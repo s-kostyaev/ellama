@@ -56,7 +56,7 @@
   :type 'boolean)
 
 (defcustom ellama-user-nick "User" "User nick in logs."
-  :grop 'ellama
+  :group 'ellama
   :type 'string)
 
 (defcustom ellama-assistant-nick "Ellama" "Assistant nick in logs."
@@ -235,12 +235,21 @@ default. Default value is `ellama-template'."
 
 ;;;###autoload
 (defun ellama-summarize ()
-  "Summarize selected region of current buffer."
+  "Summarize selected region or current buffer."
   (interactive)
   (let ((text (if (region-active-p)
 		  (buffer-substring-no-properties (region-beginning) (region-end))
 		(buffer-substring-no-properties (point-min) (point-max)))))
     (ellama-instant (format "Summarize the following text:\n%s" text))))
+
+;;;###autoload
+(defun ellama-code-review ()
+  "Review code in selected region or current buffer."
+  (interactive)
+  (let ((text (if (region-active-p)
+		  (buffer-substring-no-properties (region-beginning) (region-end))
+		(buffer-substring-no-properties (point-min) (point-max)))))
+    (ellama-instant (format "Review the following code and make concise suggestions:\n```\n%s\n```" text))))
 
 (provide 'ellama)
 ;;; ellama.el ends here.
