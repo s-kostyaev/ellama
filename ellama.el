@@ -91,26 +91,28 @@ Filter PROC output STRING."
   (when (buffer-live-p (process-buffer proc))
     (with-current-buffer (process-buffer proc)
       (let ((moving (= (point) (process-mark proc))))
-        (save-excursion
-          ;; Insert the text, advancing the process marker.
-          (goto-char (process-mark proc))
-	  (when ellama--unprocessed-data
-	    (setq string (concat ellama--unprocessed-data string)))
-	  (condition-case nil
-	      (progn
-		(mapc (lambda (s)
-			(when-let ((data
-				    (json-parse-string s :object-type 'plist)))
-			  (when-let ((context (plist-get data :context)))
-			    (setq ellama-context context))
-			  (when-let ((response (plist-get data :response)))
-			    (insert response))))
-		      (split-string string "\n" t))
-		(setq ellama--unprocessed-data nil)
-		(set-marker (process-mark proc) (point))
-		(if moving (goto-char (process-mark proc))))
-	    (error (setq ellama--unprocessed-data
-			 (car (last (split-string string "\n" t)))))))))))
+        ;; Insert the text, advancing the process marker.
+	;; For buffers other than ellama-buffer, stay on current point.
+        (when (string= (buffer-name (process-buffer proc))
+		       ellama-buffer)
+	  (goto-char (process-mark proc)))
+	(when ellama--unprocessed-data
+	  (setq string (concat ellama--unprocessed-data string)))
+	(condition-case nil
+	    (progn
+	      (mapc (lambda (s)
+		      (when-let ((data
+				  (json-parse-string s :object-type 'plist)))
+			(when-let ((context (plist-get data :context)))
+			  (setq ellama-context context))
+			(when-let ((response (plist-get data :response)))
+			  (insert response))))
+		    (split-string string "\n" t))
+	      (setq ellama--unprocessed-data nil)
+	      (set-marker (process-mark proc) (point))
+	      (if moving (goto-char (process-mark proc))))
+	  (error (setq ellama--unprocessed-data
+		       (car (last (split-string string "\n" t))))))))))
 
 (defun ellama-query (prompt &rest args)
   "Query ellama for PROMPT.
@@ -250,6 +252,42 @@ default. Default value is `ellama-template'."
 		  (buffer-substring-no-properties (region-beginning) (region-end))
 		(buffer-substring-no-properties (point-min) (point-max)))))
     (ellama-instant (format "Review the following code and make concise suggestions:\n```\n%s\n```" text))))
+
+;;;###autoload
+(defun ellama-change (change)
+  "Change selected text or text in current buffer according to provided CHANGE."
+  (interactive)
+  (let* ((beg (if (region-active-p)
+		  (region-beginning)
+		(point-min)))
+	 (end (if (region-active-p)
+		  (region-end)
+		(point-max)))
+	 (text (buffer-substring-no-properties beg end)))
+    (kill-region beg end)
+    (ellama-query
+     (format
+      "Change the following text, %s, just output the final text without additional quotes around it:\n%s"
+      change text)
+     :buffer (current-buffer))))
+
+;;;###autoload
+(defun ellama-enhance-grammar-spelling ()
+  "Enhance the grammar and spelling in the currently selected region or buffer."
+  (interactive)
+  (ellama-change "improve grammar and spelling"))
+
+;;;###autoload
+(defun ellama-enhance-wording ()
+  "Enhance the wording in the currently selected region or buffer."
+  (interactive)
+  (ellama-change "use better wording"))
+
+;;;###autoload
+(defun ellama-make-concise ()
+  "Make text currently selected region or buffer concise and simple."
+  (interactive)
+  (ellama-change "make it as simple and concise as possible"))
 
 (provide 'ellama)
 ;;; ellama.el ends here.
