@@ -285,9 +285,39 @@ default. Default value is `ellama-template'."
 
 ;;;###autoload
 (defun ellama-make-concise ()
-  "Make text currently selected region or buffer concise and simple."
+  "Make the text of the currently selected region or buffer concise and simple."
   (interactive)
   (ellama-change "make it as simple and concise as possible"))
+
+;;;###autoload
+(defun ellama-render (needed-format)
+  "Render selected text or text in current buffer as NEEDED-FORMAT."
+  (interactive)
+  (let* ((beg (if (region-active-p)
+		  (region-beginning)
+		(point-min)))
+	 (end (if (region-active-p)
+		  (region-end)
+		(point-max)))
+	 (text (buffer-substring-no-properties beg end)))
+    (kill-region beg end)
+    (ellama-query
+     (format
+      "Render the following text as a %s:\n%s"
+      needed-format text)
+     :buffer (current-buffer))))
+
+;;;###autoload
+(defun ellama-make-list ()
+  "Create markdown list from active region or current buffer."
+  (interactive)
+  (ellama-render "markdown list"))
+
+;;;###autoload
+(defun ellama-make-table ()
+  "Create markdown table from active region or current buffer."
+  (interactive)
+  (ellama-render "markdown table"))
 
 (provide 'ellama)
 ;;; ellama.el ends here.
