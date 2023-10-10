@@ -242,7 +242,7 @@ default. Default value is `ellama-template'."
   (let ((text (if (region-active-p)
 		  (buffer-substring-no-properties (region-beginning) (region-end))
 		(buffer-substring-no-properties (point-min) (point-max)))))
-    (ellama-instant (format "Summarize the following text:\n%s" text))))
+    (ellama-instant (format "Text:\n%s\nSummarize it." text))))
 
 ;;;###autoload
 (defun ellama-code-review ()
@@ -318,6 +318,22 @@ default. Default value is `ellama-template'."
   "Create markdown table from active region or current buffer."
   (interactive)
   (ellama-render "markdown table"))
+
+(defun ellama-summarize-webpage (url)
+  "Summarize webpage fetched from URL."
+  (let ((buffer-name (url-retrieve-synchronously url)))
+    ;; (display-buffer buffer-name)
+    (with-current-buffer buffer-name
+      (goto-char (point-min))
+      (search-forward "<!DOCTYPE")
+      (beginning-of-line)
+      (kill-region (point-min) (point))
+      (shr-insert-document (libxml-parse-html-region))
+      (goto-char (point-min))
+      (search-forward "<!DOCTYPE")
+      (beginning-of-line)
+      (kill-region (point) (point-max))
+      (ellama-summarize))))
 
 (provide 'ellama)
 ;;; ellama.el ends here.
