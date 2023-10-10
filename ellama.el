@@ -321,7 +321,7 @@ default. Default value is `ellama-template'."
 
 (defun ellama-summarize-webpage (url)
   "Summarize webpage fetched from URL."
-  (let ((buffer-name (url-retrieve-synchronously url)))
+  (let ((buffer-name (url-retrieve-synchronously url t)))
     ;; (display-buffer buffer-name)
     (with-current-buffer buffer-name
       (goto-char (point-min))
