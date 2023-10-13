@@ -13,6 +13,7 @@ buffer.
 ### ellama-ask-about
 
 Ask Ellama about a selected region or the current buffer.
+![ellama-ask-about](imgs/ellama-ask-about.gif)
 
 ### ellama-instant
 
@@ -28,7 +29,9 @@ Find the definition of the current word using Ellama.
 
 ### ellama-summarize
 
-Summarize a selected region or the current buffer usingreview
+Summarize a selected region or the current buffer using Ellama.
+
+### ellama-code-review
 
 Review code in a selected region or the current buffer using Ellama.
 
