@@ -1,6 +1,9 @@
 # Ellama
 
-Ellama is an [ollama](https://github.com/jmorganca/ollama) client for Emacs. It provides a set of commands for interacting with the Ollama API, allowing users to ask questions, define words, translate text, and more.
+Ellama is an [ollama](https://github.com/jmorganca/ollama) client for
+Emacs. It provides a set of commands for interacting with the Ollama
+API, allowing users to ask questions, define words, translate text,
+and more. Ellama natively supports streaming output.
 
 ## Commands
 
