@@ -81,9 +81,24 @@
 
 (defvar ellama--request nil)
 
+(defvar ellama--extract nil)
+
+(defvar ellama--prefix-regexp nil)
+
+(defvar ellama--suffix-regexp nil)
+
+(defvar ellama--extraction-state 'before)
+
+(defvar ellama--line nil)
+
 (make-local-variable 'ellama-context)
 (make-local-variable 'ellama--unprocessed-data)
 (make-local-variable 'ellama--request)
+(make-local-variable 'ellama--extract)
+(make-local-variable 'ellama--prefix-regexp)
+(make-local-variable 'ellama--suffix-regexp)
+(make-local-variable 'ellama--extraction-state)
+(make-local-variable 'ellama-line)
 
 (defun ellama--filter (proc string)
   "Filter function for ellama curl process.
@@ -104,15 +119,38 @@ Filter PROC output STRING."
 		      (when-let ((data
 				  (json-parse-string s :object-type 'plist)))
 			(when-let ((context (plist-get data :context)))
-			  (setq ellama-context context))
+			  (setq ellama-context context)
+			  (setq ellama--extract nil)
+			  (setq ellama--extraction-state 'before))
 			(when-let ((response (plist-get data :response)))
-			  (insert response))))
+			  (if ellama--extract
+			      (progn
+				(setq ellama--line (concat ellama--line response))
+				(when (string-suffix-p "\n" ellama--line)
+				  (pcase ellama--extraction-state
+				    ('before
+				     (when (string-match ellama--prefix-regexp ellama--line)
+				       (setq ellama--extraction-state 'progress)))
+				    ('progress
+				     (if (string-match ellama--suffix-regexp ellama--line)
+					 (setq ellama--extraction-state 'after)
+				       (insert ellama--line)))
+				    (_ nil))
+				  (setq ellama--line nil)))
+			    (insert response)))))
 		    (split-string string "\n" t))
 	      (setq ellama--unprocessed-data nil)
 	      (set-marker (process-mark proc) (point))
 	      (if moving (goto-char (process-mark proc))))
 	  (error (setq ellama--unprocessed-data
 		       (car (last (split-string string "\n" t))))))))))
+
+(defun ellama-setup-extraction (prefix-regexp suffix-regexp)
+  "Setup text extraction from ellama response.
+Generation returns only text between PREFIX-REGEXP and SUFFIX-REGEXP."
+  (setq ellama--extract t)
+  (setq ellama--prefix-regexp prefix-regexp)
+  (setq ellama--suffix-regexp suffix-regexp))
 
 (defun ellama-query (prompt &rest args)
   "Query ellama for PROMPT.
@@ -256,7 +294,7 @@ default. Default value is `ellama-template'."
 ;;;###autoload
 (defun ellama-change (change)
   "Change selected text or text in current buffer according to provided CHANGE."
-  (interactive)
+  (interactive "sWhat needs to be changed: ")
   (let* ((beg (if (region-active-p)
 		  (region-beginning)
 		(point-min)))
@@ -290,6 +328,83 @@ default. Default value is `ellama-template'."
   (ellama-change "make it as simple and concise as possible"))
 
 ;;;###autoload
+(defun ellama-change-code (change)
+  "Change selected code or code in current buffer according to provided CHANGE."
+  (interactive "sWhat needs to be changed in this code: ")
+  (let* ((beg (if (region-active-p)
+		  (region-beginning)
+		(point-min)))
+	 (end (if (region-active-p)
+		  (region-end)
+		(point-max)))
+	 (text (buffer-substring-no-properties beg end)))
+    (kill-region beg end)
+    (ellama-setup-extraction "```.*" "```")
+    (ellama-query
+     (format
+      "Regarding the following code, %s, only ouput the result in format ```\n...\n```:\n```\n%s\n```"
+      change text)
+     :buffer (current-buffer))))
+
+;;;###autoload
+(defun ellama-enhance-code ()
+  "Change selected code or code in current buffer according to provided CHANGE."
+  (interactive)
+  (let* ((beg (if (region-active-p)
+		  (region-beginning)
+		(point-min)))
+	 (end (if (region-active-p)
+		  (region-end)
+		(point-max)))
+	 (text (buffer-substring-no-properties beg end)))
+    (kill-region beg end)
+    (ellama-setup-extraction "```.*" "```")
+    (ellama-query
+     (format
+      "Enhance the following code, only ouput the result in format ```\n...\n```:\n```\n%s\n```"
+      text)
+     :buffer (current-buffer))))
+
+;;;###autoload
+(defun ellama-complete-code ()
+  "Change selected code or code in current buffer according to provided CHANGE."
+  (interactive)
+  (let* ((beg (if (region-active-p)
+		  (region-beginning)
+		(point-min)))
+	 (end (if (region-active-p)
+		  (region-end)
+		(point-max)))
+	 (text (buffer-substring-no-properties beg end)))
+    (ellama-setup-extraction "```.*" "```")
+    (ellama-query
+     (format
+      "Continue the following code, only ouput the result in format ```\n...\n```:\n```\n%s\n```"
+      text)
+     :buffer (current-buffer))))
+
+;;;###autoload
+(defun ellama-add-code (description)
+  "Add new code according to DESCRIPTION.
+Code will be generated with provided context from selected region or current
+buffer."
+  (interactive "sDescribe the code to be generated: ")
+  (let* ((beg (if (region-active-p)
+		  (region-beginning)
+		(point-min)))
+	 (end (if (region-active-p)
+		  (region-end)
+		(point-max)))
+	 (text (buffer-substring-no-properties beg end)))
+    (ellama-setup-extraction "```.*" "```")
+    (ellama-query
+     (format
+      "Context: \n```\n%s\n```\nBased on this context, %s, only ouput the result in format ```\n...\n```"
+      text description)
+     :buffer (current-buffer))))
+
+
+;;;###autoload
 (defun ellama-render (needed-format)
   "Render selected text or text in current buffer as NEEDED-FORMAT."
   (interactive)
@@ -321,6 +436,7 @@ default. Default value is `ellama-template'."
 
 (defun ellama-summarize-webpage (url)
   "Summarize webpage fetched from URL."
+  (interactive "sEnter URL you want to summarize: ")
   (let ((buffer-name (url-retrieve-synchronously url t)))
     ;; (display-buffer buffer-name)
     (with-current-buffer buffer-name
