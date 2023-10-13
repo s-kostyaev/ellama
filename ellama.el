@@ -248,7 +248,7 @@ default. Default value is `ellama-template'."
 		  (buffer-substring-no-properties (region-beginning) (region-end))
 		(buffer-substring-no-properties (point-min) (point-max)))))
     (ellama-query
-     (format "Regarding the following text, %s:\n%s" input text)
+     (format "Text:\n%s\nRegarding this text, %s" text input)
      :display t :log t :memory t)))
 
 (defun ellama-instant (prompt)
