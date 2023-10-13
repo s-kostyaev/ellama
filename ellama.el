@@ -67,7 +67,7 @@
   :group 'ellama
   :type 'function)
 
-(defcustom ellama-language "Russian" "Language for ellama translation."
+(defcustom ellama-language "English" "Language for ellama translation."
   :group 'ellama
   :type 'string)
 
