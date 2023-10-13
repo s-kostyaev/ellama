@@ -100,8 +100,10 @@ The following variables can be customized for the Ellama client:
 Thanks [Jeffrey Morgan](https://github.com/jmorganca) for excellent
 project [ollama](https://github.com/jmorganca/ollama). This project
 cannot exist without it.
+
 Thanks [zweifisch](https://github.com/zweifisch) - I got some ideas
 from [ollama.el](https://github.com/zweifisch/ollama) what ollama
 client in Emacs can do.
+
 Thanks [Dr. David A. Kunz](https://github.com/David-Kunz) - I got more
 ideas from [gen.nvim](https://github.com/David-Kunz/gen.nvim).
