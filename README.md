@@ -6,7 +6,9 @@ Ellama is an [ollama](https://github.com/jmorganca/ollama) client for Emacs. It 
 
 ### ellama-ask
 
-Ask Ellama about something by entering a prompt in an interactive buffer.
+Ask Ellama about something by entering a prompt in an interactive
+buffer.
+![ellama-ask](imgs/ellama-ask.gif)
 
 ### ellama-ask-about
 
