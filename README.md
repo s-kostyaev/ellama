@@ -1,11 +1,11 @@
 # Ellama
 
-Ellama is a specialized client for Emacs that enables local access to
-LLMs through [ollama](https://github.com/jmorganca/ollama)'s API. It
-provides a suite of commands that allow users to query questions,
-find word definitions, translate text, and more via the Emacs
-interface. Ellama natively supports streaming output, providing
-seamless integration with your text editor.
+Ellama lets you access LLMs locally using
+[ollama](https://github.com/jmorganca/ollama)'s API from Emacs. It
+offers a set of commands that allow you to inquire, define words,
+translate text and more through the Emacs interface. Ellama natively
+supports streaming output, making it effortless to use with your
+preferred text editor.
 
 ## Commands
 
