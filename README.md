@@ -21,18 +21,22 @@ Ask Ellama about a selected region or the current buffer.
 ### ellama-translate
 
 Ask Ellama to translate a selected region or word at the point.
+![ellama-translate](imgs/ellama-translate.gif)
 
 ### ellama-define-word
 
 Find the definition of the current word using Ellama.
+![ellama-define-word](imgs/ellama-define-word.gif)
 
 ### ellama-summarize
 
 Summarize a selected region or the current buffer using Ellama.
+![ellama-summarize](imgs/ellama-summarize.gif)
 
 ### ellama-code-review
 
 Review code in a selected region or the current buffer using Ellama.
+![ellama-code-review](imgs/ellama-code-review.gif)
 
 ### ellama-change
 
