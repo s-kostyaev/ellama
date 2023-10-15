@@ -5,7 +5,7 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "27.1"))
+;; Package-Requires: ((emacs "28.1"))
 ;; Version: 0.1.0
 ;; Created: 8th Oct 2023
 
@@ -444,7 +444,7 @@ buffer."
       (search-forward "<!DOCTYPE")
       (beginning-of-line)
       (kill-region (point-min) (point))
-      (shr-insert-document (libxml-parse-html-region))
+      (shr-insert-document (libxml-parse-html-region (point-min) (point-max)))
       (goto-char (point-min))
       (search-forward "<!DOCTYPE")
       (beginning-of-line)
