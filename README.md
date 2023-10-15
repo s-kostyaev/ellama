@@ -18,10 +18,6 @@ buffer.
 Ask Ellama about a selected region or the current buffer.
 ![ellama-ask-about](imgs/ellama-ask-about.gif)
 
-### ellama-instant
-
-Prompt Ellama to provide an instant response for a specific prompt.
-
 ### ellama-translate
 
 Ask Ellama to translate a selected region or word at the point.
