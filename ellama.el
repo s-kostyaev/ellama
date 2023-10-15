@@ -75,30 +75,21 @@
   :group 'ellama
   :type 'string)
 
-(defvar ellama-context nil "Context that contains ellama conversation memory.")
+(defvar-local ellama-context nil "Context that contains ellama conversation memory.")
 
-(defvar ellama--unprocessed-data nil)
+(defvar-local ellama--unprocessed-data nil)
 
-(defvar ellama--request nil)
+(defvar-local ellama--request nil)
 
-(defvar ellama--extract nil)
+(defvar-local ellama--extract nil)
 
-(defvar ellama--prefix-regexp nil)
+(defvar-local ellama--prefix-regexp nil)
 
-(defvar ellama--suffix-regexp nil)
+(defvar-local ellama--suffix-regexp nil)
 
-(defvar ellama--extraction-state 'before)
+(defvar-local ellama--extraction-state 'before)
 
-(defvar ellama--line nil)
-
-(make-local-variable 'ellama-context)
-(make-local-variable 'ellama--unprocessed-data)
-(make-local-variable 'ellama--request)
-(make-local-variable 'ellama--extract)
-(make-local-variable 'ellama--prefix-regexp)
-(make-local-variable 'ellama--suffix-regexp)
-(make-local-variable 'ellama--extraction-state)
-(make-local-variable 'ellama-line)
+(defvar-local ellama--line nil)
 
 (defun ellama--filter (proc string)
   "Filter function for ellama curl process.
