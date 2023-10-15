@@ -44,7 +44,9 @@ Change text in a selected region or the current buffer according to a provided c
 
 ### ellama-enhance-grammar-spelling
 
-Enhance the grammar and spelling in the currently selected region or buffer using Ellama.
+Enhance the grammar and spelling in the currently selected region or
+buffer using Ellama.
+![ellama-enhance-grammar-spelling](imgs/ellama-enhance-grammar-spelling.gif)
 
 ### ellama-enhance-wording
 
