@@ -44,7 +44,7 @@
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-model "mistral" "Model to use ollama with."
+(defcustom ellama-model "zephyr" "Model to use ollama with."
   :group 'ellama
   :type 'string)
 

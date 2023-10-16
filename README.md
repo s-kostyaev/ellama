@@ -105,7 +105,8 @@ The following variables can be customized for the Ellama client:
 
 - `ellama-url`: The URL to call Ollama.
 - `ellama-curl-executable`: The path to curl executable.
-- `ellama-model`: The model to use Ollama with. Default model is [mistral](https://ollama.ai/library/mistral).
+- `ellama-model`: The model to use Ollama with. Default model is
+  [zephyr](https://ollama.ai/library/zephyr).
 - `ellama-buffer`: The default Ellama buffer name.
 - `ellama-always-show-buffer`: Whether to always show the Ellama buffer.
 - `ellama-user-nick`: The user nick in logs.
