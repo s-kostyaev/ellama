@@ -12,6 +12,11 @@ preferred text editor.
 
 ## Installation
 
+Firstly, you need to install
+[ollama](https://github.com/jmorganca/ollama) and pull
+[zephyr](https://ollama.ai/library/zephyr) (default model) or any
+other model from [library](https://ollama.ai/library) (in that case
+you should customize `ellama-model`)
 You can now install the package `ellama` from
 [MELPA](https://melpa.org/#/getting-started). Just `M-x`
 `package-install`<kbd>Enter</kbd> `ellama` <kbd>Enter</kbd>.
