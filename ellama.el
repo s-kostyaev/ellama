@@ -1,4 +1,4 @@
-;;; ellama.el --- Ollama client
+;;; ellama.el --- Ollama client for calling local LLMs
 
 ;; Copyright (C) 2023 Sergey Kostyaev
 
