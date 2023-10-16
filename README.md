@@ -1,11 +1,20 @@
 # Ellama
 
+[![License GPL 3](https://img.shields.io/badge/license-GPL_3-green.svg)](http://www.gnu.org/licenses/gpl-3.0.txt)
+[![MELPA](https://melpa.org/packages/ellama-badge.svg)](https://melpa.org/#/ellama)
+
 Ellama lets you access LLMs locally using
 [ollama](https://github.com/jmorganca/ollama)'s API from Emacs. It
 offers a set of commands that allow you to inquire, define words,
 translate text and more through the Emacs interface. Ellama natively
 supports streaming output, making it effortless to use with your
 preferred text editor.
+
+## Installation
+
+You can now install the package `ellama` from
+[MELPA](https://melpa.org/#/getting-started). Just `M-x`
+`package-install`<kbd>Enter</kbd> `ellama` <kbd>Enter</kbd>.
 
 ## Commands
 
