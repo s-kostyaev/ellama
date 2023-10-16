@@ -5,7 +5,7 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (spinner "1.7.4"))
+;; Package-Requires: ((emacs "28.1")(llm "0.4.0")(spinner "1.7.4"))
 ;; Version: 0.1.0
 ;; Created: 8th Oct 2023
 
@@ -31,6 +31,8 @@
 ;;; Code:
 
 (require 'json)
+(require 'llm)
+(require 'llm-ollama)
 (require 'spinner)
 
 (defgroup ellama nil
@@ -76,6 +78,13 @@
 (defcustom ellama-template nil "Template to use with ollama instead of default."
   :group 'ellama
   :type 'string)
+
+(defcustom ellama-provider
+  (make-llm-ollama
+   :chat-model "zephyr" :embedding-model "zephyr")
+  "Backend LLM provider."
+  :group 'ellama
+  :type 'cl-struct)
 
 (defvar-local ellama-context nil "Context that contains ellama conversation memory.")
 
@@ -254,7 +263,14 @@ default. Default value is `ellama-template'."
 
 (defun ellama-instant (prompt)
   "Prompt ellama for PROMPT to reply instantly."
-  (ellama-query prompt :display t :buffer (make-temp-name ellama-buffer)))
+  (let ((buffer (get-buffer-create (make-temp-name ellama-buffer))))
+    (display-buffer buffer)
+    (llm-chat-streaming-to-point
+     ellama-provider
+     (llm-make-simple-chat-prompt prompt)
+     buffer
+     (point-min)
+     (lambda () nil))))
 
 ;;;###autoload
 (defun ellama-translate ()
@@ -304,11 +320,13 @@ default. Default value is `ellama-template'."
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
-    (ellama-query
-     (format
-      "Change the following text, %s, just output the final text without additional quotes around it:\n%s"
-      change text)
-     :buffer (current-buffer))))
+    (llm-chat-streaming-to-point
+     ellama-provider
+     (llm-make-simple-chat-prompt
+      (format
+       "Change the following text, %s, just output the final text without additional quotes around it:\n%s"
+       change text))
+     (current-buffer) (point) (lambda () nil))))
 
 ;;;###autoload
 (defun ellama-enhance-grammar-spelling ()
@@ -417,11 +435,15 @@ buffer."
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
-    (ellama-query
-     (format
-      "Render the following text as a %s:\n%s"
-      needed-format text)
-     :buffer (current-buffer))))
+    (llm-chat-streaming-to-point
+     ellama-provider
+     (llm-make-simple-chat-prompt
+      (format
+       "Render the following text as a %s:\n%s"
+       needed-format text))
+     (current-buffer)
+     (point)
+     (lambda () nil))))
 
 ;;;###autoload
 (defun ellama-make-list ()
