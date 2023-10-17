@@ -1,4 +1,4 @@
-;;; ellama.el --- Ollama client for calling local LLMs
+;;; ellama.el --- Ollama client for calling local LLMs -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2023 Sergey Kostyaev
 
@@ -84,7 +84,7 @@
    :chat-model "zephyr" :embedding-model "zephyr")
   "Backend LLM provider."
   :group 'ellama
-  :type 'cl-struct)
+  :type '(sexp :validate 'cl-struct-p))
 
 (defvar-local ellama-context nil "Context that contains ellama conversation memory.")
 
@@ -92,15 +92,40 @@
 
 (defvar-local ellama--request nil)
 
-(defvar-local ellama--extract nil)
+(defvar ellama--code-prefix
+  (rx (minimal-match
+       (zero-or-more anything) (literal "```") (zero-or-more anything) line-end)))
 
-(defvar-local ellama--prefix-regexp nil)
+(defvar ellama--code-suffix
+  (rx (minimal-match
+       (literal "```") (zero-or-more anything))))
 
-(defvar-local ellama--suffix-regexp nil)
-
-(defvar-local ellama--extraction-state 'before)
-
-(defvar-local ellama--line nil)
+(defun ellama-stream-filter (prompt prefix suffix buffer point)
+  "Query ellama for PROMPT with filtering.
+In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
+  (with-current-buffer buffer
+    (save-excursion
+      (let* ((start (make-marker))
+             (end (make-marker))
+	     (insert-text (lambda (text)
+			    ;; Erase and insert the new text between the marker cons.
+			    (with-current-buffer (marker-buffer start)
+			      (save-excursion
+				(goto-char start)
+				(delete-region start end)
+				;; remove prefix and suffix parts
+				(insert (string-trim-right
+					 (string-trim-left text prefix)
+					 suffix)))))))
+        (set-marker start point)
+        (set-marker end point)
+        (set-marker-insertion-type start nil)
+        (set-marker-insertion-type end t)
+	(llm-chat-streaming ellama-provider
+			    (llm-make-simple-chat-prompt prompt)
+			    insert-text
+			    insert-text
+			    (lambda (_ msg) (error "Error calling the LLM: %s" msg)))))))
 
 (defun ellama--filter (proc string)
   "Filter function for ellama curl process.
@@ -122,40 +147,17 @@ Filter PROC output STRING."
 		      (when-let ((data
 				  (json-parse-string s :object-type 'plist)))
 			(when-let ((context (plist-get data :context)))
-			  (setq ellama-context context)
-			  (setq ellama--extract nil)
-			  (setq ellama--extraction-state 'before))
+			  (setq ellama-context context))
 			(when-let ((response (plist-get data :response)))
                           (goto-char (process-mark proc))
-			  (if ellama--extract
-			      (progn
-				(setq ellama--line (concat ellama--line response))
-				(when (string-suffix-p "\n" ellama--line)
-				  (pcase ellama--extraction-state
-				    ('before
-				     (when (string-match ellama--prefix-regexp ellama--line)
-				       (setq ellama--extraction-state 'progress)))
-				    ('progress
-				     (if (string-match ellama--suffix-regexp ellama--line)
-					 (setq ellama--extraction-state 'after)
-				       (insert ellama--line)))
-				    (_ nil))
-				  (setq ellama--line nil)))
-                            (insert response)
-                            (set-marker (process-mark proc) (point))))))
+			  (insert response)
+                          (set-marker (process-mark proc) (point)))))
 		    (split-string string "\n" t))
 	      (setq ellama--unprocessed-data nil)
 	      (set-marker (process-mark proc) (point))
 	      (if moving (goto-char (process-mark proc))))
 	  (error (setq ellama--unprocessed-data
 		       (car (last (split-string string "\n" t))))))))))
-
-(defun ellama-setup-extraction (prefix-regexp suffix-regexp)
-  "Setup text extraction from ellama response.
-Generation returns only text between PREFIX-REGEXP and SUFFIX-REGEXP."
-  (setq ellama--extract t)
-  (setq ellama--prefix-regexp prefix-regexp)
-  (setq ellama--suffix-regexp suffix-regexp))
 
 (defun ellama-query (prompt &rest args)
   "Query ellama for PROMPT.
@@ -358,12 +360,14 @@ default. Default value is `ellama-template'."
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
-    (ellama-setup-extraction "```.*" "```")
-    (ellama-query
+    (ellama-stream-filter
      (format
-      "Regarding the following code, %s, only ouput the result in format ```\n...\n```:\n```\n%s\n```"
+      "Regarding the following code, %s, only ouput the result code in format ```language\n...\n```:\n```\n%s\n```"
       change text)
-     :buffer (current-buffer))))
+     ellama--code-prefix
+     ellama--code-suffix
+     (current-buffer)
+     beg)))
 
 ;;;###autoload
 (defun ellama-enhance-code ()
@@ -377,12 +381,14 @@ default. Default value is `ellama-template'."
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
-    (ellama-setup-extraction "```.*" "```")
-    (ellama-query
+    (ellama-stream-filter
      (format
-      "Enhance the following code, only ouput the result in format ```\n...\n```:\n```\n%s\n```"
+      "Enhance the following code, only ouput the result code in format ```language\n...\n```:\n```\n%s\n```"
       text)
-     :buffer (current-buffer))))
+     ellama--code-prefix
+     ellama--code-suffix
+     (current-buffer)
+     beg)))
 
 ;;;###autoload
 (defun ellama-complete-code ()
@@ -395,12 +401,14 @@ default. Default value is `ellama-template'."
 		  (region-end)
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
-    (ellama-setup-extraction "```.*" "```")
-    (ellama-query
+    (ellama-stream-filter
      (format
-      "Continue the following code, only ouput the result in format ```\n...\n```:\n```\n%s\n```"
+      "Continue the following code, only write new code in format ```language\n...\n```:\n```\n%s\n```"
       text)
-     :buffer (current-buffer))))
+     ellama--code-prefix
+     ellama--code-suffix
+     (current-buffer)
+     end)))
 
 ;;;###autoload
 (defun ellama-add-code (description)
@@ -415,12 +423,14 @@ buffer."
 		  (region-end)
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
-    (ellama-setup-extraction "```.*" "```")
-    (ellama-query
+    (ellama-stream-filter
      (format
       "Context: \n```\n%s\n```\nBased on this context, %s, only ouput the result in format ```\n...\n```"
       text description)
-     :buffer (current-buffer))))
+     ellama--code-prefix
+     ellama--code-suffix
+     (current-buffer)
+     end)))
 
 
 ;;;###autoload
