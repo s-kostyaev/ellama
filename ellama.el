@@ -5,7 +5,7 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1"))
+;; Package-Requires: ((emacs "28.1") (spinner "1.7.4"))
 ;; Version: 0.1.0
 ;; Created: 8th Oct 2023
 
@@ -31,6 +31,7 @@
 ;;; Code:
 
 (require 'json)
+(require 'spinner)
 
 (defgroup ellama nil
   "Ollama client for Emacs."
@@ -200,7 +201,8 @@ default. Default value is `ellama-template'."
 			    (with-current-buffer (process-buffer proc)
 			      (save-excursion
 				(goto-char (point-max))
-				(insert "\n\n")))))
+				(insert "\n\n"))
+                (spinner-stop))))
 		      (lambda (_ _) nil))))
       (with-current-buffer buffer
 	(setq ellama--request (list :model model :prompt prompt))
@@ -222,7 +224,8 @@ default. Default value is `ellama-template'."
 		   "-X" "POST" ellama-url "-d"
 		   (json-encode-plist ellama--request))
 	 :filter 'ellama--filter
-	 :sentinel sentinel)))))
+	 :sentinel sentinel)
+     (spinner-start 'progress-bar)))))
 
 ;;;###autoload
 (defun ellama-ask ()
