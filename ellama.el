@@ -202,8 +202,11 @@ default. Default value is `ellama-template'."
 			      (save-excursion
 				(goto-char (point-max))
 				(insert "\n\n"))
-                (spinner-stop))))
-		      (lambda (_ _) nil))))
+			      (spinner-stop))))
+		      (lambda (proc event)
+			(when (string= event "finished\n")
+			  (with-current-buffer (process-buffer proc)
+			    (spinner-stop)))))))
       (with-current-buffer buffer
 	(setq ellama--request (list :model model :prompt prompt))
 	(when (and memory ellama-context)
@@ -225,7 +228,7 @@ default. Default value is `ellama-template'."
 		   (json-encode-plist ellama--request))
 	 :filter 'ellama--filter
 	 :sentinel sentinel)
-     (spinner-start 'progress-bar)))))
+	(spinner-start 'progress-bar)))))
 
 ;;;###autoload
 (defun ellama-ask ()
