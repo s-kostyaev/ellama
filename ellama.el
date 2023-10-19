@@ -108,7 +108,6 @@ Filter PROC output STRING."
 	(condition-case nil
 	    (progn
 	      (mapc (lambda (s)
-                      ;; (message s)
 		      (when-let ((data
 				  (json-parse-string s :object-type 'plist)))
 			(when-let ((context (plist-get data :context)))
@@ -132,8 +131,7 @@ Filter PROC output STRING."
 				    (_ nil))
 				  (setq ellama--line nil)))
                             (insert response)
-                            (set-marker (process-mark proc) (point))
-                            ))))
+                            (set-marker (process-mark proc) (point))))))
 		    (split-string string "\n" t))
 	      (setq ellama--unprocessed-data nil)
 	      (set-marker (process-mark proc) (point))
