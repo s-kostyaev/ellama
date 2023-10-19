@@ -116,6 +116,7 @@ Filter PROC output STRING."
 			  (setq ellama--extract nil)
 			  (setq ellama--extraction-state 'before))
 			(when-let ((response (plist-get data :response)))
+                          (goto-char (process-mark proc))
 			  (if ellama--extract
 			      (progn
 				(setq ellama--line (concat ellama--line response))
@@ -130,7 +131,8 @@ Filter PROC output STRING."
 				       (insert ellama--line)))
 				    (_ nil))
 				  (setq ellama--line nil)))
-			    (insert response)))))
+                            (insert response)
+                            (set-marker (process-mark proc) (point))))))
 		    (split-string string "\n" t))
 	      (setq ellama--unprocessed-data nil)
 	      (set-marker (process-mark proc) (point))
@@ -224,7 +226,7 @@ default. Default value is `ellama-template'."
 	 :name "ellama"
 	 :command (list
 		   ellama-curl-executable
-		   "-X" "POST" ellama-url "-d"
+                   "-s" "-X" "POST" ellama-url "-d"
 		   (json-encode-plist ellama--request))
 	 :filter 'ellama--filter
 	 :sentinel sentinel)
