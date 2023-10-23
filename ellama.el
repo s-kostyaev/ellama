@@ -104,6 +104,43 @@
   (rx (minimal-match
        (literal "```") (zero-or-more anything))))
 
+(defun ellama-stream (prompt &rest args)
+  "Query ellama for PROMPT.
+ARGS contains keys for fine control.
+
+:buffer BUFFER -- BUFFER is the buffer (or `buffer-name') to insert ellama reply
+in. Default value is (current-buffer).
+
+:point POINT -- POINT is the point in buffer to insert ellama reaply at."
+  (let* ((buffer (or (plist-get args :buffer) (current-buffer)))
+	 (point (or (plist-get args :point)
+		    (with-current-buffer buffer (point)))))
+    (with-current-buffer buffer
+      (save-excursion
+	(let* ((start (make-marker))
+	       (end (make-marker))
+	       (insert-text
+		(lambda (text)
+		  ;; Erase and insert the new text between the marker cons.
+		  (with-current-buffer (marker-buffer start)
+		    (save-excursion
+		      (goto-char start)
+		      (delete-region start end)
+		      (insert text))))))
+          (set-marker start point)
+          (set-marker end point)
+          (set-marker-insertion-type start nil)
+          (set-marker-insertion-type end t)
+	  (spinner-start ellama-spinner-type)
+	  (llm-chat-streaming ellama-provider
+			      (llm-make-simple-chat-prompt prompt)
+			      insert-text
+			      (lambda (text)
+				(funcall insert-text text)
+				(with-current-buffer buffer
+				  (spinner-stop)))
+			      (lambda (_ msg) (error "Error calling the LLM: %s" msg))))))))
+
 (defun ellama-stream-filter (prompt prefix suffix buffer point)
   "Query ellama for PROMPT with filtering.
 In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
@@ -125,10 +162,14 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
         (set-marker end point)
         (set-marker-insertion-type start nil)
         (set-marker-insertion-type end t)
+	(spinner-start ellama-spinner-type)
 	(llm-chat-streaming ellama-provider
 			    (llm-make-simple-chat-prompt prompt)
 			    insert-text
-			    insert-text
+			    (lambda (text)
+			      (funcall insert-text text)
+			      (with-current-buffer buffer
+				(spinner-stop)))
 			    (lambda (_ msg) (error "Error calling the LLM: %s" msg)))))))
 
 (defun ellama--filter (proc string)
@@ -271,12 +312,7 @@ default. Default value is `ellama-template'."
   "Prompt ellama for PROMPT to reply instantly."
   (let ((buffer (get-buffer-create (make-temp-name ellama-buffer))))
     (display-buffer buffer)
-    (llm-chat-streaming-to-point
-     ellama-provider
-     (llm-make-simple-chat-prompt prompt)
-     buffer
-     (point-min)
-     (lambda () nil))))
+    (ellama-stream prompt :buffer buffer (point-min))))
 
 ;;;###autoload
 (defun ellama-translate ()
@@ -326,13 +362,11 @@ default. Default value is `ellama-template'."
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
-    (llm-chat-streaming-to-point
-     ellama-provider
-     (llm-make-simple-chat-prompt
-      (format
-       "Change the following text, %s, just output the final text without additional quotes around it:\n%s"
-       change text))
-     (current-buffer) (point) (lambda () nil))))
+    (ellama-stream
+     (format
+      "Change the following text, %s, just output the final text without additional quotes around it:\n%s"
+      change text)
+     :point beg)))
 
 ;;;###autoload
 (defun ellama-enhance-grammar-spelling ()
@@ -449,15 +483,11 @@ buffer."
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
-    (llm-chat-streaming-to-point
-     ellama-provider
-     (llm-make-simple-chat-prompt
-      (format
-       "Render the following text as a %s:\n%s"
-       needed-format text))
-     (current-buffer)
-     (point)
-     (lambda () nil))))
+    (ellama-stream
+     (format
+      "Render the following text as a %s:\n%s"
+      needed-format text)
+     :point beg)))
 
 ;;;###autoload
 (defun ellama-make-list ()
