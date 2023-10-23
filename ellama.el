@@ -86,6 +86,10 @@
   :group 'ellama
   :type '(sexp :validate 'cl-struct-p))
 
+(defcustom ellama-spinner-type 'progress-bar "Spinner type for ellama."
+  :group 'ellama
+  :type 'symbol)
+
 (defvar-local ellama-context nil "Context that contains ellama conversation memory.")
 
 (defvar-local ellama--unprocessed-data nil)
@@ -242,7 +246,7 @@ default. Default value is `ellama-template'."
 		   (json-encode-plist ellama--request))
 	 :filter 'ellama--filter
 	 :sentinel sentinel)
-	(spinner-start 'progress-bar)))))
+	(spinner-start ellama-spinner-type)))))
 
 ;;;###autoload
 (defun ellama-ask ()
