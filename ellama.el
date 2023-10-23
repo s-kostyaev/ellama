@@ -1,11 +1,11 @@
-;;; ellama.el --- Ollama client for calling local LLMs -*- lexical-binding: t -*-
+;;; ellama.el --- Tool for interacting with LLMs -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2023 Sergey Kostyaev
 
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1")(llm "0.4.0")(spinner "1.7.4"))
+;; Package-Requires: ((emacs "28.1")(llm "0.5.0")(spinner "1.7.4"))
 ;; Version: 0.1.0
 ;; Created: 8th Oct 2023
 
@@ -24,8 +24,12 @@
 
 ;;; Commentary:
 ;;
-;; Ellama is ollama client for Emacs. Adds ability to call local LLMs from
-;; inside Emacs.
+;; Ellama is a tool for interacting with large language models from Emacs.
+;; It allows you to ask questions and receive responses from the
+;; LLMs. Ellama can perform various tasks such as translation, code
+;; review, summarization, enhancing grammar/spelling or wording and
+;; more through the Emacs interface. Ellama natively supports streaming
+;; output, making it effortless to use with your preferred text editor.
 ;;
 
 ;;; Code:
@@ -36,28 +40,12 @@
 (require 'spinner)
 
 (defgroup ellama nil
-  "Ollama client for Emacs."
+  "Tool for interacting with LLMs for Emacs."
   :group 'ellama)
-
-(defcustom ellama-url "http://localhost:11434/api/generate" "Url to call ollama."
-  :group 'ellama
-  :type 'string)
-
-(defcustom ellama-curl-executable (executable-find "curl") "Path to curl executable."
-  :group 'ellama
-  :type 'string)
-
-(defcustom ellama-model "zephyr" "Model to use ollama with."
-  :group 'ellama
-  :type 'string)
 
 (defcustom ellama-buffer "*ellama*" "Default ellama buffer."
   :group 'ellama
   :type 'string)
-
-(defcustom ellama-always-show-buffer nil "Always show ellama buffer."
-  :group 'ellama
-  :type 'boolean)
 
 (defcustom ellama-user-nick "User" "User nick in logs."
   :group 'ellama
@@ -75,10 +63,6 @@
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-template nil "Template to use with ollama instead of default."
-  :group 'ellama
-  :type 'string)
-
 (defcustom ellama-provider
   (make-llm-ollama
    :chat-model "zephyr" :embedding-model "zephyr")
@@ -90,11 +74,7 @@
   :group 'ellama
   :type 'symbol)
 
-(defvar-local ellama-context nil "Context that contains ellama conversation memory.")
-
-(defvar-local ellama--unprocessed-data nil)
-
-(defvar-local ellama--request nil)
+(defvar-local ellama--chat-prompt nil)
 
 (defvar ellama--code-prefix
   (rx (minimal-match
@@ -172,129 +152,54 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
 				(spinner-stop)))
 			    (lambda (_ msg) (error "Error calling the LLM: %s" msg)))))))
 
-(defun ellama--filter (proc string)
-  "Filter function for ellama curl process.
-Filter PROC output STRING."
-  (when (buffer-live-p (process-buffer proc))
-    (with-current-buffer (process-buffer proc)
-      (let ((moving (= (point) (process-mark proc))))
-        ;; Insert the text, advancing the process marker.
-	;; For buffers other than ellama-buffer, stay on current point.
-        (if (string= (buffer-name (process-buffer proc))
-		     ellama-buffer)
-	    (goto-char (process-mark proc))
-	  (set-marker (process-mark proc) (point)))
-	(when ellama--unprocessed-data
-	  (setq string (concat ellama--unprocessed-data string)))
-	(condition-case nil
-	    (progn
-	      (mapc (lambda (s)
-		      (when-let ((data
-				  (json-parse-string s :object-type 'plist)))
-			(when-let ((context (plist-get data :context)))
-			  (setq ellama-context context))
-			(when-let ((response (plist-get data :response)))
-                          (goto-char (process-mark proc))
-			  (insert response)
-                          (set-marker (process-mark proc) (point)))))
-		    (split-string string "\n" t))
-	      (setq ellama--unprocessed-data nil)
-	      (set-marker (process-mark proc) (point))
-	      (if moving (goto-char (process-mark proc))))
-	  (error (setq ellama--unprocessed-data
-		       (car (last (split-string string "\n" t))))))))))
-
-(defun ellama-query (prompt &rest args)
-  "Query ellama for PROMPT.
-
-ARGS contains keys for fine control.
-
-:buffer BUFFER -- BUFFER is the buffer (or `buffer-name') to insert ollama reply
-in. Default value is `ellama-buffer'.
-
-:display BOOL -- If BOOL, show BUFFER to user.
-Default value is `ellama-always-show-buffer'.
-
-:log BOOL -- If BOOL, show conversation between user and ellama, prefixed with
-nicks.
-
-:model MODEL -- MODEL that ollama should use to generate answer. Default value
-is `ellama-model'.
-
-:memory BOOL -- If BOOL, enable conversation memory.
-
-:system SYSTEM -- SYSTEM message for prompt MODEL. If not set, default value
-inside ollama will be used. May not work for some models, see
-https://github.com/jmorganca/ollama/issues/693 - :template can help you in that
-case.
-
-:temperature TEMPERATURE -- set MODEL temperature to TEMPERATURE. If not set,
- default value inside ollama will be used.
-
-:template TEMPLATE -- TEMPLATE to use with ollama MODEL instead of ollama's
-default. Default value is `ellama-template'."
-  (let ((buffer (or (plist-get args :buffer) ellama-buffer))
-	(display (or (plist-get args :display) ellama-always-show-buffer))
-	(log (plist-get args :log))
-	(model (or (plist-get args :model) ellama-model))
-	(memory (plist-get args :memory))
-	(system (plist-get args :system))
-	(temperature (plist-get args :temperature))
-	(template (or (plist-get args :template) ellama-template)))
-    (when (not (get-buffer buffer))
-      (create-file-buffer buffer)
-      (with-current-buffer buffer
-	(if ellama-buffer-mode
-	    (funcall ellama-buffer-mode))))
-    (when display
-      (display-buffer buffer))
-    (when log
-      (with-current-buffer buffer
-	(save-excursion
-	  (goto-char (point-max))
-	  (insert "## " ellama-user-nick ":\n" prompt "\n\n"
-		  "## " ellama-assistant-nick ":\n"))))
-    (let ((sentinel (if log
-			(lambda (proc event)
-			  (when (string= event "finished\n")
-			    (with-current-buffer (process-buffer proc)
-			      (save-excursion
-				(goto-char (point-max))
-				(insert "\n\n"))
-			      (spinner-stop))))
-		      (lambda (proc event)
-			(when (string= event "finished\n")
-			  (with-current-buffer (process-buffer proc)
-			    (spinner-stop)))))))
-      (with-current-buffer buffer
-	(setq ellama--request (list :model model :prompt prompt))
-	(when (and memory ellama-context)
-	  (setq ellama--request (plist-put ellama--request :context ellama-context)))
-	(when system
-	  (setq ellama--request (plist-put ellama--request :system system)))
-	(when temperature
-	  (setq ellama--request (plist-put ellama--request :options
-					   (list :temperature temperature))))
-	(when template
-	  (setq ellama--request (plist-put ellama--request :template template)))
-	;; (message "request: %s" (json-encode-plist ellama--request))
-	(make-process
-	 :buffer buffer
-	 :name "ellama"
-	 :command (list
-		   ellama-curl-executable
-                   "-s" "-X" "POST" ellama-url "-d"
-		   (json-encode-plist ellama--request))
-	 :filter 'ellama--filter
-	 :sentinel sentinel)
-	(spinner-start ellama-spinner-type)))))
+;;;###autoload
+(defun ellama-chat (prompt)
+  "Send PROMPT to ellama chat with conversation history."
+  (interactive "sAsk ellama: ")
+  (while (not (buffer-live-p (get-buffer ellama-buffer)))
+    (get-buffer-create ellama-buffer)
+    (with-current-buffer ellama-buffer
+      (funcall ellama-buffer-mode)))
+  (with-current-buffer ellama-buffer
+    (display-buffer ellama-buffer)
+    (if ellama--chat-prompt
+	(llm-chat-prompt-append-response
+	 ellama--chat-prompt prompt)
+      (setq ellama--chat-prompt (llm-make-simple-chat-prompt prompt)))
+    (save-excursion
+      (goto-char (point-max))
+      (insert "## " ellama-user-nick ":\n" prompt "\n\n"
+	      "## " ellama-assistant-nick ":\n")
+      (let* ((start (make-marker))
+	     (end (make-marker))
+	     (point (point-max))
+	     (insert-text
+	      (lambda (text)
+		;; Erase and insert the new text between the marker cons.
+		(with-current-buffer (marker-buffer start)
+		  (save-excursion
+		    (goto-char start)
+		    (delete-region start end)
+		    (insert text))))))
+        (set-marker start point)
+        (set-marker end point)
+        (set-marker-insertion-type start nil)
+        (set-marker-insertion-type end t)
+	(spinner-start ellama-spinner-type)
+	(llm-chat-streaming ellama-provider
+			    ellama--chat-prompt
+			    insert-text
+			    (lambda (text)
+			      (funcall insert-text text)
+			      (with-current-buffer ellama-buffer
+				(save-excursion
+				  (goto-char (point-max))
+				  (insert "\n\n"))
+				(spinner-stop)))
+			    (lambda (_ msg) (error "Error calling the LLM: %s" msg)))))))
 
 ;;;###autoload
-(defun ellama-ask ()
-  "Ask ellama about something."
-  (interactive)
-  (let ((prompt (read-string "Ask ellama: ")))
-    (ellama-query prompt :display t :log t :memory t)))
+(defalias 'ellama-ask 'ellama-chat)
 
 ;;;###autoload
 (defun ellama-ask-about ()
@@ -304,9 +209,7 @@ default. Default value is `ellama-template'."
 	(text (if (region-active-p)
 		  (buffer-substring-no-properties (region-beginning) (region-end))
 		(buffer-substring-no-properties (point-min) (point-max)))))
-    (ellama-query
-     (format "Text:\n%s\nRegarding this text, %s" text input)
-     :display t :log t :memory t)))
+    (ellama-chat (format "Text:\n%s\nRegarding this text, %s" text input))))
 
 (defun ellama-instant (prompt)
   "Prompt ellama for PROMPT to reply instantly."
