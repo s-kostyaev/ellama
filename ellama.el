@@ -101,9 +101,10 @@ Filter PROC output STRING."
       (let ((moving (= (point) (process-mark proc))))
         ;; Insert the text, advancing the process marker.
 	;; For buffers other than ellama-buffer, stay on current point.
-        (when (string= (buffer-name (process-buffer proc))
-		       ellama-buffer)
-	  (goto-char (process-mark proc)))
+        (if (string= (buffer-name (process-buffer proc))
+		     ellama-buffer)
+	    (goto-char (process-mark proc))
+	  (set-marker (process-mark proc) (point)))
 	(when ellama--unprocessed-data
 	  (setq string (concat ellama--unprocessed-data string)))
 	(condition-case nil
