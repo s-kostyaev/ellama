@@ -185,7 +185,7 @@ default. Default value is `ellama-template'."
 	(system (plist-get args :system))
 	(temperature (plist-get args :temperature))
 	(template (or (plist-get args :template) ellama-template)))
-    (when (not (bufferp buffer))
+    (when (not (get-buffer buffer))
       (create-file-buffer buffer)
       (with-current-buffer buffer
 	(if ellama-buffer-mode
