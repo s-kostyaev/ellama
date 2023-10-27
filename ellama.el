@@ -1,11 +1,11 @@
-;;; ellama.el --- Ollama client for calling local LLMs
+;;; ellama.el --- Tool for interacting with LLMs -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2023 Sergey Kostyaev
 
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (spinner "1.7.4"))
+;; Package-Requires: ((emacs "28.1")(llm "0.5.0")(spinner "1.7.4"))
 ;; Version: 0.1.0
 ;; Created: 8th Oct 2023
 
@@ -24,38 +24,28 @@
 
 ;;; Commentary:
 ;;
-;; Ellama is ollama client for Emacs. Adds ability to call local LLMs from
-;; inside Emacs.
+;; Ellama is a tool for interacting with large language models from Emacs.
+;; It allows you to ask questions and receive responses from the
+;; LLMs. Ellama can perform various tasks such as translation, code
+;; review, summarization, enhancing grammar/spelling or wording and
+;; more through the Emacs interface. Ellama natively supports streaming
+;; output, making it effortless to use with your preferred text editor.
 ;;
 
 ;;; Code:
 
 (require 'json)
+(require 'llm)
+(require 'llm-ollama)
 (require 'spinner)
 
 (defgroup ellama nil
-  "Ollama client for Emacs."
+  "Tool for interacting with LLMs for Emacs."
   :group 'ellama)
-
-(defcustom ellama-url "http://localhost:11434/api/generate" "Url to call ollama."
-  :group 'ellama
-  :type 'string)
-
-(defcustom ellama-curl-executable (executable-find "curl") "Path to curl executable."
-  :group 'ellama
-  :type 'string)
-
-(defcustom ellama-model "zephyr" "Model to use ollama with."
-  :group 'ellama
-  :type 'string)
 
 (defcustom ellama-buffer "*ellama*" "Default ellama buffer."
   :group 'ellama
   :type 'string)
-
-(defcustom ellama-always-show-buffer nil "Always show ellama buffer."
-  :group 'ellama
-  :type 'boolean)
 
 (defcustom ellama-user-nick "User" "User nick in logs."
   :group 'ellama
@@ -73,172 +63,143 @@
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-template nil "Template to use with ollama instead of default."
+(defcustom ellama-provider
+  (make-llm-ollama
+   :chat-model "zephyr" :embedding-model "zephyr")
+  "Backend LLM provider."
   :group 'ellama
-  :type 'string)
+  :type '(sexp :validate 'cl-struct-p))
 
-(defvar-local ellama-context nil "Context that contains ellama conversation memory.")
+(defcustom ellama-spinner-type 'progress-bar "Spinner type for ellama."
+  :group 'ellama
+  :type 'symbol)
 
-(defvar-local ellama--unprocessed-data nil)
+(defvar-local ellama--chat-prompt nil)
 
-(defvar-local ellama--request nil)
+(defvar ellama--code-prefix
+  (rx (minimal-match
+       (zero-or-more anything) (literal "```") (zero-or-more anything) line-end)))
 
-(defvar-local ellama--extract nil)
+(defvar ellama--code-suffix
+  (rx (minimal-match
+       (literal "```") (zero-or-more anything))))
 
-(defvar-local ellama--prefix-regexp nil)
-
-(defvar-local ellama--suffix-regexp nil)
-
-(defvar-local ellama--extraction-state 'before)
-
-(defvar-local ellama--line nil)
-
-(defun ellama--filter (proc string)
-  "Filter function for ellama curl process.
-Filter PROC output STRING."
-  (when (buffer-live-p (process-buffer proc))
-    (with-current-buffer (process-buffer proc)
-      (let ((moving (= (point) (process-mark proc))))
-        ;; Insert the text, advancing the process marker.
-	;; For buffers other than ellama-buffer, stay on current point.
-        (if (string= (buffer-name (process-buffer proc))
-		     ellama-buffer)
-	    (goto-char (process-mark proc))
-	  (set-marker (process-mark proc) (point)))
-	(when ellama--unprocessed-data
-	  (setq string (concat ellama--unprocessed-data string)))
-	(condition-case nil
-	    (progn
-	      (mapc (lambda (s)
-		      (when-let ((data
-				  (json-parse-string s :object-type 'plist)))
-			(when-let ((context (plist-get data :context)))
-			  (setq ellama-context context)
-			  (setq ellama--extract nil)
-			  (setq ellama--extraction-state 'before))
-			(when-let ((response (plist-get data :response)))
-                          (goto-char (process-mark proc))
-			  (if ellama--extract
-			      (progn
-				(setq ellama--line (concat ellama--line response))
-				(when (string-suffix-p "\n" ellama--line)
-				  (pcase ellama--extraction-state
-				    ('before
-				     (when (string-match ellama--prefix-regexp ellama--line)
-				       (setq ellama--extraction-state 'progress)))
-				    ('progress
-				     (if (string-match ellama--suffix-regexp ellama--line)
-					 (setq ellama--extraction-state 'after)
-				       (insert ellama--line)))
-				    (_ nil))
-				  (setq ellama--line nil)))
-                            (insert response)
-                            (set-marker (process-mark proc) (point))))))
-		    (split-string string "\n" t))
-	      (setq ellama--unprocessed-data nil)
-	      (set-marker (process-mark proc) (point))
-	      (if moving (goto-char (process-mark proc))))
-	  (error (setq ellama--unprocessed-data
-		       (car (last (split-string string "\n" t))))))))))
-
-(defun ellama-setup-extraction (prefix-regexp suffix-regexp)
-  "Setup text extraction from ellama response.
-Generation returns only text between PREFIX-REGEXP and SUFFIX-REGEXP."
-  (setq ellama--extract t)
-  (setq ellama--prefix-regexp prefix-regexp)
-  (setq ellama--suffix-regexp suffix-regexp))
-
-(defun ellama-query (prompt &rest args)
+(defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
-
 ARGS contains keys for fine control.
 
-:buffer BUFFER -- BUFFER is the buffer (or `buffer-name') to insert ollama reply
-in. Default value is `ellama-buffer'.
+:buffer BUFFER -- BUFFER is the buffer (or `buffer-name') to insert ellama reply
+in. Default value is (current-buffer).
 
-:display BOOL -- If BOOL, show BUFFER to user.
-Default value is `ellama-always-show-buffer'.
+:point POINT -- POINT is the point in buffer to insert ellama reaply at."
+  (let* ((buffer (or (plist-get args :buffer) (current-buffer)))
+	 (point (or (plist-get args :point)
+		    (with-current-buffer buffer (point)))))
+    (with-current-buffer buffer
+      (save-excursion
+	(let* ((start (make-marker))
+	       (end (make-marker))
+	       (insert-text
+		(lambda (text)
+		  ;; Erase and insert the new text between the marker cons.
+		  (with-current-buffer (marker-buffer start)
+		    (save-excursion
+		      (goto-char start)
+		      (delete-region start end)
+		      (insert text))))))
+          (set-marker start point)
+          (set-marker end point)
+          (set-marker-insertion-type start nil)
+          (set-marker-insertion-type end t)
+	  (spinner-start ellama-spinner-type)
+	  (llm-chat-streaming ellama-provider
+			      (llm-make-simple-chat-prompt prompt)
+			      insert-text
+			      (lambda (text)
+				(funcall insert-text text)
+				(with-current-buffer buffer
+				  (spinner-stop)))
+			      (lambda (_ msg) (error "Error calling the LLM: %s" msg))))))))
 
-:log BOOL -- If BOOL, show conversation between user and ellama, prefixed with
-nicks.
-
-:model MODEL -- MODEL that ollama should use to generate answer. Default value
-is `ellama-model'.
-
-:memory BOOL -- If BOOL, enable conversation memory.
-
-:system SYSTEM -- SYSTEM message for prompt MODEL. If not set, default value
-inside ollama will be used. May not work for some models, see
-https://github.com/jmorganca/ollama/issues/693 - :template can help you in that
-case.
-
-:temperature TEMPERATURE -- set MODEL temperature to TEMPERATURE. If not set,
- default value inside ollama will be used.
-
-:template TEMPLATE -- TEMPLATE to use with ollama MODEL instead of ollama's
-default. Default value is `ellama-template'."
-  (let ((buffer (or (plist-get args :buffer) ellama-buffer))
-	(display (or (plist-get args :display) ellama-always-show-buffer))
-	(log (plist-get args :log))
-	(model (or (plist-get args :model) ellama-model))
-	(memory (plist-get args :memory))
-	(system (plist-get args :system))
-	(temperature (plist-get args :temperature))
-	(template (or (plist-get args :template) ellama-template)))
-    (when (not (get-buffer buffer))
-      (create-file-buffer buffer)
-      (with-current-buffer buffer
-	(if ellama-buffer-mode
-	    (funcall ellama-buffer-mode))))
-    (when display
-      (display-buffer buffer))
-    (when log
-      (with-current-buffer buffer
-	(save-excursion
-	  (goto-char (point-max))
-	  (insert "## " ellama-user-nick ":\n" prompt "\n\n"
-		  "## " ellama-assistant-nick ":\n"))))
-    (let ((sentinel (if log
-			(lambda (proc event)
-			  (when (string= event "finished\n")
-			    (with-current-buffer (process-buffer proc)
+(defun ellama-stream-filter (prompt prefix suffix buffer point)
+  "Query ellama for PROMPT with filtering.
+In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
+  (with-current-buffer buffer
+    (save-excursion
+      (let* ((start (make-marker))
+             (end (make-marker))
+	     (insert-text (lambda (text)
+			    ;; Erase and insert the new text between the marker cons.
+			    (with-current-buffer (marker-buffer start)
 			      (save-excursion
-				(goto-char (point-max))
-				(insert "\n\n"))
-			      (spinner-stop))))
-		      (lambda (proc event)
-			(when (string= event "finished\n")
-			  (with-current-buffer (process-buffer proc)
-			    (spinner-stop)))))))
-      (with-current-buffer buffer
-	(setq ellama--request (list :model model :prompt prompt))
-	(when (and memory ellama-context)
-	  (setq ellama--request (plist-put ellama--request :context ellama-context)))
-	(when system
-	  (setq ellama--request (plist-put ellama--request :system system)))
-	(when temperature
-	  (setq ellama--request (plist-put ellama--request :options
-					   (list :temperature temperature))))
-	(when template
-	  (setq ellama--request (plist-put ellama--request :template template)))
-	;; (message "request: %s" (json-encode-plist ellama--request))
-	(make-process
-	 :buffer buffer
-	 :name "ellama"
-	 :command (list
-		   ellama-curl-executable
-                   "-s" "-X" "POST" ellama-url "-d"
-		   (json-encode-plist ellama--request))
-	 :filter 'ellama--filter
-	 :sentinel sentinel)
-	(spinner-start 'progress-bar)))))
+				(goto-char start)
+				(delete-region start end)
+				;; remove prefix and suffix parts
+				(insert (string-trim-right
+					 (string-trim-left text prefix)
+					 suffix)))))))
+        (set-marker start point)
+        (set-marker end point)
+        (set-marker-insertion-type start nil)
+        (set-marker-insertion-type end t)
+	(spinner-start ellama-spinner-type)
+	(llm-chat-streaming ellama-provider
+			    (llm-make-simple-chat-prompt prompt)
+			    insert-text
+			    (lambda (text)
+			      (funcall insert-text text)
+			      (with-current-buffer buffer
+				(spinner-stop)))
+			    (lambda (_ msg) (error "Error calling the LLM: %s" msg)))))))
 
 ;;;###autoload
-(defun ellama-ask ()
-  "Ask ellama about something."
-  (interactive)
-  (let ((prompt (read-string "Ask ellama: ")))
-    (ellama-query prompt :display t :log t :memory t)))
+(defun ellama-chat (prompt)
+  "Send PROMPT to ellama chat with conversation history."
+  (interactive "sAsk ellama: ")
+  (while (not (buffer-live-p (get-buffer ellama-buffer)))
+    (get-buffer-create ellama-buffer)
+    (with-current-buffer ellama-buffer
+      (funcall ellama-buffer-mode)))
+  (with-current-buffer ellama-buffer
+    (display-buffer ellama-buffer)
+    (if ellama--chat-prompt
+	(llm-chat-prompt-append-response
+	 ellama--chat-prompt prompt)
+      (setq ellama--chat-prompt (llm-make-simple-chat-prompt prompt)))
+    (save-excursion
+      (goto-char (point-max))
+      (insert "## " ellama-user-nick ":\n" prompt "\n\n"
+	      "## " ellama-assistant-nick ":\n")
+      (let* ((start (make-marker))
+	     (end (make-marker))
+	     (point (point-max))
+	     (insert-text
+	      (lambda (text)
+		;; Erase and insert the new text between the marker cons.
+		(with-current-buffer (marker-buffer start)
+		  (save-excursion
+		    (goto-char start)
+		    (delete-region start end)
+		    (insert text))))))
+        (set-marker start point)
+        (set-marker end point)
+        (set-marker-insertion-type start nil)
+        (set-marker-insertion-type end t)
+	(spinner-start ellama-spinner-type)
+	(llm-chat-streaming ellama-provider
+			    ellama--chat-prompt
+			    insert-text
+			    (lambda (text)
+			      (funcall insert-text text)
+			      (with-current-buffer ellama-buffer
+				(save-excursion
+				  (goto-char (point-max))
+				  (insert "\n\n"))
+				(spinner-stop)))
+			    (lambda (_ msg) (error "Error calling the LLM: %s" msg)))))))
+
+;;;###autoload
+(defalias 'ellama-ask 'ellama-chat)
 
 ;;;###autoload
 (defun ellama-ask-about ()
@@ -248,13 +209,13 @@ default. Default value is `ellama-template'."
 	(text (if (region-active-p)
 		  (buffer-substring-no-properties (region-beginning) (region-end))
 		(buffer-substring-no-properties (point-min) (point-max)))))
-    (ellama-query
-     (format "Text:\n%s\nRegarding this text, %s" text input)
-     :display t :log t :memory t)))
+    (ellama-chat (format "Text:\n%s\nRegarding this text, %s" text input))))
 
 (defun ellama-instant (prompt)
   "Prompt ellama for PROMPT to reply instantly."
-  (ellama-query prompt :display t :buffer (make-temp-name ellama-buffer)))
+  (let ((buffer (get-buffer-create (make-temp-name ellama-buffer))))
+    (display-buffer buffer)
+    (ellama-stream prompt :buffer buffer (point-min))))
 
 ;;;###autoload
 (defun ellama-translate ()
@@ -304,11 +265,11 @@ default. Default value is `ellama-template'."
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
-    (ellama-query
+    (ellama-stream
      (format
       "Change the following text, %s, just output the final text without additional quotes around it:\n%s"
       change text)
-     :buffer (current-buffer))))
+     :point beg)))
 
 ;;;###autoload
 (defun ellama-enhance-grammar-spelling ()
@@ -340,12 +301,14 @@ default. Default value is `ellama-template'."
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
-    (ellama-setup-extraction "```.*" "```")
-    (ellama-query
+    (ellama-stream-filter
      (format
-      "Regarding the following code, %s, only ouput the result in format ```\n...\n```:\n```\n%s\n```"
+      "Regarding the following code, %s, only ouput the result code in format ```language\n...\n```:\n```\n%s\n```"
       change text)
-     :buffer (current-buffer))))
+     ellama--code-prefix
+     ellama--code-suffix
+     (current-buffer)
+     beg)))
 
 ;;;###autoload
 (defun ellama-enhance-code ()
@@ -359,12 +322,14 @@ default. Default value is `ellama-template'."
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
-    (ellama-setup-extraction "```.*" "```")
-    (ellama-query
+    (ellama-stream-filter
      (format
-      "Enhance the following code, only ouput the result in format ```\n...\n```:\n```\n%s\n```"
+      "Enhance the following code, only ouput the result code in format ```language\n...\n```:\n```\n%s\n```"
       text)
-     :buffer (current-buffer))))
+     ellama--code-prefix
+     ellama--code-suffix
+     (current-buffer)
+     beg)))
 
 ;;;###autoload
 (defun ellama-complete-code ()
@@ -377,12 +342,14 @@ default. Default value is `ellama-template'."
 		  (region-end)
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
-    (ellama-setup-extraction "```.*" "```")
-    (ellama-query
+    (ellama-stream-filter
      (format
-      "Continue the following code, only ouput the result in format ```\n...\n```:\n```\n%s\n```"
+      "Continue the following code, only write new code in format ```language\n...\n```:\n```\n%s\n```"
       text)
-     :buffer (current-buffer))))
+     ellama--code-prefix
+     ellama--code-suffix
+     (current-buffer)
+     end)))
 
 ;;;###autoload
 (defun ellama-add-code (description)
@@ -397,12 +364,14 @@ buffer."
 		  (region-end)
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
-    (ellama-setup-extraction "```.*" "```")
-    (ellama-query
+    (ellama-stream-filter
      (format
       "Context: \n```\n%s\n```\nBased on this context, %s, only ouput the result in format ```\n...\n```"
       text description)
-     :buffer (current-buffer))))
+     ellama--code-prefix
+     ellama--code-suffix
+     (current-buffer)
+     end)))
 
 
 ;;;###autoload
@@ -417,11 +386,11 @@ buffer."
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
-    (ellama-query
+    (ellama-stream
      (format
       "Render the following text as a %s:\n%s"
       needed-format text)
-     :buffer (current-buffer))))
+     :point beg)))
 
 ;;;###autoload
 (defun ellama-make-list ()
