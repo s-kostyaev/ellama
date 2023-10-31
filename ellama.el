@@ -98,8 +98,8 @@
        (literal "```") (zero-or-more anything))))
 
 
-(defun set-visual-line-mode-for-ellama-buffer ()
-  "Sets visual-line-mode for the *ellama* buffer"
+(defun ellama-set-visual-line-mode-for-ellama-buffer ()
+  "Set `visual-line-mode' for the *ellama* buffer."
   (when (string-prefix-p "*ellama*" (buffer-name))
     (visual-line-mode 1)))
 
@@ -110,8 +110,8 @@
 	:set (lambda (symbol value)
          (set symbol value)
          (if value
-           (add-hook 'buffer-list-update-hook 'set-visual-line-mode-for-ellama-buffer)
-			     (remove-hook 'buffer-list-update-hook 'set-visual-line-mode-for-ellama-buffer))))
+           (add-hook 'buffer-list-update-hook 'ellama-set-visual-line-mode-for-ellama-buffer)
+			     (remove-hook 'buffer-list-update-hook 'ellama-set-visual-line-mode-for-ellama-buffer))))
 
 (defun ellama-setup-keymap ()
 	"Set up the Ellama keymap and bindings."
@@ -123,13 +123,22 @@
 
 	(let ((key-commands
           '(("a" ellama-ask-about "Ask about selected region")
-			       ("b" ellama-make-concise "Better text")
-			       ("c" ellama-chat "Chat with Ellama")
-			       ("d" ellama-define-word "Define selected word")
-			       ("r" ellama-code-review "Code-review selected code")
-			       ("s" ellama-summarize "Summarize selected text")
-			       ("t" ellama-translate "Translate the selected region")
-			       ("w" ellama-summarize-webpage "Summarize a web page"))))
+			      ("b" ellama-make-concise "Better text")
+			      ("c" ellama-chat "Chat with Ellama")
+			      ("d" ellama-define-word "Define selected word")
+			      ("r" ellama-code-review "Code-review selected code")
+			      ("s" ellama-summarize "Summarize selected text")
+			      ("t" ellama-translate "Translate the selected region")
+			      ("w" ellama-summarize-webpage "Summarize a web page")
+            ("c" ellama-render "Convert text to a specified format")
+            ("e" ellama-enhance-grammar-spelling "Enhance grammar and spelling")
+            ("g" ellama-change-code "Change selected code")
+            ("m" ellama-make-list "Create a markdown list")
+            ("n" ellama-enhance-wording "Enhance wording")
+            ("o" ellama-enhance-code "Enhance selected code")
+            ("t" ellama-make-table "Generate a markdown table")
+            ("x" ellama-complete-code "Complete selected code")
+            ("z" ellama-add-code "Add new code based on description"))))
     (dolist (key-command key-commands)
 		  (define-key ellama-keymap (kbd (car key-command)) (cadr key-command)))))
 
