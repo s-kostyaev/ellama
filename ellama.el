@@ -111,7 +111,7 @@
          (set symbol value)
          (if value
            (add-hook 'buffer-list-update-hook 'ellama-set-visual-line-mode-for-ellama-buffer)
-			     (remove-hook 'buffer-list-update-hook 'ellama-set-visual-line-mode-for-ellama-buffer))))
+           (remove-hook 'buffer-list-update-hook 'ellama-set-visual-line-mode-for-ellama-buffer))))
 
 (defun ellama-setup-keymap ()
 	"Set up the Ellama keymap and bindings."
@@ -123,13 +123,13 @@
 
 	(let ((key-commands
           '(("a" ellama-ask-about "Ask about selected region")
-			      ("b" ellama-make-concise "Better text")
-			      ("c" ellama-chat "Chat with Ellama")
-			      ("d" ellama-define-word "Define selected word")
-			      ("r" ellama-code-review "Code-review selected code")
-			      ("s" ellama-summarize "Summarize selected text")
-			      ("t" ellama-translate "Translate the selected region")
-			      ("w" ellama-summarize-webpage "Summarize a web page")
+            ("b" ellama-make-concise "Better text")
+            ("c" ellama-chat "Chat with Ellama")
+            ("d" ellama-define-word "Define selected word")
+            ("r" ellama-code-review "Code-review selected code")
+            ("s" ellama-summarize "Summarize selected text")
+            ("t" ellama-translate "Translate the selected region")
+            ("w" ellama-summarize-webpage "Summarize a web page")
             ("c" ellama-render "Convert text to a specified format")
             ("e" ellama-enhance-grammar-spelling "Enhance grammar and spelling")
             ("g" ellama-change-code "Change selected code")
@@ -140,7 +140,7 @@
             ("x" ellama-complete-code "Complete selected code")
             ("z" ellama-add-code "Add new code based on description"))))
     (dolist (key-command key-commands)
-		  (define-key ellama-keymap (kbd (car key-command)) (cadr key-command)))))
+      (define-key ellama-keymap (kbd (car key-command)) (cadr key-command)))))
 
 (defcustom ellama-keymap-prefix "C-x e"
 	"Key sequence for Ellama Commands."
@@ -155,8 +155,8 @@
          (set symbol value)
          (if value
            (ellama-setup-keymap)
-			     ;; If ellama-enable-keymap is nil, remove the key bindings
-			     (define-key global-map (kbd ellama-keymap-prefix) nil))))
+           ;; If ellama-enable-keymap is nil, remove the key bindings
+           (define-key global-map (kbd ellama-keymap-prefix) nil))))
 
 
 (defun ellama-stream (prompt &rest args)
