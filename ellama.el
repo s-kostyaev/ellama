@@ -97,66 +97,69 @@
   (rx (minimal-match
        (literal "```") (zero-or-more anything))))
 
-
 (defun ellama-set-visual-line-mode-for-ellama-buffer ()
   "Set `visual-line-mode' for the *ellama* buffer."
   (when (string-prefix-p "*ellama*" (buffer-name))
     (visual-line-mode 1)))
 
 (defcustom ellama-enable-break-lines t
-	"Enable or disable break lines for *ellama* buffer."
-	:type 'boolean
-	:group 'ellama
-	:set (lambda (symbol value)
+  "Enable or disable break lines for *ellama* buffer."
+  :type 'boolean
+  :group 'ellama
+  :set (lambda (symbol value)
          (set symbol value)
          (if value
-           (add-hook 'buffer-list-update-hook 'ellama-set-visual-line-mode-for-ellama-buffer)
+             (add-hook 'buffer-list-update-hook 'ellama-set-visual-line-mode-for-ellama-buffer)
            (remove-hook 'buffer-list-update-hook 'ellama-set-visual-line-mode-for-ellama-buffer))))
 
 (defun ellama-setup-keymap ()
-	"Set up the Ellama keymap and bindings."
-	(interactive)
-	(defvar ellama-keymap (make-sparse-keymap)
+  "Set up the Ellama keymap and bindings."
+  (interactive)
+  (defvar ellama-keymap (make-sparse-keymap)
     "Keymap for Ellama Commands")
 
-	(define-key global-map (kbd ellama-keymap-prefix) ellama-keymap)
+  (define-key global-map (kbd ellama-keymap-prefix) ellama-keymap)
 
-	(let ((key-commands
-          '(("a" ellama-ask-about "Ask about selected region")
-            ("b" ellama-make-concise "Better text")
-            ("c" ellama-chat "Chat with Ellama")
-            ("d" ellama-define-word "Define selected word")
-            ("r" ellama-code-review "Code-review selected code")
-            ("s" ellama-summarize "Summarize selected text")
-            ("t" ellama-translate "Translate the selected region")
-            ("w" ellama-summarize-webpage "Summarize a web page")
-            ("c" ellama-render "Convert text to a specified format")
-            ("e" ellama-enhance-grammar-spelling "Enhance grammar and spelling")
-            ("g" ellama-change-code "Change selected code")
-            ("m" ellama-make-list "Create a markdown list")
-            ("n" ellama-enhance-wording "Enhance wording")
-            ("o" ellama-enhance-code "Enhance selected code")
-            ("t" ellama-make-table "Generate a markdown table")
-            ("x" ellama-complete-code "Complete selected code")
-            ("z" ellama-add-code "Add new code based on description"))))
+  (let ((key-commands
+         '(("a a"   ellama-ask-about "Ask about selected region")
+           ("m c"   ellama-make-concise "Better text")
+           ("c h"   ellama-chat "Chat with Ellama")
+           ("d w"   ellama-define-word "Define selected word")
+           ("c r"   ellama-code-review "Code-review selected code")
+           ("s m"   ellama-summarize "Summarize selected region")
+           ("s w"   ellama-summarize-webpage "Summarize a web page")
+           ("t"     ellama-translate "Translate the selected region")
+           ("r"     ellama-render "Convert text to a specified format")
+           ("e g s" ellama-enhance-grammar-spelling "Enhance grammar and spelling")
+           ("e w"   ellama-enhance-wording "Enhance wording")
+           ("e c"   ellama-enhance-code "Enhance selected code")
+           ("c c"   ellama-change-code "Replace selected code")
+           ("m l"   ellama-make-list "Create a markdown list")
+           ("m t"   ellama-make-table "Generate a markdown table")
+           ("c o"   ellama-complete-code "Complete selected code")
+           ("a c"   ellama-add-code "Add new code based on description"))))
     (dolist (key-command key-commands)
-      (define-key ellama-keymap (kbd (car key-command)) (cadr key-command)))))
+      (let ((key (car key-command))
+            (function (cadr key-command)))
+        (eval `(define-key ellama-keymap (kbd ,key) ',function))))))
 
 (defcustom ellama-keymap-prefix "C-x e"
-	"Key sequence for Ellama Commands."
-	:type 'string
-	:group 'ellama)
+  "Key sequence for Ellama Commands."
+  :type 'string
+  :group 'ellama)
 
 (defcustom ellama-enable-keymap t
-	"Enable or disable Ellama keymap."
-	:type 'boolean
-	:group 'ellama
-	:set (lambda (symbol value)
+  "Enable or disable Ellama keymap."
+  :type 'boolean
+  :group 'ellama
+  :set (lambda (symbol value)
          (set symbol value)
          (if value
-           (ellama-setup-keymap)
+             (ellama-setup-keymap)
            ;; If ellama-enable-keymap is nil, remove the key bindings
            (define-key global-map (kbd ellama-keymap-prefix) nil))))
+
+
 
 
 (defun ellama-stream (prompt &rest args)
