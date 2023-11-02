@@ -5,7 +5,7 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1")(llm "0.5.0")(spinner "1.7.4"))
+;; Package-Requires: ((emacs "28.1")(llm "0.5.1")(spinner "1.7.4"))
 ;; Version: 0.1.0
 ;; Created: 8th Oct 2023
 
