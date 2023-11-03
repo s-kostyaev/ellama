@@ -121,27 +121,33 @@
   (define-key global-map (kbd ellama-keymap-prefix) ellama-keymap)
 
   (let ((key-commands
-         '(("a a"   ellama-ask-about "Ask about selected region")
-           ("m c"   ellama-make-concise "Better text")
-           ("c h"   ellama-chat "Chat with Ellama")
-           ("d w"   ellama-define-word "Define selected word")
-           ("c r"   ellama-code-review "Code-review selected code")
-           ("s m"   ellama-summarize "Summarize selected region")
-           ("s w"   ellama-summarize-webpage "Summarize a web page")
-           ("t"     ellama-translate "Translate the selected region")
-           ("r"     ellama-render "Convert text to a specified format")
-           ("e g s" ellama-enhance-grammar-spelling "Enhance grammar and spelling")
-           ("e w"   ellama-enhance-wording "Enhance wording")
-           ("e c"   ellama-enhance-code "Enhance selected code")
-           ("c c"   ellama-change-code "Replace selected code")
-           ("m l"   ellama-make-list "Create a markdown list")
-           ("m t"   ellama-make-table "Generate a markdown table")
-           ("c o"   ellama-complete-code "Complete selected code")
-           ("a c"   ellama-add-code "Add new code based on description"))))
-    (dolist (key-command key-commands)
-      (let ((key (car key-command))
-            (function (cadr key-command)))
-        (eval `(define-key ellama-keymap (kbd ,key) ',function))))))
+          '(
+             ;; code
+	           ("c c" ellama-code-complete "Code complete")
+	           ("c a" ellama-code-add "Code add")
+	           ("c e" ellama-code-edit "Code edit")
+	           ("c i" ellama-code-improve "Code improve")
+	           ("c r" ellama-code-review "Code review")
+	           ;; summarize
+	           ("s s" ellama-summarize "Summarize")
+	           ("s w" ellama-summarize-webpage "Summarize webpage")
+	           ;; improve
+	           ("i w" ellama-improve-wording "Improve wording")
+	           ("i g" ellama-improve-grammar "Improve grammar and spelling")
+	           ("i c" ellama-improve-conciseness "Improve conciseness")
+	           ;; make
+	           ("m l" ellama-make-list "Make list")
+	           ("m t" ellama-make-table "Make table")
+	           ("m f" ellama-make-format "Make format")
+	           ;; ask
+	           ("a a" ellama-ask-about "Ask about")
+	           ("a i" ellama-ask-interactive "Chat with ellama")
+	           ;; other
+	           ("t"   ellama-translate "Translate the selected region")
+	           ("d"   ellama-define-word "Define selected word"))))
+            (dolist (key-command key-commands)
+            (define-key ellama-keymap (kbd (car key-command)) (cadr key-command)))))
+
 
 (defcustom ellama-keymap-prefix "C-x e"
   "Key sequence for Ellama Commands."
@@ -158,9 +164,6 @@
              (ellama-setup-keymap)
            ;; If ellama-enable-keymap is nil, remove the key bindings
            (define-key global-map (kbd ellama-keymap-prefix) nil))))
-
-
-
 
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
@@ -300,6 +303,33 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
 
 ;;;###autoload
 (defalias 'ellama-ask 'ellama-chat)
+
+;;;###autoload
+(defalias 'ellama-code-complete 'ellama-complete-code)
+
+;;;###autoload
+(defalias 'ellama-code-add 'ellama-add-code)
+
+;;;###autoload
+(defalias 'ellama-code-edit 'ellama-change-code)
+
+;;###autoload
+(defalias 'ellama-code-improve 'ellama-enhance-code)
+
+;;;###autoload
+(defalias 'ellama-improve-wording 'ellama-enhance-wording)
+
+;;;###autoload
+(defalias 'ellama-improve-grammar 'ellama-enhance-grammar-spelling)
+
+;;;###autoload
+(defalias 'ellama-improve-conciseness 'ellama-make-concise)
+
+;;;###autoload
+(defalias 'ellama-make-format 'ellama-render)
+
+;;;###autoload
+(defalias 'ellama-ask-interactive 'ellama-ask)
 
 ;;;###autoload
 (defun ellama-ask-about ()

@@ -145,11 +145,78 @@ Create a markdown table from the active region or the current buffer using Ellam
 
 Summarize a webpage fetched from a URL using Ellama.
 
+### ellama-code-complete
+
+Alias to the `ellama-complete-code` function.
+
+### ellama-code-add
+
+Alias to the `ellama-add-code` function.
+
+### ellama-code-edit
+
+Alias to the `ellama-change-code` function.
+
+### ellama-code-improve
+
+Alias to the `ellama-enhance-code` function.
+
+### ellama-improve-wording
+
+Alias to the `ellama-enhance-wording` function.
+
+### ellama-improve-grammar
+
+Alias to the `ellama-enhance-grammar-spelling` function.
+
+### ellama-improve-conciseness
+
+Alias to the `ellama-make-concise` function.
+
+### ellama-make-format
+
+Alias to the `ellama-render` function.
+
+### ellama-ask-interactive
+Alias to the `ellama-ask` function.
+
+
+## Keymap
+
+Here is a table of keybindings and their associated functions in
+Ellama, using the `C-x e` prefix:
+
+| Keymap | Function                   | Description                        |
+|--------|----------------------------|------------------------------------|
+| "c c"  | ellama-code-complete       | Code complete                      |
+| "c a"  | ellama-code-add            | Code add                           |
+| "c e"  | ellama-code-edit           | Code edit                          |
+| "c i"  | ellama-code-improve        | Code improve                       |
+| "c r"  | ellama-code-review         | Code review                        |
+| "s s"  | ellama-summarize           | Summarize                          |
+| "s w"  | ellama-summarize-webpage   | Summarize webpage                  |
+| "i w"  | ellama-improve-wording     | Improve wording                    |
+| "i g"  | ellama-improve-grammar     | Improve grammar and spelling       |
+| "i c"  | ellama-improve-conciseness | Improve conciseness                |
+| "m l"  | ellama-make-list           | Make list                          |
+| "m t"  | ellama-make-table          | Make table                         |
+| "m f"  | ellama-make-format         | Make format                        |
+| "a a"  | ellama-ask-about           | Ask about                          |
+| "a i"  | ellama-ask-interactive     | Chat with ellama (Interactive)     |
+| "t"    | ellama-translate           | Translate the selected region      |
+| "d"    | ellama-define-word         | Define selected word               |
+
+
 ## Configuration
 
 The following variables can be customized for the Ellama client:
 
 - `ellama-buffer`: The default Ellama buffer name.
+- `ellama-enable-break-lines`: Enable visual-mode to \*\*ellama\*\*
+  buffers, hence avoiding the need of horizontal scrolling on long
+  lines.
+- `ellama-enable-keymap`: Enable the Ellama keymap.
+- `ellama-keymap-prefix`: The keymap prefix for Ellama.
 - `ellama-user-nick`: The user nick in logs.
 - `ellama-assistant-nick`: The assistant nick in logs.
 - `ellama-buffer-mode`: The major mode for the Ellama logs buffer.
