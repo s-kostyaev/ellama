@@ -73,6 +73,9 @@ Find the definition of the current word using Ellama.
 Summarize a selected region or the current buffer using Ellama.
 ![ellama-summarize](imgs/ellama-summarize.gif)
 
+### ellama-make-flash-cards
+Create flashcards in org-mode headline format, which could later be used with packages such as [org-anki](https://github.com/eyeinsky/org-anki).
+
 ### ellama-code-review
 
 Review code in a selected region or the current buffer using Ellama.
