@@ -247,6 +247,22 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
 		(buffer-substring-no-properties (point-min) (point-max)))))
     (ellama-chat (format "Text:\n%s\nRegarding this text, %s" text input))))
 
+;;;###autoload
+(defun ellama-ask-selection ()
+  "Send selected region or current buffer to ellama chat."
+  (interactive)
+  (let ((text (if (region-active-p)
+		  (buffer-substring-no-properties (region-beginning) (region-end))
+		(buffer-substring-no-properties (point-min) (point-max)))))
+    (ellama-chat text)))
+
+;;;###autoload
+(defun ellama-ask-line ()
+  "Send current line to ellama chat."
+  (interactive)
+  (let ((text (thing-at-point 'line)))
+    (ellama-chat text)))
+
 (defun ellama-instant (prompt)
   "Prompt ellama for PROMPT to reply instantly."
   (let ((buffer (get-buffer-create (make-temp-name ellama-buffer))))
