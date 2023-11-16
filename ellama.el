@@ -26,9 +26,9 @@
 ;;
 ;; Ellama is a tool for interacting with large language models from Emacs.
 ;; It allows you to ask questions and receive responses from the
-;; LLMs. Ellama can perform various tasks such as translation, code
+;; LLMs.  Ellama can perform various tasks such as translation, code
 ;; review, summarization, enhancing grammar/spelling or wording and
-;; more through the Emacs interface. Ellama natively supports streaming
+;; more through the Emacs interface.  Ellama natively supports streaming
 ;; output, making it effortless to use with your preferred text editor.
 ;;
 
@@ -36,51 +36,65 @@
 
 (require 'json)
 (require 'llm)
-(require 'llm-ollama)
 (require 'spinner)
+(eval-when-compile (require 'rx))
 
 (defgroup ellama nil
   "Tool for interacting with LLMs for Emacs."
   :group 'ellama)
 
-(defcustom ellama-buffer "*ellama*" "Default ellama buffer."
+(defcustom ellama-buffer "*ellama*"
+ "Default ellama buffer."
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-user-nick "User" "User nick in logs."
+(defcustom ellama-user-nick "User"
+ "User nick in logs."
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-assistant-nick "Ellama" "Assistant nick in logs."
+(defcustom ellama-assistant-nick "Ellama"
+ "Assistant nick in logs."
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-buffer-mode 'markdown-mode "Major mode for ellama logs."
+(defcustom ellama-buffer-mode (if (fboundp 'markdown-mode)
+				  'markdown-mode
+				'text-mode)
+ "Major mode for ellama logs."
   :group 'ellama
   :type 'function)
 
-(defcustom ellama-language "English" "Language for ellama translation."
+(defcustom ellama-language "English"
+ "Language for ellama translation."
   :group 'ellama
   :type 'string)
 
 (defcustom ellama-provider
-  (make-llm-ollama
-   :chat-model "zephyr" :embedding-model "zephyr")
+  (progn
+    (declare-function make-llm-ollama "llm-ollama")
+    (require 'llm-ollama)
+    (make-llm-ollama
+     :chat-model "zephyr" :embedding-model "zephyr"))
   "Backend LLM provider."
   :group 'ellama
   :type '(sexp :validate 'cl-struct-p))
 
-(defcustom ellama-spinner-type 'progress-bar "Spinner type for ellama."
+(defcustom ellama-spinner-type 'progress-bar
+ "Spinner type for ellama."
   :group 'ellama
-  :type 'symbol)
+  :type `(choice ,@(mapcar
+		    (lambda (type)
+		      `(const ,(car type)))
+		    spinner-types)))
 
 (defvar-local ellama--chat-prompt nil)
 
-(defvar ellama--code-prefix
+(defconst ellama--code-prefix
   (rx (minimal-match
        (zero-or-more anything) (literal "```") (zero-or-more anything) line-end)))
 
-(defvar ellama--code-suffix
+(defconst ellama--code-suffix
   (rx (minimal-match
        (literal "```") (zero-or-more anything))))
 
@@ -89,7 +103,7 @@
 ARGS contains keys for fine control.
 
 :buffer BUFFER -- BUFFER is the buffer (or `buffer-name') to insert ellama reply
-in. Default value is (current-buffer).
+in.  Default value is (current-buffer).
 
 :point POINT -- POINT is the point in buffer to insert ellama reaply at."
   (let* ((buffer (or (plist-get args :buffer) (current-buffer)))
@@ -156,7 +170,7 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
 (defun ellama-chat (prompt)
   "Send PROMPT to ellama chat with conversation history."
   (interactive "sAsk ellama: ")
-  (while (not (buffer-live-p (get-buffer ellama-buffer)))
+  (when (not (buffer-live-p (get-buffer ellama-buffer)))
     (get-buffer-create ellama-buffer)
     (with-current-buffer ellama-buffer
       (funcall ellama-buffer-mode)))
