@@ -17,6 +17,10 @@ output, making it effortless to use with your preferred text editor.
 library](https://elpa.gnu.org/packages/llm.html). [Many
 providers](https://github.com/ahyatt/llm#setting-up-providers)
 supported.
+- `17.11.2023` - Changes by ellama is now atomic. It can be useful if
+  you want to undo this changes. Two new commands added:
+  `ellama-ask-selection` and `ellama-ask-line`. Some cosmetic changes
+  done.
 
 ## Installation
 
@@ -57,6 +61,14 @@ Alias for `ellama-chat`.
 
 Ask Ellama about a selected region or the current buffer.
 ![ellama-ask-about](imgs/ellama-ask-about.gif)
+
+### ellama-ask-selection
+
+Send selected region or current buffer to ellama chat.
+
+### ellama-ask-line
+
+Send current line to ellama chat.
 
 ### ellama-translate
 
