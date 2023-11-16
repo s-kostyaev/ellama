@@ -90,6 +90,8 @@
 
 (defvar-local ellama--chat-prompt nil)
 
+(defvar-local ellama--change-group nil)
+
 (defconst ellama--code-prefix
   (rx (minimal-match
        (zero-or-more anything) (literal "```") (zero-or-more anything) line-end)))
@@ -110,7 +112,8 @@ in.  Default value is (current-buffer).
 	 (point (or (plist-get args :point)
 		    (with-current-buffer buffer (point)))))
     (with-current-buffer buffer
-      (save-excursion
+      (unwind-protect
+       (save-excursion
 	(let* ((start (make-marker))
 	       (end (make-marker))
 	       (insert-text
@@ -121,6 +124,8 @@ in.  Default value is (current-buffer).
 		      (goto-char start)
 		      (delete-region start end)
 		      (insert text))))))
+	  (setq ellama--change-group (prepare-change-group))
+	  (activate-change-group ellama--change-group)
           (set-marker start point)
           (set-marker end point)
           (set-marker-insertion-type start nil)
@@ -132,14 +137,19 @@ in.  Default value is (current-buffer).
 			      (lambda (text)
 				(funcall insert-text text)
 				(with-current-buffer buffer
+				  (undo-amalgamate-change-group ellama--change-group)
+				  (accept-change-group ellama--change-group)
 				  (spinner-stop)))
-			      (lambda (_ msg) (error "Error calling the LLM: %s" msg))))))))
+			      (lambda (_ msg)
+				(error "Error calling the LLM: %s" msg)
+				(cancel-change-group ellama--change-group)))))))))
 
 (defun ellama-stream-filter (prompt prefix suffix buffer point)
   "Query ellama for PROMPT with filtering.
 In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
   (with-current-buffer buffer
-    (save-excursion
+    (unwind-protect
+     (save-excursion
       (let* ((start (make-marker))
              (end (make-marker))
 	     (insert-text (lambda (text)
@@ -152,6 +162,8 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
 				(insert (string-trim-right
 					 (string-trim-left text prefix)
 					 suffix)))))))
+	(setq ellama--change-group (prepare-change-group))
+	(activate-change-group ellama--change-group)
         (set-marker start point)
         (set-marker end point)
         (set-marker-insertion-type start nil)
@@ -163,8 +175,12 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
 			    (lambda (text)
 			      (funcall insert-text text)
 			      (with-current-buffer buffer
+				(undo-amalgamate-change-group ellama--change-group)
+				(accept-change-group ellama--change-group)
 				(spinner-stop)))
-			    (lambda (_ msg) (error "Error calling the LLM: %s" msg)))))))
+			    (lambda (_ msg)
+			      (cancel-change-group ellama--change-group)
+			      (error "Error calling the LLM: %s" msg))))))))
 
 ;;;###autoload
 (defun ellama-chat (prompt)
@@ -195,6 +211,8 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
 		    (goto-char start)
 		    (delete-region start end)
 		    (insert text))))))
+	(setq ellama--change-group (prepare-change-group))
+	(activate-change-group ellama--change-group)
         (set-marker start point)
         (set-marker end point)
         (set-marker-insertion-type start nil)
@@ -209,8 +227,12 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
 				(save-excursion
 				  (goto-char (point-max))
 				  (insert "\n\n"))
+				(undo-amalgamate-change-group ellama--change-group)
+				(accept-change-group ellama--change-group)
 				(spinner-stop)))
-			    (lambda (_ msg) (error "Error calling the LLM: %s" msg)))))))
+			    (lambda (_ msg)
+			      (cancel-change-group ellama--change-group)
+			      (error "Error calling the LLM: %s" msg)))))))
 
 ;;;###autoload
 (defalias 'ellama-ask 'ellama-chat)
