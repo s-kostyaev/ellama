@@ -142,6 +142,8 @@
 	           ;; ask
 	           ("a a" ellama-ask-about "Ask about")
 	           ("a i" ellama-ask-interactive "Chat with ellama")
+	           ("a l" ellama-ask-line "Ask about current line")
+	           ("a s" ellama-ask-selection "Ask about selection")
 	           ;; other
 	           ("t"   ellama-translate "Translate the selected region")
 	           ("d"   ellama-define-word "Define selected word"))))

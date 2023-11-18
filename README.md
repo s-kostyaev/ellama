@@ -203,6 +203,8 @@ Ellama, using the `C-x e` prefix:
 | "m f"  | ellama-make-format         | Make format                        |
 | "a a"  | ellama-ask-about           | Ask about                          |
 | "a i"  | ellama-ask-interactive     | Chat with ellama (Interactive)     |
+| "a l"  | ellama-ask-line            | Ask about current line             |
+| "a s"  | ellama-ask-selection       | Ask about selection                |
 | "t"    | ellama-translate           | Translate the selected region      |
 | "d"    | ellama-define-word         | Define selected word               |
 
