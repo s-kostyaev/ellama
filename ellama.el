@@ -183,18 +183,16 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
 (defun ellama-select-local-ollama-model ()
   "Override the default `ellama-provider' with the local selected model."
   (interactive)
-  (let* ((ollama-list-command "ollama list | sed 1d")
+  (let* ((ollama-list-command "ollama list")
          (ollama-models (split-string (shell-command-to-string ollama-list-command) "\n" t))
          (ellama-selected-ollama-model
-          (car (split-string (completing-read "Select a local model: " ollama-models)))))
+         (car (split-string (completing-read "Select a local model: " (cdr ollama-models))))))
 
-    (setq-local ellama-selected-ollama-model ellama-selected-ollama-model)
-    
-    (setopt ellama-provider
+         (setq ellama-provider
             (make-llm-ollama
              :chat-model ellama-selected-ollama-model :embedding-model ellama-selected-ollama-model))
 
-    (message "Using now Ollama Model: %s. Default configuration is dropped for this Emacs session."
+         (message "Using now Ollama Model: %s. Default configuration is dropped for this Emacs session."
 			 (propertize ellama-selected-ollama-model 'face '(:weight bold)))))
 
 ;;;###autoload
