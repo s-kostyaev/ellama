@@ -113,36 +113,37 @@ in.  Default value is (current-buffer).
 		    (with-current-buffer buffer (point)))))
     (with-current-buffer buffer
       (unwind-protect
-       (save-excursion
-	(let* ((start (make-marker))
-	       (end (make-marker))
-	       (insert-text
-		(lambda (text)
-		  ;; Erase and insert the new text between the marker cons.
-		  (with-current-buffer (marker-buffer start)
-		    (save-excursion
-		      (goto-char start)
-		      (delete-region start end)
-		      (insert text))))))
-	  (setq ellama--change-group (prepare-change-group))
-	  (activate-change-group ellama--change-group)
-          (set-marker start point)
-          (set-marker end point)
-          (set-marker-insertion-type start nil)
-          (set-marker-insertion-type end t)
-	  (spinner-start ellama-spinner-type)
-	  (llm-chat-streaming ellama-provider
-			      (llm-make-simple-chat-prompt prompt)
-			      insert-text
-			      (lambda (text)
-				(funcall insert-text text)
-				(with-current-buffer buffer
-				  (undo-amalgamate-change-group ellama--change-group)
-				  (accept-change-group ellama--change-group)
-				  (spinner-stop)))
-			      (lambda (_ msg)
-				(error "Error calling the LLM: %s" msg)
-				(cancel-change-group ellama--change-group)))))))))
+	  (save-excursion
+	    (let* ((start (make-marker))
+		   (end (make-marker))
+		   (insert-text
+		    (lambda (text)
+		      ;; Erase and insert the new text between the marker cons.
+		      (with-current-buffer (marker-buffer start)
+			(save-excursion
+			  (goto-char start)
+			  (delete-region start end)
+			  (insert text)
+			  (fill-region start (point)))))))
+	      (setq ellama--change-group (prepare-change-group))
+	      (activate-change-group ellama--change-group)
+              (set-marker start point)
+              (set-marker end point)
+              (set-marker-insertion-type start nil)
+              (set-marker-insertion-type end t)
+	      (spinner-start ellama-spinner-type)
+	      (llm-chat-streaming ellama-provider
+				  (llm-make-simple-chat-prompt prompt)
+				  insert-text
+				  (lambda (text)
+				    (funcall insert-text text)
+				    (with-current-buffer buffer
+				      (undo-amalgamate-change-group ellama--change-group)
+				      (accept-change-group ellama--change-group)
+				      (spinner-stop)))
+				  (lambda (_ msg)
+				    (error "Error calling the LLM: %s" msg)
+				    (cancel-change-group ellama--change-group)))))))))
 
 (defun ellama-stream-filter (prompt prefix suffix buffer point)
   "Query ellama for PROMPT with filtering.
@@ -210,7 +211,8 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
 		  (save-excursion
 		    (goto-char start)
 		    (delete-region start end)
-		    (insert text))))))
+		    (insert text)
+		    (fill-region start (point)))))))
 	(setq ellama--change-group (prepare-change-group))
 	(activate-change-group ellama--change-group)
         (set-marker start point)
@@ -255,6 +257,19 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
 		  (buffer-substring-no-properties (region-beginning) (region-end))
 		(buffer-substring-no-properties (point-min) (point-max)))))
     (ellama-chat text)))
+
+;;;###autoload
+(defun ellama-complete ()
+  "Complete text in current buffer."
+  (interactive)
+  (let* ((beg (if (region-active-p)
+		  (region-beginning)
+		(point-min)))
+	 (end (if (region-active-p)
+		  (region-end)
+		(point)))
+	 (text (buffer-substring-no-properties beg end)))
+    (ellama-stream text)))
 
 ;;;###autoload
 (defun ellama-ask-line ()
@@ -385,7 +400,7 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
 
 ;;;###autoload
 (defun ellama-complete-code ()
-  "Change selected code or code in current buffer according to provided CHANGE."
+  "Complete selected code or code in current buffer."
   (interactive)
   (let* ((beg (if (region-active-p)
 		  (region-beginning)
