@@ -1,12 +1,13 @@
 ;;; ellama.el --- Tool for interacting with LLMs -*- lexical-binding: t -*-
 
-;; Copyright (C) 2023 Sergey Kostyaev
+;; Copyright (C) 2023  Free Software Foundation, Inc.
 
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.1.0
+;; Version: 0.2.0
+;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
 ;; This file is free software; you can redistribute it and/or modify
@@ -20,7 +21,7 @@
 ;; GNU General Public License for more details.
 
 ;; You should have received a copy of the GNU General Public License
-;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
+;; along with GNU Emacs.  If not, see <http://www.gnu.org/licenses/>.
 
 ;;; Commentary:
 ;;
@@ -39,35 +40,31 @@
 (require 'spinner)
 (eval-when-compile (require 'rx))
 
-(defgroup ellama nil
-  "Tool for interacting with LLMs for Emacs."
-  :group 'ellama)
-
 (defcustom ellama-buffer "*ellama*"
- "Default ellama buffer."
-  :group 'ellama
+  "Default ellama buffer."
+  :group 'tools
   :type 'string)
 
 (defcustom ellama-user-nick "User"
- "User nick in logs."
-  :group 'ellama
+  "User nick in logs."
+  :group 'tools
   :type 'string)
 
 (defcustom ellama-assistant-nick "Ellama"
- "Assistant nick in logs."
-  :group 'ellama
+  "Assistant nick in logs."
+  :group 'tools
   :type 'string)
 
 (defcustom ellama-buffer-mode (if (fboundp 'markdown-mode)
 				  'markdown-mode
 				'text-mode)
- "Major mode for ellama logs."
-  :group 'ellama
+  "Major mode for ellama logs."
+  :group 'tools
   :type 'function)
 
 (defcustom ellama-language "English"
- "Language for ellama translation."
-  :group 'ellama
+  "Language for ellama translation."
+  :group 'tools
   :type 'string)
 
 (defcustom ellama-provider
@@ -77,12 +74,12 @@
     (make-llm-ollama
      :chat-model "zephyr" :embedding-model "zephyr"))
   "Backend LLM provider."
-  :group 'ellama
+  :group 'tools
   :type '(sexp :validate 'cl-struct-p))
 
 (defcustom ellama-spinner-type 'progress-bar
- "Spinner type for ellama."
-  :group 'ellama
+  "Spinner type for ellama."
+  :group 'tools
   :type `(choice ,@(mapcar
 		    (lambda (type)
 		      `(const ,(car type)))

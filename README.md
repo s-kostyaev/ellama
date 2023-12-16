@@ -179,3 +179,11 @@ ideas from [gen.nvim](https://github.com/David-Kunz/gen.nvim).
 
 Thanks [Andrew Hyatt](https://github.com/ahyatt) for `llm` library.
 Without it only `ollama` would be supported.
+
+# Contributions
+
+If you are interested in creating a provider, please send a pull
+request, or open a bug. This library is part of GNU ELPA, so any major
+provider that we include in this module needs to be written by someone
+with FSF papers. However, you can always write a module and put it on
+a different package archive, such as MELPA.
