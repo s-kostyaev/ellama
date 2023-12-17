@@ -205,8 +205,9 @@ Ellama, using the `C-x e` prefix:
 | "a i"  | ellama-ask-interactive     | Chat with ellama (Interactive)     |
 | "a l"  | ellama-ask-line            | Ask about current line             |
 | "a s"  | ellama-ask-selection       | Ask about selection                |
-| "t"    | ellama-translate           | Translate the selected region      |
-| "d"    | ellama-define-word         | Define selected word               |
+| "t t"  | ellama-translate           | Text translate                     |
+| "t c"  | ellama-complete            | Text complete                      |
+| "d w"  | ellama-define-word         | Define word                        |
 
 
 ## Configuration
@@ -214,9 +215,6 @@ Ellama, using the `C-x e` prefix:
 The following variables can be customized for the Ellama client:
 
 - `ellama-buffer`: The default Ellama buffer name.
-- `ellama-enable-break-lines`: Enable visual-mode to \*\*ellama\*\*
-  buffers, hence avoiding the need of horizontal scrolling on long
-  lines.
 - `ellama-enable-keymap`: Enable the Ellama keymap.
 - `ellama-keymap-prefix`: The keymap prefix for Ellama.
 - `ellama-user-nick`: The user nick in logs.

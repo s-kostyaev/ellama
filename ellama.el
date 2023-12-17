@@ -97,21 +97,6 @@
   (rx (minimal-match
        (literal "```") (zero-or-more anything))))
 
-(defun ellama-set-visual-line-mode-for-ellama-buffer ()
-  "Set `visual-line-mode' for the *ellama* buffer."
-  (when (string-prefix-p "*ellama*" (buffer-name))
-    (visual-line-mode 1)))
-
-(defcustom ellama-enable-break-lines t
-  "Enable or disable break lines for *ellama* buffer."
-  :type 'boolean
-  :group 'ellama
-  :set (lambda (symbol value)
-         (set symbol value)
-         (if value
-             (add-hook 'buffer-list-update-hook 'ellama-set-visual-line-mode-for-ellama-buffer)
-           (remove-hook 'buffer-list-update-hook 'ellama-set-visual-line-mode-for-ellama-buffer))))
-
 (defun ellama-setup-keymap ()
   "Set up the Ellama keymap and bindings."
   (interactive)
@@ -122,7 +107,7 @@
 
   (let ((key-commands
           '(
-             ;; code
+               ;; code
 	           ("c c" ellama-code-complete "Code complete")
 	           ("c a" ellama-code-add "Code add")
 	           ("c e" ellama-code-edit "Code edit")
@@ -141,15 +126,16 @@
 	           ("m f" ellama-make-format "Make format")
 	           ;; ask
 	           ("a a" ellama-ask-about "Ask about")
-	           ("a i" ellama-ask-interactive "Chat with ellama")
+	           ("a i" ellama-ask-interactive "Ask interactively")
 	           ("a l" ellama-ask-line "Ask about current line")
 	           ("a s" ellama-ask-selection "Ask about selection")
-	           ;; other
-	           ("t"   ellama-translate "Translate the selected region")
-	           ("d"   ellama-define-word "Define selected word"))))
+	           ;; text
+	           ("t t" ellama-translate "Text translate")
+	           ("t c" ellama-complete "Text complete")
+			   ;; define
+	           ("d w" ellama-define-word "Define word"))))
             (dolist (key-command key-commands)
             (define-key ellama-keymap (kbd (car key-command)) (cadr key-command)))))
-
 
 (defcustom ellama-keymap-prefix "C-x e"
   "Key sequence for Ellama Commands."
