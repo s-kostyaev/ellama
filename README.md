@@ -180,7 +180,6 @@ Alias to the `ellama-render` function.
 ### ellama-ask-interactive
 Alias to the `ellama-ask` function.
 
-
 ## Keymap
 
 Here is a table of keybindings and their associated functions in
@@ -208,7 +207,6 @@ Ellama, using the `C-x e` prefix:
 | "t t"  | ellama-translate           | Text translate                     |
 | "t c"  | ellama-complete            | Text complete                      |
 | "d w"  | ellama-define-word         | Define word                        |
-
 
 ## Configuration
 
