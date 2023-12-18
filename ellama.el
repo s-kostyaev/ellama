@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.3.0
+;; Version: 0.3.1
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -85,6 +85,11 @@
 		      `(const ,(car type)))
 		    spinner-types)))
 
+(defcustom ellama-keymap-prefix "C-x e"
+  "Key sequence for Ellama Commands."
+  :type 'string
+  :group 'tools)
+
 (defvar-local ellama--chat-prompt nil)
 
 (defvar-local ellama--change-group nil)
@@ -106,41 +111,36 @@
   (define-key global-map (kbd ellama-keymap-prefix) ellama-keymap)
 
   (let ((key-commands
-          '(
-               ;; code
-	           ("c c" ellama-code-complete "Code complete")
-	           ("c a" ellama-code-add "Code add")
-	           ("c e" ellama-code-edit "Code edit")
-	           ("c i" ellama-code-improve "Code improve")
-	           ("c r" ellama-code-review "Code review")
-	           ;; summarize
-	           ("s s" ellama-summarize "Summarize")
-	           ("s w" ellama-summarize-webpage "Summarize webpage")
-	           ;; improve
-	           ("i w" ellama-improve-wording "Improve wording")
-	           ("i g" ellama-improve-grammar "Improve grammar and spelling")
-	           ("i c" ellama-improve-conciseness "Improve conciseness")
-	           ;; make
-	           ("m l" ellama-make-list "Make list")
-	           ("m t" ellama-make-table "Make table")
-	           ("m f" ellama-make-format "Make format")
-	           ;; ask
-	           ("a a" ellama-ask-about "Ask about")
-	           ("a i" ellama-ask-interactive "Ask interactively")
-	           ("a l" ellama-ask-line "Ask about current line")
-	           ("a s" ellama-ask-selection "Ask about selection")
-	           ;; text
-	           ("t t" ellama-translate "Text translate")
-	           ("t c" ellama-complete "Text complete")
-			   ;; define
-	           ("d w" ellama-define-word "Define word"))))
-            (dolist (key-command key-commands)
-            (define-key ellama-keymap (kbd (car key-command)) (cadr key-command)))))
-
-(defcustom ellama-keymap-prefix "C-x e"
-  "Key sequence for Ellama Commands."
-  :type 'string
-  :group 'ellama)
+         '(
+           ;; code
+	   ("c c" ellama-code-complete "Code complete")
+	   ("c a" ellama-code-add "Code add")
+	   ("c e" ellama-code-edit "Code edit")
+	   ("c i" ellama-code-improve "Code improve")
+	   ("c r" ellama-code-review "Code review")
+	   ;; summarize
+	   ("s s" ellama-summarize "Summarize")
+	   ("s w" ellama-summarize-webpage "Summarize webpage")
+	   ;; improve
+	   ("i w" ellama-improve-wording "Improve wording")
+	   ("i g" ellama-improve-grammar "Improve grammar and spelling")
+	   ("i c" ellama-improve-conciseness "Improve conciseness")
+	   ;; make
+	   ("m l" ellama-make-list "Make list")
+	   ("m t" ellama-make-table "Make table")
+	   ("m f" ellama-make-format "Make format")
+	   ;; ask
+	   ("a a" ellama-ask-about "Ask about")
+	   ("a i" ellama-ask-interactive "Ask interactively")
+	   ("a l" ellama-ask-line "Ask current line")
+	   ("a s" ellama-ask-selection "Ask selection")
+	   ;; text
+	   ("t t" ellama-translate "Text translate")
+	   ("t c" ellama-complete "Text complete")
+	   ;; define
+	   ("d w" ellama-define-word "Define word"))))
+    (dolist (key-command key-commands)
+      (define-key ellama-keymap (kbd (car key-command)) (cadr key-command)))))
 
 (defcustom ellama-enable-keymap t
   "Enable or disable Ellama keymap."
