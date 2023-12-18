@@ -97,6 +97,62 @@
   (rx (minimal-match
        (literal "```") (zero-or-more anything))))
 
+(defun ellama-setup-keymap ()
+  "Set up the Ellama keymap and bindings."
+  (interactive)
+  (defvar ellama-keymap (make-sparse-keymap)
+    "Keymap for Ellama Commands")
+
+  (define-key global-map (kbd ellama-keymap-prefix) ellama-keymap)
+
+  (let ((key-commands
+          '(
+               ;; code
+	           ("c c" ellama-code-complete "Code complete")
+	           ("c a" ellama-code-add "Code add")
+	           ("c e" ellama-code-edit "Code edit")
+	           ("c i" ellama-code-improve "Code improve")
+	           ("c r" ellama-code-review "Code review")
+	           ;; summarize
+	           ("s s" ellama-summarize "Summarize")
+	           ("s w" ellama-summarize-webpage "Summarize webpage")
+	           ;; improve
+	           ("i w" ellama-improve-wording "Improve wording")
+	           ("i g" ellama-improve-grammar "Improve grammar and spelling")
+	           ("i c" ellama-improve-conciseness "Improve conciseness")
+	           ;; make
+	           ("m l" ellama-make-list "Make list")
+	           ("m t" ellama-make-table "Make table")
+	           ("m f" ellama-make-format "Make format")
+	           ;; ask
+	           ("a a" ellama-ask-about "Ask about")
+	           ("a i" ellama-ask-interactive "Ask interactively")
+	           ("a l" ellama-ask-line "Ask about current line")
+	           ("a s" ellama-ask-selection "Ask about selection")
+	           ;; text
+	           ("t t" ellama-translate "Text translate")
+	           ("t c" ellama-complete "Text complete")
+			   ;; define
+	           ("d w" ellama-define-word "Define word"))))
+            (dolist (key-command key-commands)
+            (define-key ellama-keymap (kbd (car key-command)) (cadr key-command)))))
+
+(defcustom ellama-keymap-prefix "C-x e"
+  "Key sequence for Ellama Commands."
+  :type 'string
+  :group 'ellama)
+
+(defcustom ellama-enable-keymap t
+  "Enable or disable Ellama keymap."
+  :type 'boolean
+  :group 'ellama
+  :set (lambda (symbol value)
+         (set symbol value)
+         (if value
+             (ellama-setup-keymap)
+           ;; If ellama-enable-keymap is nil, remove the key bindings
+           (define-key global-map (kbd ellama-keymap-prefix) nil))))
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
@@ -235,6 +291,33 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
 
 ;;;###autoload
 (defalias 'ellama-ask 'ellama-chat)
+
+;;;###autoload
+(defalias 'ellama-code-complete 'ellama-complete-code)
+
+;;;###autoload
+(defalias 'ellama-code-add 'ellama-add-code)
+
+;;;###autoload
+(defalias 'ellama-code-edit 'ellama-change-code)
+
+;;###autoload
+(defalias 'ellama-code-improve 'ellama-enhance-code)
+
+;;;###autoload
+(defalias 'ellama-improve-wording 'ellama-enhance-wording)
+
+;;;###autoload
+(defalias 'ellama-improve-grammar 'ellama-enhance-grammar-spelling)
+
+;;;###autoload
+(defalias 'ellama-improve-conciseness 'ellama-make-concise)
+
+;;;###autoload
+(defalias 'ellama-make-format 'ellama-render)
+
+;;;###autoload
+(defalias 'ellama-ask-interactive 'ellama-ask)
 
 ;;;###autoload
 (defun ellama-ask-about ()
