@@ -2,6 +2,7 @@
 
 [![License GPL 3](https://img.shields.io/badge/license-GPL_3-green.svg)](http://www.gnu.org/licenses/gpl-3.0.txt)
 [![MELPA](https://melpa.org/packages/ellama-badge.svg)](https://melpa.org/#/ellama)
+[![MELPA Stable](https://stable.melpa.org/packages/ellama-badge.svg)](https://stable.melpa.org/#/ellama)
 
 Ellama is a tool for interacting with large language models from
 Emacs. It allows you to ask questions and receive responses from the
