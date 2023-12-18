@@ -209,7 +209,7 @@ Alias to the `ellama-ask` function.
 ## Keymap
 
 Here is a table of keybindings and their associated functions in
-Ellama, using the `C-x e` prefix:
+Ellama, using the `C-c e` prefix:
 
 | Keymap | Function                   | Description                        |
 |--------|----------------------------|------------------------------------|
