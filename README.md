@@ -18,10 +18,10 @@ output, making it effortless to use with your preferred text editor.
   `ellama-ask-selection` and `ellama-ask-line`. Some cosmetic changes
   done.
 - `28.10.2023` - Switched from
-[ollama](https://github.com/jmorganca/ollama)'s API to [llm
-library](https://elpa.gnu.org/packages/llm.html). [Many
-providers](https://github.com/ahyatt/llm#setting-up-providers)
-supported.
+  [ollama](https://github.com/jmorganca/ollama)'s API to
+  [llm library](https://elpa.gnu.org/packages/llm.html).
+  [Many providers](https://github.com/ahyatt/llm#setting-up-providers)
+  supported.
 
 ## Installation
 
@@ -43,7 +43,20 @@ ellama configuration like this:
   (require 'llm-ollama)
   (setopt ellama-provider
 		  (make-llm-ollama
-		   :chat-model "zephyr:7b-alpha-q5_K_M" :embedding-model "zephyr:7b-alpha-q5_K_M")))
+		   :chat-model "zephyr:7b-beta-q6_K" :embedding-model "zephyr:7b-beta-q6_K"))
+  ;; Predefined llm providers for interactive switching.
+  ;; You shouldn't add ollama providers here - it can be selected interactively
+  ;; without it. It is just example.
+  (setopt ellama-providers
+		  '(("zephyr" . (make-llm-ollama
+						 :chat-model "zephyr:7b-beta-q6_K"
+						 :embedding-model "zephyr:7b-beta-q6_K"))
+			("mistral" . (make-llm-ollama
+						  :chat-model "mistral:7b-instruct-v0.2-q6_K"
+						  :embedding-model "mistral:7b-instruct-v0.2-q6_K"))
+			("mixtral" . (make-llm-ollama
+						  :chat-model "mixtral:8x7b-instruct-v0.1-q3_K_M-4k"
+						  :embedding-model "mixtral:8x7b-instruct-v0.1-q3_K_M-4k")))))
 ```
 
 ## Commands
@@ -97,7 +110,8 @@ Review code in a selected region or the current buffer using Ellama.
 
 ### ellama-change
 
-Change text in a selected region or the current buffer according to a provided change.
+Change text in a selected region or the current buffer according to a
+provided change.
 
 ### ellama-enhance-grammar-spelling
 
@@ -111,27 +125,33 @@ Enhance the wording in the currently selected region or buffer using Ellama.
 
 ### ellama-make-concise
 
-Make the text of the currently selected region or buffer concise and simple using Ellama.
+Make the text of the currently selected region or buffer concise and
+simple using Ellama.
 
 ### ellama-change-code
 
-Change selected code or code in the current buffer according to a provided change using Ellama.
+Change selected code or code in the current buffer according to a
+provided change using Ellama.
 
 ### ellama-enhance-code
 
-Change selected code or code in the current buffer according to a provided change using Ellama.
+Change selected code or code in the current buffer according to a
+provided change using Ellama.
 
 ### ellama-complete-code
 
-Complete selected code or code in the current buffer according to a provided change using Ellama.
+Complete selected code or code in the current buffer according to a
+provided change using Ellama.
 
 ### ellama-add-code
 
-Add new code according to a description, generating it with a provided context from the selected region or the current buffer using Ellama.
+Add new code according to a description, generating it with a provided
+context from the selected region or the current buffer using Ellama.
 
 ### ellama-render
 
-Render the currently selected text or the text in the current buffer as a specified format using Ellama.
+Render the currently selected text or the text in the current buffer
+as a specified format using Ellama.
 
 ### ellama-make-list
 
@@ -144,6 +164,10 @@ Create a markdown table from the active region or the current buffer using Ellam
 ### ellama-summarize-webpage
 
 Summarize a webpage fetched from a URL using Ellama.
+
+### ellama-provider-select
+
+Select ellama provider.
 
 ### ellama-code-complete
 
@@ -207,6 +231,7 @@ Ellama, using the `C-x e` prefix:
 | "t t"  | ellama-translate           | Text translate                     |
 | "t c"  | ellama-complete            | Text complete                      |
 | "d w"  | ellama-define-word         | Define word                        |
+| "p s"  | ellama-provider-select     | Provider select                    |
 
 ## Configuration
 
@@ -218,16 +243,19 @@ The following variables can be customized for the Ellama client:
 - `ellama-user-nick`: The user nick in logs.
 - `ellama-assistant-nick`: The assistant nick in logs.
 - `ellama-buffer-mode`: The major mode for the Ellama logs buffer.
-  Default mode is `markdown-mode`.
+Default mode is `markdown-mode`.
 - `ellama-language`: The language for Ollama translation. Default
-  language is english.
+language is english.
 - `ellama-provider`: llm provider for ellama. Default provider is
-  `ollama` with [zephyr](https://ollama.ai/library/zephyr) model.
-  There are many supported providers: `ollama`, `open ai`, `vertex`,
-  `GPT4All`. For more information see [llm
-  documentation](https://elpa.gnu.org/packages/llm.html)
+`ollama` with [zephyr](https://ollama.ai/library/zephyr) model.
+There are many supported providers: `ollama`, `open ai`, `vertex`,
+`GPT4All`. For more information see [llm
+documentation](https://elpa.gnu.org/packages/llm.html)
+- `ellama-providers`: association list of model llm providers with
+  name as key.
 - `ellama-spinner-type`: Spinner type for ellama. Default type is
-  `progress-bar`.
+`progress-bar`.
+- `ellama-ollama-binary`: Path to ollama binary.
 
 ## Acknowledgments
 

@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.3.2
+;; Version: 0.4.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -77,6 +77,11 @@
   :group 'tools
   :type '(sexp :validate 'cl-struct-p))
 
+(defcustom ellama-providers nil
+  "LLM provider list for fast switching."
+  :group 'tools
+  :type '(alist :key-type string))
+
 (defcustom ellama-spinner-type 'progress-bar
   "Spinner type for ellama."
   :group 'tools
@@ -87,6 +92,11 @@
 
 (defcustom ellama-keymap-prefix "C-c e"
   "Key sequence for Ellama Commands."
+  :type 'string
+  :group 'tools)
+
+(defcustom ellama-ollama-binary (executable-find "ollama")
+  "Path to ollama binary."
   :type 'string
   :group 'tools)
 
@@ -138,7 +148,9 @@
 	   ("t t" ellama-translate "Text translate")
 	   ("t c" ellama-complete "Text complete")
 	   ;; define
-	   ("d w" ellama-define-word "Define word"))))
+	   ("d w" ellama-define-word "Define word")
+	   ;; provider
+	   ("p s" ellama-provider-select "Provider select"))))
     (dolist (key-command key-commands)
       (define-key ellama-keymap (kbd (car key-command)) (cadr key-command)))))
 
@@ -567,6 +579,33 @@ buffer."
       (beginning-of-line)
       (kill-region (point) (point-max))
       (ellama-summarize))))
+
+(defun ellama-get-ollama-local-model ()
+  "Return llm provider for interactively selected ollama model."
+  (interactive)
+  (let ((model-name
+	 (completing-read "Select ollama model: "
+			  (mapcar (lambda (s)
+				    (car (split-string s)))
+				  (seq-drop
+				   (process-lines ellama-ollama-binary "ls") 1)))))
+    (make-llm-ollama
+     :chat-model model-name :embedding-model model-name)))
+
+;;;###autoload
+(defun ellama-provider-select ()
+  "Select ellama provider."
+  (interactive)
+  (let* ((providers (if (and ellama-ollama-binary
+			     (file-exists-p ellama-ollama-binary))
+			(push '("ollama model" . (ellama-get-ollama-local-model))
+			      ellama-providers)
+		      ellama-providers))
+	 (variants (mapcar #'car providers)))
+    (setq ellama-provider
+	  (eval (alist-get
+		 (completing-read "Select model: " variants)
+		 providers nil nil #'string=)))))
 
 (provide 'ellama)
 ;;; ellama.el ends here.
