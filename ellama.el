@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.4.1
+;; Version: 0.4.2
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -98,6 +98,11 @@
 (defcustom ellama-ollama-binary (executable-find "ollama")
   "Path to ollama binary."
   :type 'string
+  :group 'tools)
+
+(defcustom ellama-auto-scroll nil
+  "If enabled ellama buffer will scroll automatically during generation."
+  :type 'boolean
   :group 'tools)
 
 (defvar-local ellama--chat-prompt nil)
@@ -255,8 +260,8 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
     (get-buffer-create ellama-buffer)
     (with-current-buffer ellama-buffer
       (funcall ellama-buffer-mode)))
+  (display-buffer ellama-buffer)
   (with-current-buffer ellama-buffer
-    (display-buffer ellama-buffer)
     (if ellama--chat-prompt
 	(llm-chat-prompt-append-response
 	 ellama--chat-prompt prompt)
@@ -268,6 +273,7 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
       (let* ((start (make-marker))
 	     (end (make-marker))
 	     (point (point-max))
+	     (window (selected-window))
 	     (insert-text
 	      (lambda (text)
 		;; Erase and insert the new text between the marker cons.
@@ -276,13 +282,22 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
 		    (goto-char start)
 		    (delete-region start end)
 		    (insert text)
-		    (fill-region start (point)))))))
+		    (fill-region start (point)))
+		  (when ellama-auto-scroll
+		    (select-window (get-window-with-predicate
+				    (lambda (_)
+				      (eq (current-buffer)
+					  (get-buffer ellama-buffer))))
+				   t)
+		    (goto-char (point-max))
+		    (recenter -1)
+		    (select-window window))))))
 	(setq ellama--change-group (prepare-change-group))
 	(activate-change-group ellama--change-group)
-        (set-marker start point)
-        (set-marker end point)
-        (set-marker-insertion-type start nil)
-        (set-marker-insertion-type end t)
+	(set-marker start point)
+	(set-marker end point)
+	(set-marker-insertion-type start nil)
+	(set-marker-insertion-type end t)
 	(spinner-start ellama-spinner-type)
 	(llm-chat-streaming ellama-provider
 			    ellama--chat-prompt

@@ -1,3 +1,5 @@
+* Version 0.4.2
+- Add auto scrolling. Disabled by default.
 * Version 0.4.1
 - Fix adding and completing code. Do it inline instead of end of buffer.
 * Version 0.4.0

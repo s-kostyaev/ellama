@@ -245,6 +245,8 @@ documentation](https://elpa.gnu.org/packages/llm.html)
 - `ellama-spinner-type`: Spinner type for ellama. Default type is
 `progress-bar`.
 - `ellama-ollama-binary`: Path to ollama binary.
+- `ellama-auto-scroll`: If enabled ellama buffer will scroll
+  automatically during generation. Disabled by default.
 
 ## Acknowledgments
 
