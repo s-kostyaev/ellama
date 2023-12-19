@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.4.0
+;; Version: 0.4.1
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -121,8 +121,7 @@
   (define-key global-map (kbd ellama-keymap-prefix) ellama-keymap)
 
   (let ((key-commands
-         '(
-           ;; code
+         '(;; code
 	   ("c c" ellama-code-complete "Code complete")
 	   ("c a" ellama-code-add "Code add")
 	   ("c e" ellama-code-edit "Code edit")
@@ -157,7 +156,7 @@
 (defcustom ellama-enable-keymap t
   "Enable or disable Ellama keymap."
   :type 'boolean
-  :group 'ellama
+  :group 'tools
   :set (lambda (symbol value)
          (set symbol value)
          (if value
@@ -499,7 +498,7 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
 		(point-min)))
 	 (end (if (region-active-p)
 		  (region-end)
-		(point-max)))
+		(point)))
 	 (text (buffer-substring-no-properties beg end)))
     (ellama-stream-filter
      (format
@@ -530,7 +529,7 @@ buffer."
      ellama--code-prefix
      ellama--code-suffix
      (current-buffer)
-     end)))
+     (point))))
 
 
 ;;;###autoload

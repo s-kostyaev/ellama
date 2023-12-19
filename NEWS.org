@@ -1,3 +1,5 @@
+* Version 0.4.1
+- Fix adding and completing code. Do it inline instead of end of buffer.
 * Version 0.4.0
 - Add interactive provider selection.
 * Version 0.3.2
