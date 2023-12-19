@@ -12,19 +12,6 @@ review, summarization, enhancing grammar/spelling or wording and
 more through the Emacs interface. Ellama natively supports streaming
 output, making it effortless to use with your preferred text editor.
 
-## What's new
-
-- `10.12.2023` - Added command `ellama-complete`.
-- `17.11.2023` - Changes by ellama is now atomic. It can be useful if
-  you want to undo this changes. Two new commands added:
-  `ellama-ask-selection` and `ellama-ask-line`. Some cosmetic changes
-  done.
-- `28.10.2023` - Switched from
-  [ollama](https://github.com/jmorganca/ollama)'s API to
-  [llm library](https://elpa.gnu.org/packages/llm.html).
-  [Many providers](https://github.com/ahyatt/llm#setting-up-providers)
-  supported.
-
 ## Installation
 
 Install the package `ellama` from

@@ -1,0 +1,10 @@
+* Version 0.4.0
+- Add interactive provider selection.
+* Version 0.3.2
+- Change keymap prefix to prevent default binding overwriting.
+* Version 0.3.1
+- Minor fixes in custom variables.
+* Version 0.3.0
+- Add keymap.
+* Version 0.2.0
+- Move to GNU ELPA.
