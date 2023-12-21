@@ -206,53 +206,43 @@ when the request completes (with BUFFER current)."
 	  (llm-chat-prompt-append-response
 	   ellama--chat-prompt prompt)
 	(setq ellama--chat-prompt (llm-make-simple-chat-prompt prompt)))
-      (unwind-protect
-	  (save-excursion
-	    (let* ((start (make-marker))
-		   (end (make-marker))
-		   (window (selected-window))
-		   (insert-text
-		    (lambda (text)
-		      ;; Erase and insert the new text between the marker cons.
-		      (with-current-buffer (marker-buffer start)
-			(let ((pt (point)))
-			  (save-excursion
-			    (goto-char start)
-			    (delete-region start end)
-			    (insert (funcall filter text))
-			    (fill-region start (point)))
-			  (goto-char pt))
-			(when ellama-auto-scroll
-			  (select-window (get-window-with-predicate
-					  (lambda (_)
-					    (eq (current-buffer)
-						(get-buffer buffer))))
-					 t)
-			  (goto-char (point-max))
-			  (recenter -1)
-			  (select-window window))))))
-	      (setq ellama--change-group (prepare-change-group))
-	      (activate-change-group ellama--change-group)
-	      (set-marker start point)
-	      (set-marker end point)
-	      (set-marker-insertion-type start nil)
-	      (set-marker-insertion-type end t)
-	      (spinner-start ellama-spinner-type)
-	      (llm-chat-streaming ellama-provider
-				  ellama--chat-prompt
-				  insert-text
-				  (lambda (text)
-				    (funcall insert-text text)
-				    (with-current-buffer buffer
-				      (undo-amalgamate-change-group ellama--change-group)
-				      (accept-change-group ellama--change-group)
-				      (spinner-stop)
-				      (funcall donecb text)))
-				  (lambda (_ msg)
-				    (with-current-buffer buffer
-				      (cancel-change-group ellama--change-group)
-				      (spinner-stop)
-				      (funcall errcb msg))))))))))
+      (let* ((start (make-marker))
+	     (end (make-marker))
+	     (insert-text
+	      (lambda (text)
+		;; Erase and insert the new text between the marker cons.
+		(with-current-buffer buffer
+		  (save-excursion
+		    (goto-char start)
+		    (delete-region start end)
+		    (insert (funcall filter text))
+		    (fill-region start (point)))
+		  (when-let ((ellama-auto-scroll)
+			     (window (get-buffer-window buffer)))
+		    (with-selected-window window
+		      (goto-char (point-max))
+		      (recenter -1)))))))
+	(setq ellama--change-group (prepare-change-group))
+	(activate-change-group ellama--change-group)
+	(set-marker start point)
+	(set-marker end point)
+	(set-marker-insertion-type start nil)
+	(set-marker-insertion-type end t)
+	(spinner-start ellama-spinner-type)
+	(llm-chat-streaming ellama-provider
+			    ellama--chat-prompt
+			    insert-text
+			    (lambda (text)
+			      (funcall insert-text text)
+			      (with-current-buffer buffer
+				(undo-amalgamate-change-group ellama--change-group)
+				(accept-change-group ellama--change-group)
+				(spinner-stop)
+				(funcall donecb text)))
+			    (lambda (_ msg)
+			      (with-current-buffer buffer
+				(cancel-change-group ellama--change-group)
+				(funcall errcb msg))))))))
 
 ;;;###autoload
 (defun ellama-chat (prompt)
