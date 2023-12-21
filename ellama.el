@@ -126,7 +126,7 @@
   (define-key global-map (kbd ellama-keymap-prefix) ellama-keymap)
 
   (let ((key-commands
-         '(;; code
+	 '(;; code
 	   ("c c" ellama-code-complete "Code complete")
 	   ("c a" ellama-code-add "Code add")
 	   ("c e" ellama-code-edit "Code edit")
@@ -163,11 +163,11 @@
   :type 'boolean
   :group 'tools
   :set (lambda (symbol value)
-         (set symbol value)
-         (if value
-             (ellama-setup-keymap)
-           ;; If ellama-enable-keymap is nil, remove the key bindings
-           (define-key global-map (kbd ellama-keymap-prefix) nil))))
+	 (set symbol value)
+	 (if value
+	     (ellama-setup-keymap)
+	   ;; If ellama-enable-keymap is nil, remove the key bindings
+	   (define-key global-map (kbd ellama-keymap-prefix) nil))))
 
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
@@ -208,10 +208,10 @@ in.  Default value is (current-buffer).
 			  (select-window window))))))
 	      (setq ellama--change-group (prepare-change-group))
 	      (activate-change-group ellama--change-group)
-              (set-marker start point)
-              (set-marker end point)
-              (set-marker-insertion-type start nil)
-              (set-marker-insertion-type end t)
+	      (set-marker start point)
+	      (set-marker end point)
+	      (set-marker-insertion-type start nil)
+	      (set-marker-insertion-type end t)
 	      (spinner-start ellama-spinner-type)
 	      (llm-chat-streaming ellama-provider
 				  (llm-make-simple-chat-prompt prompt)
@@ -260,10 +260,10 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
 			(select-window window))))))
 	    (setq ellama--change-group (prepare-change-group))
 	    (activate-change-group ellama--change-group)
-            (set-marker start point)
-            (set-marker end point)
-            (set-marker-insertion-type start nil)
-            (set-marker-insertion-type end t)
+	    (set-marker start point)
+	    (set-marker end point)
+	    (set-marker-insertion-type start nil)
+	    (set-marker-insertion-type end t)
 	    (spinner-start ellama-spinner-type)
 	    (llm-chat-streaming ellama-provider
 				(llm-make-simple-chat-prompt prompt)
