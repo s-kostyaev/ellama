@@ -109,6 +109,8 @@
 
 (defvar-local ellama--change-group nil)
 
+(defvar-local ellama--current-request nil)
+
 (defconst ellama--code-prefix
   (rx (minimal-match
        (zero-or-more anything) (literal "```") (zero-or-more anything) line-end)))
@@ -174,6 +176,15 @@
 	   ;; If ellama-enable-keymap is nil, remove the key bindings
 	   (define-key global-map (kbd ellama-keymap-prefix) nil))))
 
+(defun ellama-cancel ()
+  "Cancel the current ellama request."
+  (interactive)
+  (when ellama--current-request
+    (llm-cancel-request ellama--current-request)
+    (cancel-change-group ellama--change-group)
+    (spinner-stop)
+    (setq ellama--current-request nil)))
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
@@ -229,24 +240,28 @@ when the request completes (with BUFFER current)."
 	(activate-change-group ellama--change-group)
 	(set-marker start point)
 	(set-marker end point)
-	(set-marker-insertion-type start nil)
-	(set-marker-insertion-type end t)
-	(spinner-start ellama-spinner-type)
-	(llm-chat-streaming ellama-provider
-			    ellama--chat-prompt
-			    insert-text
-			    (lambda (text)
-			      (funcall insert-text text)
-			      (with-current-buffer buffer
-				(undo-amalgamate-change-group ellama--change-group)
-				(accept-change-group ellama--change-group)
-				(spinner-stop)
-				(funcall donecb text)))
-			    (lambda (_ msg)
-			      (with-current-buffer buffer
-				(cancel-change-group ellama--change-group)
-				(spinner-stop)
-				(funcall errcb msg))))))))
+        (set-marker-insertion-type start nil)
+        (set-marker-insertion-type end t)
+        (spinner-start ellama-spinner-type)
+        (ellama-cancel)
+        (setq ellama--current-request
+              (llm-chat-streaming ellama-provider
+                                  ellama--chat-prompt
+                                  insert-text
+                                  (lambda (text)
+                                    (funcall insert-text text)
+                                    (with-current-buffer buffer
+                                      (setq ellama--current-request nil)
+                                      (undo-amalgamate-change-group ellama--change-group)
+                                      (accept-change-group ellama--change-group)
+                                      (spinner-stop)
+                                      (funcall donecb text)))
+                                  (lambda (_ msg)
+                                    (with-current-buffer buffer
+                                      (setq ellama--current-request nil)
+                                      (cancel-change-group ellama--change-group)
+                                      (spinner-stop)
+                                      (funcall errcb msg)))))))))
 
 ;;;###autoload
 (defun ellama-chat (prompt)
