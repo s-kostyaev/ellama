@@ -1,3 +1,6 @@
+* Version 0.4.3
+- Fix scrolling during generation.
+- Add auto scrolling for all commands.
 * Version 0.4.2
 - Add auto scrolling. Disabled by default.
 * Version 0.4.1

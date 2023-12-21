@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.4.2
+;; Version: 0.4.3
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -185,15 +185,27 @@ in.  Default value is (current-buffer).
 	  (save-excursion
 	    (let* ((start (make-marker))
 		   (end (make-marker))
+		   (window (selected-window))
 		   (insert-text
 		    (lambda (text)
 		      ;; Erase and insert the new text between the marker cons.
 		      (with-current-buffer (marker-buffer start)
-			(save-excursion
-			  (goto-char start)
-			  (delete-region start end)
-			  (insert text)
-			  (fill-region start (point)))))))
+			(let ((pt (point)))
+			  (save-excursion
+			    (goto-char start)
+			    (delete-region start end)
+			    (insert text)
+			    (fill-region start (point)))
+			  (goto-char pt))
+			(when ellama-auto-scroll
+			  (select-window (get-window-with-predicate
+					  (lambda (_)
+					    (eq (current-buffer)
+						(get-buffer buffer))))
+					 t)
+			  (goto-char (point-max))
+			  (recenter -1)
+			  (select-window window))))))
 	      (setq ellama--change-group (prepare-change-group))
 	      (activate-change-group ellama--change-group)
               (set-marker start point)
@@ -219,38 +231,52 @@ in.  Default value is (current-buffer).
 In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
   (with-current-buffer buffer
     (unwind-protect
-     (save-excursion
-      (let* ((start (make-marker))
-             (end (make-marker))
-	     (insert-text (lambda (text)
-			    ;; Erase and insert the new text between the marker cons.
-			    (with-current-buffer (marker-buffer start)
-			      (save-excursion
-				(goto-char start)
-				(delete-region start end)
-				;; remove prefix and suffix parts
-				(insert (string-trim-right
-					 (string-trim-left text prefix)
-					 suffix)))))))
-	(setq ellama--change-group (prepare-change-group))
-	(activate-change-group ellama--change-group)
-        (set-marker start point)
-        (set-marker end point)
-        (set-marker-insertion-type start nil)
-        (set-marker-insertion-type end t)
-	(spinner-start ellama-spinner-type)
-	(llm-chat-streaming ellama-provider
-			    (llm-make-simple-chat-prompt prompt)
-			    insert-text
-			    (lambda (text)
-			      (funcall insert-text text)
-			      (with-current-buffer buffer
-				(undo-amalgamate-change-group ellama--change-group)
-				(accept-change-group ellama--change-group)
-				(spinner-stop)))
-			    (lambda (_ msg)
-			      (cancel-change-group ellama--change-group)
-			      (error "Error calling the LLM: %s" msg))))))))
+	(save-excursion
+	  (let* ((start (make-marker))
+		 (end (make-marker))
+		 (window (selected-window))
+		 (insert-text
+		  (lambda (text)
+		    ;; Erase and insert the new text between the marker cons.
+		    (with-current-buffer (marker-buffer start)
+		      (let ((pt (point)))
+			(save-excursion
+			  (goto-char start)
+			  (delete-region start end)
+			  ;; remove prefix and suffix parts
+			  (insert (string-trim-right
+				   (string-trim-left text prefix)
+				   suffix))
+			  (fill-region start (point)))
+			(goto-char pt))
+		      (when ellama-auto-scroll
+			(select-window (get-window-with-predicate
+					(lambda (_)
+					  (eq (current-buffer)
+					      (get-buffer ellama-buffer))))
+				       t)
+			(goto-char (point-max))
+			(recenter -1)
+			(select-window window))))))
+	    (setq ellama--change-group (prepare-change-group))
+	    (activate-change-group ellama--change-group)
+            (set-marker start point)
+            (set-marker end point)
+            (set-marker-insertion-type start nil)
+            (set-marker-insertion-type end t)
+	    (spinner-start ellama-spinner-type)
+	    (llm-chat-streaming ellama-provider
+				(llm-make-simple-chat-prompt prompt)
+				insert-text
+				(lambda (text)
+				  (funcall insert-text text)
+				  (with-current-buffer buffer
+				    (undo-amalgamate-change-group ellama--change-group)
+				    (accept-change-group ellama--change-group)
+				    (spinner-stop)))
+				(lambda (_ msg)
+				  (cancel-change-group ellama--change-group)
+				  (error "Error calling the LLM: %s" msg))))))))
 
 ;;;###autoload
 (defun ellama-chat (prompt)
@@ -278,11 +304,13 @@ In BUFFER at POINT will be inserted result between PREFIX and SUFFIX."
 	      (lambda (text)
 		;; Erase and insert the new text between the marker cons.
 		(with-current-buffer (marker-buffer start)
-		  (save-excursion
-		    (goto-char start)
-		    (delete-region start end)
-		    (insert text)
-		    (fill-region start (point)))
+		  (let ((pt (point)))
+		    (save-excursion
+		      (goto-char start)
+		      (delete-region start end)
+		      (insert text)
+		      (fill-region start (point)))
+		    (goto-char pt))
 		  (when ellama-auto-scroll
 		    (select-window (get-window-with-predicate
 				    (lambda (_)
