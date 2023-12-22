@@ -1,3 +1,6 @@
+* Version 0.4.5
+- Refactoring. Eliminate duplicated code.
+- Fix minor bugs with error handling.
 * Version 0.4.4
 - Fix ellama-render interactive spec.
 * Version 0.4.3
