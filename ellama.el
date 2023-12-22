@@ -242,6 +242,7 @@ when the request completes (with BUFFER current)."
 			    (lambda (_ msg)
 			      (with-current-buffer buffer
 				(cancel-change-group ellama--change-group)
+				(spinner-stop)
 				(funcall errcb msg))))))))
 
 ;;;###autoload
