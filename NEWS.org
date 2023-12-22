@@ -1,3 +1,5 @@
+* Version 0.4.6
+- Fix code trimming.
 * Version 0.4.5
 - Refactoring. Eliminate duplicated code.
 - Fix minor bugs with error handling.
