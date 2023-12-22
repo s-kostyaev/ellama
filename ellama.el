@@ -119,7 +119,8 @@
 
 (defun ellama--code-filter (text)
   "Filter code prefix/suffix from TEXT."
-  (string-trim text ellama--code-prefix ellama--code-suffix))
+  ;; Trim left first as `string-trim' trims from the right and ends up deleting all the code.
+  (string-trim-right (string-trim-left text ellama--code-prefix) ellama--code-suffix))
 
 (defun ellama-setup-keymap ()
   "Set up the Ellama keymap and bindings."
