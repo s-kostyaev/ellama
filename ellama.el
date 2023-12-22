@@ -178,20 +178,20 @@
 ARGS contains keys for fine control.
 
 :buffer BUFFER -- BUFFER is the buffer (or `buffer-name') to insert ellama reply
-in.  Default value is (current-buffer).
+in. Default value is (current-buffer).
 
 :point POINT -- POINT is the point in buffer to insert ellama reply at.
 
 :filter FILTER -- FILTER is a function applied to (partial) response strings.
 
-:session SESSION -- if session is non-nil, the PROMPT will be appended to the current (buffer-local)
-conversation.
+:session SESSION -- if session is non-nil, the PROMPT will be appended to the
+current (buffer-local) conversation.
 
-:on-error ON-ERROR -- ON-ERROR a function that's called with an error message on failure (with
-BUFFER current).
+:on-error ON-ERROR -- ON-ERROR a function that's called with an error message on
+failure (with BUFFER current).
 
-:on-done ON-DONE -- ON-DONE a function that's called when the request completes (with BUFFER
-current)."
+:on-done ON-DONE -- ON-DONE a function that's called when the request completes
+(with BUFFER current)."
   (let* ((buffer (or (plist-get args :buffer) (current-buffer)))
 	 (point (or (plist-get args :point)
 		    (with-current-buffer buffer (point))))
