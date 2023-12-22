@@ -182,10 +182,11 @@ in.  Default value is (current-buffer).
 
 :point POINT -- POINT is the point in buffer to insert ellama reply at.
 
-:filter FILTER -- FILTER is a function applied to (partial) response strings.
+:filter FILTER -- FILTER is a function that's applied to (partial) response
+strings before they're inserted into the BUFFER.
 
 :session SESSION -- if session is non-nil, the PROMPT will be appended to the
-current (buffer-local) conversation.
+current (BUFFER-local) conversation.
 
 :on-error ON-ERROR -- ON-ERROR a function that's called with an error message on
 failure (with BUFFER current).
