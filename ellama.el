@@ -190,8 +190,8 @@ current (buffer-local) conversation.
 :on-error ON-ERROR -- ON-ERROR a function that's called with an error message on
 failure (with BUFFER current).
 
-:on-done ON-DONE -- ON-DONE a function that's called when the request completes
-\(with BUFFER current)."
+:on-done ON-DONE -- ON-DONE a function that's called with the full response text
+when the request completes (with BUFFER current)."
   (let* ((buffer (or (plist-get args :buffer) (current-buffer)))
 	 (point (or (plist-get args :point)
 		    (with-current-buffer buffer (point))))
@@ -245,7 +245,7 @@ failure (with BUFFER current).
 				      (undo-amalgamate-change-group ellama--change-group)
 				      (accept-change-group ellama--change-group)
 				      (spinner-stop)
-				      (funcall donecb)))
+				      (funcall donecb text)))
 				  (lambda (_ msg)
 				    (with-current-buffer buffer
 				      (cancel-change-group ellama--change-group)
@@ -267,7 +267,7 @@ failure (with BUFFER current).
 	      "## " ellama-assistant-nick ":\n")
       (ellama-stream prompt
 		     :session t
-		     :on-done (lambda () (save-excursion
+		     :on-done (lambda (_) (save-excursion
 				      (goto-char (point-max))
 				      (insert "\n\n")))))))
 
