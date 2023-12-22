@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.4.3
+;; Version: 0.4.4
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -578,7 +578,7 @@ buffer."
 ;;;###autoload
 (defun ellama-render (needed-format)
   "Render selected text or text in current buffer as NEEDED-FORMAT."
-  (interactive)
+  (interactive "sSpecify required format: ")
   (let* ((beg (if (region-active-p)
 		  (region-beginning)
 		(point-min)))

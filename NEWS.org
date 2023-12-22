@@ -1,3 +1,5 @@
+* Version 0.4.4
+- Fix ellama-render interactive spec.
 * Version 0.4.3
 - Fix scrolling during generation.
 - Add auto scrolling for all commands.
