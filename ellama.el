@@ -212,11 +212,14 @@ when the request completes (with BUFFER current)."
 	      (lambda (text)
 		;; Erase and insert the new text between the marker cons.
 		(with-current-buffer buffer
-		  (save-excursion
+		  ;; Manually save/restore point as save-excursion doesn't restore the point into
+		  ;; the middle of replaced text.
+		  (let ((pt (point)))
 		    (goto-char start)
 		    (delete-region start end)
 		    (insert (funcall filter text))
-		    (fill-region start (point)))
+		    (fill-region start (point))
+		    (goto-char pt))
 		  (when-let ((ellama-auto-scroll)
 			     (window (get-buffer-window buffer)))
 		    (with-selected-window window
