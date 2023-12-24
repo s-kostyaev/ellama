@@ -1,3 +1,5 @@
+* Version 0.4.8
+- Improve lines wrapping.
 * Version 0.4.7
 - Simplify scroll logic.
 * Version 0.4.6
