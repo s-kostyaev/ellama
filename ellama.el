@@ -155,6 +155,15 @@
   :type 'boolean
   :group 'ellama)
 
+(defcustom ellama-fill-paragraphs '(text-mode)
+  "When to wrap paragraphs."
+  :group 'ellama
+  :type `(choice
+          (const :tag "Never fill paragraphs" nil)
+          (const :tag "Always fill paragraphs" t)
+          (function :tag "By predicate")
+          (repeat :tag "In specific modes" (symbol))))
+
 (defvar-local ellama--chat-prompt nil)
 
 (defvar-local ellama--change-group nil)
@@ -227,8 +236,11 @@ when the request completes (with BUFFER current)."
 		    (goto-char start)
 		    (delete-region start end)
 		    (insert (funcall filter text))
-		    (when (not (derived-mode-p 'prog-mode))
-		      (fill-region start (point)))
+                    (when (pcase ellama-fill-paragraphs
+                            ((cl-type function) (funcall ellama-fill-paragraphs))
+                            ((cl-type boolean) ellama-fill-paragraphs)
+                            ((cl-type list) (derived-mode-p ellama-fill-paragraphs)))
+                      (fill-region start (point)))
 		    (goto-char pt))
 		  (when-let ((ellama-auto-scroll)
 			     (window (get-buffer-window buffer)))
