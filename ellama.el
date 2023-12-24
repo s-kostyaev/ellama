@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.4.8
+;; Version: 0.4.9
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -218,9 +218,8 @@ when the request completes (with BUFFER current)."
 		    (goto-char start)
 		    (delete-region start end)
 		    (insert (funcall filter text))
-		    ;; hard newlines will not be elliminated by `fill-region'
-		    (add-text-properties start (point) '(hard))
-		    (fill-region start (point))
+		    (when (not (derived-mode-p 'prog-mode))
+		      (fill-region start (point)))
 		    (goto-char pt))
 		  (when-let ((ellama-auto-scroll)
 			     (window (get-buffer-window buffer)))

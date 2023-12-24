@@ -1,3 +1,5 @@
+* Version 0.4.9
+- Call fill-region only for non-programming modes.
 * Version 0.4.8
 - Improve lines wrapping.
 * Version 0.4.7
