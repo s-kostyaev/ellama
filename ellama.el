@@ -94,6 +94,48 @@
 		      `(const ,(car type)))
 		    spinner-types)))
 
+(defun ellama-setup-keymap ()
+  "Set up the Ellama keymap and bindings."
+  (interactive)
+  (when (boundp 'ellama-keymap-prefix)
+    (defvar ellama-keymap (make-sparse-keymap)
+      "Keymap for Ellama Commands")
+
+    (define-key global-map (kbd ellama-keymap-prefix) ellama-keymap)
+
+    (let ((key-commands
+	   '(;; code
+	     ("c c" ellama-code-complete "Code complete")
+	     ("c a" ellama-code-add "Code add")
+	     ("c e" ellama-code-edit "Code edit")
+	     ("c i" ellama-code-improve "Code improve")
+	     ("c r" ellama-code-review "Code review")
+	     ;; summarize
+	     ("s s" ellama-summarize "Summarize")
+	     ("s w" ellama-summarize-webpage "Summarize webpage")
+	     ;; improve
+	     ("i w" ellama-improve-wording "Improve wording")
+	     ("i g" ellama-improve-grammar "Improve grammar and spelling")
+	     ("i c" ellama-improve-conciseness "Improve conciseness")
+	     ;; make
+	     ("m l" ellama-make-list "Make list")
+	     ("m t" ellama-make-table "Make table")
+	     ("m f" ellama-make-format "Make format")
+	     ;; ask
+	     ("a a" ellama-ask-about "Ask about")
+	     ("a i" ellama-ask-interactive "Ask interactively")
+	     ("a l" ellama-ask-line "Ask current line")
+	     ("a s" ellama-ask-selection "Ask selection")
+	     ;; text
+	     ("t t" ellama-translate "Text translate")
+	     ("t c" ellama-complete "Text complete")
+	     ;; define
+	     ("d w" ellama-define-word "Define word")
+	     ;; provider
+	     ("p s" ellama-provider-select "Provider select"))))
+      (dolist (key-command key-commands)
+	(define-key ellama-keymap (kbd (car key-command)) (cadr key-command))))))
+
 (defcustom ellama-keymap-prefix "C-c e"
   "Key sequence for Ellama Commands."
   :type 'string
@@ -129,47 +171,6 @@
   "Filter code prefix/suffix from TEXT."
   ;; Trim left first as `string-trim' trims from the right and ends up deleting all the code.
   (string-trim-right (string-trim-left text ellama--code-prefix) ellama--code-suffix))
-
-(defun ellama-setup-keymap ()
-  "Set up the Ellama keymap and bindings."
-  (interactive)
-  (defvar ellama-keymap (make-sparse-keymap)
-    "Keymap for Ellama Commands")
-
-  (define-key global-map (kbd ellama-keymap-prefix) ellama-keymap)
-
-  (let ((key-commands
-	 '(;; code
-	   ("c c" ellama-code-complete "Code complete")
-	   ("c a" ellama-code-add "Code add")
-	   ("c e" ellama-code-edit "Code edit")
-	   ("c i" ellama-code-improve "Code improve")
-	   ("c r" ellama-code-review "Code review")
-	   ;; summarize
-	   ("s s" ellama-summarize "Summarize")
-	   ("s w" ellama-summarize-webpage "Summarize webpage")
-	   ;; improve
-	   ("i w" ellama-improve-wording "Improve wording")
-	   ("i g" ellama-improve-grammar "Improve grammar and spelling")
-	   ("i c" ellama-improve-conciseness "Improve conciseness")
-	   ;; make
-	   ("m l" ellama-make-list "Make list")
-	   ("m t" ellama-make-table "Make table")
-	   ("m f" ellama-make-format "Make format")
-	   ;; ask
-	   ("a a" ellama-ask-about "Ask about")
-	   ("a i" ellama-ask-interactive "Ask interactively")
-	   ("a l" ellama-ask-line "Ask current line")
-	   ("a s" ellama-ask-selection "Ask selection")
-	   ;; text
-	   ("t t" ellama-translate "Text translate")
-	   ("t c" ellama-complete "Text complete")
-	   ;; define
-	   ("d w" ellama-define-word "Define word")
-	   ;; provider
-	   ("p s" ellama-provider-select "Provider select"))))
-    (dolist (key-command key-commands)
-      (define-key ellama-keymap (kbd (car key-command)) (cadr key-command)))))
 
 (defcustom ellama-enable-keymap t
   "Enable or disable Ellama keymap."
