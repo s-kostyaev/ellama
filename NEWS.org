@@ -1,3 +1,5 @@
+* Version 0.4.11
+- Fix compilation
 * Version 0.4.10
 - Add customization group.
 - Call ellama-setup-keymap on prefix change.
