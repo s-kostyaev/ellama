@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.4.9
+;; Version: 0.4.10
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -97,6 +97,10 @@
 (defcustom ellama-keymap-prefix "C-c e"
   "Key sequence for Ellama Commands."
   :type 'string
+  :set (lambda (symbol value)
+	 (set symbol value)
+	 (when value
+	   (ellama-setup-keymap)))
   :group 'ellama)
 
 (defcustom ellama-ollama-binary (executable-find "ollama")

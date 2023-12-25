@@ -1,3 +1,6 @@
+* Version 0.4.10
+- Add customization group.
+- Call ellama-setup-keymap on prefix change.
 * Version 0.4.9
 - Call fill-region only for non-programming modes.
 * Version 0.4.8
