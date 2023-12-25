@@ -40,31 +40,35 @@
 (require 'spinner)
 (eval-when-compile (require 'rx))
 
+(defgroup ellama nil
+  "Tool for interacting with LLMs."
+  :group 'tools)
+
 (defcustom ellama-buffer "*ellama*"
   "Default ellama buffer."
-  :group 'tools
+  :group 'ellama
   :type 'string)
 
 (defcustom ellama-user-nick "User"
   "User nick in logs."
-  :group 'tools
+  :group 'ellama
   :type 'string)
 
 (defcustom ellama-assistant-nick "Ellama"
   "Assistant nick in logs."
-  :group 'tools
+  :group 'ellama
   :type 'string)
 
 (defcustom ellama-buffer-mode (if (fboundp 'markdown-mode)
 				  'markdown-mode
 				'text-mode)
   "Major mode for ellama logs."
-  :group 'tools
+  :group 'ellama
   :type 'function)
 
 (defcustom ellama-language "English"
   "Language for ellama translation."
-  :group 'tools
+  :group 'ellama
   :type 'string)
 
 (defcustom ellama-provider
@@ -74,17 +78,17 @@
     (make-llm-ollama
      :chat-model "zephyr" :embedding-model "zephyr"))
   "Backend LLM provider."
-  :group 'tools
+  :group 'ellama
   :type '(sexp :validate 'cl-struct-p))
 
 (defcustom ellama-providers nil
   "LLM provider list for fast switching."
-  :group 'tools
+  :group 'ellama
   :type '(alist :key-type string))
 
 (defcustom ellama-spinner-type 'progress-bar
   "Spinner type for ellama."
-  :group 'tools
+  :group 'ellama
   :type `(choice ,@(mapcar
 		    (lambda (type)
 		      `(const ,(car type)))
@@ -93,17 +97,17 @@
 (defcustom ellama-keymap-prefix "C-c e"
   "Key sequence for Ellama Commands."
   :type 'string
-  :group 'tools)
+  :group 'ellama)
 
 (defcustom ellama-ollama-binary (executable-find "ollama")
   "Path to ollama binary."
   :type 'string
-  :group 'tools)
+  :group 'ellama)
 
 (defcustom ellama-auto-scroll nil
   "If enabled ellama buffer will scroll automatically during generation."
   :type 'boolean
-  :group 'tools)
+  :group 'ellama)
 
 (defvar-local ellama--chat-prompt nil)
 
@@ -166,7 +170,7 @@
 (defcustom ellama-enable-keymap t
   "Enable or disable Ellama keymap."
   :type 'boolean
-  :group 'tools
+  :group 'ellama
   :set (lambda (symbol value)
 	 (set symbol value)
 	 (if value
