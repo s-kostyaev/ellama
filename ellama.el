@@ -107,7 +107,7 @@
 (defcustom ellama-auto-scroll nil
   "If enabled ellama buffer will scroll automatically during generation."
   :type 'boolean
-  :group 'tools)
+  :group 'ellama)
 
 (defvar-local ellama--chat-prompt nil)
 
@@ -170,7 +170,7 @@
 (defcustom ellama-enable-keymap t
   "Enable or disable Ellama keymap."
   :type 'boolean
-  :group 'tools
+  :group 'ellama
   :set (lambda (symbol value)
 	 (set symbol value)
 	 (if value
