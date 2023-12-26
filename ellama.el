@@ -239,7 +239,7 @@ when the request completes (with BUFFER current)."
                     (when (pcase ellama-fill-paragraphs
                             ((cl-type function) (funcall ellama-fill-paragraphs))
                             ((cl-type boolean) ellama-fill-paragraphs)
-                            ((cl-type list) (derived-mode-p ellama-fill-paragraphs)))
+                            ((cl-type list) (apply #'derived-mode-p ellama-fill-paragraphs)))
                       (fill-region start (point)))
 		    (goto-char pt))
 		  (when-let ((ellama-auto-scroll)
