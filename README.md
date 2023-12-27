@@ -247,6 +247,8 @@ documentation](https://elpa.gnu.org/packages/llm.html)
 - `ellama-ollama-binary`: Path to ollama binary.
 - `ellama-auto-scroll`: If enabled ellama buffer will scroll
   automatically during generation. Disabled by default.
+- `ellama-fill-paragraphs`: Option to customize ellama paragraphs
+  filling behaviour.
 
 ## Acknowledgments
 

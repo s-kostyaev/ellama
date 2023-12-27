@@ -1,3 +1,5 @@
+* Version 0.4.12
+- Add option to customize paragraphs filling behaviour.
 * Version 0.4.11
 - Fix compilation
 * Version 0.4.10
