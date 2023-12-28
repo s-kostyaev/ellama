@@ -1,3 +1,5 @@
+* Version 0.4.13
+- Use custom-set-default in set function for custom variables.
 * Version 0.4.12
 - Add option to customize paragraphs filling behaviour.
 * Version 0.4.11

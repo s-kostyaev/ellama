@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.4.12
+;; Version: 0.4.13
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -140,7 +140,7 @@
   "Key sequence for Ellama Commands."
   :type 'string
   :set (lambda (symbol value)
-	 (set symbol value)
+	 (custom-set-default symbol value)
 	 (when value
 	   (ellama-setup-keymap)))
   :group 'ellama)
@@ -186,7 +186,7 @@
   :type 'boolean
   :group 'ellama
   :set (lambda (symbol value)
-	 (set symbol value)
+	 (custom-set-default symbol value)
 	 (if value
 	     (ellama-setup-keymap)
 	   ;; If ellama-enable-keymap is nil, remove the key bindings
