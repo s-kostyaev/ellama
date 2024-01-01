@@ -181,6 +181,11 @@
   ;; Trim left first as `string-trim' trims from the right and ends up deleting all the code.
   (string-trim-right (string-trim-left text ellama--code-prefix) ellama--code-suffix))
 
+(defun ellama--generate-selected-provider-indicator ()
+  (if ellama-provider
+      (format "<!-- %s -->\n" (llm-ollama-chat-model ellama-provider))
+    ""))
+
 (defcustom ellama-enable-keymap t
   "Enable or disable Ellama keymap."
   :type 'boolean
@@ -282,7 +287,8 @@ when the request completes (with BUFFER current)."
   (with-current-buffer ellama-buffer
     (save-excursion
       (goto-char (point-max))
-      (insert "## " ellama-user-nick ":\n" prompt "\n\n"
+      (insert (ellama--generate-selected-provider-indicator)
+              "## " ellama-user-nick ":\n" prompt "\n\n"
 	      "## " ellama-assistant-nick ":\n")
       (ellama-stream prompt
 		     :session t
@@ -363,6 +369,8 @@ when the request completes (with BUFFER current)."
   "Prompt ellama for PROMPT to reply instantly."
   (let ((buffer (get-buffer-create (make-temp-name ellama-buffer))))
     (display-buffer buffer)
+    (with-current-buffer buffer
+      (insert (ellama--generate-selected-provider-indicator)))
     (ellama-stream prompt :buffer buffer (point-min))))
 
 ;;;###autoload
