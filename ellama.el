@@ -182,6 +182,7 @@
   (string-trim-right (string-trim-left text ellama--code-prefix) ellama--code-suffix))
 
 (defun ellama--generate-selected-provider-indicator ()
+  "Generate a string indicating the selected provider."
   (if ellama-provider
       (format "<!-- %s -->\n" (llm-ollama-chat-model ellama-provider))
     ""))
