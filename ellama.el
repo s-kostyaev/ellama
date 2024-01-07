@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.5.5
+;; Version: 0.5.6
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -290,8 +290,8 @@ It should be a function with single argument generated text string."
 	   ;; If ellama-enable-keymap is nil, remove the key bindings
 	   (define-key global-map (kbd ellama-keymap-prefix) nil))))
 
-(defun ellama-generate-name (action prompt)
-  "Generate name for ellama ACTION according to PROMPT."
+(defun ellama-generate-name (provider action prompt)
+  "Generate name for ellama ACTION by PROVIDER according to PROMPT."
   (let ((prompt-words (split-string prompt)))
     (string-join
      (flatten-tree
@@ -299,7 +299,8 @@ It should be a function with single argument generated text string."
 	    (seq-take prompt-words ellama-name-prompt-words-count)
 	    (if (> (length prompt-words) ellama-name-prompt-words-count)
 		"..."
-	      nil)))
+	      nil)
+	    (format "(%s)" (llm-name provider))))
      " ")))
 
 (defun ellama--cancel-current-request (&rest _)
@@ -458,7 +459,7 @@ Will call `ellama-chat-done-callback' on TEXT."
 
 (defun ellama-instant (prompt)
   "Prompt ellama for PROMPT to reply instantly."
-  (let* ((buffer-name (ellama-generate-name real-this-command prompt))
+  (let* ((buffer-name (ellama-generate-name ellama-provider real-this-command prompt))
 	 (buffer (get-buffer-create (if (get-buffer buffer-name)
 					(make-temp-name (concat buffer-name " "))
 				      buffer-name))))
