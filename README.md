@@ -14,9 +14,7 @@ output, making it effortless to use with your preferred text editor.
 
 ## Installation
 
-Install the package `ellama` from
-[MELPA](https://melpa.org/#/getting-started). Just `M-x`
-`package-install`<kbd>Enter</kbd> `ellama` <kbd>Enter</kbd>.
+Just `M-x` `package-install`<kbd>Enter</kbd> `ellama` <kbd>Enter</kbd>.
 By default it uses [ollama](https://github.com/jmorganca/ollama)
 provider and [zephyr](https://ollama.ai/library/zephyr) model. If you
 ok with it, you need to install
@@ -32,7 +30,7 @@ ellama configuration like this:
   (require 'llm-ollama)
   (setopt ellama-provider
 		  (make-llm-ollama
-		   :chat-model "zephyr:7b-beta-q6_K" :embedding-model "zephyr:7b-beta-q6_K"))
+		   :chat-model "mistral:7b-instruct-v0.2-q6_K" :embedding-model "mistral:7b-instruct-v0.2-q6_K"))
   ;; Predefined llm providers for interactive switching.
   ;; You shouldn't add ollama providers here - it can be selected interactively
   ;; without it. It is just example.
