@@ -1,3 +1,5 @@
+* Version 0.5.3
+- Support cancellation.
 * Version 0.5.2
 - Make default prompt templates customizable.
 * Version 0.5.1

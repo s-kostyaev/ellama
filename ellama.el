@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.5.2
+;; Version: 0.5.3
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -258,6 +258,8 @@
 
 (defvar-local ellama--change-group nil)
 
+(defvar-local ellama--current-request nil)
+
 (defconst ellama--code-prefix
   (rx (minimal-match
        (zero-or-more anything) (literal "```") (zero-or-more anything) line-end)))
@@ -293,6 +295,13 @@
 		"..."
 	      nil)))
      " ")))
+
+(defun ellama--cancel-current-request (&rest _)
+  "Cancel current running request."
+  (when ellama--current-request
+    (llm-cancel-request ellama--current-request)))
+
+(advice-add #'keyboard-quit :before #'ellama--cancel-current-request)
 
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
@@ -356,21 +365,24 @@ when the request completes (with BUFFER current)."
 	(set-marker-insertion-type start nil)
 	(set-marker-insertion-type end t)
 	(spinner-start ellama-spinner-type)
-	(llm-chat-streaming ellama-provider
-			    ellama--chat-prompt
-			    insert-text
-			    (lambda (text)
-			      (funcall insert-text text)
-			      (with-current-buffer buffer
-				(undo-amalgamate-change-group ellama--change-group)
-				(accept-change-group ellama--change-group)
-				(spinner-stop)
-				(funcall donecb text)))
-			    (lambda (_ msg)
-			      (with-current-buffer buffer
-				(cancel-change-group ellama--change-group)
-				(spinner-stop)
-				(funcall errcb msg))))))))
+	(setq ellama--current-request
+	      (llm-chat-streaming ellama-provider
+				  ellama--chat-prompt
+				  insert-text
+				  (lambda (text)
+				    (funcall insert-text text)
+				    (with-current-buffer buffer
+				      (undo-amalgamate-change-group ellama--change-group)
+				      (accept-change-group ellama--change-group)
+				      (spinner-stop)
+				      (funcall donecb text)
+				      (setq ellama--current-request nil)))
+				  (lambda (_ msg)
+				    (with-current-buffer buffer
+				      (cancel-change-group ellama--change-group)
+				      (spinner-stop)
+				      (funcall errcb msg)
+				      (setq ellama--current-request nil)))))))))
 
 (defun ellama-chat-done (_)
   "Chat done."
