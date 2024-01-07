@@ -269,6 +269,11 @@ when the request completes (with BUFFER current)."
 				(cancel-change-group ellama--change-group)
 				(spinner-stop)
 				(funcall errcb msg))))))))
+(defun ellama-chat-done (_)
+  "Chat done."
+  (save-excursion
+    (goto-char (point-max))
+    (insert "\n\n")))
 
 ;;;###autoload
 (defun ellama-chat (prompt)
@@ -286,9 +291,7 @@ when the request completes (with BUFFER current)."
 	      "## " ellama-assistant-nick ":\n")
       (ellama-stream prompt
 		     :session t
-		     :on-done (lambda (_) (save-excursion
-				      (goto-char (point-max))
-				      (insert "\n\n")))))))
+		     :on-done #'ellama-chat-done))))
 
 ;;;###autoload
 (defalias 'ellama-ask 'ellama-chat)
