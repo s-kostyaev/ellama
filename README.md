@@ -211,6 +211,7 @@ documentation](https://elpa.gnu.org/packages/llm.html)
   filling behaviour.
 - `ellama-name-prompt-words-count`: Count of words in prompt to
   generate name.
+- Prompt templates for every command.
 
 ## Acknowledgments
 
