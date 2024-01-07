@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.5.0
+;; Version: 0.5.1
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -164,6 +164,11 @@
           (function :tag "By predicate")
           (repeat :tag "In specific modes" (symbol))))
 
+(defcustom ellama-name-prompt-words-count 5
+  "Count of words in prompt to generate name."
+  :group 'ellama
+  :type 'integer)
+
 (defvar-local ellama--chat-prompt nil)
 
 (defvar-local ellama--change-group nil)
@@ -191,6 +196,18 @@
 	     (ellama-setup-keymap)
 	   ;; If ellama-enable-keymap is nil, remove the key bindings
 	   (define-key global-map (kbd ellama-keymap-prefix) nil))))
+
+(defun ellama-generate-name (action prompt)
+  "Generate name for ellama ACTION according to PROMPT."
+  (let ((prompt-words (split-string prompt)))
+    (string-join
+     (flatten-tree
+      (list (split-string (format "%s" action) "-")
+	    (seq-take prompt-words ellama-name-prompt-words-count)
+	    (if (> (length prompt-words) ellama-name-prompt-words-count)
+		"..."
+	      nil)))
+     " ")))
 
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
@@ -334,7 +351,10 @@ when the request completes (with BUFFER current)."
 
 (defun ellama-instant (prompt)
   "Prompt ellama for PROMPT to reply instantly."
-  (let ((buffer (get-buffer-create (make-temp-name ellama-buffer))))
+  (let* ((buffer-name (ellama-generate-name real-this-command prompt))
+	 (buffer (get-buffer-create (if (get-buffer buffer-name)
+					(make-temp-name (concat buffer-name " "))
+				      buffer-name))))
     (display-buffer buffer)
     (ellama-stream prompt :buffer buffer (point-min))))
 

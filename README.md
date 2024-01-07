@@ -209,6 +209,8 @@ documentation](https://elpa.gnu.org/packages/llm.html)
   automatically during generation. Disabled by default.
 - `ellama-fill-paragraphs`: Option to customize ellama paragraphs
   filling behaviour.
+- `ellama-name-prompt-words-count`: Count of words in prompt to
+  generate name.
 
 ## Acknowledgments
 
