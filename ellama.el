@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.5.3
+;; Version: 0.5.4
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -656,14 +656,21 @@ buffer."
 (defun ellama-get-ollama-local-model ()
   "Return llm provider for interactively selected ollama model."
   (interactive)
+  (declare-function llm-ollama-p "ext:llm-ollama")
+  (declare-function llm-ollama-host "ext:llm-ollama")
+  (declare-function llm-ollama-port "ext:llm-ollama")
   (let ((model-name
 	 (completing-read "Select ollama model: "
 			  (mapcar (lambda (s)
 				    (car (split-string s)))
 				  (seq-drop
-				   (process-lines ellama-ollama-binary "ls") 1)))))
+				   (process-lines ellama-ollama-binary "ls") 1))))
+	(host (when (llm-ollama-p ellama-provider)
+		(llm-ollama-host ellama-provider)))
+	(port (when (llm-ollama-p ellama-provider)
+		(llm-ollama-port ellama-provider))))
     (make-llm-ollama
-     :chat-model model-name :embedding-model model-name)))
+     :chat-model model-name :embedding-model model-name :host host :port port)))
 
 ;;;###autoload
 (defun ellama-provider-select ()
