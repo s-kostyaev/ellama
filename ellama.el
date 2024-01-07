@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.4.14
+;; Version: 0.5.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -123,7 +123,7 @@
 	     ("m f" ellama-make-format "Make format")
 	     ;; ask
 	     ("a a" ellama-ask-about "Ask about")
-	     ("a i" ellama-ask-interactive "Ask interactively")
+	     ("a i" ellama-chat "Ask interactively")
 	     ("a l" ellama-ask-line "Ask current line")
 	     ("a s" ellama-ask-selection "Ask selection")
 	     ;; text
@@ -294,36 +294,6 @@ when the request completes (with BUFFER current)."
 		     :on-done #'ellama-chat-done))))
 
 ;;;###autoload
-(defalias 'ellama-ask 'ellama-chat)
-
-;;;###autoload
-(defalias 'ellama-code-complete 'ellama-complete-code)
-
-;;;###autoload
-(defalias 'ellama-code-add 'ellama-add-code)
-
-;;;###autoload
-(defalias 'ellama-code-edit 'ellama-change-code)
-
-;;###autoload
-(defalias 'ellama-code-improve 'ellama-enhance-code)
-
-;;;###autoload
-(defalias 'ellama-improve-wording 'ellama-enhance-wording)
-
-;;;###autoload
-(defalias 'ellama-improve-grammar 'ellama-enhance-grammar-spelling)
-
-;;;###autoload
-(defalias 'ellama-improve-conciseness 'ellama-make-concise)
-
-;;;###autoload
-(defalias 'ellama-make-format 'ellama-render)
-
-;;;###autoload
-(defalias 'ellama-ask-interactive 'ellama-ask)
-
-;;;###autoload
 (defun ellama-ask-about ()
   "Ask ellama about selected region or current buffer."
   (interactive)
@@ -423,25 +393,25 @@ when the request completes (with BUFFER current)."
      :point beg)))
 
 ;;;###autoload
-(defun ellama-enhance-grammar-spelling ()
+(defun ellama-improve-grammar ()
   "Enhance the grammar and spelling in the currently selected region or buffer."
   (interactive)
   (ellama-change "improve grammar and spelling"))
 
 ;;;###autoload
-(defun ellama-enhance-wording ()
+(defun ellama-improve-wording ()
   "Enhance the wording in the currently selected region or buffer."
   (interactive)
   (ellama-change "use better wording"))
 
 ;;;###autoload
-(defun ellama-make-concise ()
+(defun ellama-improve-conciseness ()
   "Make the text of the currently selected region or buffer concise and simple."
   (interactive)
   (ellama-change "make it as simple and concise as possible"))
 
 ;;;###autoload
-(defun ellama-change-code (change)
+(defun ellama-code-edit (change)
   "Change selected code or code in current buffer according to provided CHANGE."
   (interactive "sWhat needs to be changed in this code: ")
   (let* ((beg (if (region-active-p)
@@ -460,7 +430,7 @@ when the request completes (with BUFFER current)."
      :point beg)))
 
 ;;;###autoload
-(defun ellama-enhance-code ()
+(defun ellama-code-improve ()
   "Change selected code or code in current buffer according to provided CHANGE."
   (interactive)
   (let* ((beg (if (region-active-p)
@@ -479,7 +449,7 @@ when the request completes (with BUFFER current)."
      :point beg)))
 
 ;;;###autoload
-(defun ellama-complete-code ()
+(defun ellama-code-complete ()
   "Complete selected code or code in current buffer."
   (interactive)
   (let* ((beg (if (region-active-p)
@@ -497,7 +467,7 @@ when the request completes (with BUFFER current)."
      :point end)))
 
 ;;;###autoload
-(defun ellama-add-code (description)
+(defun ellama-code-add (description)
   "Add new code according to DESCRIPTION.
 Code will be generated with provided context from selected region or current
 buffer."
@@ -517,7 +487,7 @@ buffer."
 
 
 ;;;###autoload
-(defun ellama-render (needed-format)
+(defun ellama-make-format (needed-format)
   "Render selected text or text in current buffer as NEEDED-FORMAT."
   (interactive "sSpecify required format: ")
   (let* ((beg (if (region-active-p)
@@ -538,13 +508,13 @@ buffer."
 (defun ellama-make-list ()
   "Create markdown list from active region or current buffer."
   (interactive)
-  (ellama-render "markdown list"))
+  (ellama-make-format "markdown list"))
 
 ;;;###autoload
 (defun ellama-make-table ()
   "Create markdown table from active region or current buffer."
   (interactive)
-  (ellama-render "markdown table"))
+  (ellama-make-format "markdown table"))
 
 (defun ellama-summarize-webpage (url)
   "Summarize webpage fetched from URL."
