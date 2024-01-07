@@ -210,6 +210,9 @@ documentation](https://elpa.gnu.org/packages/llm.html)
 - `ellama-name-prompt-words-count`: Count of words in prompt to
   generate name.
 - Prompt templates for every command.
+- `ellama-chat-done-callback`: Callback that will be called on ellama
+chat response generation done. It should be a function with single
+argument generated text string.
 
 ## Acknowledgments
 

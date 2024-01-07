@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.5.4
+;; Version: 0.5.5
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -254,6 +254,12 @@
   :group 'ellama
   :type 'string)
 
+(defcustom ellama-chat-done-callback nil
+  "Callback that will be called on ellama chat response generation done.
+It should be a function with single argument generated text string."
+  :group 'ellama
+  :type 'function)
+
 (defvar-local ellama--chat-prompt nil)
 
 (defvar-local ellama--change-group nil)
@@ -384,11 +390,14 @@ when the request completes (with BUFFER current)."
 				      (funcall errcb msg)
 				      (setq ellama--current-request nil)))))))))
 
-(defun ellama-chat-done (_)
-  "Chat done."
+(defun ellama-chat-done (text)
+  "Chat done.
+Will call `ellama-chat-done-callback' on TEXT."
   (save-excursion
     (goto-char (point-max))
-    (insert "\n\n")))
+    (insert "\n\n"))
+  (when ellama-chat-done-callback
+    (funcall ellama-chat-done-callback text)))
 
 ;;;###autoload
 (defun ellama-chat (prompt)
