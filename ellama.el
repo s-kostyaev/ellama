@@ -59,6 +59,11 @@
   :group 'ellama
   :type 'string)
 
+(defcustom ellama-nick-prefix "##"
+  "User and assistant nick prefix in logs."
+  :group 'ellama
+  :type 'string)
+
 (defcustom ellama-buffer-mode (if (fboundp 'markdown-mode)
 				  'markdown-mode
 				'text-mode)
@@ -412,8 +417,8 @@ Will call `ellama-chat-done-callback' on TEXT."
   (with-current-buffer ellama-buffer
     (save-excursion
       (goto-char (point-max))
-      (insert "## " ellama-user-nick ":\n" prompt "\n\n"
-	      "## " ellama-assistant-nick ":\n")
+      (insert ellama-nick-prefix " " ellama-user-nick ":\n" prompt "\n\n"
+	      ellama-nick-prefix " " ellama-assistant-nick ":\n")
       (ellama-stream prompt
 		     :session t
 		     :on-done #'ellama-chat-done))))
