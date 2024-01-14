@@ -1,3 +1,5 @@
+* Version 0.5.7
+- Add ellama-nick-prefix custom variable.
 * Version 0.5.6
 - Add llm name to generated ellama name.
 * Version 0.5.5

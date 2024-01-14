@@ -213,6 +213,7 @@ documentation](https://elpa.gnu.org/packages/llm.html)
 - `ellama-chat-done-callback`: Callback that will be called on ellama
 chat response generation done. It should be a function with single
 argument generated text string.
+- `ellama-nick-prefix`: User and assistant nick prefix in logs.
 
 ## Acknowledgments
 
