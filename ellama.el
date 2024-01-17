@@ -367,6 +367,16 @@ PROMPT is a variable contains last prompt in this session."
 
 (advice-add #'keyboard-quit :before #'ellama--cancel-current-request)
 
+(defun ellama--session-deactivate (&rest _)
+  "Deactivate current session."
+  (when ellama--current-session
+    (let ((id (ellama-session-id ellama--current-session)))
+      (when (equal ellama--current-session-id id)
+	(setq ellama--current-session-id nil))
+      (remhash id ellama--active-sessions))))
+
+(advice-add #'kill-buffer :before #'ellama--session-deactivate)
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
