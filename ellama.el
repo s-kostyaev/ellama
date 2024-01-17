@@ -377,6 +377,53 @@ PROMPT is a variable contains last prompt in this session."
 
 (advice-add #'kill-buffer :before #'ellama--session-deactivate)
 
+(defun ellama--get-session-file-name (file-name)
+  "Get ellama session file name for FILE-NAME."
+  (let* ((base-name (file-name-nondirectory file-name))
+	 (dir (file-name-directory file-name))
+	 (session-file-name
+	  (file-name-concat
+	   dir
+	   (concat "." base-name ".session.el"))))
+    session-file-name))
+
+(defun ellama--save-session (&rest _)
+  "Save current ellama session."
+  (when ellama--current-session
+    (let* ((session ellama--current-session)
+	   (file-name (ellama-session-file session))
+	   (session-file-name (ellama--get-session-file-name file-name)))
+      (with-current-buffer (find-file-noselect session-file-name)
+	(delete-region (point-min) (point-max))
+	(insert (concat "(setq ellama--current-session " (prin1-to-string session)")"))
+	(save-buffer)
+	(kill-buffer)))))
+
+(advice-add #'save-buffer :before #'ellama--save-session)
+
+(defun ellama-load-session ()
+  "Load ellama session from file."
+  (interactive)
+  (when-let* ((file-name (file-name-concat
+			  ellama-sessions-directory
+			  (completing-read
+			   "Select session to load: "
+			   (directory-files
+			    ellama-sessions-directory nil "^[^\.].*"))))
+	      (session-file-name (ellama--get-session-file-name file-name))
+	      (session-file-exists (file-exists-p session-file-name))
+	      (buffer (find-file-noselect file-name))
+	      (session-buffer (find-file-noselect session-file-name)))
+    (with-current-buffer session-buffer
+      (goto-char (point-min)))
+    (with-current-buffer buffer
+      (eval (read session-buffer))
+      (setq ellama--current-session-id (ellama-session-id ellama--current-session))
+      (puthash (ellama-session-id ellama--current-session)
+	       buffer ellama--active-sessions))
+    (kill-buffer session-buffer)
+    (display-buffer buffer)))
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
