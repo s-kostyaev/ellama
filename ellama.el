@@ -429,6 +429,21 @@ PROMPT is a variable contains last prompt in this session."
     (kill-buffer session-buffer)
     (display-buffer buffer)))
 
+(defun ellama-session-remove ()
+  "Remove ellama session."
+  (interactive)
+  (let* ((id (completing-read
+	      "Select session to remove: "
+	      (hash-table-keys ellama--active-sessions)))
+	 (buffer (ellama-get-session-buffer id))
+	 (file (buffer-file-name buffer))
+	 (session-file (ellama--get-session-file-name file)))
+    (with-current-buffer buffer
+      (ellama--session-deactivate)
+      (kill-buffer))
+    (delete-file file t)
+    (delete-file session-file t)))
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
