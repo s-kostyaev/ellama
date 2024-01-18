@@ -454,6 +454,39 @@ PROMPT is a variable contains last prompt in this session."
     (setq ellama--current-session-id id)
     (display-buffer buffer)))
 
+(defun ellama-session-rename ()
+  "Rename current ellama session."
+  (interactive)
+  (when-let* ((id (if ellama--current-session
+		      (ellama-session-id ellama--current-session)
+		    ellama--current-session-id))
+	      (buffer (ellama-get-session-buffer id))
+	      (session (with-current-buffer buffer
+			 ellama--current-session))
+	      (file-name (buffer-file-name buffer))
+	      (file-ext (file-name-extension file-name))
+	      (dir (file-name-directory file-name))
+	      (session-file-name (ellama--get-session-file-name file-name))
+	      (new-id (read-string
+		       "New session name: "
+		       id))
+	      (new-file-name (file-name-concat
+			      dir
+			      (concat new-id "." file-ext)))
+	      (new-session-file-name
+	       (ellama--get-session-file-name new-file-name)))
+    (with-current-buffer buffer
+      (set-visited-file-name new-file-name))
+    (when (file-exists-p file-name)
+      (rename-file file-name new-file-name))
+    (when (file-exists-p session-file-name)
+      (rename-file session-file-name new-session-file-name))
+    (setf (ellama-session-id session) new-id)
+    (when (equal ellama--current-session-id id)
+      (setq ellama--current-session-id new-id))
+    (remhash id ellama--active-sessions)
+    (puthash new-id buffer ellama--active-sessions)))
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
