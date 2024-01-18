@@ -1,3 +1,5 @@
+* Version 0.5.8
+- Fix typo in predefined prompts.
 * Version 0.5.7
 - Add ellama-nick-prefix custom variable.
 * Version 0.5.6

@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.5.7
+;; Version: 0.5.8
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -224,12 +224,12 @@
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-code-edit-prompt-template "Regarding the following code, %s, only ouput the result code in format ```language\n...\n```:\n```\n%s\n```"
+(defcustom ellama-code-edit-prompt-template "Regarding the following code, %s, only output the result code in format ```language\n...\n```:\n```\n%s\n```"
   "Prompt template for `ellama-code-edit'."
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-code-improve-prompt-template "Enhance the following code, only ouput the result code in format ```language\n...\n```:\n```\n%s\n```"
+(defcustom ellama-code-improve-prompt-template "Enhance the following code, only output the result code in format ```language\n...\n```:\n```\n%s\n```"
   "Prompt template for `ellama-code-improve'."
   :group 'ellama
   :type 'string)
@@ -239,7 +239,7 @@
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-code-add-prompt-template "Context: \n```\n%s\n```\nBased on this context, %s, only ouput the result in format ```\n...\n```"
+(defcustom ellama-code-add-prompt-template "Context: \n```\n%s\n```\nBased on this context, %s, only output the result in format ```\n...\n```"
   "Prompt template for `ellama-code-add'."
   :group 'ellama
   :type 'string)
