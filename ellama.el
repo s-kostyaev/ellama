@@ -59,13 +59,6 @@
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-buffer-mode (if (fboundp 'markdown-mode)
-				  'markdown-mode
-				'text-mode)
-  "Major mode for ellama logs."
-  :group 'ellama
-  :type 'function)
-
 (defcustom ellama-language "English"
   "Language for ellama translation."
   :group 'ellama
