@@ -533,11 +533,25 @@ Will call `ellama-chat-done-callback' on TEXT."
 
 If CREATE-SESSION set, creates new session even if there is an active session."
   (interactive "sAsk ellama: ")
-  (let* ((session (if (or create-session
+  (let* ((providers (progn
+		      (push '("default model" . ellama-provider)
+			    ellama-providers)
+		      (if (and ellama-ollama-binary
+			       (file-exists-p ellama-ollama-binary))
+			  (push '("ollama model" . (ellama-get-ollama-local-model))
+				ellama-providers)
+			ellama-providers)))
+	 (variants (mapcar #'car providers))
+	 (provider (if current-prefix-arg
+		       (eval (alist-get
+			      (completing-read "Select model: " variants)
+			      providers nil nil #'string=))
+		     ellama-provider))
+	 (session (if (or create-session
 			  current-prefix-arg
 			  (and (not ellama--current-session)
 			       (not ellama--current-session-id)))
-		      (ellama-new-session ellama-provider prompt)
+		      (ellama-new-session provider prompt)
 		    (or ellama--current-session
 			(with-current-buffer (ellama-get-session-buffer
 					      ellama--current-session-id)
