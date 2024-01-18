@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.6.0
+;; Version: 0.7.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -54,7 +54,7 @@
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-nick-prefix "##"
+(defcustom ellama-nick-prefix "**"
   "User and assistant nick prefix in logs."
   :group 'ellama
   :type 'string)
@@ -253,6 +253,24 @@ It should be a function with single argument generated text string."
   :group 'ellama
   :type 'function)
 
+(defcustom ellama-chat-system-prompt "You are helpful assistant. Use org-mode syntax in your responses. A source code block conforms to this structure:
+
+#+NAME: <name>
+#+BEGIN_SRC <language> <switches> <header arguments>
+  <body>
+#+END_SRC
+
+ For example, if you add python code to your answer it should look like this:
+
+#+BEGIN_SRC python
+  def foo(x):
+  if x>0:
+    return x+1
+#+END_SRC"
+  "System prompt for ollama chat."
+  :group 'ellama
+  :type 'string)
+
 (defvar-local ellama--change-group nil)
 
 (defvar-local ellama--current-request nil)
@@ -281,7 +299,7 @@ It should be a function with single argument generated text string."
 	   ;; If ellama-enable-keymap is nil, remove the key bindings
 	   (define-key global-map (kbd ellama-keymap-prefix) nil))))
 
-(defcustom ellama-session-file-extension "md"
+(defcustom ellama-session-file-extension "org"
   "File extension for saving ellama session."
   :type 'string
   :group 'ellama)
@@ -329,8 +347,9 @@ PROMPT is a variable contains last prompt in this session."
 	    (format "(%s)" (llm-name provider))))
      " ")))
 
-(defun ellama-new-session (provider prompt)
-  "Create new ellama session with provided PROVIDER and PROMPT and unique id."
+(defun ellama-new-session (provider prompt system-prompt)
+  "Create new ellama session with unique id.
+Provided PROVIDER, PROMPT and SYSTEM-PROMPT will be used in new session."
   (let* ((name (ellama-generate-name provider 'ellama prompt))
 	 (count 1)
 	 (name-with-suffix (format "%s %d" name count))
@@ -343,7 +362,14 @@ PROMPT is a variable contains last prompt in this session."
 	 (file-name (file-name-concat
 		     ellama-sessions-directory
 		     (concat id "." ellama-session-file-extension)))
-	 (session (make-ellama-session :id id :provider provider :file file-name))
+	 (llm-prompt (when system-prompt
+		       (make-llm-chat-prompt
+			:interactions
+			(list
+			 (make-llm-chat-prompt-interaction
+			  :role 'system :content system-prompt)))))
+	 (session (make-ellama-session
+		   :id id :provider provider :file file-name :prompt llm-prompt))
 	 (buffer (progn
 		   (make-directory ellama-sessions-directory t)
 		   (find-file-noselect file-name))))
@@ -612,7 +638,7 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 			  current-prefix-arg
 			  (and (not ellama--current-session)
 			       (not ellama--current-session-id)))
-		      (ellama-new-session provider prompt)
+		      (ellama-new-session provider prompt ellama-chat-system-prompt)
 		    (or ellama--current-session
 			(with-current-buffer (ellama-get-session-buffer
 					      ellama--current-session-id)
