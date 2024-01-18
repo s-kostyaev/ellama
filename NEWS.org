@@ -1,3 +1,5 @@
+* Version 0.6.0
+- Implement session management.
 * Version 0.5.8
 - Fix typo in predefined prompts.
 * Version 0.5.7

@@ -151,6 +151,22 @@ simple using Ellama.
 Render the currently selected text or the text in the current buffer
 as a specified format using Ellama.
 
+### ellama-load-session
+
+Load ellama session from file.
+
+### ellama-session-remove
+
+Remove ellama session.
+
+### ellama-session-switch
+
+Change current active session.
+
+### ellama-session-rename
+
+Rename current ellama session.
+
 ## Keymap
 
 Here is a table of keybindings and their associated functions in
@@ -184,13 +200,10 @@ Ellama, using the `C-c e` prefix:
 
 The following variables can be customized for the Ellama client:
 
-- `ellama-buffer`: The default Ellama buffer name.
 - `ellama-enable-keymap`: Enable the Ellama keymap.
 - `ellama-keymap-prefix`: The keymap prefix for Ellama.
 - `ellama-user-nick`: The user nick in logs.
 - `ellama-assistant-nick`: The assistant nick in logs.
-- `ellama-buffer-mode`: The major mode for the Ellama logs buffer.
-Default mode is `markdown-mode`.
 - `ellama-language`: The language for Ollama translation. Default
 language is english.
 - `ellama-provider`: llm provider for ellama. Default provider is
@@ -214,6 +227,9 @@ documentation](https://elpa.gnu.org/packages/llm.html)
 chat response generation done. It should be a function with single
 argument generated text string.
 - `ellama-nick-prefix`: User and assistant nick prefix in logs.
+- `ellama-session-file-extension`: File extension for saving ellama
+  session. Default value "md".
+- `ellama-sessions-directory`: Directory for saved ellama sessions.
 
 ## Acknowledgments
 

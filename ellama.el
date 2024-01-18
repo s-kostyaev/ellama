@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.5.8
+;; Version: 0.6.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -44,11 +44,6 @@
   "Tool for interacting with LLMs."
   :group 'tools)
 
-(defcustom ellama-buffer "*ellama*"
-  "Default ellama buffer."
-  :group 'ellama
-  :type 'string)
-
 (defcustom ellama-user-nick "User"
   "User nick in logs."
   :group 'ellama
@@ -63,13 +58,6 @@
   "User and assistant nick prefix in logs."
   :group 'ellama
   :type 'string)
-
-(defcustom ellama-buffer-mode (if (fboundp 'markdown-mode)
-				  'markdown-mode
-				'text-mode)
-  "Major mode for ellama logs."
-  :group 'ellama
-  :type 'function)
 
 (defcustom ellama-language "English"
   "Language for ellama translation."
@@ -265,8 +253,6 @@ It should be a function with single argument generated text string."
   :group 'ellama
   :type 'function)
 
-(defvar-local ellama--chat-prompt nil)
-
 (defvar-local ellama--change-group nil)
 
 (defvar-local ellama--current-request nil)
@@ -295,6 +281,41 @@ It should be a function with single argument generated text string."
 	   ;; If ellama-enable-keymap is nil, remove the key bindings
 	   (define-key global-map (kbd ellama-keymap-prefix) nil))))
 
+(defcustom ellama-session-file-extension "md"
+  "File extension for saving ellama session."
+  :type 'string
+  :group 'ellama)
+
+(defcustom ellama-sessions-directory (file-truename
+				      (file-name-concat
+				       user-emacs-directory
+				       "ellama-sessions"))
+  "Directory for saved ellama sessions."
+  :type 'string
+  :group 'ellama)
+
+(defvar-local ellama--current-session nil)
+
+(defvar ellama--current-session-id nil)
+
+(defvar ellama--active-sessions (make-hash-table :test #'equal))
+
+(cl-defstruct ellama-session
+  "A structure represent ellama session.
+
+ID is an unique identifier of session, string.
+
+PROVIDER is an llm provider of session.
+
+FILE is a path to file contains string representation of this session, string.
+
+PROMPT is a variable contains last prompt in this session."
+  id provider file prompt)
+
+(defun ellama-get-session-buffer (id)
+  "Return ellama session buffer by provided ID."
+  (gethash id ellama--active-sessions))
+
 (defun ellama-generate-name (provider action prompt)
   "Generate name for ellama ACTION by PROVIDER according to PROMPT."
   (let ((prompt-words (split-string prompt)))
@@ -308,6 +329,30 @@ It should be a function with single argument generated text string."
 	    (format "(%s)" (llm-name provider))))
      " ")))
 
+(defun ellama-new-session (provider prompt)
+  "Create new ellama session with provided PROVIDER and PROMPT and unique id."
+  (let* ((name (ellama-generate-name provider 'ellama prompt))
+	 (count 1)
+	 (name-with-suffix (format "%s %d" name count))
+	 (id (if (not (ellama-get-session-buffer name))
+		 name
+	       (while (ellama-get-session-buffer name-with-suffix)
+		 (setq count (+ count 1))
+		 (setq name-with-suffix (format "%s %d" name count)))
+	       name-with-suffix))
+	 (file-name (file-name-concat
+		     ellama-sessions-directory
+		     (concat id "." ellama-session-file-extension)))
+	 (session (make-ellama-session :id id :provider provider :file file-name))
+	 (buffer (progn
+		   (make-directory ellama-sessions-directory t)
+		   (find-file-noselect file-name))))
+    (setq ellama--current-session-id id)
+    (puthash id buffer ellama--active-sessions)
+    (with-current-buffer buffer
+      (setq ellama--current-session session))
+    session))
+
 (defun ellama--cancel-current-request (&rest _)
   "Cancel current running request."
   (when ellama--current-request
@@ -315,9 +360,135 @@ It should be a function with single argument generated text string."
 
 (advice-add #'keyboard-quit :before #'ellama--cancel-current-request)
 
+(defun ellama--session-deactivate (&rest _)
+  "Deactivate current session."
+  (when ellama--current-session
+    (let ((id (ellama-session-id ellama--current-session)))
+      (when (equal ellama--current-session-id id)
+	(setq ellama--current-session-id nil))
+      (remhash id ellama--active-sessions))))
+
+(advice-add #'kill-buffer :before #'ellama--session-deactivate)
+
+(defun ellama--get-session-file-name (file-name)
+  "Get ellama session file name for FILE-NAME."
+  (let* ((base-name (file-name-nondirectory file-name))
+	 (dir (file-name-directory file-name))
+	 (session-file-name
+	  (file-name-concat
+	   dir
+	   (concat "." base-name ".session.el"))))
+    session-file-name))
+
+(defun ellama--save-session (&rest _)
+  "Save current ellama session."
+  (when ellama--current-session
+    (let* ((session ellama--current-session)
+	   (file-name (ellama-session-file session))
+	   (session-file-name (ellama--get-session-file-name file-name)))
+      (with-current-buffer (find-file-noselect session-file-name)
+	(delete-region (point-min) (point-max))
+	(insert (concat "(setq ellama--current-session " (prin1-to-string session)")"))
+	(save-buffer)
+	(kill-buffer)))))
+
+(advice-add #'save-buffer :before #'ellama--save-session)
+
+;;;###autoload
+(defun ellama-load-session ()
+  "Load ellama session from file."
+  (interactive)
+  (when-let* ((dir (if current-prefix-arg
+		       (read-directory-name
+			"Select directory containing sessions: "
+			ellama-sessions-directory)
+		     ellama-sessions-directory))
+	      (file-name (file-name-concat
+			  ellama-sessions-directory
+			  (completing-read
+			   "Select session to load: "
+			   (directory-files
+			    ellama-sessions-directory nil "^[^\.].*"))))
+	      (session-file-name (ellama--get-session-file-name file-name))
+	      (session-file-exists (file-exists-p session-file-name))
+	      (buffer (find-file-noselect file-name))
+	      (session-buffer (find-file-noselect session-file-name)))
+    (with-current-buffer session-buffer
+      (goto-char (point-min)))
+    (with-current-buffer buffer
+      (eval (read session-buffer))
+      (setq ellama--current-session-id (ellama-session-id ellama--current-session))
+      (puthash (ellama-session-id ellama--current-session)
+	       buffer ellama--active-sessions))
+    (kill-buffer session-buffer)
+    (display-buffer buffer)))
+
+;;;###autoload
+(defun ellama-session-remove ()
+  "Remove ellama session."
+  (interactive)
+  (let* ((id (completing-read
+	      "Select session to remove: "
+	      (hash-table-keys ellama--active-sessions)))
+	 (buffer (ellama-get-session-buffer id))
+	 (file (buffer-file-name buffer))
+	 (session-file (ellama--get-session-file-name file)))
+    (with-current-buffer buffer
+      (ellama--session-deactivate)
+      (kill-buffer))
+    (delete-file file t)
+    (delete-file session-file t)))
+
+;;;###autoload
+(defun ellama-session-switch ()
+  "Change current active session."
+  (interactive)
+  (let* ((id (completing-read
+	      "Select session to activate: "
+	      (hash-table-keys ellama--active-sessions)))
+	 (buffer (ellama-get-session-buffer id)))
+    (setq ellama--current-session-id id)
+    (display-buffer buffer)))
+
+;;;###autoload
+(defun ellama-session-rename ()
+  "Rename current ellama session."
+  (interactive)
+  (when-let* ((id (if ellama--current-session
+		      (ellama-session-id ellama--current-session)
+		    ellama--current-session-id))
+	      (buffer (ellama-get-session-buffer id))
+	      (session (with-current-buffer buffer
+			 ellama--current-session))
+	      (file-name (buffer-file-name buffer))
+	      (file-ext (file-name-extension file-name))
+	      (dir (file-name-directory file-name))
+	      (session-file-name (ellama--get-session-file-name file-name))
+	      (new-id (read-string
+		       "New session name: "
+		       id))
+	      (new-file-name (file-name-concat
+			      dir
+			      (concat new-id "." file-ext)))
+	      (new-session-file-name
+	       (ellama--get-session-file-name new-file-name)))
+    (with-current-buffer buffer
+      (set-visited-file-name new-file-name))
+    (when (file-exists-p file-name)
+      (rename-file file-name new-file-name))
+    (when (file-exists-p session-file-name)
+      (rename-file session-file-name new-session-file-name))
+    (setf (ellama-session-id session) new-id)
+    (when (equal ellama--current-session-id id)
+      (setq ellama--current-session-id new-id))
+    (remhash id ellama--active-sessions)
+    (puthash new-id buffer ellama--active-sessions)))
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
+
+:provider PROVIDER -- PROVIDER is an llm provider for generation.
 
 :buffer BUFFER -- BUFFER is the buffer (or `buffer-name') to insert ellama reply
 in.  Default value is (current-buffer).
@@ -327,34 +498,45 @@ in.  Default value is (current-buffer).
 :filter FILTER -- FILTER is a function that's applied to (partial) response
 strings before they're inserted into the BUFFER.
 
-:session SESSION -- if session is non-nil, the PROMPT will be appended to the
-current (BUFFER-local) conversation.
+:session SESSION -- SESSION is a ellama conversation session.
 
 :on-error ON-ERROR -- ON-ERROR a function that's called with an error message on
 failure (with BUFFER current).
 
 :on-done ON-DONE -- ON-DONE a function that's called with the full response text
 when the request completes (with BUFFER current)."
-  (let* ((buffer (or (plist-get args :buffer) (current-buffer)))
+  (let* ((provider (or (plist-get args :provider) ellama-provider))
+	 (session (plist-get args :session))
+	 (buffer (or (plist-get args :buffer)
+		     (when (ellama-session-p session)
+		       (ellama-get-session-buffer (ellama-session-id session)))
+		     (current-buffer)))
 	 (point (or (plist-get args :point)
 		    (with-current-buffer buffer (point))))
 	 (filter (or (plist-get args :filter) #'identity))
-	 (session (plist-get args :session))
-	 (errcb (or (plist-get args :on-error) (lambda (msg) (error "Error calling the LLM: %s" msg))))
-	 (donecb (or (plist-get args :on-done) #'ignore)))
+	 (errcb (or (plist-get args :on-error)
+		    (lambda (msg)
+		      (error "Error calling the LLM: %s" msg))))
+	 (donecb (or (plist-get args :on-done) #'ignore))
+	 (llm-prompt (if session
+			 (if (llm-chat-prompt-p (ellama-session-prompt session))
+			     (progn
+			       (llm-chat-prompt-append-response
+				(ellama-session-prompt session)
+				prompt)
+			       (ellama-session-prompt session))
+			   (setf (ellama-session-prompt session)
+				 (llm-make-simple-chat-prompt prompt)))
+		       (llm-make-simple-chat-prompt prompt))))
     (with-current-buffer buffer
-      (if (and session ellama--chat-prompt)
-	  (llm-chat-prompt-append-response
-	   ellama--chat-prompt prompt)
-	(setq ellama--chat-prompt (llm-make-simple-chat-prompt prompt)))
       (let* ((start (make-marker))
 	     (end (make-marker))
 	     (insert-text
 	      (lambda (text)
 		;; Erase and insert the new text between the marker cons.
 		(with-current-buffer buffer
-		  ;; Manually save/restore point as save-excursion doesn't restore the point into
-		  ;; the middle of replaced text.
+		  ;; Manually save/restore point as save-excursion doesn't
+		  ;; restore the point into the middle of replaced text.
 		  (let ((pt (point)))
 		    (goto-char start)
 		    (delete-region start end)
@@ -362,7 +544,8 @@ when the request completes (with BUFFER current)."
                     (when (pcase ellama-fill-paragraphs
                             ((cl-type function) (funcall ellama-fill-paragraphs))
                             ((cl-type boolean) ellama-fill-paragraphs)
-                            ((cl-type list) (apply #'derived-mode-p ellama-fill-paragraphs)))
+                            ((cl-type list) (apply #'derived-mode-p
+						   ellama-fill-paragraphs)))
                       (fill-region start (point)))
 		    (goto-char pt))
 		  (when-let ((ellama-auto-scroll)
@@ -378,8 +561,8 @@ when the request completes (with BUFFER current)."
 	(set-marker-insertion-type end t)
 	(spinner-start ellama-spinner-type)
 	(setq ellama--current-request
-	      (llm-chat-streaming ellama-provider
-				  ellama--chat-prompt
+	      (llm-chat-streaming provider
+				  llm-prompt
 				  insert-text
 				  (lambda (text)
 				    (funcall insert-text text)
@@ -406,22 +589,45 @@ Will call `ellama-chat-done-callback' on TEXT."
     (funcall ellama-chat-done-callback text)))
 
 ;;;###autoload
-(defun ellama-chat (prompt)
-  "Send PROMPT to ellama chat with conversation history."
+(defun ellama-chat (prompt &optional create-session)
+  "Send PROMPT to ellama chat with conversation history.
+
+If CREATE-SESSION set, creates new session even if there is an active session."
   (interactive "sAsk ellama: ")
-  (when (not (buffer-live-p (get-buffer ellama-buffer)))
-    (get-buffer-create ellama-buffer)
-    (with-current-buffer ellama-buffer
-      (funcall ellama-buffer-mode)))
-  (display-buffer ellama-buffer)
-  (with-current-buffer ellama-buffer
-    (save-excursion
-      (goto-char (point-max))
-      (insert ellama-nick-prefix " " ellama-user-nick ":\n" prompt "\n\n"
-	      ellama-nick-prefix " " ellama-assistant-nick ":\n")
-      (ellama-stream prompt
-		     :session t
-		     :on-done #'ellama-chat-done))))
+  (let* ((providers (progn
+		      (push '("default model" . ellama-provider)
+			    ellama-providers)
+		      (if (and ellama-ollama-binary
+			       (file-exists-p ellama-ollama-binary))
+			  (push '("ollama model" . (ellama-get-ollama-local-model))
+				ellama-providers)
+			ellama-providers)))
+	 (variants (mapcar #'car providers))
+	 (provider (if current-prefix-arg
+		       (eval (alist-get
+			      (completing-read "Select model: " variants)
+			      providers nil nil #'string=))
+		     ellama-provider))
+	 (session (if (or create-session
+			  current-prefix-arg
+			  (and (not ellama--current-session)
+			       (not ellama--current-session-id)))
+		      (ellama-new-session provider prompt)
+		    (or ellama--current-session
+			(with-current-buffer (ellama-get-session-buffer
+					      ellama--current-session-id)
+			  ellama--current-session))))
+	 (buffer (ellama-get-session-buffer
+		  (ellama-session-id session))))
+    (display-buffer buffer)
+    (with-current-buffer buffer
+      (save-excursion
+	(goto-char (point-max))
+	(insert ellama-nick-prefix " " ellama-user-nick ":\n" prompt "\n\n"
+		ellama-nick-prefix " " ellama-assistant-nick ":\n")
+	(ellama-stream prompt
+		       :session session
+		       :on-done #'ellama-chat-done)))))
 
 ;;;###autoload
 (defun ellama-ask-about ()
