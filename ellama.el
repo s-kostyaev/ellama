@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.5.8
+;; Version: 0.6.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -394,6 +394,7 @@ PROMPT is a variable contains last prompt in this session."
 
 (advice-add #'save-buffer :before #'ellama--save-session)
 
+;;;###autoload
 (defun ellama-load-session ()
   "Load ellama session from file."
   (interactive)
@@ -422,6 +423,7 @@ PROMPT is a variable contains last prompt in this session."
     (kill-buffer session-buffer)
     (display-buffer buffer)))
 
+;;;###autoload
 (defun ellama-session-remove ()
   "Remove ellama session."
   (interactive)
@@ -437,6 +439,7 @@ PROMPT is a variable contains last prompt in this session."
     (delete-file file t)
     (delete-file session-file t)))
 
+;;;###autoload
 (defun ellama-session-switch ()
   "Change current active session."
   (interactive)
@@ -447,6 +450,7 @@ PROMPT is a variable contains last prompt in this session."
     (setq ellama--current-session-id id)
     (display-buffer buffer)))
 
+;;;###autoload
 (defun ellama-session-rename ()
   "Rename current ellama session."
   (interactive)
@@ -484,6 +488,8 @@ PROMPT is a variable contains last prompt in this session."
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
 
+:provider PROVIDER -- PROVIDER is an llm provider for generation.
+
 :buffer BUFFER -- BUFFER is the buffer (or `buffer-name') to insert ellama reply
 in.  Default value is (current-buffer).
 
@@ -492,8 +498,7 @@ in.  Default value is (current-buffer).
 :filter FILTER -- FILTER is a function that's applied to (partial) response
 strings before they're inserted into the BUFFER.
 
-:session SESSION -- if session is non-nil, the PROMPT will be appended to the
-current (BUFFER-local) conversation.
+:session SESSION -- SESSION is a ellama conversation session.
 
 :on-error ON-ERROR -- ON-ERROR a function that's called with an error message on
 failure (with BUFFER current).
