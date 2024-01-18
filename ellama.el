@@ -253,24 +253,6 @@ It should be a function with single argument generated text string."
   :group 'ellama
   :type 'function)
 
-(defcustom ellama-chat-system-prompt "You are helpful assistant. Use org-mode syntax in your responses. A source code block conforms to this structure:
-
-#+NAME: <name>
-#+BEGIN_SRC <language> <switches> <header arguments>
-  <body>
-#+END_SRC
-
- For example, if you add python code to your answer it should look like this:
-
-#+BEGIN_SRC python
-  def foo(x):
-  if x>0:
-    return x+1
-#+END_SRC"
-  "System prompt for ollama chat."
-  :group 'ellama
-  :type 'string)
-
 (defvar-local ellama--change-group nil)
 
 (defvar-local ellama--current-request nil)
@@ -283,10 +265,23 @@ It should be a function with single argument generated text string."
   (rx (minimal-match
        (literal "```") (zero-or-more anything))))
 
+(defconst ellama--code-translate-prefix
+  "^```\\(.+\\)$")
+
+(defconst ellama--code-translate-suffix
+  "^```$")
+
 (defun ellama--code-filter (text)
   "Filter code prefix/suffix from TEXT."
   ;; Trim left first as `string-trim' trims from the right and ends up deleting all the code.
   (string-trim-right (string-trim-left text ellama--code-prefix) ellama--code-suffix))
+
+(defun ellama--code-block-translate-to-org-filter (text)
+  "Filter to translate code blocks from markdown syntax to org syntax."
+  (replace-regexp-in-string
+   ellama--code-translate-suffix "#+END_SRC"
+   (replace-regexp-in-string
+    ellama--code-translate-prefix "#+BEGIN_SRC \\1" text)))
 
 (defcustom ellama-enable-keymap t
   "Enable or disable Ellama keymap."
@@ -638,7 +633,7 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 			  current-prefix-arg
 			  (and (not ellama--current-session)
 			       (not ellama--current-session-id)))
-		      (ellama-new-session provider prompt ellama-chat-system-prompt)
+		      (ellama-new-session provider prompt nil)
 		    (or ellama--current-session
 			(with-current-buffer (ellama-get-session-buffer
 					      ellama--current-session-id)
@@ -653,7 +648,8 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 		ellama-nick-prefix " " ellama-assistant-nick ":\n")
 	(ellama-stream prompt
 		       :session session
-		       :on-done #'ellama-chat-done)))))
+		       :on-done #'ellama-chat-done
+		       :filter #'ellama--code-block-translate-to-org-filter)))))
 
 ;;;###autoload
 (defun ellama-ask-about ()
