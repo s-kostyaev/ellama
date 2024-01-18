@@ -444,6 +444,16 @@ PROMPT is a variable contains last prompt in this session."
     (delete-file file t)
     (delete-file session-file t)))
 
+(defun ellama-session-switch ()
+  "Change current active session."
+  (interactive)
+  (let* ((id (completing-read
+	      "Select session to activate: "
+	      (hash-table-keys ellama--active-sessions)))
+	 (buffer (ellama-get-session-buffer id)))
+    (setq ellama--current-session-id id)
+    (display-buffer buffer)))
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
