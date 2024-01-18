@@ -404,7 +404,12 @@ PROMPT is a variable contains last prompt in this session."
 (defun ellama-load-session ()
   "Load ellama session from file."
   (interactive)
-  (when-let* ((file-name (file-name-concat
+  (when-let* ((dir (if current-prefix-arg
+		       (read-directory-name
+			"Select directory containing sessions: "
+			ellama-sessions-directory)
+		     ellama-sessions-directory))
+	      (file-name (file-name-concat
 			  ellama-sessions-directory
 			  (completing-read
 			   "Select session to load: "
