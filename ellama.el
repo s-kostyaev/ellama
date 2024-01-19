@@ -401,13 +401,21 @@ Provided PROVIDER and PROMPT will be used in new session."
 
 (advice-add #'keyboard-quit :before #'ellama--cancel-current-request)
 
-(defun ellama--session-deactivate (&rest _)
-  "Deactivate current session."
-  (when ellama--current-session
-    (let ((id (ellama-session-id ellama--current-session)))
+(defun ellama--session-deactivate (&rest args)
+  "Deactivate current session with ARGS."
+  (when-let* ((buf (car args))
+	      (session
+	       (with-current-buffer buf
+		 ellama--current-session))
+	      (id (ellama-session-id session)))
+    (when (string= (if (bufferp buf)
+		       (buffer-name buf)
+		     buf)
+		   (buffer-name (ellama-get-session-buffer id)))
+      (message "clearing %s" id)
+      (remhash id ellama--active-sessions)
       (when (equal ellama--current-session-id id)
-	(setq ellama--current-session-id nil))
-      (remhash id ellama--active-sessions))))
+	(setq ellama--current-session-id nil)))))
 
 (advice-add #'kill-buffer :before #'ellama--session-deactivate)
 
@@ -594,7 +602,8 @@ when the request completes (with BUFFER current)."
 			     (window (get-buffer-window buffer)))
 		    (with-selected-window window
 		      (goto-char (point-max))
-		      (recenter -1)))))))
+		      (recenter -1)))
+		  (undo-amalgamate-change-group ellama--change-group)))))
 	(setq ellama--change-group (prepare-change-group))
 	(activate-change-group ellama--change-group)
 	(set-marker start point)
@@ -609,7 +618,6 @@ when the request completes (with BUFFER current)."
 				  (lambda (text)
 				    (funcall insert-text text)
 				    (with-current-buffer buffer
-				      (undo-amalgamate-change-group ellama--change-group)
 				      (accept-change-group ellama--change-group)
 				      (spinner-stop)
 				      (funcall donecb text)
