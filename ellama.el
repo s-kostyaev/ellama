@@ -5,7 +5,7 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
+;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4") (dash "2.19.1"))
 ;; Version: 0.7.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
@@ -38,6 +38,7 @@
 (require 'json)
 (require 'llm)
 (require 'spinner)
+(require 'dash)
 (eval-when-compile (require 'rx))
 
 (defgroup ellama nil
@@ -265,23 +266,43 @@ It should be a function with single argument generated text string."
   (rx (minimal-match
        (literal "```") (zero-or-more anything))))
 
-(defconst ellama--code-translate-prefix
-  "^```\\(.+\\)$")
-
-(defconst ellama--code-translate-suffix
-  "^```$")
-
 (defun ellama--code-filter (text)
   "Filter code prefix/suffix from TEXT."
   ;; Trim left first as `string-trim' trims from the right and ends up deleting all the code.
   (string-trim-right (string-trim-left text ellama--code-prefix) ellama--code-suffix))
 
-(defun ellama--code-block-translate-to-org-filter (text)
-  "Filter to translate code blocks from markdown syntax to org syntax."
-  (replace-regexp-in-string
-   ellama--code-translate-suffix "#+END_SRC"
-   (replace-regexp-in-string
-    ellama--code-translate-prefix "#+BEGIN_SRC \\1" text)))
+(defun ellama--fill-string (s)
+  "Fill string S."
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert s)
+    (fill-region (point-min) (point-max))
+    (buffer-substring (point-min) (point-max))))
+
+(defun ellama--fill-long-lines (text)
+  "Fill long lines only in TEXT."
+  (--> text
+       (split-string it "\n")
+       (-map (lambda (el)
+	       (if (> (length el) 100)
+		   (ellama--fill-string el)
+		 el)) it)
+       (string-join it "\n")))
+
+(defun ellama--translate-markdown-to-org-filter (text)
+  "Filter to translate code blocks from markdown syntax to org syntax in TEXT.
+This filter contains only subset of markdown syntax to be good enough."
+  (->> text
+       (replace-regexp-in-string "^```\\(.+\\)$" "#+BEGIN_SRC \\1")
+       (replace-regexp-in-string "^```$" "#+END_SRC")
+       (replace-regexp-in-string "^# " "* ")
+       (replace-regexp-in-string "^## " "** ")
+       (replace-regexp-in-string "^### " "*** ")
+       (replace-regexp-in-string "^#### " "**** ")
+       (replace-regexp-in-string "^##### " "***** ")
+       (replace-regexp-in-string "^###### " "***** ")
+       (replace-regexp-in-string "^* " "- ")
+       (ellama--fill-long-lines)))
 
 (defcustom ellama-enable-keymap t
   "Enable or disable Ellama keymap."
@@ -342,9 +363,9 @@ PROMPT is a variable contains last prompt in this session."
 	    (format "(%s)" (llm-name provider))))
      " ")))
 
-(defun ellama-new-session (provider prompt system-prompt)
+(defun ellama-new-session (provider prompt)
   "Create new ellama session with unique id.
-Provided PROVIDER, PROMPT and SYSTEM-PROMPT will be used in new session."
+Provided PROVIDER and PROMPT will be used in new session."
   (let* ((name (ellama-generate-name provider 'ellama prompt))
 	 (count 1)
 	 (name-with-suffix (format "%s %d" name count))
@@ -357,14 +378,8 @@ Provided PROVIDER, PROMPT and SYSTEM-PROMPT will be used in new session."
 	 (file-name (file-name-concat
 		     ellama-sessions-directory
 		     (concat id "." ellama-session-file-extension)))
-	 (llm-prompt (when system-prompt
-		       (make-llm-chat-prompt
-			:interactions
-			(list
-			 (make-llm-chat-prompt-interaction
-			  :role 'system :content system-prompt)))))
 	 (session (make-ellama-session
-		   :id id :provider provider :file file-name :prompt llm-prompt))
+		   :id id :provider provider :file file-name))
 	 (buffer (progn
 		   (make-directory ellama-sessions-directory t)
 		   (find-file-noselect file-name))))
@@ -565,8 +580,9 @@ when the request completes (with BUFFER current)."
                     (when (pcase ellama-fill-paragraphs
                             ((cl-type function) (funcall ellama-fill-paragraphs))
                             ((cl-type boolean) ellama-fill-paragraphs)
-                            ((cl-type list) (apply #'derived-mode-p
-						   ellama-fill-paragraphs)))
+                            ((cl-type list) (and (apply #'derived-mode-p
+							ellama-fill-paragraphs)
+						 (not (equal major-mode 'org-mode)))))
                       (fill-region start (point)))
 		    (goto-char pt))
 		  (when-let ((ellama-auto-scroll)
@@ -633,7 +649,7 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 			  current-prefix-arg
 			  (and (not ellama--current-session)
 			       (not ellama--current-session-id)))
-		      (ellama-new-session provider prompt nil)
+		      (ellama-new-session provider prompt)
 		    (or ellama--current-session
 			(with-current-buffer (ellama-get-session-buffer
 					      ellama--current-session-id)
@@ -649,7 +665,7 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 	(ellama-stream prompt
 		       :session session
 		       :on-done #'ellama-chat-done
-		       :filter #'ellama--code-block-translate-to-org-filter)))))
+		       :filter #'ellama--translate-markdown-to-org-filter)))))
 
 ;;;###autoload
 (defun ellama-ask-about ()
