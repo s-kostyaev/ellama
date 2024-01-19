@@ -259,6 +259,12 @@ It should be a function with single argument generated text string."
   :group 'ellama
   :type 'symbol)
 
+(defcustom ellama-long-lines-length 100
+  "Long lines length for fill paragraph call.
+Too low value can break generated code by splitting long comment lines."
+  :group 'ellama
+  :type 'integer)
+
 (defvar-local ellama--change-group nil)
 
 (defvar-local ellama--current-request nil)
@@ -289,7 +295,8 @@ It should be a function with single argument generated text string."
   (--> text
        (split-string it "\n")
        (-map (lambda (el)
-	       (if (> (length el) 100)
+	       (if (> (length el)
+		      ellama-long-lines-length)
 		   (ellama--fill-string el)
 		 el)) it)
        (string-join it "\n")))
