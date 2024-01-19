@@ -254,6 +254,11 @@ It should be a function with single argument generated text string."
   :group 'ellama
   :type 'function)
 
+(defcustom ellama-instant-mode 'org-mode
+  "Major mode for ellama instant commands."
+  :group 'ellama
+  :type 'symbol)
+
 (defvar-local ellama--change-group nil)
 
 (defvar-local ellama--current-request nil)
@@ -711,9 +716,15 @@ If CREATE-SESSION set, creates new session even if there is an active session."
   (let* ((buffer-name (ellama-generate-name ellama-provider real-this-command prompt))
 	 (buffer (get-buffer-create (if (get-buffer buffer-name)
 					(make-temp-name (concat buffer-name " "))
-				      buffer-name))))
+				      buffer-name)))
+	 (filter (when (equal ellama-instant-mode 'org-mode)
+		   'ellama--translate-markdown-to-org-filter)))
+    (with-current-buffer buffer
+      (funcall ellama-instant-mode))
     (display-buffer buffer)
-    (ellama-stream prompt :buffer buffer (point-min))))
+    (ellama-stream prompt
+		   :buffer buffer
+		   :filter filter)))
 
 ;;;###autoload
 (defun ellama-translate ()
