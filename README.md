@@ -228,8 +228,13 @@ chat response generation done. It should be a function with single
 argument generated text string.
 - `ellama-nick-prefix`: User and assistant nick prefix in logs.
 - `ellama-session-file-extension`: File extension for saving ellama
-  session. Default value "md".
+  session. Default value "org".
 - `ellama-sessions-directory`: Directory for saved ellama sessions.
+- `ellama-instant-mode`: Major mode for ellama instant commands. Org
+  mode by default.
+- `ellama-long-lines-length`: Long lines length for fill paragraph call.
+Too low value can break generated code by splitting long comment
+lines. Default value 100.
 
 ## Acknowledgments
 

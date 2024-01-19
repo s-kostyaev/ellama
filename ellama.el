@@ -5,8 +5,8 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
-;; Version: 0.6.0
+;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4") (dash "2.19.1"))
+;; Version: 0.7.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -38,6 +38,7 @@
 (require 'json)
 (require 'llm)
 (require 'spinner)
+(require 'dash)
 (eval-when-compile (require 'rx))
 
 (defgroup ellama nil
@@ -54,7 +55,7 @@
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-nick-prefix "##"
+(defcustom ellama-nick-prefix "**"
   "User and assistant nick prefix in logs."
   :group 'ellama
   :type 'string)
@@ -253,6 +254,17 @@ It should be a function with single argument generated text string."
   :group 'ellama
   :type 'function)
 
+(defcustom ellama-instant-mode 'org-mode
+  "Major mode for ellama instant commands."
+  :group 'ellama
+  :type 'symbol)
+
+(defcustom ellama-long-lines-length 100
+  "Long lines length for fill paragraph call.
+Too low value can break generated code by splitting long comment lines."
+  :group 'ellama
+  :type 'integer)
+
 (defvar-local ellama--change-group nil)
 
 (defvar-local ellama--current-request nil)
@@ -270,6 +282,40 @@ It should be a function with single argument generated text string."
   ;; Trim left first as `string-trim' trims from the right and ends up deleting all the code.
   (string-trim-right (string-trim-left text ellama--code-prefix) ellama--code-suffix))
 
+(defun ellama--fill-string (s)
+  "Fill string S."
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert s)
+    (fill-region (point-min) (point-max))
+    (buffer-substring (point-min) (point-max))))
+
+(defun ellama--fill-long-lines (text)
+  "Fill long lines only in TEXT."
+  (--> text
+       (split-string it "\n")
+       (-map (lambda (el)
+	       (if (> (length el)
+		      ellama-long-lines-length)
+		   (ellama--fill-string el)
+		 el)) it)
+       (string-join it "\n")))
+
+(defun ellama--translate-markdown-to-org-filter (text)
+  "Filter to translate code blocks from markdown syntax to org syntax in TEXT.
+This filter contains only subset of markdown syntax to be good enough."
+  (->> text
+       (replace-regexp-in-string "^```\\(.+\\)$" "#+BEGIN_SRC \\1")
+       (replace-regexp-in-string "^```$" "#+END_SRC")
+       (replace-regexp-in-string "^# " "* ")
+       (replace-regexp-in-string "^## " "** ")
+       (replace-regexp-in-string "^### " "*** ")
+       (replace-regexp-in-string "^#### " "**** ")
+       (replace-regexp-in-string "^##### " "***** ")
+       (replace-regexp-in-string "^###### " "***** ")
+       (replace-regexp-in-string "^* " "- ")
+       (ellama--fill-long-lines)))
+
 (defcustom ellama-enable-keymap t
   "Enable or disable Ellama keymap."
   :type 'boolean
@@ -281,7 +327,7 @@ It should be a function with single argument generated text string."
 	   ;; If ellama-enable-keymap is nil, remove the key bindings
 	   (define-key global-map (kbd ellama-keymap-prefix) nil))))
 
-(defcustom ellama-session-file-extension "md"
+(defcustom ellama-session-file-extension "org"
   "File extension for saving ellama session."
   :type 'string
   :group 'ellama)
@@ -330,7 +376,8 @@ PROMPT is a variable contains last prompt in this session."
      " ")))
 
 (defun ellama-new-session (provider prompt)
-  "Create new ellama session with provided PROVIDER and PROMPT and unique id."
+  "Create new ellama session with unique id.
+Provided PROVIDER and PROMPT will be used in new session."
   (let* ((name (ellama-generate-name provider 'ellama prompt))
 	 (count 1)
 	 (name-with-suffix (format "%s %d" name count))
@@ -343,7 +390,8 @@ PROMPT is a variable contains last prompt in this session."
 	 (file-name (file-name-concat
 		     ellama-sessions-directory
 		     (concat id "." ellama-session-file-extension)))
-	 (session (make-ellama-session :id id :provider provider :file file-name))
+	 (session (make-ellama-session
+		   :id id :provider provider :file file-name))
 	 (buffer (progn
 		   (make-directory ellama-sessions-directory t)
 		   (find-file-noselect file-name))))
@@ -360,13 +408,21 @@ PROMPT is a variable contains last prompt in this session."
 
 (advice-add #'keyboard-quit :before #'ellama--cancel-current-request)
 
-(defun ellama--session-deactivate (&rest _)
-  "Deactivate current session."
-  (when ellama--current-session
-    (let ((id (ellama-session-id ellama--current-session)))
+(defun ellama--session-deactivate (&rest args)
+  "Deactivate current session with ARGS."
+  (when-let* ((buf (car args))
+	      (session
+	       (with-current-buffer buf
+		 ellama--current-session))
+	      (id (ellama-session-id session)))
+    (when (string= (if (bufferp buf)
+		       (buffer-name buf)
+		     buf)
+		   (buffer-name (ellama-get-session-buffer id)))
+      (message "clearing %s" id)
+      (remhash id ellama--active-sessions)
       (when (equal ellama--current-session-id id)
-	(setq ellama--current-session-id nil))
-      (remhash id ellama--active-sessions))))
+	(setq ellama--current-session-id nil)))))
 
 (advice-add #'kill-buffer :before #'ellama--session-deactivate)
 
@@ -544,15 +600,17 @@ when the request completes (with BUFFER current)."
                     (when (pcase ellama-fill-paragraphs
                             ((cl-type function) (funcall ellama-fill-paragraphs))
                             ((cl-type boolean) ellama-fill-paragraphs)
-                            ((cl-type list) (apply #'derived-mode-p
-						   ellama-fill-paragraphs)))
+                            ((cl-type list) (and (apply #'derived-mode-p
+							ellama-fill-paragraphs)
+						 (not (equal major-mode 'org-mode)))))
                       (fill-region start (point)))
 		    (goto-char pt))
 		  (when-let ((ellama-auto-scroll)
 			     (window (get-buffer-window buffer)))
 		    (with-selected-window window
 		      (goto-char (point-max))
-		      (recenter -1)))))))
+		      (recenter -1)))
+		  (undo-amalgamate-change-group ellama--change-group)))))
 	(setq ellama--change-group (prepare-change-group))
 	(activate-change-group ellama--change-group)
 	(set-marker start point)
@@ -567,7 +625,6 @@ when the request completes (with BUFFER current)."
 				  (lambda (text)
 				    (funcall insert-text text)
 				    (with-current-buffer buffer
-				      (undo-amalgamate-change-group ellama--change-group)
 				      (accept-change-group ellama--change-group)
 				      (spinner-stop)
 				      (funcall donecb text)
@@ -627,7 +684,8 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 		ellama-nick-prefix " " ellama-assistant-nick ":\n")
 	(ellama-stream prompt
 		       :session session
-		       :on-done #'ellama-chat-done)))))
+		       :on-done #'ellama-chat-done
+		       :filter #'ellama--translate-markdown-to-org-filter)))))
 
 ;;;###autoload
 (defun ellama-ask-about ()
@@ -673,9 +731,15 @@ If CREATE-SESSION set, creates new session even if there is an active session."
   (let* ((buffer-name (ellama-generate-name ellama-provider real-this-command prompt))
 	 (buffer (get-buffer-create (if (get-buffer buffer-name)
 					(make-temp-name (concat buffer-name " "))
-				      buffer-name))))
+				      buffer-name)))
+	 (filter (when (equal ellama-instant-mode 'org-mode)
+		   'ellama--translate-markdown-to-org-filter)))
+    (with-current-buffer buffer
+      (funcall ellama-instant-mode))
     (display-buffer buffer)
-    (ellama-stream prompt :buffer buffer (point-min))))
+    (ellama-stream prompt
+		   :buffer buffer
+		   :filter filter)))
 
 ;;;###autoload
 (defun ellama-translate ()

@@ -1,3 +1,7 @@
+* Version 0.7.0
+- Switch from markdown to org-mode.
+- Fix bug in session management on buffer kill.
+- Decrease pressure to garbage collector during text generation.
 * Version 0.6.0
 - Implement session management.
 * Version 0.5.8
