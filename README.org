@@ -23,7 +23,9 @@ In that case you should customize ellama configuration like this:
 #+BEGIN_SRC  emacs-lisp
   (use-package ellama
     :init
+    ;; language you want ellama to translate to
     (setopt ellama-language "German")
+    ;; could be llm-openai for example
     (require 'llm-ollama)
     (setopt ellama-provider
                     (make-llm-ollama
