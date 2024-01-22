@@ -21,6 +21,8 @@ Just ~M-x~ ~package-install~ @@html:<kbd>@@Enter@@html:</kbd>@@ ~ellama~
 In that case you should customize ellama configuration like this:
 
 #+BEGIN_SRC  emacs-lisp
+  ;; YOU DON'T NEED NONE OF THIS CODE FOR SIMPLE INSTALL
+  ;; IT IS AN EXAMPLE OF CUSTOMIZATION.
   (use-package ellama
     :init
     ;; language you want ellama to translate to
