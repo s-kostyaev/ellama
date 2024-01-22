@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4") (dash "2.19.1"))
-;; Version: 0.7.0
+;; Version: 0.7.1
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -305,15 +305,38 @@ Too low value can break generated code by splitting long comment lines."
   "Filter to translate code blocks from markdown syntax to org syntax in TEXT.
 This filter contains only subset of markdown syntax to be good enough."
   (->> text
+       ;; code blocks
        (replace-regexp-in-string "^```\\(.+\\)$" "#+BEGIN_SRC \\1")
+       (replace-regexp-in-string "^<!-- language: \\(.+\\) -->\n```" "#+BEGIN_SRC \\1")
        (replace-regexp-in-string "^```$" "#+END_SRC")
+       ;; lists
+       (replace-regexp-in-string "^\\* " "+ ")
+       ;; bold
+       (replace-regexp-in-string "\\*\\*\\(.+?\\)\\*\\*" "*\\1*")
+       (replace-regexp-in-string "__\\(.+?\\)__" "*\\1*")
+       (replace-regexp-in-string "<b>\\(.+?\\)</b>" "*\\1*")
+       ;; italic
+       (replace-regexp-in-string "_\\(.+?\\)_" "/\\1/")
+       (replace-regexp-in-string "<i>\\(.+?\\)</i>" "/\\1/")
+       ;; inline code
+       (replace-regexp-in-string "`\\(.+?\\)`" "~\\1~")
+       ;; underlined
+       (replace-regexp-in-string "<u>\\(.+?\\)</u>" "_\\1_")
+       ;; strikethrough
+       (replace-regexp-in-string "~~\\(.+?\\)~~" "+\\1+")
+       (replace-regexp-in-string "<s>\\(.+?\\)</s>" "+\\1+")
+       ;; headings
        (replace-regexp-in-string "^# " "* ")
        (replace-regexp-in-string "^## " "** ")
        (replace-regexp-in-string "^### " "*** ")
        (replace-regexp-in-string "^#### " "**** ")
        (replace-regexp-in-string "^##### " "***** ")
        (replace-regexp-in-string "^###### " "***** ")
-       (replace-regexp-in-string "^* " "- ")
+       ;; badges
+       (replace-regexp-in-string "\\[\\!\\[.*?\\](\\(.*?\\))\\](\\(.*?\\))" "[[\\2][file:\\1]]")
+       ;;links
+       (replace-regexp-in-string "\\[\\(.*?\\)\\](\\(.*?\\))" "[[\\2][\\1]]")
+       ;; filling long lines
        (ellama--fill-long-lines)))
 
 (defcustom ellama-enable-keymap t
