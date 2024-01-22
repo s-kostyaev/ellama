@@ -31,8 +31,8 @@ In that case you should customize ellama configuration like this:
                     (make-llm-ollama
                      ;; this model should be pulled to use it
                      ;; value should be the same as you print in terminal during pull
-                     :chat-model "mistral:7b-instruct-v0.2-q6/K"
-                     :embedding-model "mistral:7b-instruct-v0.2-q6/K"))
+                     :chat-model "mistral:7b-instruct-v0.2-q6_K"
+                     :embedding-model "mistral:7b-instruct-v0.2-q6_K"))
     ;; Predefined llm providers for interactive switching.
     ;; You shouldn't add ollama providers here - it can be selected interactively
     ;; without it. It is just example.
@@ -44,8 +44,8 @@ In that case you should customize ellama configuration like this:
                                     :chat-model "mistral:7b-instruct-v0.2-q6_K"
                                     :embedding-model "mistral:7b-instruct-v0.2-q6_K"))
                       ("mixtral" . (make-llm-ollama
-                                    :chat-model "mixtral:8x7b-instruct-v0.1-q3/K/M-4k"
-                                    :embedding-model "mixtral:8x7b-instruct-v0.1-q3/K/M-4k")))))
+                                    :chat-model "mixtral:8x7b-instruct-v0.1-q3_K_M-4k"
+                                    :embedding-model "mixtral:8x7b-instruct-v0.1-q3_K_M-4k")))))
 #+END_SRC
 
 ** Commands
