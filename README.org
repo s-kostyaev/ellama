@@ -15,9 +15,17 @@ output, making it effortless to use with your preferred text editor.
 ** Installation
 
 Just ~M-x~ ~package-install~ @@html:<kbd>@@Enter@@html:</kbd>@@ ~ellama~
-@@html:<kbd>@@Enter@@html:</kbd>@@. By default it uses [[https://github.com/jmorganca/ollama][ollama]] provider and
-[[https://ollama.ai/library/zephyr][zephyr]] model. If you ok with it, you need to install [[https://github.com/jmorganca/ollama][ollama]] and pull
-[[https://ollama.ai/library/zephyr][zephyr]]. You can use ~ellama~ with other model or other llm provider.
+@@html:<kbd>@@Enter@@html:</kbd>@@. By default it uses
+[[https://github.com/jmorganca/ollama][ollama]] provider and
+[[https://ollama.ai/library/zephyr][zephyr]] model. If you ok with it,
+you need to install [[https://github.com/jmorganca/ollama][ollama]]
+and pull [[https://ollama.ai/library/zephyr][zephyr]] like this:
+
+#+BEGIN_SRC shell
+  ollama pull zephyr
+#+END_SRC
+
+You can use ~ellama~ with other model or other llm provider.
 In that case you should customize ellama configuration like this:
 
 #+BEGIN_SRC  emacs-lisp
