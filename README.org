@@ -50,12 +50,12 @@ In that case you should customize ellama configuration like this:
 
 Ask Ellama about something by entering a prompt in an interactive
 buffer and continue conversation.
-![[imgs/ellama-ask.gif][ellama-chat]]
+[[imgs/ellama-ask.gif]]
 
 *** ellama-ask-about
 
 Ask Ellama about a selected region or the current buffer.
-![[imgs/ellama-ask-about.gif][ellama-ask-about]]
+[[imgs/ellama-ask-about.gif]]
 
 *** ellama-ask-selection
 
@@ -72,22 +72,22 @@ Complete text in current buffer with ellama.
 *** ellama-translate
 
 Ask Ellama to translate a selected region or word at the point.
-![[imgs/ellama-translate.gif][ellama-translate]]
+[[imgs/ellama-translate.gif]]
 
 *** ellama-define-word
 
 Find the definition of the current word using Ellama.
-![[imgs/ellama-define-word.gif][ellama-define-word]]
+[[imgs/ellama-define-word.gif]]
 
 *** ellama-summarize
 
 Summarize a selected region or the current buffer using Ellama.
-![[imgs/ellama-summarize.gif][ellama-summarize]]
+[[imgs/ellama-summarize.gif]]
 
 *** ellama-code-review
 
 Review code in a selected region or the current buffer using Ellama.
-![[imgs/ellama-code-review.gif][ellama-code-review]]
+[[imgs/ellama-code-review.gif]]
 
 *** ellama-change
 
@@ -137,7 +137,7 @@ Enhance the wording in the currently selected region or buffer using Ellama.
 *** ellama-improve-grammar
 Enhance the grammar and spelling in the currently selected region or
 buffer using Ellama.
-![[imgs/ellama-enhance-grammar-spelling.gif][ellama-improve-grammar]]
+[[imgs/ellama-enhance-grammar-spelling.gif]]
 
 *** ellama-improve-conciseness
 
@@ -229,9 +229,9 @@ argument generated text string.
 - ~ellama-sessions-directory~: Directory for saved ellama sessions.
 - ~ellama-instant-mode~: Major mode for ellama instant commands. Org
   mode by default.
-- ~ellama-long-lines-length~: Long lines length for fill paragraph call.
-Too low value can break generated code by splitting long comment
-lines. Default value 100.
+- ~ellama-long-lines-length~: Long lines length for fill paragraph
+  call. Too low value can break generated code by splitting long
+  comment lines. Default value 100.
 
 ** Acknowledgments
 
