@@ -387,7 +387,8 @@ PROMPT is a variable contains last prompt in this session."
 
 (defun ellama-generate-name (provider action prompt)
   "Generate name for ellama ACTION by PROVIDER according to PROMPT."
-  (let ((prompt-words (split-string prompt)))
+  (let* ((cleaned-prompt (replace-regexp-in-string "/" "_" prompt))
+         (prompt-words (split-string cleaned-prompt)))
     (string-join
      (flatten-tree
       (list (split-string (format "%s" action) "-")
