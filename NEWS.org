@@ -1,3 +1,5 @@
+* Version 0.7.2
+- Replace / with _ in new note filenames to prevent errors.
 * Version 0.7.1
 - Improve markdown to org conversion.
 - Move readme from markdown to org.
