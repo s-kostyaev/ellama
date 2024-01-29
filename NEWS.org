@@ -1,3 +1,9 @@
+* Version 0.7.3
+- Add sessions auto save. If not set will not use named files for new
+  sessions. Enabled by default.
+- ~ellama-major-mode~ used instead of ~ellama-instant-mode~ and used
+  not only for ellama instant buffers, but also for ellama chat
+  buffers.
 * Version 0.7.2
 - Replace / with _ in new note filenames to prevent errors.
 * Version 0.7.1

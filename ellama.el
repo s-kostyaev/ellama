@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4") (dash "2.19.1"))
-;; Version: 0.7.2
+;; Version: 0.7.3
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -254,8 +254,8 @@ It should be a function with single argument generated text string."
   :group 'ellama
   :type 'function)
 
-(defcustom ellama-instant-mode 'org-mode
-  "Major mode for ellama instant commands."
+(defcustom ellama-major-mode 'org-mode
+  "Major mode for ellama commands."
   :group 'ellama
   :type 'symbol)
 
@@ -264,6 +264,11 @@ It should be a function with single argument generated text string."
 Too low value can break generated code by splitting long comment lines."
   :group 'ellama
   :type 'integer)
+
+(defcustom ellama-session-auto-save t
+  "Automatically save ellama sessions if set."
+  :group 'ellama
+  :type 'boolean)
 
 (defvar-local ellama--change-group nil)
 
@@ -399,9 +404,10 @@ PROMPT is a variable contains last prompt in this session."
 	    (format "(%s)" (llm-name provider))))
      " ")))
 
-(defun ellama-new-session (provider prompt)
+(defun ellama-new-session (provider prompt &optional ephemeral)
   "Create new ellama session with unique id.
-Provided PROVIDER and PROMPT will be used in new session."
+Provided PROVIDER and PROMPT will be used in new session.
+If EPHEMERAL non nil new session will not be associated with any file."
   (let* ((name (ellama-generate-name provider 'ellama prompt))
 	 (count 1)
 	 (name-with-suffix (format "%s %d" name count))
@@ -411,17 +417,22 @@ Provided PROVIDER and PROMPT will be used in new session."
 		 (setq count (+ count 1))
 		 (setq name-with-suffix (format "%s %d" name count)))
 	       name-with-suffix))
-	 (file-name (file-name-concat
-		     ellama-sessions-directory
-		     (concat id "." ellama-session-file-extension)))
+	 (file-name (when (and (not ephemeral)
+			       ellama-session-auto-save)
+		      (file-name-concat
+		       ellama-sessions-directory
+		       (concat id "." ellama-session-file-extension))))
 	 (session (make-ellama-session
 		   :id id :provider provider :file file-name))
-	 (buffer (progn
-		   (make-directory ellama-sessions-directory t)
-		   (find-file-noselect file-name))))
+	 (buffer (if file-name
+		     (progn
+		       (make-directory ellama-sessions-directory t)
+		       (find-file-noselect file-name))
+		   (get-buffer-create id))))
     (setq ellama--current-session-id id)
     (puthash id buffer ellama--active-sessions)
     (with-current-buffer buffer
+      (funcall ellama-major-mode)
       (setq ellama--current-session session))
     session))
 
@@ -443,7 +454,6 @@ Provided PROVIDER and PROMPT will be used in new session."
 		       (buffer-name buf)
 		     buf)
 		   (buffer-name (ellama-get-session-buffer id)))
-      (message "clearing %s" id)
       (remhash id ellama--active-sessions)
       (when (equal ellama--current-session-id id)
 	(setq ellama--current-session-id nil)))))
@@ -580,6 +590,9 @@ strings before they're inserted into the BUFFER.
 
 :session SESSION -- SESSION is a ellama conversation session.
 
+:ephemeral-session BOOL -- if BOOL is set session will not be saved to named
+file by default.
+
 :on-error ON-ERROR -- ON-ERROR a function that's called with an error message on
 failure (with BUFFER current).
 
@@ -665,7 +678,9 @@ when the request completes (with BUFFER current)."
 Will call `ellama-chat-done-callback' on TEXT."
   (save-excursion
     (goto-char (point-max))
-    (insert "\n\n"))
+    (insert "\n\n")
+    (when ellama-session-auto-save
+      (save-buffer)))
   (when ellama-chat-done-callback
     (funcall ellama-chat-done-callback text)))
 
@@ -756,10 +771,10 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 	 (buffer (get-buffer-create (if (get-buffer buffer-name)
 					(make-temp-name (concat buffer-name " "))
 				      buffer-name)))
-	 (filter (when (equal ellama-instant-mode 'org-mode)
+	 (filter (when (equal ellama-major-mode 'org-mode)
 		   'ellama--translate-markdown-to-org-filter)))
     (with-current-buffer buffer
-      (funcall ellama-instant-mode))
+      (funcall ellama-major-mode))
     (display-buffer buffer)
     (ellama-stream prompt
 		   :buffer buffer
