@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4") (dash "2.19.1"))
-;; Version: 0.7.3
+;; Version: 0.7.4
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -846,6 +846,7 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
+    (ellama-instant-mode +1)
     (ellama-stream
      (format
       ellama-change-prompt-template
@@ -882,6 +883,7 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
+    (ellama-instant-mode +1)
     (ellama-stream
      (format
       ellama-code-edit-prompt-template
@@ -901,6 +903,7 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
+    (ellama-instant-mode +1)
     (ellama-stream
      (format
       ellama-code-improve-prompt-template
@@ -919,6 +922,7 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 		  (region-end)
 		(point)))
 	 (text (buffer-substring-no-properties beg end)))
+    (ellama-instant-mode +1)
     (ellama-stream
      (format
       ellama-code-complete-prompt-template
@@ -939,6 +943,7 @@ buffer."
 		  (region-end)
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
+    (ellama-instant-mode +1)
     (ellama-stream
      (format
       ellama-code-add-prompt-template
@@ -958,6 +963,7 @@ buffer."
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
+    (ellama-instant-mode +1)
     (ellama-stream
      (format
       ellama-make-format-prompt-template
