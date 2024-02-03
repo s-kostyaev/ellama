@@ -277,13 +277,19 @@ Too low value can break generated code by splitting long comment lines."
   (if ellama-session-mode
       (progn
         (add-hook 'after-save-hook 'ellama--save-session nil t)
-        (add-hook 'kill-buffer-hook 'ellama--cancel-current-request nil t)
         (add-hook 'kill-buffer-hook 'ellama--session-deactivate nil t))
-    (remove-hook 'kill-buffer-hook 'ellama--cancel-current-request)
     (remove-hook 'kill-buffer-hook 'ellama--session-deactivate)
     (remove-hook 'after-save-hook 'ellama--save-session)
-    (ellama--cancel-current-request)
     (ellama--session-deactivate)))
+
+(define-minor-mode ellama-instant-mode
+  "Minor mode for ellama instant buffers."
+  :interactive nil
+  :keymap '(([remap keyboard-quit] . ellama--cancel-current-request-and-quit))
+  (if ellama-instant-mode
+      (add-hook 'kill-buffer-hook 'ellama--cancel-current-request nil t)
+    (remove-hook 'kill-buffer-hook 'ellama--cancel-current-request)
+    (ellama--cancel-current-request)))
 
 (defvar-local ellama--change-group nil)
 
@@ -466,6 +472,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 (defun ellama--session-deactivate ()
   "Deactivate current session."
+  (ellama--cancel-current-request)
   (when-let* ((session ellama--current-session)
               (id (ellama-session-id session)))
     (when (string= (buffer-name)
@@ -783,7 +790,7 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 		   'ellama--translate-markdown-to-org-filter)))
     (with-current-buffer buffer
       (funcall ellama-major-mode)
-      (ellama-session-mode +1))
+      (ellama-instant-mode +1))
     (display-buffer buffer)
     (ellama-stream prompt
 		   :buffer buffer
