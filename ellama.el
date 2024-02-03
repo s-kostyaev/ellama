@@ -270,6 +270,20 @@ Too low value can break generated code by splitting long comment lines."
   :group 'ellama
   :type 'boolean)
 
+(define-minor-mode ellama-session-mode
+  "Minor mode for ellama session buffers."
+  :interactive nil
+  :keymap '(([remap keyboard-quit] . ellama--cancel-current-request-and-quit))
+  (if ellama-session-mode
+      (progn
+        (add-hook 'after-save-hook 'ellama--save-session nil t)
+        (add-hook 'kill-buffer-hook 'ellama--cancel-current-request nil t)
+        (add-hook 'kill-buffer-hook 'ellama--session-deactivate nil t))
+    (remove-hook 'kill-buffer-hook 'ellama--cancel-current-request)
+    (remove-hook 'kill-buffer-hook 'ellama--session-deactivate)
+    (ellama--cancel-current-request)
+    (ellama--session-deactivate)))
+
 (defvar-local ellama--change-group nil)
 
 (defvar-local ellama--current-request nil)
@@ -433,32 +447,31 @@ If EPHEMERAL non nil new session will not be associated with any file."
     (puthash id buffer ellama--active-sessions)
     (with-current-buffer buffer
       (funcall ellama-major-mode)
-      (setq ellama--current-session session))
+      (setq ellama--current-session session)
+      (ellama-session-mode +1))
     session))
 
-(defun ellama--cancel-current-request (&rest _)
+(defun ellama--cancel-current-request ()
   "Cancel current running request."
   (when ellama--current-request
-    (llm-cancel-request ellama--current-request)))
+    (llm-cancel-request ellama--current-request)
+    (setq ellama--current-request nil)))
 
-(advice-add #'keyboard-quit :before #'ellama--cancel-current-request)
+(defun ellama--cancel-current-request-and-quit ()
+  "Cancel the current request and quit."
+  (interactive)
+  (ellama--cancel-current-request)
+  (keyboard-quit))
 
-(defun ellama--session-deactivate (&rest args)
-  "Deactivate current session with ARGS."
-  (when-let* ((buf (car args))
-	      (session
-	       (with-current-buffer buf
-		 ellama--current-session))
-	      (id (ellama-session-id session)))
-    (when (string= (if (bufferp buf)
-		       (buffer-name buf)
-		     buf)
-		   (buffer-name (ellama-get-session-buffer id)))
+(defun ellama--session-deactivate ()
+  "Deactivate current session."
+  (when-let* ((session ellama--current-session)
+              (id (ellama-session-id session)))
+    (when (string= (buffer-name)
+                   (buffer-name (ellama-get-session-buffer id)))
       (remhash id ellama--active-sessions)
       (when (equal ellama--current-session-id id)
 	(setq ellama--current-session-id nil)))))
-
-(advice-add #'kill-buffer :before #'ellama--session-deactivate)
 
 (defun ellama--get-session-file-name (file-name)
   "Get ellama session file name for FILE-NAME."
@@ -470,19 +483,14 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	   (concat "." base-name ".session.el"))))
     session-file-name))
 
-(defun ellama--save-session (&rest _)
+(defun ellama--save-session ()
   "Save current ellama session."
   (when ellama--current-session
     (let* ((session ellama--current-session)
 	   (file-name (ellama-session-file session))
 	   (session-file-name (ellama--get-session-file-name file-name)))
-      (with-current-buffer (find-file-noselect session-file-name)
-	(delete-region (point-min) (point-max))
-	(insert (concat "(setq ellama--current-session " (prin1-to-string session)")"))
-	(save-buffer)
-	(kill-buffer)))))
-
-(advice-add #'save-buffer :before #'ellama--save-session)
+      (with-temp-file session-file-name
+	(insert "(setq ellama--current-session " (prin1-to-string session) ")")))))
 
 ;;;###autoload
 (defun ellama-load-session ()
@@ -509,7 +517,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
       (eval (read session-buffer))
       (setq ellama--current-session-id (ellama-session-id ellama--current-session))
       (puthash (ellama-session-id ellama--current-session)
-	       buffer ellama--active-sessions))
+	       buffer ellama--active-sessions)
+      (ellama-session-mode +1))
     (kill-buffer session-buffer)
     (display-buffer buffer)))
 
@@ -523,9 +532,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	 (buffer (ellama-get-session-buffer id))
 	 (file (buffer-file-name buffer))
 	 (session-file (ellama--get-session-file-name file)))
-    (with-current-buffer buffer
-      (ellama--session-deactivate)
-      (kill-buffer))
+    (kill-buffer buffer)
     (delete-file file t)
     (delete-file session-file t)))
 
@@ -774,7 +781,8 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 	 (filter (when (equal ellama-major-mode 'org-mode)
 		   'ellama--translate-markdown-to-org-filter)))
     (with-current-buffer buffer
-      (funcall ellama-major-mode))
+      (funcall ellama-major-mode)
+      (ellama-session-mode +1))
     (display-buffer buffer)
     (ellama-stream prompt
 		   :buffer buffer
