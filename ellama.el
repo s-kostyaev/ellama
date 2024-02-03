@@ -281,6 +281,7 @@ Too low value can break generated code by splitting long comment lines."
         (add-hook 'kill-buffer-hook 'ellama--session-deactivate nil t))
     (remove-hook 'kill-buffer-hook 'ellama--cancel-current-request)
     (remove-hook 'kill-buffer-hook 'ellama--session-deactivate)
+    (remove-hook 'after-save-hook 'ellama--save-session)
     (ellama--cancel-current-request)
     (ellama--session-deactivate)))
 
