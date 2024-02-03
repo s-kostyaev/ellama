@@ -273,7 +273,6 @@ Too low value can break generated code by splitting long comment lines."
 (define-minor-mode ellama-session-mode
   "Minor mode for ellama session buffers."
   :interactive nil
-  :keymap '(([remap keyboard-quit] . ellama--cancel-current-request-and-quit))
   (if ellama-session-mode
       (progn
         (add-hook 'after-save-hook 'ellama--save-session nil t)
@@ -282,11 +281,11 @@ Too low value can break generated code by splitting long comment lines."
     (remove-hook 'after-save-hook 'ellama--save-session)
     (ellama--session-deactivate)))
 
-(define-minor-mode ellama-instant-mode
-  "Minor mode for ellama instant buffers."
+(define-minor-mode ellama-request-mode
+  "Minor mode for ellama buffers with active request to llm."
   :interactive nil
   :keymap '(([remap keyboard-quit] . ellama--cancel-current-request-and-quit))
-  (if ellama-instant-mode
+  (if ellama-request-mode
       (add-hook 'kill-buffer-hook 'ellama--cancel-current-request nil t)
     (remove-hook 'kill-buffer-hook 'ellama--cancel-current-request)
     (ellama--cancel-current-request)))
@@ -637,6 +636,7 @@ when the request completes (with BUFFER current)."
 				 (llm-make-simple-chat-prompt prompt)))
 		       (llm-make-simple-chat-prompt prompt))))
     (with-current-buffer buffer
+      (ellama-request-mode +1)
       (let* ((start (make-marker))
 	     (end (make-marker))
 	     (insert-text
@@ -680,13 +680,15 @@ when the request completes (with BUFFER current)."
 				      (accept-change-group ellama--change-group)
 				      (spinner-stop)
 				      (funcall donecb text)
-				      (setq ellama--current-request nil)))
+				      (setq ellama--current-request nil)
+				      (ellama-request-mode -1)))
 				  (lambda (_ msg)
 				    (with-current-buffer buffer
 				      (cancel-change-group ellama--change-group)
 				      (spinner-stop)
 				      (funcall errcb msg)
-				      (setq ellama--current-request nil)))))))))
+				      (setq ellama--current-request nil)
+				      (ellama-request-mode -1)))))))))
 
 (defun ellama-chat-done (text)
   "Chat done.
@@ -789,8 +791,7 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 	 (filter (when (equal ellama-major-mode 'org-mode)
 		   'ellama--translate-markdown-to-org-filter)))
     (with-current-buffer buffer
-      (funcall ellama-major-mode)
-      (ellama-instant-mode +1))
+      (funcall ellama-major-mode))
     (display-buffer buffer)
     (ellama-stream prompt
 		   :buffer buffer
@@ -846,7 +847,6 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
-    (ellama-instant-mode +1)
     (ellama-stream
      (format
       ellama-change-prompt-template
@@ -883,7 +883,6 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
-    (ellama-instant-mode +1)
     (ellama-stream
      (format
       ellama-code-edit-prompt-template
@@ -903,7 +902,6 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
-    (ellama-instant-mode +1)
     (ellama-stream
      (format
       ellama-code-improve-prompt-template
@@ -922,7 +920,6 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 		  (region-end)
 		(point)))
 	 (text (buffer-substring-no-properties beg end)))
-    (ellama-instant-mode +1)
     (ellama-stream
      (format
       ellama-code-complete-prompt-template
@@ -943,7 +940,6 @@ buffer."
 		  (region-end)
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
-    (ellama-instant-mode +1)
     (ellama-stream
      (format
       ellama-code-add-prompt-template
@@ -963,7 +959,6 @@ buffer."
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
-    (ellama-instant-mode +1)
     (ellama-stream
      (format
       ellama-make-format-prompt-template
