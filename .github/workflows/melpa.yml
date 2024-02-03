@@ -15,36 +15,33 @@ on:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  lint-emacs-28:
-    # The type of runner that the job will run on
+  test-melpa:
     runs-on: ubuntu-latest
-
+    strategy:
+      fail-fast: false
+      matrix:
+        emacs_version:
+          - 28.1
+          - 28.2
+          - 29.1
+          - 29.2
+        ignore_warnings:
+          - false
+        warnings_as_errors:
+          - false
+        check:
+          - melpa
+        file:
+          - ellama.el
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       - uses: actions/checkout@v4
       - uses: purcell/setup-emacs@master
         with:
-          version: 28.1
+          version: ${{ matrix.emacs_version }}
       - uses: leotaku/elisp-check@master
         with:
-          check: melpa
-          file: ellama.el
-          ignore_warnings: false
-          warnings_as_errors: false
-  lint-emacs-29:
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
-    
-    # Steps represent a sequence of tasks that will be executed as part of the job
-    steps:
-      - uses: actions/checkout@v4
-      - uses: purcell/setup-emacs@master
-        with:
-          version: 29.1
-      - uses: leotaku/elisp-check@master
-        with:
-          check: melpa
-          file: ellama.el
-          ignore_warnings: false
-          warnings_as_errors: false
+          check: ${{ matrix.check }}
+          file: ${{ matrix.file }}
+          ignore_warnings: ${{ matrix.ignore_warnings }}
+          warnings_as_errors: ${{ matrix.warnings_as_errors }}
