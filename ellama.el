@@ -403,8 +403,10 @@ PROVIDER is an llm provider of session.
 
 FILE is a path to file contains string representation of this session, string.
 
-PROMPT is a variable contains last prompt in this session."
-  id provider file prompt)
+PROMPT is a variable contains last prompt in this session.
+
+CONTEXT contains context for next request."
+  id provider file prompt context)
 
 (defun ellama-get-session-buffer (id)
   "Return ellama session buffer by provided ID."
@@ -443,7 +445,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 		       ellama-sessions-directory
 		       (concat id "." ellama-session-file-extension))))
 	 (session (make-ellama-session
-		   :id id :provider provider :file file-name))
+		   :id id :provider provider :file file-name :context nil))
 	 (buffer (if file-name
 		     (progn
 		       (make-directory ellama-sessions-directory t)
@@ -607,6 +609,40 @@ If EPHEMERAL non nil new session will not be associated with any file."
       (setq ellama--current-session-id new-id))
     (remhash id ellama--active-sessions)
     (puthash new-id buffer ellama--active-sessions)))
+
+;;;###autoload
+(defun ellama-context-add-file ()
+  "Add file to current session."
+  (interactive)
+  (if-let* ((id ellama--current-session-id)
+	    (session (with-current-buffer (ellama-get-session-buffer id)
+		       ellama--current-session))
+	    (file-name (read-file-name "Select file: " nil nil t)))
+      (push (cons 'file file-name) (ellama-session-context session))
+    (user-error "Empty current ellama session")))
+
+;;;###autoload
+(defun ellama-context-add-buffer ()
+  "Add file to current session."
+  (interactive)
+  (if-let* ((id ellama--current-session-id)
+	    (session (with-current-buffer (ellama-get-session-buffer id)
+		       ellama--current-session))
+	    (buf (read-buffer "Select buffer: " nil t)))
+      (push (cons 'buffer buf) (ellama-session-context session))
+    (user-error "Empty current ellama session")))
+
+;;;###autoload
+(defun ellama-context-add-region ()
+  "Add file to current session."
+  (interactive)
+  (if-let* ((id ellama--current-session-id)
+	    (session (with-current-buffer (ellama-get-session-buffer id)
+		       ellama--current-session))
+	    ((region-active-p))
+	    (content (buffer-substring-no-properties (region-beginning) (region-end))))
+      (push (cons 'text content) (ellama-session-context session))
+    (user-error "Empty current ellama session")))
 
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
