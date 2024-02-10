@@ -761,7 +761,8 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 	(ellama-stream prompt
 		       :session session
 		       :on-done #'ellama-chat-done
-		       :filter #'ellama--translate-markdown-to-org-filter)))))
+		       :filter (when (derived-mode-p 'org-mode)
+				 #'ellama--translate-markdown-to-org-filter))))))
 
 ;;;###autoload
 (defun ellama-ask-about ()
@@ -808,10 +809,11 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 	 (buffer (get-buffer-create (if (get-buffer buffer-name)
 					(make-temp-name (concat buffer-name " "))
 				      buffer-name)))
-	 (filter (when (equal ellama-major-mode 'org-mode)
-		   'ellama--translate-markdown-to-org-filter)))
+	 filter)
     (with-current-buffer buffer
-      (funcall ellama-major-mode))
+      (funcall ellama-major-mode)
+      (when (derived-mode-p 'org-mode)
+	(setq filter 'ellama--translate-markdown-to-org-filter)))
     (display-buffer buffer)
     (ellama-stream prompt
 		   :buffer buffer
