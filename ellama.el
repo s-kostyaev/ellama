@@ -622,7 +622,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 ;;;###autoload
 (defun ellama-context-add-file ()
-  "Add file to current session."
+  "Add file to context."
   (interactive)
   (if-let* ((id ellama--current-session-id)
 	    (session (with-current-buffer (ellama-get-session-buffer id)
@@ -633,7 +633,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 ;;;###autoload
 (defun ellama-context-add-buffer (buf)
-  "Add BUF to current session."
+  "Add BUF to context."
   (interactive "bSelect buffer: ")
   (if-let* ((id ellama--current-session-id)
 	    (session (with-current-buffer (ellama-get-session-buffer id)
@@ -643,7 +643,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 ;;;###autoload
 (defun ellama-context-add-selection ()
-  "Add file to current session."
+  "Add file to context."
   (interactive)
   (if-let* ((id ellama--current-session-id)
 	    (session (with-current-buffer (ellama-get-session-buffer id)
