@@ -125,6 +125,10 @@
 	     ("t c" ellama-complete "Text complete")
 	     ;; define
 	     ("d w" ellama-define-word "Define word")
+	     ;; context
+	     ("x b" ellama-context-add-buffer "Context add buffer")
+	     ("x f" ellama-context-add-file "Context add file")
+	     ("x s" ellama-context-add-selection "Context add selection")
 	     ;; provider
 	     ("p s" ellama-provider-select "Provider select"))))
       (dolist (key-command key-commands)
@@ -638,7 +642,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
     (push (cons 'buffer buf) ellama--new-session-context)))
 
 ;;;###autoload
-(defun ellama-context-add-region ()
+(defun ellama-context-add-selection ()
   "Add file to current session."
   (interactive)
   (if-let* ((id ellama--current-session-id)
@@ -877,7 +881,7 @@ If CREATE-SESSION set, creates new session even if there is an active session."
   (interactive)
   (let ((input (read-string "Ask ellama about this text: ")))
     (if (region-active-p)
-	(ellama-context-add-region)
+	(ellama-context-add-selection)
       (ellama-context-add-buffer (buffer-name (current-buffer))))
     (ellama-chat input)))
 
