@@ -163,11 +163,6 @@
   :group 'ellama
   :type 'integer)
 
-(defcustom ellama-ask-about-prompt-template "Text:\n%s\nRegarding this text, %s"
-  "Prompt template for `ellama-ask-about'."
-  :group 'ellama
-  :type 'string)
-
 (defcustom ellama-translate-word-prompt-template "Translate %s to %s"
   "Promp template for `ellama-translate' with single word."
   :group 'ellama
@@ -622,13 +617,12 @@ If EPHEMERAL non nil new session will not be associated with any file."
     (user-error "Empty current ellama session")))
 
 ;;;###autoload
-(defun ellama-context-add-buffer ()
-  "Add file to current session."
-  (interactive)
+(defun ellama-context-add-buffer (buf)
+  "Add BUF to current session."
+  (interactive "bSelect buffer: ")
   (if-let* ((id ellama--current-session-id)
 	    (session (with-current-buffer (ellama-get-session-buffer id)
-		       ellama--current-session))
-	    (buf (read-buffer "Select buffer: " nil t)))
+		       ellama--current-session)))
       (push (cons 'buffer buf) (ellama-session-context session))
     (user-error "Empty current ellama session")))
 
@@ -643,6 +637,69 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	    (content (buffer-substring-no-properties (region-beginning) (region-end))))
       (push (cons 'text content) (ellama-session-context session))
     (user-error "Empty current ellama session")))
+
+(defun ellama--org-format-context-element (elt)
+  "Format context ELT for org mode."
+  (pcase (car elt)
+    ('file
+     (format "file:%s" (cdr elt)))
+    ('buffer
+     (format "elisp:(display-buffer \"%s\")" (cdr elt)))
+    ('text
+     (cdr elt))
+    (_
+     (user-error "Unsupported context element"))))
+
+(defun ellama--md-format-context-element (elt)
+  "Format context ELT for org mode."
+  (pcase (car elt)
+    ('file
+     (format "[%s](<%s>)"
+	     (cdr elt)
+	     (cdr elt)))
+    ('buffer
+     (format "```emacs-lisp\n(display-buffer \"%s\")\n```\n" (cdr elt)))
+    ('text
+     (cdr elt))
+    (_
+     (user-error "Unsupported context element"))))
+
+(defun ellama--extract-context-element (elt)
+  "Extract context ELT content."
+  (pcase (car elt)
+    ('text (cdr elt))
+    ('buffer (with-current-buffer (cdr elt)
+	       (buffer-substring-no-properties (point-min) (point-max))))
+    ('file (with-temp-buffer
+	     (find-file-literally (cdr elt))
+	     (buffer-substring-no-properties (point-min) (point-max))))
+    (_
+     (user-error "Unsupported context element"))))
+
+(defun ellama--format-context ()
+  "Format current session context for chat buffer."
+  (if-let* ((session ellama--current-session)
+	    (context (ellama-session-context session)))
+      (concat (string-join
+	       (cons "Context:"
+		     (if (derived-mode-p 'org-mode)
+			 (mapcar #'ellama--org-format-context-element context)
+		       (mapcar #'ellama--md-format-context-element context)))
+	       "\n")
+	      "\n\n")
+    ""))
+
+(defun ellama--prompt-with-context (prompt)
+  "Add context to PROMPT for sending to llm."
+  (if-let* ((session ellama--current-session)
+	    (context (ellama-session-context session)))
+      (concat (string-join
+	       (cons "Context:"
+		     (mapcar #'ellama--extract-context-element context))
+	       "\n")
+	      "\n\n"
+	      prompt)
+    prompt))
 
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
@@ -681,16 +738,17 @@ when the request completes (with BUFFER current)."
 		    (lambda (msg)
 		      (error "Error calling the LLM: %s" msg))))
 	 (donecb (or (plist-get args :on-done) #'ignore))
+	 (prompt-with-ctx (ellama--prompt-with-context prompt))
 	 (llm-prompt (if session
 			 (if (llm-chat-prompt-p (ellama-session-prompt session))
 			     (progn
 			       (llm-chat-prompt-append-response
 				(ellama-session-prompt session)
-				prompt)
+				prompt-with-ctx)
 			       (ellama-session-prompt session))
 			   (setf (ellama-session-prompt session)
-				 (llm-make-simple-chat-prompt prompt)))
-		       (llm-make-simple-chat-prompt prompt))))
+				 (llm-make-simple-chat-prompt prompt-with-ctx)))
+		       (llm-make-simple-chat-prompt prompt-with-ctx))))
     (with-current-buffer buffer
       (ellama-request-mode +1)
       (let* ((start (make-marker))
@@ -726,6 +784,7 @@ when the request completes (with BUFFER current)."
 	(set-marker-insertion-type start nil)
 	(set-marker-insertion-type end t)
 	(spinner-start ellama-spinner-type)
+	(setf (ellama-session-context session) nil)
 	(setq ellama--current-request
 	      (llm-chat-streaming provider
 				  llm-prompt
@@ -792,7 +851,8 @@ If CREATE-SESSION set, creates new session even if there is an active session."
     (with-current-buffer buffer
       (save-excursion
 	(goto-char (point-max))
-	(insert ellama-nick-prefix " " ellama-user-nick ":\n" prompt "\n\n"
+	(insert ellama-nick-prefix " " ellama-user-nick ":\n"
+		(ellama--format-context) prompt "\n\n"
 		ellama-nick-prefix " " ellama-assistant-nick ":\n")
 	(ellama-stream prompt
 		       :session session
@@ -804,11 +864,11 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 (defun ellama-ask-about ()
   "Ask ellama about selected region or current buffer."
   (interactive)
-  (let ((input (read-string "Ask ellama about this text: "))
-	(text (if (region-active-p)
-		  (buffer-substring-no-properties (region-beginning) (region-end))
-		(buffer-substring-no-properties (point-min) (point-max)))))
-    (ellama-chat (format ellama-ask-about-prompt-template text input))))
+  (let ((input (read-string "Ask ellama about this text: ")))
+    (if (region-active-p)
+	(ellama-context-add-region)
+      (ellama-context-add-buffer (buffer-name (current-buffer))))
+    (ellama-chat input)))
 
 ;;;###autoload
 (defun ellama-ask-selection ()
