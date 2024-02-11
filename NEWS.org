@@ -1,3 +1,5 @@
+* Version 0.8.0
+- Add context management.
 * Version 0.7.7
 - Apply markdown-to-org filter consistently.
 * Version 0.7.6
