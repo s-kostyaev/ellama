@@ -1,3 +1,5 @@
+* Version 0.8.1
+- Add naming scheme user option.
 * Version 0.8.0
 - Add context management.
 * Version 0.7.7
