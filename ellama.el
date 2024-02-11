@@ -541,8 +541,14 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	(save-buffer)
 	(goto-char (point-min))))
     (with-current-buffer buffer
-      (setq ellama--current-session (read session-buffer))
-      (setf (ellama-session-context ellama--current-session) ellama--new-session-context)
+      (let ((session (read session-buffer)))
+	(setq ellama--current-session
+	      (make-ellama-session
+	       :id (ellama-session-id session)
+	       :provider (ellama-session-provider session)
+	       :file (ellama-session-file session)
+	       :prompt (ellama-session-prompt session)
+	       :context ellama--new-session-context)))
       (setq ellama--new-session-context nil)
       (setq ellama--current-session-id (ellama-session-id ellama--current-session))
       (puthash (ellama-session-id ellama--current-session)
