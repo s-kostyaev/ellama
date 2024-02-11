@@ -12,6 +12,9 @@ review, summarization, enhancing grammar/spelling or wording and
 more through the Emacs interface. Ellama natively supports streaming
 output, making it effortless to use with your preferred text editor.
 
+The name "ellama" is derived from "Emacs Large LAnguage Model
+Assistant". Previous sentence was written by Ellama itself.
+
 ** Installation
 
 Just ~M-x~ ~package-install~ @@html:<kbd>@@Enter@@html:</kbd>@@ ~ellama~
