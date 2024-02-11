@@ -12,6 +12,9 @@ review, summarization, enhancing grammar/spelling or wording and
 more through the Emacs interface. Ellama natively supports streaming
 output, making it effortless to use with your preferred text editor.
 
+The name "ellama" is derived from "Emacs Large LAnguage Model
+Assistant". Previous sentence was written by Ellama itself.
+
 ** Installation
 
 Just ~M-x~ ~package-install~ @@html:<kbd>@@Enter@@html:</kbd>@@ ~ellama~
@@ -180,34 +183,49 @@ Change current active session.
 
 Rename current ellama session.
 
+*** ellama-context-add-file
+
+Add file to context.
+
+*** ellama-context-add-buffer
+
+Add buffer to context.
+
+*** ellama-context-add-selection
+
+Add selected region to context.
+
 ** Keymap
 
 Here is a table of keybindings and their associated functions in
 Ellama, using the ~C-c e~ prefix:
 
-| Keymap | Function                   | Description                  |
-|--------+----------------------------+------------------------------|
-| "c c"  | ellama-code-complete       | Code complete                |
-| "c a"  | ellama-code-add            | Code add                     |
-| "c e"  | ellama-code-edit           | Code edit                    |
-| "c i"  | ellama-code-improve        | Code improve                 |
-| "c r"  | ellama-code-review         | Code review                  |
-| "s s"  | ellama-summarize           | Summarize                    |
-| "s w"  | ellama-summarize-webpage   | Summarize webpage            |
-| "i w"  | ellama-improve-wording     | Improve wording              |
-| "i g"  | ellama-improve-grammar     | Improve grammar and spelling |
-| "i c"  | ellama-improve-conciseness | Improve conciseness          |
-| "m l"  | ellama-make-list           | Make list                    |
-| "m t"  | ellama-make-table          | Make table                   |
-| "m f"  | ellama-make-format         | Make format                  |
-| "a a"  | ellama-ask-about           | Ask about                    |
-| "a i"  | ellama-chat                | Chat (ask interactively)     |
-| "a l"  | ellama-ask-line            | Ask about current line       |
-| "a s"  | ellama-ask-selection       | Ask about selection          |
-| "t t"  | ellama-translate           | Text translate               |
-| "t c"  | ellama-complete            | Text complete                |
-| "d w"  | ellama-define-word         | Define word                  |
-| "p s"  | ellama-provider-select     | Provider select              |
+| Keymap | Function                     | Description                  |
+|--------+------------------------------+------------------------------|
+| "c c"  | ellama-code-complete         | Code complete                |
+| "c a"  | ellama-code-add              | Code add                     |
+| "c e"  | ellama-code-edit             | Code edit                    |
+| "c i"  | ellama-code-improve          | Code improve                 |
+| "c r"  | ellama-code-review           | Code review                  |
+| "s s"  | ellama-summarize             | Summarize                    |
+| "s w"  | ellama-summarize-webpage     | Summarize webpage            |
+| "i w"  | ellama-improve-wording       | Improve wording              |
+| "i g"  | ellama-improve-grammar       | Improve grammar and spelling |
+| "i c"  | ellama-improve-conciseness   | Improve conciseness          |
+| "m l"  | ellama-make-list             | Make list                    |
+| "m t"  | ellama-make-table            | Make table                   |
+| "m f"  | ellama-make-format           | Make format                  |
+| "a a"  | ellama-ask-about             | Ask about                    |
+| "a i"  | ellama-chat                  | Chat (ask interactively)     |
+| "a l"  | ellama-ask-line              | Ask current line             |
+| "a s"  | ellama-ask-selection         | Ask selection                |
+| "t t"  | ellama-translate             | Text translate               |
+| "t c"  | ellama-complete              | Text complete                |
+| "d w"  | ellama-define-word           | Define word                  |
+| "x b"  | ellama-context-add-buffer    | Context add buffer           |
+| "x f"  | ellama-context-add-file      | Context add file             |
+| "x s"  | ellama-context-add-selection | Context add selection        |
+| "p s"  | ellama-provider-select       | Provider select              |
 
 ** Configuration
 
