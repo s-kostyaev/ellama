@@ -167,6 +167,23 @@
   :group 'ellama
   :type 'integer)
 
+(defcustom ellama-naming-scheme 'ellama-generate-name-by-words
+  "How to name sessions.
+If you choose custom function, that function should accept PROVIDER, ACTION
+and PROMPT arguments.
+
+PROVIDER is an llm provider.
+
+ACTION is a symbol, current command.
+
+PROMPT is a prompt string."
+  :group 'ellama
+  :type `(choice
+          (const :tag "By first N words of prompt" ellama-generate-name-by-words)
+          (const :tag "By current time" ellama-generate-name-by-time)
+	  (const :tag "By generating name with LLM based on prompt." ellama-generate-name-by-llm)
+          (function :tag "By custom function")))
+
 (defcustom ellama-translate-word-prompt-template "Translate %s to %s"
   "Promp template for `ellama-translate' with single word."
   :group 'ellama
@@ -244,6 +261,17 @@
 
 (defcustom ellama-make-table-prompt-template "markdown table"
   "Prompt template for `ellama-make-table'."
+  :group 'ellama
+  :type 'string)
+
+(defcustom ellama-get-name-template "I will get you user query, you should return short topic only, what this conversation about. NEVER respond to query itself. Topic must be short and concise.
+For example:
+Query: Why is sky blue?
+Topic: Blue sky
+
+Query: %s
+Topic:"
+  "Prompt template for `ellama-get-name'."
   :group 'ellama
   :type 'string)
 
@@ -387,6 +415,11 @@ This filter contains only subset of markdown syntax to be good enough."
   :type 'string
   :group 'ellama)
 
+(defcustom ellama-naming-provider nil
+  "LLM provider for generating names."
+  :group 'ellama
+  :type '(sexp :validate 'cl-struct-p))
+
 (defvar-local ellama--current-session nil)
 
 (defvar ellama--current-session-id nil)
@@ -411,8 +444,8 @@ CONTEXT contains context for next request."
   "Return ellama session buffer by provided ID."
   (gethash id ellama--active-sessions))
 
-(defun ellama-generate-name (provider action prompt)
-  "Generate name for ellama ACTION by PROVIDER according to PROMPT."
+(defun ellama-generate-name-by-words (provider action prompt)
+  "Generate name for ACTION by PROVIDER by getting first N words from PROMPT."
   (let* ((cleaned-prompt (replace-regexp-in-string "/" "_" prompt))
          (prompt-words (split-string cleaned-prompt)))
     (string-join
@@ -424,6 +457,35 @@ CONTEXT contains context for next request."
 	      nil)
 	    (format "(%s)" (llm-name provider))))
      " ")))
+
+(defun ellama-get-name (prompt)
+  "Generate session name by LLM based on PROMPT."
+  (let ((provider (or ellama-naming-provider ellama-provider)))
+    (string-trim-right
+     (string-trim
+      (llm-chat provider (llm-make-simple-chat-prompt
+			  (format ellama-get-name-template prompt))))
+     "\\.")))
+
+(defun ellama-generate-name-by-llm (provider _action prompt)
+  "Generate name for ellama ACTION by PROVIDER and PROMPT by LLM."
+  (format "%s (%s)"
+	  (ellama-get-name prompt)
+	  (llm-name provider)))
+
+(defun ellama-get-current-time ()
+  "Return string representation of current time."
+  (replace-regexp-in-string
+   "\\([0-9]\\{2\\}\\)\\([0-9]\\{2\\}\\)\\'" "\\1:\\2"
+   (format-time-string "%FT%T%z" (current-time))))
+
+(defun ellama-generate-name-by-time (_provider _action _prompt)
+  "Generate name for ellama session by current time."
+  (ellama-get-current-time))
+
+(defun ellama-generate-name (provider action prompt)
+  "Generate name for ellama ACTION by PROVIDER according to PROMPT."
+  (funcall ellama-naming-scheme provider action prompt))
 
 (defvar ellama--new-session-context nil)
 
