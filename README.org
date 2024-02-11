@@ -267,6 +267,9 @@ argument generated text string.
   comment lines. Default value 100.
 - ~ellama-session-auto-save~: Automatically save ellama sessions if
   set. Enabled by default.
+- ~ellama-naming-scheme~: How to name new sessions.
+- ~ellama-naming-provider~: LLM provider for generating session names
+  by LLM. If not set ~ellama-provider~ will be used.
 
 ** Acknowledgments
 
