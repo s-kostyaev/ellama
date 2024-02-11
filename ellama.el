@@ -421,6 +421,8 @@ CONTEXT contains context for next request."
 	    (format "(%s)" (llm-name provider))))
      " ")))
 
+(defvar ellama--new-session-context nil)
+
 (defun ellama-new-session (provider prompt &optional ephemeral)
   "Create new ellama session with unique id.
 Provided PROVIDER and PROMPT will be used in new session.
@@ -440,12 +442,13 @@ If EPHEMERAL non nil new session will not be associated with any file."
 		       ellama-sessions-directory
 		       (concat id "." ellama-session-file-extension))))
 	 (session (make-ellama-session
-		   :id id :provider provider :file file-name :context nil))
+		   :id id :provider provider :file file-name :context ellama--new-session-context))
 	 (buffer (if file-name
 		     (progn
 		       (make-directory ellama-sessions-directory t)
 		       (find-file-noselect file-name))
 		   (get-buffer-create id))))
+    (setq ellama--new-session-context nil)
     (setq ellama--current-session-id id)
     (puthash id buffer ellama--active-sessions)
     (with-current-buffer buffer
@@ -539,6 +542,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	(goto-char (point-min))))
     (with-current-buffer buffer
       (setq ellama--current-session (read session-buffer))
+      (setf (ellama-session-context ellama--current-session) ellama--new-session-context)
+      (setq ellama--new-session-context nil)
       (setq ellama--current-session-id (ellama-session-id ellama--current-session))
       (puthash (ellama-session-id ellama--current-session)
 	       buffer ellama--active-sessions)
@@ -614,7 +619,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 		       ellama--current-session))
 	    (file-name (read-file-name "Select file: " nil nil t)))
       (push (cons 'file file-name) (ellama-session-context session))
-    (user-error "Empty current ellama session")))
+    (push (cons 'file file-name) ellama--new-session-context)))
 
 ;;;###autoload
 (defun ellama-context-add-buffer (buf)
@@ -624,7 +629,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	    (session (with-current-buffer (ellama-get-session-buffer id)
 		       ellama--current-session)))
       (push (cons 'buffer buf) (ellama-session-context session))
-    (user-error "Empty current ellama session")))
+    (push (cons 'buffer buf) ellama--new-session-context)))
 
 ;;;###autoload
 (defun ellama-context-add-region ()
@@ -636,7 +641,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	    ((region-active-p))
 	    (content (buffer-substring-no-properties (region-beginning) (region-end))))
       (push (cons 'text content) (ellama-session-context session))
-    (user-error "Empty current ellama session")))
+    (push (cons 'text content) ellama--new-session-context)))
 
 (defun ellama--org-format-context-element (elt)
   "Format context ELT for org mode."
