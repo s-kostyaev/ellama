@@ -488,7 +488,7 @@ CONTEXT contains context for next request."
 
 (defun ellama-generate-name (provider action prompt)
   "Generate name for ellama ACTION by PROVIDER according to PROMPT."
-  (funcall ellama-naming-scheme provider action prompt))
+  (replace-regexp-in-string "/" "_" (funcall ellama-naming-scheme provider action prompt)))
 
 (defvar ellama--new-session-context nil)
 
@@ -805,8 +805,10 @@ failure (with BUFFER current).
 
 :on-done ON-DONE -- ON-DONE a function that's called with the full response text
 when the request completes (with BUFFER current)."
-  (let* ((provider (or (plist-get args :provider) ellama-provider))
-	 (session (plist-get args :session))
+  (let* ((session (plist-get args :session))
+	 (provider (if session
+		       (ellama-session-provider session)
+		     (or (plist-get args :provider) ellama-provider)))
 	 (buffer (or (plist-get args :buffer)
 		     (when (ellama-session-p session)
 		       (ellama-get-session-buffer (ellama-session-id session)))
@@ -1224,7 +1226,8 @@ buffer."
     (setq ellama-provider
 	  (eval (alist-get
 		 (completing-read "Select model: " variants)
-		 providers nil nil #'string=)))))
+		 providers nil nil #'string=)))
+    (setq ellama--current-session-id nil)))
 
 (provide 'ellama)
 ;;; ellama.el ends here.
