@@ -463,8 +463,11 @@ CONTEXT contains context for next request."
   (let ((provider (or ellama-naming-provider ellama-provider)))
     (string-trim-right
      (string-trim
-      (llm-chat provider (llm-make-simple-chat-prompt
-			  (format ellama-get-name-template prompt))))
+      (seq-first
+       (split-string
+	(llm-chat provider (llm-make-simple-chat-prompt
+			    (format ellama-get-name-template prompt)))
+	"\n")))
      "\\.")))
 
 (defun ellama-generate-name-by-llm (provider _action prompt)
