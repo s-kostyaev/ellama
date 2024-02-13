@@ -1,3 +1,5 @@
+* Version 0.8.2
+- Fix chat on model switching.
 * Version 0.8.1
 - Add naming scheme user option.
 * Version 0.8.0
