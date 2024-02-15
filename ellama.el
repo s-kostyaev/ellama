@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4") (dash "2.19.1"))
-;; Version: 0.8.2
+;; Version: 0.8.3
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -866,7 +866,8 @@ when the request completes (with BUFFER current)."
 	(set-marker-insertion-type start nil)
 	(set-marker-insertion-type end t)
 	(spinner-start ellama-spinner-type)
-	(setf (ellama-session-context session) nil)
+	(when session
+	  (setf (ellama-session-context session) nil))
 	(setq ellama--current-request
 	      (llm-chat-streaming provider
 				  llm-prompt
