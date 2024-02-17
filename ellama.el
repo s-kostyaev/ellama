@@ -55,10 +55,10 @@
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-nick-prefix "**"
-  "User and assistant nick prefix in logs."
+(defcustom ellama-nick-prefix-depth 2
+  "Prefix depth"
   :group 'ellama
-  :type 'string)
+  :type 'integer)
 
 (defcustom ellama-language "English"
   "Language for ellama translation."
@@ -402,11 +402,6 @@ This filter contains only subset of markdown syntax to be good enough."
 	   ;; If ellama-enable-keymap is nil, remove the key bindings
 	   (define-key global-map (kbd ellama-keymap-prefix) nil))))
 
-(defcustom ellama-session-file-extension "org"
-  "File extension for saving ellama session."
-  :type 'string
-  :group 'ellama)
-
 (defcustom ellama-sessions-directory (file-truename
 				      (file-name-concat
 				       user-emacs-directory
@@ -492,6 +487,18 @@ CONTEXT contains context for next request."
 
 (defvar ellama--new-session-context nil)
 
+(defun ellama-get-nick-prefix-for-mode ()
+  (let* ((preferred-mode (symbol-name ellama-major-mode))
+         (prefix-char
+          (cond ((string= preferred-mode "org-mode") ?*)
+                (t ?#))))
+    (make-string ellama-nick-prefix-depth prefix-char)))
+
+(defun ellama-get-session-file-extension ()
+  (let ((preferred-mode (symbol-name ellama-major-mode)))
+    (cond ((= preferred-mode "org-mode") "org")
+          (t "md"))))
+
 (defun ellama-new-session (provider prompt &optional ephemeral)
   "Create new ellama session with unique id.
 Provided PROVIDER and PROMPT will be used in new session.
@@ -509,7 +516,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 			       ellama-session-auto-save)
 		      (file-name-concat
 		       ellama-sessions-directory
-		       (concat id "." ellama-session-file-extension))))
+		       (concat id "." (ellama-get-session-file-extension)))))
 	 (session (make-ellama-session
 		   :id id :provider provider :file file-name :context ellama--new-session-context))
 	 (buffer (if file-name
@@ -934,9 +941,9 @@ If CREATE-SESSION set, creates new session even if there is an active session."
     (with-current-buffer buffer
       (save-excursion
 	(goto-char (point-max))
-	(insert ellama-nick-prefix " " ellama-user-nick ":\n"
+	(insert (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n"
 		(ellama--format-context) prompt "\n\n"
-		ellama-nick-prefix " " ellama-assistant-nick ":\n")
+		(ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
 	(ellama-stream prompt
 		       :session session
 		       :on-done #'ellama-chat-done
