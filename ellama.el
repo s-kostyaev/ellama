@@ -88,6 +88,51 @@
 		      `(const ,(car type)))
 		    spinner-types)))
 
+(defcustom ellama-command-map
+  (let ((map (make-sparse-keymap)))
+    ;; code
+    (define-key map (kbd "c c") 'ellama-code-complete)
+    (define-key map (kbd "c a") 'ellama-code-add)
+    (define-key map (kbd "c e") 'ellama-code-edit)
+    (define-key map (kbd "c i") 'ellama-code-improve)
+    (define-key map (kbd "c r") 'ellama-code-review)
+    ;; summarize
+    (define-key map (kbd "s s") 'ellama-summarize)
+    (define-key map (kbd "s w") 'ellama-summarize-webpage)
+    ;; session
+    (define-key map (kbd "s l") 'ellama-load-session)
+    (define-key map (kbd "s r") 'ellama-session-rename)
+    (define-key map (kbd "s d") 'ellama-session-remove)
+    (define-key map (kbd "s a") 'ellama-session-switch)
+    ;; improve
+    (define-key map (kbd "i w") 'ellama-improve-wording)
+    (define-key map (kbd "i g") 'ellama-improve-grammar)
+    (define-key map (kbd "i c") 'ellama-improve-conciseness)
+    ;; make
+    (define-key map (kbd "m l") 'ellama-make-list)
+    (define-key map (kbd "m t") 'ellama-make-table)
+    (define-key map (kbd "m f") 'ellama-make-format)
+    ;; ask
+    (define-key map (kbd "a a") 'ellama-ask-about)
+    (define-key map (kbd "a i") 'ellama-chat)
+    (define-key map (kbd "a l") 'ellama-ask-line)
+    (define-key map (kbd "a s") 'ellama-ask-selection)
+    ;; text
+    (define-key map (kbd "t t") 'ellama-translate)
+    (define-key map (kbd "t c") 'ellama-complete)
+    ;; define
+    (define-key map (kbd "d w") 'ellama-define-word)
+    ;; context
+    (define-key map (kbd "x b") 'ellama-context-add-buffer)
+    (define-key map (kbd "x f") 'ellama-context-add-file)
+    (define-key map (kbd "x s") 'ellama-context-add-selection)
+    ;; provider
+    (define-key map (kbd "p s") 'ellama-provider-select)
+    map)
+  "Keymap for ellama commands."
+  :group 'ellama
+  :type 'keymap)
+
 (defun ellama-setup-keymap ()
   "Set up the Ellama keymap and bindings."
   (interactive)
@@ -95,46 +140,10 @@
     (defvar ellama-keymap (make-sparse-keymap)
       "Keymap for Ellama Commands")
 
-    (define-key global-map (kbd ellama-keymap-prefix) ellama-keymap)
+    (when ellama-keymap-prefix
+      (define-key global-map (kbd ellama-keymap-prefix) ellama-command-map))))
 
-    (let ((key-commands
-	   '(;; code
-	     ("c c" ellama-code-complete "Code complete")
-	     ("c a" ellama-code-add "Code add")
-	     ("c e" ellama-code-edit "Code edit")
-	     ("c i" ellama-code-improve "Code improve")
-	     ("c r" ellama-code-review "Code review")
-	     ;; summarize
-	     ("s s" ellama-summarize "Summarize")
-	     ("s w" ellama-summarize-webpage "Summarize webpage")
-	     ;; improve
-	     ("i w" ellama-improve-wording "Improve wording")
-	     ("i g" ellama-improve-grammar "Improve grammar and spelling")
-	     ("i c" ellama-improve-conciseness "Improve conciseness")
-	     ;; make
-	     ("m l" ellama-make-list "Make list")
-	     ("m t" ellama-make-table "Make table")
-	     ("m f" ellama-make-format "Make format")
-	     ;; ask
-	     ("a a" ellama-ask-about "Ask about")
-	     ("a i" ellama-chat "Ask interactively")
-	     ("a l" ellama-ask-line "Ask current line")
-	     ("a s" ellama-ask-selection "Ask selection")
-	     ;; text
-	     ("t t" ellama-translate "Text translate")
-	     ("t c" ellama-complete "Text complete")
-	     ;; define
-	     ("d w" ellama-define-word "Define word")
-	     ;; context
-	     ("x b" ellama-context-add-buffer "Context add buffer")
-	     ("x f" ellama-context-add-file "Context add file")
-	     ("x s" ellama-context-add-selection "Context add selection")
-	     ;; provider
-	     ("p s" ellama-provider-select "Provider select"))))
-      (dolist (key-command key-commands)
-	(define-key ellama-keymap (kbd (car key-command)) (cadr key-command))))))
-
-(defcustom ellama-keymap-prefix "C-c e"
+(defcustom ellama-keymap-prefix nil
   "Key sequence for Ellama Commands."
   :type 'string
   :set (lambda (symbol value)
