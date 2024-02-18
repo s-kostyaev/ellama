@@ -1,3 +1,6 @@
+* Version 0.8.4
+- Fix keybindings. Keymap prefix now not set by default to prevent
+  usage of reserved for end user customisation keys.
 * Version 0.8.3
 - Fix non-chat commands.
 * Version 0.8.2
