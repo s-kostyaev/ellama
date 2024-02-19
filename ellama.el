@@ -39,6 +39,7 @@
 (require 'llm)
 (require 'spinner)
 (require 'dash)
+(require 'info)
 (eval-when-compile (require 'rx))
 
 (defgroup ellama nil
@@ -126,6 +127,7 @@
     (define-key map (kbd "x b") 'ellama-context-add-buffer)
     (define-key map (kbd "x f") 'ellama-context-add-file)
     (define-key map (kbd "x s") 'ellama-context-add-selection)
+    (define-key map (kbd "x i") 'ellama-context-add-info-node)
     ;; provider
     (define-key map (kbd "p s") 'ellama-provider-select)
     map)
@@ -727,15 +729,30 @@ If EPHEMERAL non nil new session will not be associated with any file."
       (push (cons 'text content) (ellama-session-context session))
     (push (cons 'text content) ellama--new-session-context)))
 
+;;;###autoload
+(defun ellama-context-add-info-node (node)
+  "Add info NODE to context."
+  (interactive (list (Info-copy-current-node-name)))
+  (if-let* ((id ellama--current-session-id)
+	    (session (with-current-buffer (ellama-get-session-buffer id)
+		       ellama--current-session)))
+      (push (cons 'info node) (ellama-session-context session))
+    (push (cons 'info node) ellama--new-session-context)))
+
 (defun ellama--org-format-context-element (elt)
   "Format context ELT for org mode."
   (pcase (car elt)
     ('file
-     (format "file:%s" (cdr elt)))
+     (format "[[file:%s][%s]]" (cdr elt) (cdr elt)))
     ('buffer
-     (format "elisp:(display-buffer \"%s\")" (cdr elt)))
+     (format "[[elisp:(display-buffer \"%s\")][%s]]" (cdr elt) (cdr elt)))
     ('text
      (cdr elt))
+    ('info
+     (format "[[%s][%s]]"
+	     (replace-regexp-in-string
+	      "(\\(.?*\\)) \\(.*\\)" "info:\\1#\\2" (cdr elt))
+	     (cdr elt)))
     (_
      (user-error "Unsupported context element"))))
 
@@ -750,6 +767,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
      (format "```emacs-lisp\n(display-buffer \"%s\")\n```\n" (cdr elt)))
     ('text
      (cdr elt))
+    ('info
+     (format "```emacs-lisp\n(info \"%s\")\n```\n" (cdr elt)))
     (_
      (user-error "Unsupported context element"))))
 
@@ -761,6 +780,9 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	       (buffer-substring-no-properties (point-min) (point-max))))
     ('file (with-temp-buffer
 	     (find-file-literally (cdr elt))
+	     (buffer-substring-no-properties (point-min) (point-max))))
+    ('info (with-temp-buffer
+	     (info (cdr elt) (current-buffer))
 	     (buffer-substring-no-properties (point-min) (point-max))))
     (_
      (user-error "Unsupported context element"))))
