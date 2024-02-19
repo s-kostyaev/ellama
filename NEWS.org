@@ -1,3 +1,8 @@
+* Version 0.8.5
+- Improve working with context:
+  - Fix some ~org-mode~ links.
+  - Add command for adding info nodes into context.
+  - Fix keybindings documentation.
 * Version 0.8.4
 - Fix keybindings. Keymap prefix now not set by default to prevent
   usage of reserved for end user customisation keys.
