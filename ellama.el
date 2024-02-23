@@ -931,10 +931,13 @@ Will call `ellama-chat-done-callback' on TEXT."
     (funcall ellama-chat-done-callback text)))
 
 ;;;###autoload
-(defun ellama-chat (prompt &optional create-session)
+(defun ellama-chat (prompt &optional create-session &rest args)
   "Send PROMPT to ellama chat with conversation history.
 
-If CREATE-SESSION set, creates new session even if there is an active session."
+If CREATE-SESSION set, creates new session even if there is an active session.
+ARGS contains keys for fine control.
+
+:provider PROVIDER -- PROVIDER is an llm provider for generation."
   (interactive "sAsk ellama: ")
   (let* ((providers (progn
 		      (push '("default model" . ellama-provider)
@@ -949,7 +952,8 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 		       (eval (alist-get
 			      (completing-read "Select model: " variants)
 			      providers nil nil #'string=))
-		     ellama-provider))
+		     (or (plist-get :provider args)
+			 ellama-provider)))
 	 (session (if (or create-session
 			  current-prefix-arg
 			  (and (not ellama--current-session)
