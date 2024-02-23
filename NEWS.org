@@ -1,3 +1,5 @@
+* Version 0.8.6
+- Add provider to ~ellama-chat~ arguments.
 * Version 0.8.5
 - Improve working with context:
   - Fix some ~org-mode~ links.
