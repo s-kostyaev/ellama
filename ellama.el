@@ -1246,8 +1246,11 @@ buffer."
 		(llm-ollama-host ellama-provider)))
 	(port (when (llm-ollama-p ellama-provider)
 		(llm-ollama-port ellama-provider))))
-    (make-llm-ollama
-     :chat-model model-name :embedding-model model-name :host host :port port)))
+    (if host
+	(make-llm-ollama
+	 :chat-model model-name :embedding-model model-name :host host :port port)
+      (make-llm-ollama
+       :chat-model model-name :embedding-model model-name))))
 
 ;;;###autoload
 (defun ellama-provider-select ()
