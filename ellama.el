@@ -369,9 +369,9 @@ Too low value can break generated code by splitting long comment lines."
 This filter contains only subset of markdown syntax to be good enough."
   (->> text
        ;; code blocks
-       (replace-regexp-in-string "^```\\(.+\\)$" "#+BEGIN_SRC \\1")
+       (replace-regexp-in-string "^[[:space:]]*```\\(.+\\)$" "#+BEGIN_SRC \\1")
        (replace-regexp-in-string "^<!-- language: \\(.+\\) -->\n```" "#+BEGIN_SRC \\1")
-       (replace-regexp-in-string "^```$" "#+END_SRC")
+       (replace-regexp-in-string "^[[:space:]]*```$" "#+END_SRC")
        ;; lists
        (replace-regexp-in-string "^\\* " "+ ")
        ;; bold
@@ -379,7 +379,7 @@ This filter contains only subset of markdown syntax to be good enough."
        (replace-regexp-in-string "__\\(.+?\\)__" "*\\1*")
        (replace-regexp-in-string "<b>\\(.+?\\)</b>" "*\\1*")
        ;; italic
-       (replace-regexp-in-string "_\\(.+?\\)_" "/\\1/")
+       ;; (replace-regexp-in-string "_\\(.+?\\)_" "/\\1/") ;; most of the time it breaks code blocks, so disable it
        (replace-regexp-in-string "<i>\\(.+?\\)</i>" "/\\1/")
        ;; inline code
        (replace-regexp-in-string "`\\(.+?\\)`" "~\\1~")
