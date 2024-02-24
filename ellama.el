@@ -76,6 +76,16 @@
   :group 'ellama
   :type '(sexp :validate 'cl-struct-p))
 
+(defcustom ellama-chat-translation-enabled nil
+  "Enable chat translations."
+  :group 'ellama
+  :type 'boolean)
+
+(defcustom ellama-translation-provider nil
+  "LLM provider for chat translation."
+  :group 'ellama
+  :type '(sexp :validate 'cl-struct-p))
+
 (defcustom ellama-providers nil
   "LLM provider list for fast switching."
   :group 'ellama
@@ -121,6 +131,8 @@
     ;; text
     (define-key map (kbd "t t") 'ellama-translate)
     (define-key map (kbd "t c") 'ellama-complete)
+    (define-key map (kbd "t e") 'ellama-chat-translation-enable)
+    (define-key map (kbd "t d") 'ellama-chat-translation-disable)
     ;; define
     (define-key map (kbd "d w") 'ellama-define-word)
     ;; context
@@ -570,6 +582,19 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	   (concat "." base-name ".session.el"))))
     session-file-name))
 
+(defun ellama--get-translation-file-name (file-name)
+  "Get ellama translation file name for FILE-NAME."
+  (let* ((base-name (file-name-base file-name))
+	 (ext (file-name-extension file-name))
+	 (dir (file-name-directory file-name))
+	 (translation-file-name
+	  (file-name-concat
+	   dir
+	   (concat base-name ".translation"
+		   (when ext
+		     (concat "." ext))))))
+    translation-file-name))
+
 (defun ellama--save-session ()
   "Save current ellama session."
   (when ellama--current-session
@@ -646,10 +671,20 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	      (hash-table-keys ellama--active-sessions)))
 	 (buffer (ellama-get-session-buffer id))
 	 (file (buffer-file-name buffer))
-	 (session-file (ellama--get-session-file-name file)))
+	 (session-file (ellama--get-session-file-name file))
+	 (translation-file (ellama--get-translation-file-name file)))
     (kill-buffer buffer)
     (delete-file file t)
-    (delete-file session-file t)))
+    (delete-file session-file t)
+    (mapc
+     (lambda (buf)
+       (when (and (buffer-file-name buf)
+		  (file-equal-p (buffer-file-name buf)
+				translation-file))
+	 (kill-buffer buf)))
+     (buffer-list))
+    (when (file-exists-p translation-file)
+      (delete-file translation-file t))))
 
 ;;;###autoload
 (defun ellama-session-switch ()
@@ -964,19 +999,80 @@ ARGS contains keys for fine control.
 					      ellama--current-session-id)
 			  ellama--current-session))))
 	 (buffer (ellama-get-session-buffer
-		  (ellama-session-id session))))
-    (display-buffer buffer)
-    (with-current-buffer buffer
-      (save-excursion
-	(goto-char (point-max))
-	(insert ellama-nick-prefix " " ellama-user-nick ":\n"
-		(ellama--format-context) prompt "\n\n"
-		ellama-nick-prefix " " ellama-assistant-nick ":\n")
-	(ellama-stream prompt
-		       :session session
-		       :on-done #'ellama-chat-done
-		       :filter (when (derived-mode-p 'org-mode)
-				 #'ellama--translate-markdown-to-org-filter))))))
+		  (ellama-session-id session)))
+	 (file-name (ellama-session-file session))
+	 (translation-buffer (when ellama-chat-translation-enabled
+			       (if file-name
+				   (progn
+				     (find-file-noselect
+				      (ellama--get-translation-file-name file-name)))
+				 (get-buffer-create (ellama-session-id session))))))
+    (if ellama-chat-translation-enabled
+	(progn
+	  (display-buffer translation-buffer)
+	  (with-current-buffer translation-buffer
+	    (save-excursion
+	      (goto-char (point-max))
+	      (insert ellama-nick-prefix " " ellama-user-nick ":\n"
+		      (ellama--format-context) prompt "\n\n"
+		      ellama-nick-prefix " " ellama-assistant-nick ":\n")
+	      (ellama-stream
+	       (format "Translate this text to english.
+Original text:
+%s
+Translation to english:
+"
+		       prompt)
+	       :filter (when (derived-mode-p 'org-mode)
+			 #'ellama--translate-markdown-to-org-filter)
+	       :on-done
+	       (lambda (result)
+		 (ellama-chat-done result)
+		 (save-excursion
+		   (goto-char (point-max))
+		   (delete-char -2)
+		   (delete-char (- (length result))))
+		 (display-buffer buffer)
+		 (with-current-buffer buffer
+		   (save-excursion
+		     (goto-char (point-max))
+		     (insert ellama-nick-prefix " " ellama-user-nick ":\n"
+			     (ellama--format-context) result "\n\n"
+			     ellama-nick-prefix " " ellama-assistant-nick ":\n")
+		     (ellama-stream result
+				    :session session
+				    :on-done (lambda (generated)
+					       (ellama-chat-done generated)
+					       (display-buffer translation-buffer)
+					       (with-current-buffer translation-buffer
+						 (save-excursion
+						   (goto-char (point-max))
+						   (ellama-stream
+						    (format "Translate this text to %s.
+Original text:
+%s
+Translation to %s:
+"
+							    ellama-language
+							    generated
+							    ellama-language)
+						    :on-done #'ellama-chat-done
+						    :filter (when (derived-mode-p 'org-mode)
+							      #'ellama--translate-markdown-to-org-filter)))))
+				    :filter (when (derived-mode-p 'org-mode)
+					      #'ellama--translate-markdown-to-org-filter)))))))))
+      (display-buffer buffer)
+      (with-current-buffer buffer
+	(save-excursion
+	  (goto-char (point-max))
+	  (insert ellama-nick-prefix " " ellama-user-nick ":\n"
+		  (ellama--format-context) prompt "\n\n"
+		  ellama-nick-prefix " " ellama-assistant-nick ":\n")
+	  (ellama-stream prompt
+			 :session session
+			 :on-done #'ellama-chat-done
+			 :filter (when (derived-mode-p 'org-mode)
+				   #'ellama--translate-markdown-to-org-filter)))))))
 
 ;;;###autoload
 (defun ellama-ask-about ()
@@ -1267,6 +1363,18 @@ buffer."
 		 (completing-read "Select model: " variants)
 		 providers nil nil #'string=)))
     (setq ellama--current-session-id nil)))
+
+;;;###autoload
+(defun ellama-chat-translation-enable ()
+  "Enable chat translation."
+  (interactive)
+  (setq ellama-chat-translation-enabled t))
+
+;;;###autoload
+(defun ellama-chat-translation-disable ()
+  "Enable chat translation."
+  (interactive)
+  (setq ellama-chat-translation-enabled nil))
 
 (provide 'ellama)
 ;;; ellama.el ends here.
