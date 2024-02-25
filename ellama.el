@@ -1052,7 +1052,7 @@ ARGS contains keys for fine control.
 		       (eval (alist-get
 			      (completing-read "Select model: " variants)
 			      providers nil nil #'string=))
-		     (or (plist-get :provider args)
+		     (or (plist-get args :provider)
 			 ellama-provider)))
 	 (session (if (or create-session
 			  current-prefix-arg
