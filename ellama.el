@@ -965,6 +965,71 @@ Will call `ellama-chat-done-callback' on TEXT."
   (when ellama-chat-done-callback
     (funcall ellama-chat-done-callback text)))
 
+(defun ellama--translate-generated-text-on-done (translation-buffer)
+  "Translate generated text into TRANSLATION-BUFFER."
+  (lambda (generated)
+    (ellama-chat-done generated)
+    (display-buffer translation-buffer)
+    (with-current-buffer translation-buffer
+      (save-excursion
+	(goto-char (point-max))
+	(ellama-stream
+	 (format "Translate this text to %s.
+Original text:
+%s
+Translation to %s:
+"
+		 ellama-language
+		 generated
+		 ellama-language)
+	 :provider (or ellama-translation-provider ellama-provider)
+	 :on-done #'ellama-chat-done
+	 :filter (when (derived-mode-p 'org-mode)
+		   #'ellama--translate-markdown-to-org-filter))))))
+
+(defun ellama--call-llm-with-translated-prompt (buffer session translation-buffer)
+  "Call llm with translated text in BUFFER with SESSION from TRANSLATION-BUFFER."
+  (lambda (result)
+    (ellama-chat-done result)
+    (save-excursion
+      (goto-char (point-max))
+      (delete-char -2)
+      (delete-char (- (length result))))
+    (display-buffer buffer)
+    (with-current-buffer buffer
+      (save-excursion
+	(goto-char (point-max))
+	(insert ellama-nick-prefix " " ellama-user-nick ":\n"
+		(ellama--format-context) result "\n\n"
+		ellama-nick-prefix " " ellama-assistant-nick ":\n")
+	(ellama-stream result
+		       :session session
+		       :on-done (ellama--translate-generated-text-on-done translation-buffer)
+		       :filter (when (derived-mode-p 'org-mode)
+				 #'ellama--translate-markdown-to-org-filter))))))
+
+(defun ellama--translate-interaction (prompt translation-buffer buffer session)
+  "Translate chat PROMPT in TRANSLATION-BUFFER for BUFFER with SESSION."
+  (display-buffer translation-buffer)
+  (with-current-buffer translation-buffer
+    (save-excursion
+      (goto-char (point-max))
+      (insert ellama-nick-prefix " " ellama-user-nick ":\n"
+	      (ellama--format-context) prompt "\n\n"
+	      ellama-nick-prefix " " ellama-assistant-nick ":\n")
+      (ellama-stream
+       (format "Translate this text to english.
+Original text:
+%s
+Translation to english:
+"
+	       prompt)
+       :provider (or ellama-translation-provider ellama-provider)
+       :filter (when (derived-mode-p 'org-mode)
+		 #'ellama--translate-markdown-to-org-filter)
+       :on-done
+       (ellama--call-llm-with-translated-prompt buffer session translation-buffer)))))
+
 ;;;###autoload
 (defun ellama-chat (prompt &optional create-session &rest args)
   "Send PROMPT to ellama chat with conversation history.
@@ -1008,59 +1073,7 @@ ARGS contains keys for fine control.
 				      (ellama--get-translation-file-name file-name)))
 				 (get-buffer-create (ellama-session-id session))))))
     (if ellama-chat-translation-enabled
-	(progn
-	  (display-buffer translation-buffer)
-	  (with-current-buffer translation-buffer
-	    (save-excursion
-	      (goto-char (point-max))
-	      (insert ellama-nick-prefix " " ellama-user-nick ":\n"
-		      (ellama--format-context) prompt "\n\n"
-		      ellama-nick-prefix " " ellama-assistant-nick ":\n")
-	      (ellama-stream
-	       (format "Translate this text to english.
-Original text:
-%s
-Translation to english:
-"
-		       prompt)
-	       :filter (when (derived-mode-p 'org-mode)
-			 #'ellama--translate-markdown-to-org-filter)
-	       :on-done
-	       (lambda (result)
-		 (ellama-chat-done result)
-		 (save-excursion
-		   (goto-char (point-max))
-		   (delete-char -2)
-		   (delete-char (- (length result))))
-		 (display-buffer buffer)
-		 (with-current-buffer buffer
-		   (save-excursion
-		     (goto-char (point-max))
-		     (insert ellama-nick-prefix " " ellama-user-nick ":\n"
-			     (ellama--format-context) result "\n\n"
-			     ellama-nick-prefix " " ellama-assistant-nick ":\n")
-		     (ellama-stream result
-				    :session session
-				    :on-done (lambda (generated)
-					       (ellama-chat-done generated)
-					       (display-buffer translation-buffer)
-					       (with-current-buffer translation-buffer
-						 (save-excursion
-						   (goto-char (point-max))
-						   (ellama-stream
-						    (format "Translate this text to %s.
-Original text:
-%s
-Translation to %s:
-"
-							    ellama-language
-							    generated
-							    ellama-language)
-						    :on-done #'ellama-chat-done
-						    :filter (when (derived-mode-p 'org-mode)
-							      #'ellama--translate-markdown-to-org-filter)))))
-				    :filter (when (derived-mode-p 'org-mode)
-					      #'ellama--translate-markdown-to-org-filter)))))))))
+	(ellama--translate-interaction prompt translation-buffer buffer session)
       (display-buffer buffer)
       (with-current-buffer buffer
 	(save-excursion
