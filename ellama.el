@@ -1126,9 +1126,15 @@ ARGS contains keys for fine control.
   (let ((text (thing-at-point 'line)))
     (ellama-chat text)))
 
-(defun ellama-instant (prompt)
-  "Prompt ellama for PROMPT to reply instantly."
-  (let* ((buffer-name (ellama-generate-name ellama-provider real-this-command prompt))
+(defun ellama-instant (prompt &rest args)
+  "Prompt ellama for PROMPT to reply instantly.
+
+ARGS contains keys for fine control.
+
+:provider PROVIDER -- PROVIDER is an llm provider for generation."
+  (let* ((provider (or (plist-get args :provider)
+		       ellama-provider))
+	 (buffer-name (ellama-generate-name provider real-this-command prompt))
 	 (buffer (get-buffer-create (if (get-buffer buffer-name)
 					(make-temp-name (concat buffer-name " "))
 				      buffer-name)))
@@ -1140,7 +1146,8 @@ ARGS contains keys for fine control.
     (display-buffer buffer)
     (ellama-stream prompt
 		   :buffer buffer
-		   :filter filter)))
+		   :filter filter
+		   :provider provider)))
 
 ;;;###autoload
 (defun ellama-translate ()
@@ -1150,10 +1157,12 @@ ARGS contains keys for fine control.
       (ellama-instant
        (format ellama-translate-region-prompt-template
 	       ellama-language
-	       (buffer-substring-no-properties (region-beginning) (region-end))))
+	       (buffer-substring-no-properties (region-beginning) (region-end)))
+       :provider ellama-translation-provider)
     (ellama-instant
      (format ellama-translate-word-prompt-template
-	     (thing-at-point 'word) ellama-language))))
+	     (thing-at-point 'word) ellama-language)
+     :provider ellama-translation-provider)))
 
 ;;;###autoload
 (defun ellama-define-word ()
