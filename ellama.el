@@ -822,10 +822,9 @@ If EPHEMERAL non nil new session will not be associated with any file."
     (_
      (user-error "Unsupported context element"))))
 
-(defun ellama--format-context ()
-  "Format current session context for chat buffer."
-  (if-let* ((session ellama--current-session)
-	    (context (ellama-session-context session)))
+(defun ellama--format-context (session)
+  "Format SESSION context for chat buffer."
+  (if-let* ((context (ellama-session-context session)))
       (concat (string-join
 	       (cons "Context:"
 		     (if (derived-mode-p 'org-mode)
@@ -1000,7 +999,7 @@ Translation to %s:
       (save-excursion
 	(goto-char (point-max))
 	(insert ellama-nick-prefix " " ellama-user-nick ":\n"
-		(ellama--format-context) result "\n\n"
+		(ellama--format-context session) result "\n\n"
 		ellama-nick-prefix " " ellama-assistant-nick ":\n")
 	(ellama-stream result
 		       :session session
@@ -1015,7 +1014,7 @@ Translation to %s:
     (save-excursion
       (goto-char (point-max))
       (insert ellama-nick-prefix " " ellama-user-nick ":\n"
-	      (ellama--format-context) prompt "\n\n"
+	      (ellama--format-context session) prompt "\n\n"
 	      ellama-nick-prefix " " ellama-assistant-nick ":\n")
       (ellama-stream
        (format "Translate this text to english.
@@ -1079,7 +1078,7 @@ ARGS contains keys for fine control.
 	(save-excursion
 	  (goto-char (point-max))
 	  (insert ellama-nick-prefix " " ellama-user-nick ":\n"
-		  (ellama--format-context) prompt "\n\n"
+		  (ellama--format-context session) prompt "\n\n"
 		  ellama-nick-prefix " " ellama-assistant-nick ":\n")
 	  (ellama-stream prompt
 			 :session session
