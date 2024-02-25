@@ -69,8 +69,8 @@ In that case you should customize ellama configuration like this:
     (setopt ellama-naming-scheme 'ellama-generate-name-by-llm)
     ;; Translation llm provider
     (setopt ellama-translation-provider (make-llm-ollama
-				     :chat-model "sskostyaev/openchat:8k"
-				     :embedding-model "nomic-embed-text")))
+					 :chat-model "sskostyaev/openchat:8k"
+					 :embedding-model "nomic-embed-text")))
 #+END_SRC
 
 ** Commands
@@ -103,6 +103,10 @@ Complete text in current buffer with ellama.
 
 Ask Ellama to translate a selected region or word at the point.
 [[imgs/ellama-translate.gif]]
+
+*** ellama-translate-buffer
+
+Translate current buffer.
 
 *** ellama-define-word
 
@@ -248,6 +252,7 @@ Ellama, using the ~ellama-keymap-prefix~ prefix (not set by default):
 | "a l"  | ellama-ask-line                 | Ask current line             |
 | "a s"  | ellama-ask-selection            | Ask selection                |
 | "t t"  | ellama-translate                | Text translate               |
+| "t b"  | ellama-translate-buffer         | Translate buffer             |
 | "t e"  | ellama-chat-translation-enable  | Translation enable           |
 | "t d"  | ellama-chat-translation-disable | Translation disable          |
 | "t c"  | ellama-complete                 | Text complete                |
