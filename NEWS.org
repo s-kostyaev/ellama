@@ -1,3 +1,7 @@
+* Version 0.8.10
+- Fix context for chat translation.
+- Refactor translations.
+- Add command for current buffer translation.
 * Version 0.8.9
 - Add chat translation.
 * Version 0.8.8
