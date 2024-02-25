@@ -130,6 +130,7 @@
     (define-key map (kbd "a s") 'ellama-ask-selection)
     ;; text
     (define-key map (kbd "t t") 'ellama-translate)
+    (define-key map (kbd "t b") 'ellama-translate-buffer)
     (define-key map (kbd "t c") 'ellama-complete)
     (define-key map (kbd "t e") 'ellama-chat-translation-enable)
     (define-key map (kbd "t d") 'ellama-chat-translation-disable)
@@ -206,16 +207,6 @@ PROMPT is a prompt string."
           (const :tag "By current time" ellama-generate-name-by-time)
 	  (const :tag "By generating name with LLM based on prompt." ellama-generate-name-by-llm)
           (function :tag "By custom function")))
-
-(defcustom ellama-translate-word-prompt-template "Translate %s to %s"
-  "Promp template for `ellama-translate' with single word."
-  :group 'ellama
-  :type 'string)
-
-(defcustom ellama-translate-region-prompt-template "Translate the following text to %s:\n%s"
-  "Promp template for `ellama-translate' with active region."
-  :group 'ellama
-  :type 'string)
 
 (defcustom ellama-define-word-prompt-template "Define %s"
   "Prompt template for `ellama-define-word'."
@@ -295,6 +286,15 @@ Topic: Blue sky
 Query: %s
 Topic:"
   "Prompt template for `ellama-get-name'."
+  :group 'ellama
+  :type 'string)
+
+(defcustom ellama-translation-template "Translate this text to %s.
+Original text:
+%s
+Translation to %s:
+"
+  "Translation template."
   :group 'ellama
   :type 'string)
 
@@ -774,6 +774,16 @@ If EPHEMERAL non nil new session will not be associated with any file."
       (push (cons 'info node) (ellama-session-context session))
     (push (cons 'info node) ellama--new-session-context)))
 
+(defun ellama--translate-string (s)
+  "Translate string S to `ellama-language' syncronously."
+  (llm-chat
+   (or ellama-translation-provider ellama-provider)
+   (llm-make-simple-chat-prompt
+    (format ellama-translation-template
+	    ellama-language
+	    s
+	    ellama-language))))
+
 (defun ellama--org-format-context-element (elt)
   "Format context ELT for org mode."
   (pcase (car elt)
@@ -787,7 +797,10 @@ If EPHEMERAL non nil new session will not be associated with any file."
      (format "[[%s][%s]]"
 	     (replace-regexp-in-string
 	      "(\\(.?*\\)) \\(.*\\)" "info:\\1#\\2" (cdr elt))
-	     (cdr elt)))
+	     (if (and ellama-chat-translation-enabled
+		      (not ellama--current-session))
+		 (ellama--translate-string (cdr elt))
+	       (cdr elt))))
     (_
      (user-error "Unsupported context element"))))
 
@@ -973,11 +986,7 @@ Will call `ellama-chat-done-callback' on TEXT."
       (save-excursion
 	(goto-char (point-max))
 	(ellama-stream
-	 (format "Translate this text to %s.
-Original text:
-%s
-Translation to %s:
-"
+	 (format ellama-translation-template
 		 ellama-language
 		 generated
 		 ellama-language)
@@ -1017,12 +1026,10 @@ Translation to %s:
 	      (ellama--format-context session) prompt "\n\n"
 	      ellama-nick-prefix " " ellama-assistant-nick ":\n")
       (ellama-stream
-       (format "Translate this text to english.
-Original text:
-%s
-Translation to english:
-"
-	       prompt)
+       (format ellama-translation-template
+	       "english"
+	       prompt
+	       "english")
        :provider (or ellama-translation-provider ellama-provider)
        :filter (when (derived-mode-p 'org-mode)
 		 #'ellama--translate-markdown-to-org-filter)
@@ -1152,15 +1159,22 @@ ARGS contains keys for fine control.
 (defun ellama-translate ()
   "Ask ellama to translate selected region or word at point."
   (interactive)
-  (if (region-active-p)
-      (ellama-instant
-       (format ellama-translate-region-prompt-template
-	       ellama-language
-	       (buffer-substring-no-properties (region-beginning) (region-end)))
-       :provider ellama-translation-provider)
+  (let ((text (if (region-active-p)
+		  (buffer-substring-no-properties (region-beginning) (region-end))
+		(thing-at-point 'word))))
     (ellama-instant
-     (format ellama-translate-word-prompt-template
-	     (thing-at-point 'word) ellama-language)
+     (format ellama-translation-template
+	     ellama-language text ellama-language)
+     :provider ellama-translation-provider)))
+
+;;;###autoload
+(defun ellama-translate-buffer ()
+  "Ask ellama to translate current buffer."
+  (interactive)
+  (let ((text (buffer-substring-no-properties (point-min) (point-max))))
+    (ellama-instant
+     (format ellama-translation-template
+	     ellama-language text ellama-language)
      :provider ellama-translation-provider)))
 
 ;;;###autoload
