@@ -31,11 +31,11 @@
 (ert-deftest test-ellama--code-filter ()
   (should (equal "" (ellama--code-filter "")))
   (should (equal "(hello)" (ellama--code-filter "(hello)")))
-  (should (equal "(hello)" (ellama--code-filter "```lisp\n(hello)```"))))
+  (should (equal "(hello)\n" (ellama--code-filter "```lisp\n(hello)\n```"))))
 
 (ert-deftest test-ellama-code-improve ()
-  (let ((original "(hello)")
-        (improved "```lisp\n(hello)```"))
+  (let ((original "(hello)\n")
+        (improved "```lisp\n(hello)\n```"))
     (with-temp-buffer
       (insert original)
       (cl-letf (((symbol-function 'llm-chat-streaming)
