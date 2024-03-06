@@ -1016,9 +1016,9 @@ Will call `ellama-chat-done-callback' on TEXT."
     (with-current-buffer buffer
       (save-excursion
 	(goto-char (point-max))
-	(insert ellama-nick-prefix " " ellama-user-nick ":\n"
+	(insert (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n"
 		(ellama--format-context session) result "\n\n"
-		ellama-nick-prefix " " ellama-assistant-nick ":\n")
+		(ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
 	(ellama-stream result
 		       :session session
 		       :on-done (ellama--translate-generated-text-on-done translation-buffer)
@@ -1031,9 +1031,9 @@ Will call `ellama-chat-done-callback' on TEXT."
   (with-current-buffer translation-buffer
     (save-excursion
       (goto-char (point-max))
-      (insert ellama-nick-prefix " " ellama-user-nick ":\n"
+      (insert (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n"
 	      (ellama--format-context session) prompt "\n\n"
-	      ellama-nick-prefix " " ellama-assistant-nick ":\n")
+	      (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
       (ellama-stream
        (format ellama-translation-template
 	       "english"
@@ -1093,9 +1093,9 @@ ARGS contains keys for fine control.
       (with-current-buffer buffer
 	(save-excursion
 	  (goto-char (point-max))
-	  (insert ellama-nick-prefix " " ellama-user-nick ":\n"
+	  (insert (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n"
 		  (ellama--format-context session) prompt "\n\n"
-		  ellama-nick-prefix " " ellama-assistant-nick ":\n")
+		  (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
 	  (ellama-stream prompt
 			 :session session
 			 :on-done #'ellama-chat-done
