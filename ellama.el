@@ -490,18 +490,16 @@ CONTEXT contains context for next request."
 (defun ellama-get-nick-prefix-for-mode ()
   "Returns preferred header prefix char based om the current mode.
 Defaults to #, but supports org-mode. Depends on ellama-major-mode."
-  (let* ((preferred-mode (symbol-name ellama-major-mode))
-         (prefix-char
-          (cond ((string= preferred-mode "org-mode") ?*)
+  (let* ((prefix-char
+          (cond ((provided-mode-derived-p ellama-major-mode "org-mode") ?*)
                 (t ?#))))
     (make-string ellama-nick-prefix-depth prefix-char)))
 
 (defun ellama-get-session-file-extension ()
   "Returns file extension based om the current mode.
 Defaults to md, but supports org. Depends on ellama-major-mode."
-  (let ((preferred-mode (symbol-name ellama-major-mode)))
-    (cond ((= preferred-mode "org-mode") "org")
-          (t "md"))))
+  (cond ((provided-mode-derived-p ellama-major-mode "org-mode") "org")
+        (t "md")))
 
 (defun ellama-new-session (provider prompt &optional ephemeral)
   "Create new ellama session with unique id.
