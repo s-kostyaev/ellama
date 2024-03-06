@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4") (dash "2.19.1"))
-;; Version: 0.8.3
+;; Version: 0.8.10
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -39,6 +39,7 @@
 (require 'llm)
 (require 'spinner)
 (require 'dash)
+(require 'info)
 (eval-when-compile (require 'rx))
 
 (defgroup ellama nil
@@ -75,6 +76,16 @@
   :group 'ellama
   :type '(sexp :validate 'cl-struct-p))
 
+(defcustom ellama-chat-translation-enabled nil
+  "Enable chat translations."
+  :group 'ellama
+  :type 'boolean)
+
+(defcustom ellama-translation-provider nil
+  "LLM provider for chat translation."
+  :group 'ellama
+  :type '(sexp :validate 'cl-struct-p))
+
 (defcustom ellama-providers nil
   "LLM provider list for fast switching."
   :group 'ellama
@@ -88,6 +99,55 @@
 		      `(const ,(car type)))
 		    spinner-types)))
 
+(defcustom ellama-command-map
+  (let ((map (make-sparse-keymap)))
+    ;; code
+    (define-key map (kbd "c c") 'ellama-code-complete)
+    (define-key map (kbd "c a") 'ellama-code-add)
+    (define-key map (kbd "c e") 'ellama-code-edit)
+    (define-key map (kbd "c i") 'ellama-code-improve)
+    (define-key map (kbd "c r") 'ellama-code-review)
+    ;; summarize
+    (define-key map (kbd "s s") 'ellama-summarize)
+    (define-key map (kbd "s w") 'ellama-summarize-webpage)
+    ;; session
+    (define-key map (kbd "s l") 'ellama-load-session)
+    (define-key map (kbd "s r") 'ellama-session-rename)
+    (define-key map (kbd "s d") 'ellama-session-remove)
+    (define-key map (kbd "s a") 'ellama-session-switch)
+    ;; improve
+    (define-key map (kbd "i w") 'ellama-improve-wording)
+    (define-key map (kbd "i g") 'ellama-improve-grammar)
+    (define-key map (kbd "i c") 'ellama-improve-conciseness)
+    ;; make
+    (define-key map (kbd "m l") 'ellama-make-list)
+    (define-key map (kbd "m t") 'ellama-make-table)
+    (define-key map (kbd "m f") 'ellama-make-format)
+    ;; ask
+    (define-key map (kbd "a a") 'ellama-ask-about)
+    (define-key map (kbd "a i") 'ellama-chat)
+    (define-key map (kbd "a l") 'ellama-ask-line)
+    (define-key map (kbd "a s") 'ellama-ask-selection)
+    ;; text
+    (define-key map (kbd "t t") 'ellama-translate)
+    (define-key map (kbd "t b") 'ellama-translate-buffer)
+    (define-key map (kbd "t c") 'ellama-complete)
+    (define-key map (kbd "t e") 'ellama-chat-translation-enable)
+    (define-key map (kbd "t d") 'ellama-chat-translation-disable)
+    ;; define
+    (define-key map (kbd "d w") 'ellama-define-word)
+    ;; context
+    (define-key map (kbd "x b") 'ellama-context-add-buffer)
+    (define-key map (kbd "x f") 'ellama-context-add-file)
+    (define-key map (kbd "x s") 'ellama-context-add-selection)
+    (define-key map (kbd "x i") 'ellama-context-add-info-node)
+    ;; provider
+    (define-key map (kbd "p s") 'ellama-provider-select)
+    map)
+  "Keymap for ellama commands."
+  :group 'ellama
+  :type 'keymap)
+
 (defun ellama-setup-keymap ()
   "Set up the Ellama keymap and bindings."
   (interactive)
@@ -95,46 +155,10 @@
     (defvar ellama-keymap (make-sparse-keymap)
       "Keymap for Ellama Commands")
 
-    (define-key global-map (kbd ellama-keymap-prefix) ellama-keymap)
+    (when ellama-keymap-prefix
+      (define-key global-map (kbd ellama-keymap-prefix) ellama-command-map))))
 
-    (let ((key-commands
-	   '(;; code
-	     ("c c" ellama-code-complete "Code complete")
-	     ("c a" ellama-code-add "Code add")
-	     ("c e" ellama-code-edit "Code edit")
-	     ("c i" ellama-code-improve "Code improve")
-	     ("c r" ellama-code-review "Code review")
-	     ;; summarize
-	     ("s s" ellama-summarize "Summarize")
-	     ("s w" ellama-summarize-webpage "Summarize webpage")
-	     ;; improve
-	     ("i w" ellama-improve-wording "Improve wording")
-	     ("i g" ellama-improve-grammar "Improve grammar and spelling")
-	     ("i c" ellama-improve-conciseness "Improve conciseness")
-	     ;; make
-	     ("m l" ellama-make-list "Make list")
-	     ("m t" ellama-make-table "Make table")
-	     ("m f" ellama-make-format "Make format")
-	     ;; ask
-	     ("a a" ellama-ask-about "Ask about")
-	     ("a i" ellama-chat "Ask interactively")
-	     ("a l" ellama-ask-line "Ask current line")
-	     ("a s" ellama-ask-selection "Ask selection")
-	     ;; text
-	     ("t t" ellama-translate "Text translate")
-	     ("t c" ellama-complete "Text complete")
-	     ;; define
-	     ("d w" ellama-define-word "Define word")
-	     ;; context
-	     ("x b" ellama-context-add-buffer "Context add buffer")
-	     ("x f" ellama-context-add-file "Context add file")
-	     ("x s" ellama-context-add-selection "Context add selection")
-	     ;; provider
-	     ("p s" ellama-provider-select "Provider select"))))
-      (dolist (key-command key-commands)
-	(define-key ellama-keymap (kbd (car key-command)) (cadr key-command))))))
-
-(defcustom ellama-keymap-prefix "C-c e"
+(defcustom ellama-keymap-prefix nil
   "Key sequence for Ellama Commands."
   :type 'string
   :set (lambda (symbol value)
@@ -183,16 +207,6 @@ PROMPT is a prompt string."
           (const :tag "By current time" ellama-generate-name-by-time)
 	  (const :tag "By generating name with LLM based on prompt." ellama-generate-name-by-llm)
           (function :tag "By custom function")))
-
-(defcustom ellama-translate-word-prompt-template "Translate %s to %s"
-  "Promp template for `ellama-translate' with single word."
-  :group 'ellama
-  :type 'string)
-
-(defcustom ellama-translate-region-prompt-template "Translate the following text to %s:\n%s"
-  "Promp template for `ellama-translate' with active region."
-  :group 'ellama
-  :type 'string)
 
 (defcustom ellama-define-word-prompt-template "Define %s"
   "Prompt template for `ellama-define-word'."
@@ -272,6 +286,15 @@ Topic: Blue sky
 Query: %s
 Topic:"
   "Prompt template for `ellama-get-name'."
+  :group 'ellama
+  :type 'string)
+
+(defcustom ellama-translation-template "Translate this text to %s.
+Original text:
+%s
+Translation to %s:
+"
+  "Translation template."
   :group 'ellama
   :type 'string)
 
@@ -358,9 +381,9 @@ Too low value can break generated code by splitting long comment lines."
 This filter contains only subset of markdown syntax to be good enough."
   (->> text
        ;; code blocks
-       (replace-regexp-in-string "^```\\(.+\\)$" "#+BEGIN_SRC \\1")
+       (replace-regexp-in-string "^[[:space:]]*```\\(.+\\)$" "#+BEGIN_SRC \\1")
        (replace-regexp-in-string "^<!-- language: \\(.+\\) -->\n```" "#+BEGIN_SRC \\1")
-       (replace-regexp-in-string "^```$" "#+END_SRC")
+       (replace-regexp-in-string "^[[:space:]]*```$" "#+END_SRC")
        ;; lists
        (replace-regexp-in-string "^\\* " "+ ")
        ;; bold
@@ -368,7 +391,7 @@ This filter contains only subset of markdown syntax to be good enough."
        (replace-regexp-in-string "__\\(.+?\\)__" "*\\1*")
        (replace-regexp-in-string "<b>\\(.+?\\)</b>" "*\\1*")
        ;; italic
-       (replace-regexp-in-string "_\\(.+?\\)_" "/\\1/")
+       ;; (replace-regexp-in-string "_\\(.+?\\)_" "/\\1/") ;; most of the time it breaks code blocks, so disable it
        (replace-regexp-in-string "<i>\\(.+?\\)</i>" "/\\1/")
        ;; inline code
        (replace-regexp-in-string "`\\(.+?\\)`" "~\\1~")
@@ -568,6 +591,19 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	   (concat "." base-name ".session.el"))))
     session-file-name))
 
+(defun ellama--get-translation-file-name (file-name)
+  "Get ellama translation file name for FILE-NAME."
+  (let* ((base-name (file-name-base file-name))
+	 (ext (file-name-extension file-name))
+	 (dir (file-name-directory file-name))
+	 (translation-file-name
+	  (file-name-concat
+	   dir
+	   (concat base-name ".translation"
+		   (when ext
+		     (concat "." ext))))))
+    translation-file-name))
+
 (defun ellama--save-session ()
   "Save current ellama session."
   (when ellama--current-session
@@ -644,10 +680,20 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	      (hash-table-keys ellama--active-sessions)))
 	 (buffer (ellama-get-session-buffer id))
 	 (file (buffer-file-name buffer))
-	 (session-file (ellama--get-session-file-name file)))
+	 (session-file (ellama--get-session-file-name file))
+	 (translation-file (ellama--get-translation-file-name file)))
     (kill-buffer buffer)
     (delete-file file t)
-    (delete-file session-file t)))
+    (delete-file session-file t)
+    (mapc
+     (lambda (buf)
+       (when (and (buffer-file-name buf)
+		  (file-equal-p (buffer-file-name buf)
+				translation-file))
+	 (kill-buffer buf)))
+     (buffer-list))
+    (when (file-exists-p translation-file)
+      (delete-file translation-file t))))
 
 ;;;###autoload
 (defun ellama-session-switch ()
@@ -727,15 +773,43 @@ If EPHEMERAL non nil new session will not be associated with any file."
       (push (cons 'text content) (ellama-session-context session))
     (push (cons 'text content) ellama--new-session-context)))
 
+;;;###autoload
+(defun ellama-context-add-info-node (node)
+  "Add info NODE to context."
+  (interactive (list (Info-copy-current-node-name)))
+  (if-let* ((id ellama--current-session-id)
+	    (session (with-current-buffer (ellama-get-session-buffer id)
+		       ellama--current-session)))
+      (push (cons 'info node) (ellama-session-context session))
+    (push (cons 'info node) ellama--new-session-context)))
+
+(defun ellama--translate-string (s)
+  "Translate string S to `ellama-language' syncronously."
+  (llm-chat
+   (or ellama-translation-provider ellama-provider)
+   (llm-make-simple-chat-prompt
+    (format ellama-translation-template
+	    ellama-language
+	    s
+	    ellama-language))))
+
 (defun ellama--org-format-context-element (elt)
   "Format context ELT for org mode."
   (pcase (car elt)
     ('file
-     (format "file:%s" (cdr elt)))
+     (format "[[file:%s][%s]]" (cdr elt) (cdr elt)))
     ('buffer
-     (format "elisp:(display-buffer \"%s\")" (cdr elt)))
+     (format "[[elisp:(display-buffer \"%s\")][%s]]" (cdr elt) (cdr elt)))
     ('text
      (cdr elt))
+    ('info
+     (format "[[%s][%s]]"
+	     (replace-regexp-in-string
+	      "(\\(.?*\\)) \\(.*\\)" "info:\\1#\\2" (cdr elt))
+	     (if (and ellama-chat-translation-enabled
+		      (not ellama--current-session))
+		 (ellama--translate-string (cdr elt))
+	       (cdr elt))))
     (_
      (user-error "Unsupported context element"))))
 
@@ -750,6 +824,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
      (format "```emacs-lisp\n(display-buffer \"%s\")\n```\n" (cdr elt)))
     ('text
      (cdr elt))
+    ('info
+     (format "```emacs-lisp\n(info \"%s\")\n```\n" (cdr elt)))
     (_
      (user-error "Unsupported context element"))))
 
@@ -762,13 +838,15 @@ If EPHEMERAL non nil new session will not be associated with any file."
     ('file (with-temp-buffer
 	     (find-file-literally (cdr elt))
 	     (buffer-substring-no-properties (point-min) (point-max))))
+    ('info (with-temp-buffer
+	     (info (cdr elt) (current-buffer))
+	     (buffer-substring-no-properties (point-min) (point-max))))
     (_
      (user-error "Unsupported context element"))))
 
-(defun ellama--format-context ()
-  "Format current session context for chat buffer."
-  (if-let* ((session ellama--current-session)
-	    (context (ellama-session-context session)))
+(defun ellama--format-context (session)
+  "Format SESSION context for chat buffer."
+  (if-let* ((context (ellama-session-context session)))
       (concat (string-join
 	       (cons "Context:"
 		     (if (derived-mode-p 'org-mode)
@@ -908,11 +986,73 @@ Will call `ellama-chat-done-callback' on TEXT."
   (when ellama-chat-done-callback
     (funcall ellama-chat-done-callback text)))
 
+(defun ellama--translate-generated-text-on-done (translation-buffer)
+  "Translate generated text into TRANSLATION-BUFFER."
+  (lambda (generated)
+    (ellama-chat-done generated)
+    (display-buffer translation-buffer)
+    (with-current-buffer translation-buffer
+      (save-excursion
+	(goto-char (point-max))
+	(ellama-stream
+	 (format ellama-translation-template
+		 ellama-language
+		 generated
+		 ellama-language)
+	 :provider (or ellama-translation-provider ellama-provider)
+	 :on-done #'ellama-chat-done
+	 :filter (when (derived-mode-p 'org-mode)
+		   #'ellama--translate-markdown-to-org-filter))))))
+
+(defun ellama--call-llm-with-translated-prompt (buffer session translation-buffer)
+  "Call llm with translated text in BUFFER with SESSION from TRANSLATION-BUFFER."
+  (lambda (result)
+    (ellama-chat-done result)
+    (save-excursion
+      (goto-char (point-max))
+      (delete-char -2)
+      (delete-char (- (length result))))
+    (display-buffer buffer)
+    (with-current-buffer buffer
+      (save-excursion
+	(goto-char (point-max))
+	(insert ellama-nick-prefix " " ellama-user-nick ":\n"
+		(ellama--format-context session) result "\n\n"
+		ellama-nick-prefix " " ellama-assistant-nick ":\n")
+	(ellama-stream result
+		       :session session
+		       :on-done (ellama--translate-generated-text-on-done translation-buffer)
+		       :filter (when (derived-mode-p 'org-mode)
+				 #'ellama--translate-markdown-to-org-filter))))))
+
+(defun ellama--translate-interaction (prompt translation-buffer buffer session)
+  "Translate chat PROMPT in TRANSLATION-BUFFER for BUFFER with SESSION."
+  (display-buffer translation-buffer)
+  (with-current-buffer translation-buffer
+    (save-excursion
+      (goto-char (point-max))
+      (insert ellama-nick-prefix " " ellama-user-nick ":\n"
+	      (ellama--format-context session) prompt "\n\n"
+	      ellama-nick-prefix " " ellama-assistant-nick ":\n")
+      (ellama-stream
+       (format ellama-translation-template
+	       "english"
+	       prompt
+	       "english")
+       :provider (or ellama-translation-provider ellama-provider)
+       :filter (when (derived-mode-p 'org-mode)
+		 #'ellama--translate-markdown-to-org-filter)
+       :on-done
+       (ellama--call-llm-with-translated-prompt buffer session translation-buffer)))))
+
 ;;;###autoload
-(defun ellama-chat (prompt &optional create-session)
+(defun ellama-chat (prompt &optional create-session &rest args)
   "Send PROMPT to ellama chat with conversation history.
 
-If CREATE-SESSION set, creates new session even if there is an active session."
+If CREATE-SESSION set, creates new session even if there is an active session.
+ARGS contains keys for fine control.
+
+:provider PROVIDER -- PROVIDER is an llm provider for generation."
   (interactive "sAsk ellama: ")
   (let* ((providers (progn
 		      (push '("default model" . ellama-provider)
@@ -927,7 +1067,8 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 		       (eval (alist-get
 			      (completing-read "Select model: " variants)
 			      providers nil nil #'string=))
-		     ellama-provider))
+		     (or (plist-get args :provider)
+			 ellama-provider)))
 	 (session (if (or create-session
 			  current-prefix-arg
 			  (and (not ellama--current-session)
@@ -938,19 +1079,28 @@ If CREATE-SESSION set, creates new session even if there is an active session."
 					      ellama--current-session-id)
 			  ellama--current-session))))
 	 (buffer (ellama-get-session-buffer
-		  (ellama-session-id session))))
-    (display-buffer buffer)
-    (with-current-buffer buffer
-      (save-excursion
-	(goto-char (point-max))
-	(insert (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n"
-		(ellama--format-context) prompt "\n\n"
-		(ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
-	(ellama-stream prompt
-		       :session session
-		       :on-done #'ellama-chat-done
-		       :filter (when (derived-mode-p 'org-mode)
-				 #'ellama--translate-markdown-to-org-filter))))))
+		  (ellama-session-id session)))
+	 (file-name (ellama-session-file session))
+	 (translation-buffer (when ellama-chat-translation-enabled
+			       (if file-name
+				   (progn
+				     (find-file-noselect
+				      (ellama--get-translation-file-name file-name)))
+				 (get-buffer-create (ellama-session-id session))))))
+    (if ellama-chat-translation-enabled
+	(ellama--translate-interaction prompt translation-buffer buffer session)
+      (display-buffer buffer)
+      (with-current-buffer buffer
+	(save-excursion
+	  (goto-char (point-max))
+	  (insert ellama-nick-prefix " " ellama-user-nick ":\n"
+		  (ellama--format-context session) prompt "\n\n"
+		  ellama-nick-prefix " " ellama-assistant-nick ":\n")
+	  (ellama-stream prompt
+			 :session session
+			 :on-done #'ellama-chat-done
+			 :filter (when (derived-mode-p 'org-mode)
+				   #'ellama--translate-markdown-to-org-filter)))))))
 
 ;;;###autoload
 (defun ellama-ask-about ()
@@ -991,9 +1141,15 @@ If CREATE-SESSION set, creates new session even if there is an active session."
   (let ((text (thing-at-point 'line)))
     (ellama-chat text)))
 
-(defun ellama-instant (prompt)
-  "Prompt ellama for PROMPT to reply instantly."
-  (let* ((buffer-name (ellama-generate-name ellama-provider real-this-command prompt))
+(defun ellama-instant (prompt &rest args)
+  "Prompt ellama for PROMPT to reply instantly.
+
+ARGS contains keys for fine control.
+
+:provider PROVIDER -- PROVIDER is an llm provider for generation."
+  (let* ((provider (or (plist-get args :provider)
+		       ellama-provider))
+	 (buffer-name (ellama-generate-name provider real-this-command prompt))
 	 (buffer (get-buffer-create (if (get-buffer buffer-name)
 					(make-temp-name (concat buffer-name " "))
 				      buffer-name)))
@@ -1005,20 +1161,30 @@ If CREATE-SESSION set, creates new session even if there is an active session."
     (display-buffer buffer)
     (ellama-stream prompt
 		   :buffer buffer
-		   :filter filter)))
+		   :filter filter
+		   :provider provider)))
 
 ;;;###autoload
 (defun ellama-translate ()
   "Ask ellama to translate selected region or word at point."
   (interactive)
-  (if (region-active-p)
-      (ellama-instant
-       (format ellama-translate-region-prompt-template
-	       ellama-language
-	       (buffer-substring-no-properties (region-beginning) (region-end))))
+  (let ((text (if (region-active-p)
+		  (buffer-substring-no-properties (region-beginning) (region-end))
+		(thing-at-point 'word))))
     (ellama-instant
-     (format ellama-translate-word-prompt-template
-	     (thing-at-point 'word) ellama-language))))
+     (format ellama-translation-template
+	     ellama-language text ellama-language)
+     :provider ellama-translation-provider)))
+
+;;;###autoload
+(defun ellama-translate-buffer ()
+  "Ask ellama to translate current buffer."
+  (interactive)
+  (let ((text (buffer-substring-no-properties (point-min) (point-max))))
+    (ellama-instant
+     (format ellama-translation-template
+	     ellama-language text ellama-language)
+     :provider ellama-translation-provider)))
 
 ;;;###autoload
 (defun ellama-define-word ()
@@ -1220,8 +1386,11 @@ buffer."
 		(llm-ollama-host ellama-provider)))
 	(port (when (llm-ollama-p ellama-provider)
 		(llm-ollama-port ellama-provider))))
-    (make-llm-ollama
-     :chat-model model-name :embedding-model model-name :host host :port port)))
+    (if host
+	(make-llm-ollama
+	 :chat-model model-name :embedding-model model-name :host host :port port)
+      (make-llm-ollama
+       :chat-model model-name :embedding-model model-name))))
 
 ;;;###autoload
 (defun ellama-provider-select ()
@@ -1238,6 +1407,18 @@ buffer."
 		 (completing-read "Select model: " variants)
 		 providers nil nil #'string=)))
     (setq ellama--current-session-id nil)))
+
+;;;###autoload
+(defun ellama-chat-translation-enable ()
+  "Enable chat translation."
+  (interactive)
+  (setq ellama-chat-translation-enabled t))
+
+;;;###autoload
+(defun ellama-chat-translation-disable ()
+  "Enable chat translation."
+  (interactive)
+  (setq ellama-chat-translation-enabled nil))
 
 (provide 'ellama)
 ;;; ellama.el ends here.

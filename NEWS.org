@@ -1,3 +1,23 @@
+* Version 0.8.10
+- Fix context for chat translation.
+- Refactor translations.
+- Add command for current buffer translation.
+* Version 0.8.9
+- Add chat translation.
+* Version 0.8.8
+- Fix some bad markdown to org translations.
+* Version 0.8.7
+- Fix interactive local model selection for emacs 28.
+* Version 0.8.6
+- Add provider to ~ellama-chat~ arguments.
+* Version 0.8.5
+- Improve working with context:
+  - Fix some ~org-mode~ links.
+  - Add command for adding info nodes into context.
+  - Fix keybindings documentation.
+* Version 0.8.4
+- Fix keybindings. Keymap prefix now not set by default to prevent
+  usage of reserved for end user customisation keys.
 * Version 0.8.3
 - Fix non-chat commands.
 * Version 0.8.2
