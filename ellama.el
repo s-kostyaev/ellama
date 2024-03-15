@@ -1,11 +1,11 @@
 ;;; ellama.el --- Tool for interacting with LLMs -*- lexical-binding: t -*-
 
-;; Copyright (C) 2023  Free Software Foundation, Inc.
+;; Copyright (C) 2023, 2024  Free Software Foundation, Inc.
 
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4") (dash "2.19.1"))
+;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
 ;; Version: 0.8.10
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
@@ -38,7 +38,6 @@
 (require 'json)
 (require 'llm)
 (require 'spinner)
-(require 'dash)
 (require 'info)
 (eval-when-compile (require 'rx))
 
@@ -357,29 +356,19 @@ Too low value can break generated code by splitting long comment lines."
   ;; Trim left first as `string-trim' trims from the right and ends up deleting all the code.
   (string-trim-right (string-trim-left text ellama--code-prefix) ellama--code-suffix))
 
-(defun ellama--fill-string (s)
-  "Fill string S."
-  (with-temp-buffer
-    (emacs-lisp-mode)
-    (insert s)
-    (fill-region (point-min) (point-max))
-    (buffer-substring (point-min) (point-max))))
-
 (defun ellama--fill-long-lines (text)
   "Fill long lines only in TEXT."
-  (--> text
-       (split-string it "\n")
-       (-map (lambda (el)
-	       (if (> (length el)
-		      ellama-long-lines-length)
-		   (ellama--fill-string el)
-		 el)) it)
-       (string-join it "\n")))
+  (with-temp-buffer
+    (insert (propertize text 'hard t))
+    (let ((fill-column ellama-long-lines-length)
+	  (use-hard-newlines t))
+      (fill-region (point-min) (point-max) nil t t))
+    (buffer-substring-no-properties (point-min) (point-max))))
 
 (defun ellama--translate-markdown-to-org-filter (text)
   "Filter to translate code blocks from markdown syntax to org syntax in TEXT.
 This filter contains only subset of markdown syntax to be good enough."
-  (->> text
+  (thread-last text
        ;; code blocks
        (replace-regexp-in-string "^[[:space:]]*```\\(.+\\)$" "#+BEGIN_SRC \\1")
        (replace-regexp-in-string "^<!-- language: \\(.+\\) -->\n```" "#+BEGIN_SRC \\1")
