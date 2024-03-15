@@ -1,3 +1,8 @@
+* Version 0.8.11
+- Remove ~dash~ dependency.
+- Remove function ~ellama--fill-string~.
+- Rewrite function ~ellama--fill-long-lines~ to use ~fill-region~.
+- Use ~thread-last~ instead of ~->>~ from ~dash~.
 * Version 0.8.10
 - Fix context for chat translation.
 - Refactor translations.
