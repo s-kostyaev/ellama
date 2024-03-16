@@ -1,3 +1,5 @@
+* Version 0.8.12
+- Construct a local list instead of pushin to global one.
 * Version 0.8.11
 - Remove ~dash~ dependency.
 - Remove function ~ellama--fill-string~.
