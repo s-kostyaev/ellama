@@ -1034,39 +1034,36 @@ ARGS contains keys for fine control.
 
 :provider PROVIDER -- PROVIDER is an llm provider for generation."
   (interactive "sAsk ellama: ")
-  (let* ((providers (progn
-		      (push '("default model" . ellama-provider)
-			    ellama-providers)
-		      (if (and ellama-ollama-binary
-			       (file-exists-p ellama-ollama-binary))
-			  (push '("ollama model" . (ellama-get-ollama-local-model))
-				ellama-providers)
-			ellama-providers)))
-	 (variants (mapcar #'car providers))
-	 (provider (if current-prefix-arg
-		       (eval (alist-get
-			      (completing-read "Select model: " variants)
-			      providers nil nil #'string=))
-		     (or (plist-get args :provider)
-			 ellama-provider)))
-	 (session (if (or create-session
-			  current-prefix-arg
-			  (and (not ellama--current-session)
-			       (not ellama--current-session-id)))
-		      (ellama-new-session provider prompt)
-		    (or ellama--current-session
-			(with-current-buffer (ellama-get-session-buffer
-					      ellama--current-session-id)
-			  ellama--current-session))))
-	 (buffer (ellama-get-session-buffer
-		  (ellama-session-id session)))
-	 (file-name (ellama-session-file session))
-	 (translation-buffer (when ellama-chat-translation-enabled
-			       (if file-name
-				   (progn
-				     (find-file-noselect
-				      (ellama--get-translation-file-name file-name)))
-				 (get-buffer-create (ellama-session-id session))))))
+  (let* ((providers (append
+                     `(("default model" . ellama-provider)
+		               ,(if (and ellama-ollama-binary (file-exists-p ellama-ollama-binary))
+			                '("ollama model" . (ellama-get-ollama-local-model))))
+                     ellama-providers))
+	     (variants (mapcar #'car providers))
+	     (provider (if current-prefix-arg
+		               (eval (alist-get
+			                  (completing-read "Select model: " variants)
+			                  providers nil nil #'string=))
+		             (or (plist-get args :provider)
+			             ellama-provider)))
+	     (session (if (or create-session
+			              current-prefix-arg
+			              (and (not ellama--current-session)
+			                   (not ellama--current-session-id)))
+		              (ellama-new-session provider prompt)
+		            (or ellama--current-session
+			            (with-current-buffer (ellama-get-session-buffer
+					                          ellama--current-session-id)
+			              ellama--current-session))))
+	     (buffer (ellama-get-session-buffer
+		          (ellama-session-id session)))
+	     (file-name (ellama-session-file session))
+	     (translation-buffer (when ellama-chat-translation-enabled
+			                   (if file-name
+				                   (progn
+				                     (find-file-noselect
+				                      (ellama--get-translation-file-name file-name)))
+				                 (get-buffer-create (ellama-session-id session))))))
     (if ellama-chat-translation-enabled
 	(ellama--translate-interaction prompt translation-buffer buffer session)
       (display-buffer buffer)
@@ -1376,12 +1373,12 @@ buffer."
 (defun ellama-provider-select ()
   "Select ellama provider."
   (interactive)
-  (let* ((providers (if (and ellama-ollama-binary
-			     (file-exists-p ellama-ollama-binary))
-			(push '("ollama model" . (ellama-get-ollama-local-model))
-			      ellama-providers)
-		      ellama-providers))
-	 (variants (mapcar #'car providers)))
+  (let* ((providers (append
+                     `(("default model" . ellama-provider)
+		               ,(if (and ellama-ollama-binary (file-exists-p ellama-ollama-binary))
+			                '("ollama model" . (ellama-get-ollama-local-model))))
+                     ellama-providers))
+	     (variants (mapcar #'car providers)))
     (setq ellama-provider
 	  (eval (alist-get
 		 (completing-read "Select model: " variants)
