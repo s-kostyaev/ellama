@@ -1,3 +1,5 @@
+* Version 0.8.13
+- Simplify switching between org and markdown.
 * Version 0.8.12
 - Construct a local list instead of pushin to global one.
 * Version 0.8.11

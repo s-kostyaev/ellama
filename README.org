@@ -292,9 +292,8 @@ There are many supported providers: ~ollama~, ~open ai~, ~vertex~,
 - ~ellama-chat-done-callback~: Callback that will be called on ellama
 chat response generation done. It should be a function with single
 argument generated text string.
-- ~ellama-nick-prefix~: User and assistant nick prefix in logs.
-- ~ellama-session-file-extension~: File extension for saving ellama
-  session. Default value "org".
+- ~ellama-nick-prefix-depth~: User and assistant nick prefix depth.
+  Default value is 2.
 - ~ellama-sessions-directory~: Directory for saved ellama sessions.
 - ~ellama-major-mode~: Major mode for ellama commands. Org mode by
   default.
