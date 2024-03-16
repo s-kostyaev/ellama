@@ -512,16 +512,16 @@ CONTEXT contains context for next request."
 
 (defun ellama-get-nick-prefix-for-mode ()
   "Return preferred header prefix char based om the current mode.
-Defaults to #, but supports \"org-mode\".  Depends on \"ellama-major-mode.\""
+Defaults to #, but supports `org-mode'.  Depends on `ellama-major-mode'."
   (let* ((prefix-char
-          (cond ((provided-mode-derived-p ellama-major-mode "org-mode") ?*)
+          (cond ((provided-mode-derived-p ellama-major-mode 'org-mode) ?*)
                 (t ?#))))
     (make-string ellama-nick-prefix-depth prefix-char)))
 
 (defun ellama-get-session-file-extension ()
   "Return file extension based om the current mode.
 Defaults to md, but supports org.  Depends on \"ellama-major-mode.\""
-  (cond ((provided-mode-derived-p ellama-major-mode "org-mode") "org")
+  (cond ((provided-mode-derived-p ellama-major-mode 'org-mode) "org")
         (t "md")))
 
 (defun ellama-new-session (provider prompt &optional ephemeral)
