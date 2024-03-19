@@ -730,48 +730,166 @@ If EPHEMERAL non nil new session will not be associated with any file."
     (remhash id ellama--active-sessions)
     (puthash new-id buffer ellama--active-sessions)))
 
+;; Context elements
+
+(defclass ellama-context-element () ()
+  "A structure for holding information about a context element.")
+
+(cl-defgeneric ellama-context-element-add (element)
+  "Add the ELEMENT to the Ellama context.")
+
+(cl-defgeneric ellama-context-element-extract (element)
+  "Extract the content of the context ELEMENT.")
+
+(cl-defgeneric ellama-context-element-format (element mode)
+  "Format the context ELEMENT for the major MODE.")
+
+(cl-defmethod ellama-context-element-add ((element ellama-context-element))
+  "Add the ELEMENT to the Ellama context."
+  (if-let* ((id ellama--current-session-id)
+	    (session (with-current-buffer (ellama-get-session-buffer id)
+		       ellama--current-session)))
+      (push element (ellama-session-context session))
+    (push element ellama--new-session-context)))
+
+;; Buffer context element
+
+(defclass ellama-context-element-buffer (ellama-context-element)
+  ((name :initarg :name :type string))
+  "A structure for holding information about a context element.")
+
+(cl-defmethod ellama-context-element-extract ((element ellama-context-element-buffer))
+  "Extract the content of the context ELEMENT."
+  (with-slots (name) element
+    (with-current-buffer name
+      (buffer-substring-no-properties (point-min) (point-max)))))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-buffer) (mode (eql 'markdown-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name) element
+    (format "```emacs-lisp\n(display-buffer \"%s\")\n```\n" name)))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-buffer) (mode (eql 'org-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name) element
+    (format "[[elisp:(display-buffer \"%s\")][%s]]" name name)))
+
+;; File context element
+
+(defclass ellama-context-element-file (ellama-context-element)
+  ((name :initarg :name :type string))
+  "A structure for holding information about a context element.")
+
+(cl-defmethod ellama-context-element-extract ((element ellama-context-element-file))
+  "Extract the content of the context ELEMENT."
+  (with-slots (name) element
+    (with-temp-buffer
+      (find-file-literally name)
+      (buffer-substring-no-properties (point-min) (point-max)))))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-file) (mode (eql 'markdown-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name) element
+    (format "[%s](<%s>)" name name)))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-file) (mode (eql 'org-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name) element
+    (format "[[file:%s][%s]]" name name)))
+
+;; Info node context element
+
+(defclass ellama-context-element-info-node (ellama-context-element)
+  ((name :initarg :name :type string))
+  "A structure for holding information about a context element.")
+
+(cl-defmethod ellama-context-element-extract ((element ellama-context-element-info-node))
+  "Extract the content of the context ELEMENT."
+  (with-slots (name) element
+    (with-temp-buffer
+      (info name (current-buffer))
+      (buffer-substring-no-properties (point-min) (point-max)))))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-info-node) (mode (eql 'markdown-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name) element
+    (format "```emacs-lisp\n(info \"%s\")\n```\n" name)))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-info-node) (mode (eql 'org-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name) element
+    (format "[[%s][%s]]"
+	    (replace-regexp-in-string
+	     "(\\(.?*\\)) \\(.*\\)" "info:\\1#\\2" name)
+	    (if (and ellama-chat-translation-enabled
+		     (not ellama--current-session))
+		(ellama--translate-string name)
+	      name))))
+
+;; Text context element
+
+(defclass ellama-context-element-text (ellama-context-element)
+  ((content :initarg :content :type string))
+  "A structure for holding information about a context element.")
+
+(cl-defmethod ellama-context-element-extract ((element ellama-context-element-text))
+  "Extract the content of the context ELEMENT."
+  (oref element content))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-text) (mode (eql 'markdown-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (oref element content))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-text) (mode (eql 'org-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (oref element content))
+
 ;;;###autoload
 (defun ellama-context-add-file ()
   "Add file to context."
   (interactive)
-  (if-let* ((id ellama--current-session-id)
-	    (session (with-current-buffer (ellama-get-session-buffer id)
-		       ellama--current-session))
-	    (file-name (read-file-name "Select file: " nil nil t)))
-      (push (cons 'file file-name) (ellama-session-context session))
-    (push (cons 'file file-name) ellama--new-session-context)))
+  (let* ((file-name (read-file-name "Select file: " nil nil t))
+         (element (ellama-context-element-file :name file-name)))
+    (ellama-context-element-add element)))
 
 ;;;###autoload
 (defun ellama-context-add-buffer (buf)
   "Add BUF to context."
   (interactive "bSelect buffer: ")
-  (if-let* ((id ellama--current-session-id)
-	    (session (with-current-buffer (ellama-get-session-buffer id)
-		       ellama--current-session)))
-      (push (cons 'buffer buf) (ellama-session-context session))
-    (push (cons 'buffer buf) ellama--new-session-context)))
+  (let ((element (ellama-context-element-buffer :name buf)))
+    (ellama-context-element-add element)))
 
 ;;;###autoload
 (defun ellama-context-add-selection ()
   "Add file to context."
   (interactive)
-  (if-let* ((id ellama--current-session-id)
-	    (session (with-current-buffer (ellama-get-session-buffer id)
-		       ellama--current-session))
-	    ((region-active-p))
-	    (content (buffer-substring-no-properties (region-beginning) (region-end))))
-      (push (cons 'text content) (ellama-session-context session))
-    (push (cons 'text content) ellama--new-session-context)))
+  ;; TODO: Use region-active-p
+  (let* ((content (buffer-substring-no-properties (region-beginning) (region-end)))
+         (element (ellama-context-element-text :content content)))
+    (ellama-context-element-add element)))
 
 ;;;###autoload
 (defun ellama-context-add-info-node (node)
   "Add info NODE to context."
   (interactive (list (Info-copy-current-node-name)))
-  (if-let* ((id ellama--current-session-id)
-	    (session (with-current-buffer (ellama-get-session-buffer id)
-		       ellama--current-session)))
-      (push (cons 'info node) (ellama-session-context session))
-    (push (cons 'info node) ellama--new-session-context)))
+  (let ((element (ellama-context-element-info-node :name node)))
+    (ellama-context-element-add element)))
 
 (defun ellama--translate-string (s)
   "Translate string S to `ellama-language' syncronously."
@@ -783,68 +901,18 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	    s
 	    ellama-language))))
 
-(defun ellama--org-format-context-element (elt)
-  "Format context ELT for org mode."
-  (pcase (car elt)
-    ('file
-     (format "[[file:%s][%s]]" (cdr elt) (cdr elt)))
-    ('buffer
-     (format "[[elisp:(display-buffer \"%s\")][%s]]" (cdr elt) (cdr elt)))
-    ('text
-     (cdr elt))
-    ('info
-     (format "[[%s][%s]]"
-	     (replace-regexp-in-string
-	      "(\\(.?*\\)) \\(.*\\)" "info:\\1#\\2" (cdr elt))
-	     (if (and ellama-chat-translation-enabled
-		      (not ellama--current-session))
-		 (ellama--translate-string (cdr elt))
-	       (cdr elt))))
-    (_
-     (user-error "Unsupported context element"))))
-
-(defun ellama--md-format-context-element (elt)
-  "Format context ELT for org mode."
-  (pcase (car elt)
-    ('file
-     (format "[%s](<%s>)"
-	     (cdr elt)
-	     (cdr elt)))
-    ('buffer
-     (format "```emacs-lisp\n(display-buffer \"%s\")\n```\n" (cdr elt)))
-    ('text
-     (cdr elt))
-    ('info
-     (format "```emacs-lisp\n(info \"%s\")\n```\n" (cdr elt)))
-    (_
-     (user-error "Unsupported context element"))))
-
-(defun ellama--extract-context-element (elt)
-  "Extract context ELT content."
-  (pcase (car elt)
-    ('text (cdr elt))
-    ('buffer (with-current-buffer (cdr elt)
-	       (buffer-substring-no-properties (point-min) (point-max))))
-    ('file (with-temp-buffer
-	     (find-file-literally (cdr elt))
-	     (buffer-substring-no-properties (point-min) (point-max))))
-    ('info (with-temp-buffer
-	     (info (cdr elt) (current-buffer))
-	     (buffer-substring-no-properties (point-min) (point-max))))
-    (_
-     (user-error "Unsupported context element"))))
-
 (defun ellama--format-context (session)
   "Format SESSION context for chat buffer."
-  (if-let* ((context (ellama-session-context session)))
-      (concat (string-join
-	       (cons "Context:"
-		     (if (derived-mode-p 'org-mode)
-			 (mapcar #'ellama--org-format-context-element context)
-		       (mapcar #'ellama--md-format-context-element context)))
-	       "\n")
-	      "\n\n")
-    ""))
+  (let ((mode (if (derived-mode-p 'org-mode) 'org-mode 'markdown-mode)))
+    (if-let* ((context (ellama-session-context session)))
+        (concat (string-join
+	         (cons "Context:"
+                       (mapcar (lambda (elt)
+                                 (ellama-context-element-format elt mode))
+                               context))
+	         "\n")
+	        "\n\n")
+      "")))
 
 (defun ellama--prompt-with-context (prompt)
   "Add context to PROMPT for sending to llm."
@@ -852,7 +920,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	    (context (ellama-session-context session)))
       (concat (string-join
 	       (cons "Context:"
-		     (mapcar #'ellama--extract-context-element context))
+		     (mapcar #'ellama-context-element-extract context))
 	       "\n")
 	      "\n\n"
 	      prompt)
@@ -1406,136 +1474,6 @@ buffer."
   "Enable chat translation."
   (interactive)
   (setq ellama-chat-translation-enabled nil))
-
-;; Context elements
-
-(defclass ellama-context-element () ()
-  "A structure for holding information about a context element.")
-
-(cl-defgeneric ellama-context-element-add (element)
-  "Add the ELEMENT to the Ellama context.")
-
-(cl-defgeneric ellama-context-element-extract (element)
-  "Extract the content of the context ELEMENT.")
-
-(cl-defgeneric ellama-context-element-format (element mode)
-  "Format the context ELEMENT for the major MODE.")
-
-(cl-defmethod ellama-context-element-add ((element ellama-context-element))
-  "Add the ELEMENT to the Ellama context."
-  (if-let* ((id ellama--current-session-id)
-	    (session (with-current-buffer (ellama-get-session-buffer id)
-		       ellama--current-session)))
-      (push (cons (type-of element) element) (ellama-session-context session))
-    (push (cons (type-of element) element) ellama--new-session-context)))
-
-;; Buffer context element
-
-(defclass ellama-context-element-buffer (ellama-context-element)
-  ((name :initarg :name :type string))
-  "A structure for holding information about a context element.")
-
-(cl-defmethod ellama-context-element-extract ((element ellama-context-element-buffer))
-  "Extract the content of the context ELEMENT."
-  (with-slots (name) element
-    (with-current-buffer name
-      (buffer-substring-no-properties (point-min) (point-max)))))
-
-(cl-defmethod ellama-context-element-format
-  ((element ellama-context-element-buffer) (mode (eql 'markdown-mode)))
-  "Format the context ELEMENT for the major MODE."
-  (ignore mode)
-  (with-slots (name) element
-    (format "```emacs-lisp\n(display-buffer \"%s\")\n```\n" name)))
-
-(cl-defmethod ellama-context-element-format
-  ((element ellama-context-element-buffer) (mode (eql 'org-mode)))
-  "Format the context ELEMENT for the major MODE."
-  (ignore mode)
-  (with-slots (name) element
-    (format "[[elisp:(display-buffer \"%s\")][%s]]" name name)))
-
-;; File context element
-
-(defclass ellama-context-element-file (ellama-context-element)
-  ((name :initarg :name :type string))
-  "A structure for holding information about a context element.")
-
-(cl-defmethod ellama-context-element-extract ((element ellama-context-element-file))
-  "Extract the content of the context ELEMENT."
-  (with-slots (name) element
-    (with-temp-buffer
-      (find-file-literally name)
-      (buffer-substring-no-properties (point-min) (point-max)))))
-
-(cl-defmethod ellama-context-element-format
-  ((element ellama-context-element-file) (mode (eql 'markdown-mode)))
-  "Format the context ELEMENT for the major MODE."
-  (ignore mode)
-  (with-slots (name) element
-    (format "[%s](<%s>)" name name)))
-
-(cl-defmethod ellama-context-element-format
-  ((element ellama-context-element-file) (mode (eql 'org-mode)))
-  "Format the context ELEMENT for the major MODE."
-  (ignore mode)
-  (with-slots (name) element
-    (format "[[file:%s][%s]]" name name)))
-
-;; Info node context element
-
-(defclass ellama-context-element-info-node (ellama-context-element)
-  ((name :initarg :name :type string))
-  "A structure for holding information about a context element.")
-
-(cl-defmethod ellama-context-element-extract ((element ellama-context-element-info-node))
-  "Extract the content of the context ELEMENT."
-  (with-slots (name) element
-    (with-temp-buffer
-      (info name (current-buffer))
-      (buffer-substring-no-properties (point-min) (point-max)))))
-
-(cl-defmethod ellama-context-element-format
-  ((element ellama-context-element-info-node) (mode (eql 'markdown-mode)))
-  "Format the context ELEMENT for the major MODE."
-  (ignore mode)
-  (with-slots (name) element
-    (format "```emacs-lisp\n(info \"%s\")\n```\n" name)))
-
-(cl-defmethod ellama-context-element-format
-  ((element ellama-context-element-info-node) (mode (eql 'org-mode)))
-  "Format the context ELEMENT for the major MODE."
-  (ignore mode)
-  (with-slots (name) element
-    (format "[[%s][%s]]"
-	    (replace-regexp-in-string
-	     "(\\(.?*\\)) \\(.*\\)" "info:\\1#\\2" name)
-	    (if (and ellama-chat-translation-enabled
-		     (not ellama--current-session))
-		(ellama--translate-string name)
-	      name))))
-
-;; Text context element
-
-(defclass ellama-context-element-text (ellama-context-element)
-  ((content :initarg :name :type string))
-  "A structure for holding information about a context element.")
-
-(cl-defmethod ellama-context-element-extract ((element ellama-context-element-text))
-  "Extract the content of the context ELEMENT."
-  (oref element content))
-
-(cl-defmethod ellama-context-element-format
-  ((element ellama-context-element-text) (mode (eql 'markdown-mode)))
-  "Format the context ELEMENT for the major MODE."
-  (ignore mode)
-  (oref element content))
-
-(cl-defmethod ellama-context-element-format
-  ((element ellama-context-element-text) (mode (eql 'org-mode)))
-  "Format the context ELEMENT for the major MODE."
-  (ignore mode)
-  (oref element content))
 
 (provide 'ellama)
 ;;; ellama.el ends here.
