@@ -35,6 +35,7 @@
 
 ;;; Code:
 
+(require 'eieio)
 (require 'json)
 (require 'llm)
 (require 'spinner)
@@ -1405,6 +1406,69 @@ buffer."
   "Enable chat translation."
   (interactive)
   (setq ellama-chat-translation-enabled nil))
+
+;; Context elements
+
+(defclass ellama-context-element () ()
+  "A structure for holding information about a context element.")
+
+(defclass ellama-context-element-buffer (ellama-context-element)
+  ((name :initarg :name :type string))
+  "A structure for holding information about a context element.")
+
+(defclass ellama-context-element-file (ellama-context-element)
+  ((name :initarg :name :type string))
+  "A structure for holding information about a context element.")
+
+(defclass ellama-context-element-selection (ellama-context-element)
+  ()
+  "A structure for holding information about a context element.")
+
+(defclass ellama-context-element-info-node (ellama-context-element)
+  ((name :initarg :name :type string))
+  "A structure for holding information about a context element.")
+
+(cl-defgeneric ellama-context-element-add (element)
+  "Add the ELEMENT to the Ellama context.")
+
+(cl-defgeneric ellama-context-element-format (element mode)
+  "Format the context ELEMENT for the major MODE.")
+
+(cl-defmethod ellama-context-element-add ((element ellama-context-element))
+  "Add the ELEMENT to the Ellama context."
+  (if-let* ((id ellama--current-session-id)
+	    (session (with-current-buffer (ellama-get-session-buffer id)
+		       ellama--current-session)))
+      (push (cons (type-of element) element) (ellama-session-context session))
+    (push (cons (type-of element) element) ellama--new-session-context)))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-buffer) (mode (eql 'markdown-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name) element
+    (format "```emacs-lisp\n(display-buffer \"%s\")\n```\n" name)))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-buffer) (mode (eql 'org-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name) element
+    (format "[[elisp:(display-buffer \"%s\")][%s]]" name name)))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-file) (mode (eql 'markdown-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name) element
+    (format "[%s](<%s>)" name name)))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-file) (mode (eql 'org-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name) element
+    (format "[[file:%s][%s]]" name name)))
 
 (provide 'ellama)
 ;;; ellama.el ends here.
