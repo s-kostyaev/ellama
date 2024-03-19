@@ -47,6 +47,26 @@
         (ellama-code-improve)
         (should (equal original (buffer-string)))))))
 
+(ert-deftest test-ellama-context-element-format-buffer-markdown ()
+  (let ((element (ellama-context-element-buffer :name "*scratch*")))
+    (should (equal "```emacs-lisp\n(display-buffer \"*scratch*\")\n```\n"
+                   (ellama-context-element-format element 'markdown-mode)))))
+
+(ert-deftest test-ellama-context-element-format-buffer-org-mode ()
+  (let ((element (ellama-context-element-buffer :name "*scratch*")))
+    (should (equal "[[elisp:(display-buffer \"*scratch*\")][*scratch*]]"
+                   (ellama-context-element-format element 'org-mode)))))
+
+(ert-deftest test-ellama-context-element-format-file-markdown ()
+  (let ((element (ellama-context-element-file :name "test.el")))
+    (should (equal "[test.el](<test.el>)"
+                   (ellama-context-element-format element 'markdown-mode)))))
+
+(ert-deftest test-ellama-context-element-format-file-org-mode ()
+  (let ((element (ellama-context-element-file :name "test.el")))
+    (should (equal "[[file:test.el][test.el]]"
+                   (ellama-context-element-format element 'org-mode)))))
+
 (provide 'test-ellama)
 
 ;;; test-ellama.el ends here
