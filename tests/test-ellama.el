@@ -67,6 +67,24 @@
     (should (equal "[[file:test.el][test.el]]"
                    (ellama-context-element-format element 'org-mode)))))
 
+(ert-deftest test-ellama-context-element-format-info-node-markdown ()
+  (let ((element (ellama-context-element-info-node :name "(dir)Top")))
+    (should (equal "```emacs-lisp\n(info \"(dir)Top\")\n```\n"
+                   (ellama-context-element-format element 'markdown-mode)))))
+
+(ert-deftest test-ellama-context-element-format-info-node-org-mode ()
+  (let ((element (ellama-context-element-info-node :name "(dir)Top")))
+    (should (equal "[[(dir)Top][(dir)Top]]"
+                   (ellama-context-element-format element 'org-mode)))))
+
+(ert-deftest test-ellama-context-element-format-text-markdown ()
+  (let ((element (ellama-context-element-text :content "123")))
+    (should (equal "123" (ellama-context-element-format element 'markdown-mode)))))
+
+(ert-deftest test-ellama-context-element-format-text-org-mode ()
+  (let ((element (ellama-context-element-text :content "123")))
+    (should (equal "123" (ellama-context-element-format element 'org-mode)))))
+
 (provide 'test-ellama)
 
 ;;; test-ellama.el ends here
