@@ -1412,24 +1412,11 @@ buffer."
 (defclass ellama-context-element () ()
   "A structure for holding information about a context element.")
 
-(defclass ellama-context-element-buffer (ellama-context-element)
-  ((name :initarg :name :type string))
-  "A structure for holding information about a context element.")
-
-(defclass ellama-context-element-file (ellama-context-element)
-  ((name :initarg :name :type string))
-  "A structure for holding information about a context element.")
-
-(defclass ellama-context-element-selection (ellama-context-element)
-  ()
-  "A structure for holding information about a context element.")
-
-(defclass ellama-context-element-info-node (ellama-context-element)
-  ((name :initarg :name :type string))
-  "A structure for holding information about a context element.")
-
 (cl-defgeneric ellama-context-element-add (element)
   "Add the ELEMENT to the Ellama context.")
+
+(cl-defgeneric ellama-context-element-extract (element)
+  "Extract the content of the context ELEMENT.")
 
 (cl-defgeneric ellama-context-element-format (element mode)
   "Format the context ELEMENT for the major MODE.")
@@ -1441,6 +1428,18 @@ buffer."
 		       ellama--current-session)))
       (push (cons (type-of element) element) (ellama-session-context session))
     (push (cons (type-of element) element) ellama--new-session-context)))
+
+;; Buffer context element
+
+(defclass ellama-context-element-buffer (ellama-context-element)
+  ((name :initarg :name :type string))
+  "A structure for holding information about a context element.")
+
+(cl-defmethod ellama-context-element-extract ((element ellama-context-element-buffer))
+  "Extract the content of the context ELEMENT."
+  (with-slots (name) element
+    (with-current-buffer name
+      (buffer-substring-no-properties (point-min) (point-max)))))
 
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-buffer) (mode (eql 'markdown-mode)))
@@ -1456,6 +1455,19 @@ buffer."
   (with-slots (name) element
     (format "[[elisp:(display-buffer \"%s\")][%s]]" name name)))
 
+;; File context element
+
+(defclass ellama-context-element-file (ellama-context-element)
+  ((name :initarg :name :type string))
+  "A structure for holding information about a context element.")
+
+(cl-defmethod ellama-context-element-extract ((element ellama-context-element-file))
+  "Extract the content of the context ELEMENT."
+  (with-slots (name) element
+    (with-temp-buffer
+      (find-file-literally name)
+      (buffer-substring-no-properties (point-min) (point-max)))))
+
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-file) (mode (eql 'markdown-mode)))
   "Format the context ELEMENT for the major MODE."
@@ -1469,6 +1481,61 @@ buffer."
   (ignore mode)
   (with-slots (name) element
     (format "[[file:%s][%s]]" name name)))
+
+;; Info node context element
+
+(defclass ellama-context-element-info-node (ellama-context-element)
+  ((name :initarg :name :type string))
+  "A structure for holding information about a context element.")
+
+(cl-defmethod ellama-context-element-extract ((element ellama-context-element-info-node))
+  "Extract the content of the context ELEMENT."
+  (with-slots (name) element
+    (with-temp-buffer
+      (info name (current-buffer))
+      (buffer-substring-no-properties (point-min) (point-max)))))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-info-node) (mode (eql 'markdown-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name) element
+    (format "```emacs-lisp\n(info \"%s\")\n```\n" name)))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-info-node) (mode (eql 'org-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name) element
+    (format "[[%s][%s]]"
+	    (replace-regexp-in-string
+	     "(\\(.?*\\)) \\(.*\\)" "info:\\1#\\2" name)
+	    (if (and ellama-chat-translation-enabled
+		     (not ellama--current-session))
+		(ellama--translate-string name)
+	      name))))
+
+;; Text context element
+
+(defclass ellama-context-element-text (ellama-context-element)
+  ((content :initarg :name :type string))
+  "A structure for holding information about a context element.")
+
+(cl-defmethod ellama-context-element-extract ((element ellama-context-element-text))
+  "Extract the content of the context ELEMENT."
+  (oref element content))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-text) (mode (eql 'markdown-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (oref element content))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-text) (mode (eql 'org-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (oref element content))
 
 (provide 'ellama)
 ;;; ellama.el ends here.
