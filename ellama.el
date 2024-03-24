@@ -1198,40 +1198,50 @@ ARGS contains keys for fine control.
     (ellama-instant (format ellama-code-review-prompt-template text))))
 
 ;;;###autoload
-(defun ellama-change (change)
-  "Change selected text or text in current buffer according to provided CHANGE."
-  (interactive "sWhat needs to be changed: ")
+(defun ellama-change (change &optional edit-template)
+  "Change selected text or text in current buffer according to provided CHANGE.
+When the value of EDIT-TEMPLATE is 4, or with one `universal-argument' as
+prefix (\\[universal-argument]), prompt the user to amend the template."
+  (interactive "sWhat needs to be changed: \np")
   (let* ((beg (if (region-active-p)
 		  (region-beginning)
 		(point-min)))
 	 (end (if (region-active-p)
 		  (region-end)
 		(point-max)))
+         (template-orig (format ellama-change-prompt-template change "%s"))
+         (template (if (= edit-template 4)
+                       (read-from-minibuffer "Template: " template-orig)
+                     template-orig))
 	 (text (buffer-substring-no-properties beg end)))
     (kill-region beg end)
     (ellama-stream
-     (format
-      ellama-change-prompt-template
-      change text)
+     (format template text)
      :point beg)))
 
 ;;;###autoload
-(defun ellama-improve-grammar ()
-  "Enhance the grammar and spelling in the currently selected region or buffer."
-  (interactive)
-  (ellama-change ellama-improve-grammar-prompt-template))
+(defun ellama-improve-grammar (&optional edit-template)
+  "Enhance the grammar and spelling in the currently selected region or buffer.
+When the value of EDIT-TEMPLATE is 4, or with one `universal-argument' as
+prefix (\\[universal-argument]), prompt the user to amend the template."
+  (interactive "p")
+  (ellama-change ellama-improve-grammar-prompt-template edit-template))
 
 ;;;###autoload
-(defun ellama-improve-wording ()
-  "Enhance the wording in the currently selected region or buffer."
-  (interactive)
-  (ellama-change ellama-improve-wording-prompt-template))
+(defun ellama-improve-wording (&optional edit-template)
+  "Enhance the wording in the currently selected region or buffer.
+When the value of EDIT-TEMPLATE is 4, or with one `universal-argument' as
+prefix (\\[universal-argument]), prompt the user to amend the template."
+  (interactive "p")
+  (ellama-change ellama-improve-wording-prompt-template edit-template))
 
 ;;;###autoload
-(defun ellama-improve-conciseness ()
-  "Make the text of the currently selected region or buffer concise and simple."
-  (interactive)
-  (ellama-change ellama-improve-conciseness-prompt-template))
+(defun ellama-improve-conciseness (&optional edit-template)
+  "Make the text of the currently selected region or buffer concise and simple.
+When the value of EDIT-TEMPLATE is 4, or with one `universal-argument' as
+prefix (\\[universal-argument]), prompt the user to amend the template."
+  (interactive "p")
+  (ellama-change ellama-improve-conciseness-prompt-template edit-template))
 
 ;;;###autoload
 (defun ellama-code-edit (change)
