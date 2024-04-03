@@ -28,6 +28,7 @@
 (require 'cl-lib)
 (require 'ellama)
 (require 'ert)
+(require 'llm-ollama)
 
 (ert-deftest test-ellama--code-filter ()
   (should (equal "" (ellama--code-filter "")))
@@ -105,6 +106,17 @@
 (ert-deftest test-ellama-context-element-extract-text ()
   (let ((element (ellama-context-element-text :content "123")))
     (should (string-match "123" (ellama-context-element-extract element)))))
+
+(ert-deftest test-ellama-connection-error-undo ()
+  (with-temp-buffer
+    (insert "test test")
+    (let ((ellama-provider (make-llm-ollama
+			    :chat-model "1" :embedding-model "2" :port 3)))
+      (funcall-interactively 'ellama-improve-conciseness))
+    (sleep-for 3)
+    (message "'%s'" (buffer-substring-no-properties (point-min) (point-max)))
+    (should (string= "test test"
+		     (buffer-substring-no-properties (point-min) (point-max))))))
 
 (provide 'test-ellama)
 
