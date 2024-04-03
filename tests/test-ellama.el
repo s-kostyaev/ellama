@@ -3,6 +3,7 @@
 ;; Copyright (C) 2023  Free Software Foundation, Inc.
 
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
+;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
 
 ;; This file is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by

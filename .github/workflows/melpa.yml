@@ -25,14 +25,46 @@ jobs:
           - 28.2
           - 29.1
           - 29.2
+          - 29.3
         ignore_warnings:
           - false
         warnings_as_errors:
-          - false
+          - true
         check:
           - melpa
         file:
           - ellama.el
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      - uses: actions/checkout@v4
+      - uses: purcell/setup-emacs@master
+        with:
+          version: ${{ matrix.emacs_version }}
+      - uses: leotaku/elisp-check@master
+        with:
+          check: ${{ matrix.check }}
+          file: ${{ matrix.file }}
+          ignore_warnings: ${{ matrix.ignore_warnings }}
+          warnings_as_errors: ${{ matrix.warnings_as_errors }}
+  test-ert:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        emacs_version:
+          - 28.1
+          - 28.2
+          - 29.1
+          - 29.2
+          - 29.3
+        ignore_warnings:
+          - false
+        warnings_as_errors:
+          - true
+        check:
+          - ert
+        file:
+          - 'tests/test*.el'
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       - uses: actions/checkout@v4
