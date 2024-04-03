@@ -887,7 +887,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
       (let* ((content (buffer-substring-no-properties (region-beginning) (region-end)))
              (element (ellama-context-element-text :content content)))
         (ellama-context-element-add element))
-    (user-error "No active region")))
+    (warn "No active region")))
 
 ;;;###autoload
 (defun ellama-context-add-info-node (node)
