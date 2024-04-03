@@ -48,6 +48,64 @@
         (ellama-code-improve)
         (should (equal original (buffer-string)))))))
 
+(ert-deftest test-ellama-context-element-format-buffer-markdown ()
+  (let ((element (ellama-context-element-buffer :name "*scratch*")))
+    (should (equal "```emacs-lisp\n(display-buffer \"*scratch*\")\n```\n"
+                   (ellama-context-element-format element 'markdown-mode)))))
+
+(ert-deftest test-ellama-context-element-format-buffer-org-mode ()
+  (let ((element (ellama-context-element-buffer :name "*scratch*")))
+    (should (equal "[[elisp:(display-buffer \"*scratch*\")][*scratch*]]"
+                   (ellama-context-element-format element 'org-mode)))))
+
+(ert-deftest test-ellama-context-element-format-file-markdown ()
+  (let ((element (ellama-context-element-file :name "LICENSE")))
+    (should (equal "[LICENSE](<LICENSE>)"
+                   (ellama-context-element-format element 'markdown-mode)))))
+
+(ert-deftest test-ellama-context-element-format-file-org-mode ()
+  (let ((element (ellama-context-element-file :name "LICENSE")))
+    (should (equal "[[file:LICENSE][LICENSE]]"
+                   (ellama-context-element-format element 'org-mode)))))
+
+(ert-deftest test-ellama-context-element-format-info-node-markdown ()
+  (let ((element (ellama-context-element-info-node :name "(dir)Top")))
+    (should (equal "```emacs-lisp\n(info \"(dir)Top\")\n```\n"
+                   (ellama-context-element-format element 'markdown-mode)))))
+
+(ert-deftest test-ellama-context-element-format-info-node-org-mode ()
+  (let ((element (ellama-context-element-info-node :name "(dir)Top")))
+    (should (equal "[[(dir)Top][(dir)Top]]"
+                   (ellama-context-element-format element 'org-mode)))))
+
+(ert-deftest test-ellama-context-element-format-text-markdown ()
+  (let ((element (ellama-context-element-text :content "123")))
+    (should (equal "123" (ellama-context-element-format element 'markdown-mode)))))
+
+(ert-deftest test-ellama-context-element-format-text-org-mode ()
+  (let ((element (ellama-context-element-text :content "123")))
+    (should (equal "123" (ellama-context-element-format element 'org-mode)))))
+
+(ert-deftest test-ellama-context-element-extract-buffer ()
+  (with-temp-buffer
+    (insert "123")
+    (let ((element (ellama-context-element-buffer :name (buffer-name))))
+      (should (equal "123" (ellama-context-element-extract element))))))
+
+(ert-deftest test-ellama-context-element-extract-file ()
+  (let* ((filename (expand-file-name "LICENSE" (locate-dominating-file "." ".git")))
+         (element (ellama-context-element-file :name filename)))
+    (should (string-match "GNU GENERAL PUBLIC LICENSE"
+                          (ellama-context-element-extract element)))))
+
+(ert-deftest test-ellama-context-element-extract-info-node ()
+  (let ((element (ellama-context-element-info-node :name "(dir)Top")))
+    (should (string-match "This" (ellama-context-element-extract element)))))
+
+(ert-deftest test-ellama-context-element-extract-text ()
+  (let ((element (ellama-context-element-text :content "123")))
+    (should (string-match "123" (ellama-context-element-extract element)))))
+
 (provide 'test-ellama)
 
 ;;; test-ellama.el ends here
