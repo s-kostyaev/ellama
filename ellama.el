@@ -758,7 +758,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
   ((name :initarg :name :type string))
   "A structure for holding information about a context element.")
 
-(cl-defmethod ellama-context-element-extract ((element ellama-context-element-buffer))
+(cl-defmethod ellama-context-element-extract
+  ((element ellama-context-element-buffer))
   "Extract the content of the context ELEMENT."
   (with-slots (name) element
     (with-current-buffer name
@@ -784,11 +785,12 @@ If EPHEMERAL non nil new session will not be associated with any file."
   ((name :initarg :name :type string))
   "A structure for holding information about a context element.")
 
-(cl-defmethod ellama-context-element-extract ((element ellama-context-element-file))
+(cl-defmethod ellama-context-element-extract
+  ((element ellama-context-element-file))
   "Extract the content of the context ELEMENT."
   (with-slots (name) element
     (with-temp-buffer
-      (find-file-literally name)
+      (insert-file-contents name)
       (buffer-substring-no-properties (point-min) (point-max)))))
 
 (cl-defmethod ellama-context-element-format
@@ -811,7 +813,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
   ((name :initarg :name :type string))
   "A structure for holding information about a context element.")
 
-(cl-defmethod ellama-context-element-extract ((element ellama-context-element-info-node))
+(cl-defmethod ellama-context-element-extract
+  ((element ellama-context-element-info-node))
   "Extract the content of the context ELEMENT."
   (with-slots (name) element
     (with-temp-buffer
@@ -844,7 +847,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
   ((content :initarg :content :type string))
   "A structure for holding information about a context element.")
 
-(cl-defmethod ellama-context-element-extract ((element ellama-context-element-text))
+(cl-defmethod ellama-context-element-extract
+  ((element ellama-context-element-text))
   "Extract the content of the context ELEMENT."
   (oref element content))
 
