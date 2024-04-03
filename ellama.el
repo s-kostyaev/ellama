@@ -345,7 +345,7 @@ Too low value can break generated code by splitting long comment lines."
 
 (defconst ellama--code-prefix
   (rx (minimal-match
-       (zero-or-more anything) (literal "```") (zero-or-more anything) line-end)))
+       (zero-or-more anything) (literal "```") (zero-or-more anything) (+ (or "\n" "\r")))))
 
 (defconst ellama--code-suffix
   (rx (minimal-match
