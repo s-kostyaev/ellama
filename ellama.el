@@ -883,10 +883,11 @@ If EPHEMERAL non nil new session will not be associated with any file."
 (defun ellama-context-add-selection ()
   "Add file to context."
   (interactive)
-  ;; TODO: Use region-active-p
-  (let* ((content (buffer-substring-no-properties (region-beginning) (region-end)))
-         (element (ellama-context-element-text :content content)))
-    (ellama-context-element-add element)))
+  (if (region-active-p)
+      (let* ((content (buffer-substring-no-properties (region-beginning) (region-end)))
+             (element (ellama-context-element-text :content content)))
+        (ellama-context-element-add element))
+    (user-error "No active region")))
 
 ;;;###autoload
 (defun ellama-context-add-info-node (node)
