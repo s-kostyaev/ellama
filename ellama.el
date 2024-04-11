@@ -1247,10 +1247,6 @@ ARGS contains keys for fine control.
 	     ellama-language text ellama-language)
      :provider ellama-translation-provider)))
 
-
-
-
-
 ;;;###autoload
 (defun ellama-define-word ()
   "Find definition of current word."
