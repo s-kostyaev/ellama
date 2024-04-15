@@ -1281,7 +1281,8 @@ ARGS contains keys for fine control.
 	 (end (if (region-active-p)
 		  (region-end)
 		(point-max)))
-	 (text (buffer-substring-no-properties beg end)))
+	 (text (buffer-substring-no-properties beg end))
+	 (buf (current-buffer)))
     (kill-region beg end)
     (ellama-stream
      (format
