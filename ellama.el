@@ -1272,7 +1272,6 @@ ARGS contains keys for fine control.
         (message "No text in the kill ring to summarize.")
       (ellama-instant (format ellama-summarize-prompt-template text)))))
 
-
 ;;;###autoload
 (defun ellama-code-review ()
   "Review code in selected region or current buffer."
