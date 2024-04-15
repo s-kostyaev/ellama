@@ -118,6 +118,10 @@ Find the definition of the current word using Ellama.
 Summarize a selected region or the current buffer using Ellama.
 [[imgs/ellama-summarize.gif]]
 
+*** ellama-summarize-killring
+
+Summarize text from the kill ring.
+
 *** ellama-code-review
 
 Review code in a selected region or the current buffer using Ellama.
@@ -237,6 +241,7 @@ Ellama, using the ~ellama-keymap-prefix~ prefix (not set by default):
 | "c r"  | ellama-code-review              | Code review                  |
 | "s s"  | ellama-summarize                | Summarize                    |
 | "s w"  | ellama-summarize-webpage        | Summarize webpage            |
+| "s c"  | ellama-summarize-killring       | Summarize killring           |
 | "s l"  | ellama-load-session             | Session Load                 |
 | "s r"  | ellama-session-rename           | Session rename               |
 | "s d"  | ellama-session-remove           | Session delete               |
