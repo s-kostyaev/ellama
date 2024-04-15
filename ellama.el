@@ -110,6 +110,7 @@
     ;; summarize
     (define-key map (kbd "s s") 'ellama-summarize)
     (define-key map (kbd "s w") 'ellama-summarize-webpage)
+    (define-key map (kbd "s c") 'ellama-summarize-killring)
     ;; session
     (define-key map (kbd "s l") 'ellama-load-session)
     (define-key map (kbd "s r") 'ellama-session-rename)
@@ -1261,6 +1262,15 @@ ARGS contains keys for fine control.
 		  (buffer-substring-no-properties (region-beginning) (region-end))
 		(buffer-substring-no-properties (point-min) (point-max)))))
     (ellama-instant (format ellama-summarize-prompt-template text))))
+
+;;;###autoload
+(defun ellama-summarize-killring ()
+  "Summarize text from the kill ring."
+  (interactive)
+  (let ((text (current-kill 0)))
+    (if (string-empty-p text)
+        (message "No text in the kill ring to summarize.")
+      (ellama-instant (format ellama-summarize-prompt-template text)))))
 
 ;;;###autoload
 (defun ellama-code-review ()
