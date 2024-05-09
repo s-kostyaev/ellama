@@ -1031,11 +1031,11 @@ when the request completes (with BUFFER current)."
 				      (funcall donecb text)
 				      (setq ellama--current-request nil)
 				      (ellama-request-mode -1)))
-				  (lambda (_ msg)
+				  (lambda (&rest args)
 				    (with-current-buffer buffer
 				      (cancel-change-group ellama--change-group)
 				      (spinner-stop)
-				      (funcall errcb msg)
+				      (funcall errcb args)
 				      (setq ellama--current-request nil)
 				      (ellama-request-mode -1)))))))))
 
@@ -1291,13 +1291,15 @@ ARGS contains keys for fine control.
 	 (end (if (region-active-p)
 		  (region-end)
 		(point-max)))
-	 (text (buffer-substring-no-properties beg end)))
+	 (text (buffer-substring-no-properties beg end))
+	 (buf (current-buffer)))
     (kill-region beg end)
     (ellama-stream
      (format
       ellama-change-prompt-template
       change text)
-     :point beg)))
+     :point beg :on-error (lambda (&rest _)
+			    (undo)))))
 
 ;;;###autoload
 (defun ellama-improve-grammar ()
