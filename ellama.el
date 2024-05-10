@@ -1424,18 +1424,27 @@ buffer."
   (ellama-make-format ellama-make-table-prompt-template))
 
 (defun ellama-summarize-webpage (url)
-  "Summarize webpage fetched from URL."
-  (interactive "sEnter URL you want to summarize: ")
+  "Summarize webpage fetched from URL.
+
+Summarize the URL at point if `thing-at-point' is present, otherwise
+prompt user for URL to summarize."
+  (interactive
+   (list
+    (if-let ((url (and (fboundp 'thing-at-point) (thing-at-point 'url))))
+        url
+      (read-string "Enter URL you want to summarize: "))))
   (let ((buffer-name (url-retrieve-synchronously url t)))
     ;; (display-buffer buffer-name)
     (with-current-buffer buffer-name
       (goto-char (point-min))
-      (search-forward "<!DOCTYPE")
+      (or (search-forward "<!DOCTYPE" nil t)
+          (search-forward "<html" nil))
       (beginning-of-line)
       (kill-region (point-min) (point))
       (shr-insert-document (libxml-parse-html-region (point-min) (point-max)))
       (goto-char (point-min))
-      (search-forward "<!DOCTYPE")
+      (or (search-forward "<!DOCTYPE" nil t)
+          (search-forward "<html" nil))
       (beginning-of-line)
       (kill-region (point) (point-max))
       (ellama-summarize))))
