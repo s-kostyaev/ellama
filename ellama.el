@@ -40,6 +40,7 @@
 (require 'llm)
 (require 'spinner)
 (require 'info)
+(require 'shr)
 (eval-when-compile (require 'rx))
 
 (defgroup ellama nil
@@ -1426,11 +1427,13 @@ buffer."
 (defun ellama-summarize-webpage (url)
   "Summarize webpage fetched from URL.
 
-Summarize the URL at point if `thing-at-point' is present, otherwise
-prompt user for URL to summarize."
+Summarize the URL at point if `thing-at-point' is present, or using
+`shr-url-at-point' if a URL is at point in modes like `eww' or `elfeed',
+otherwise prompt user for URL to summarize."
   (interactive
    (list
-    (if-let ((url (and (fboundp 'thing-at-point) (thing-at-point 'url))))
+    (if-let ((url (or (and (fboundp 'thing-at-point) (thing-at-point 'url))
+                      (shr-url-at-point nil))))
         url
       (read-string "Enter URL you want to summarize: "))))
   (let ((buffer-name (url-retrieve-synchronously url t)))
