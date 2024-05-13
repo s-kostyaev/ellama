@@ -1,3 +1,6 @@
+* Version 0.9.3
+- Support summarize shr url at point (eww and elfeed).
+- Add ellama-chain function for chaining multiple calls to LLMs.
 * Version 0.9.2
 - Allow summarizing urls withoud doctype tag.
 - Summarize url at point.
