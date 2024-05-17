@@ -1,3 +1,5 @@
+* Version 0.9.4
+- Improve code blocks translation from markdown to org.
 * Version 0.9.3
 - Support summarize shr url at point (eww and elfeed).
 - Add ellama-chain function for chaining multiple calls to LLMs.
