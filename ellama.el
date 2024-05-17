@@ -368,43 +368,53 @@ Too low value can break generated code by splitting long comment lines."
       (fill-region (point-min) (point-max) nil t t))
     (buffer-substring-no-properties (point-min) (point-max))))
 
+(defun ellama--replace-first-begin-src (text)
+  "Replace first begin src in TEXT."
+  (if (not (string-match-p (rx (literal "#+BEGIN_SRC")) text))
+      (replace-regexp-in-string "^[[:space:]]*```\\(\\(.\\|\n\\)*\\)" "#+BEGIN_SRC\\1" text)
+    text))
+
 (defun ellama--translate-markdown-to-org-filter (text)
   "Filter to translate code blocks from markdown syntax to org syntax in TEXT.
 This filter contains only subset of markdown syntax to be good enough."
-  (thread-last text
-       ;; code blocks
-       (replace-regexp-in-string "^[[:space:]]*```\\(.+\\)$" "#+BEGIN_SRC \\1")
-       (replace-regexp-in-string "^<!-- language: \\(.+\\) -->\n```" "#+BEGIN_SRC \\1")
-       (replace-regexp-in-string "^[[:space:]]*```$" "#+END_SRC")
-       ;; lists
-       (replace-regexp-in-string "^\\* " "+ ")
-       ;; bold
-       (replace-regexp-in-string "\\*\\*\\(.+?\\)\\*\\*" "*\\1*")
-       (replace-regexp-in-string "__\\(.+?\\)__" "*\\1*")
-       (replace-regexp-in-string "<b>\\(.+?\\)</b>" "*\\1*")
-       ;; italic
-       ;; (replace-regexp-in-string "_\\(.+?\\)_" "/\\1/") ;; most of the time it breaks code blocks, so disable it
-       (replace-regexp-in-string "<i>\\(.+?\\)</i>" "/\\1/")
-       ;; inline code
-       (replace-regexp-in-string "`\\(.+?\\)`" "~\\1~")
-       ;; underlined
-       (replace-regexp-in-string "<u>\\(.+?\\)</u>" "_\\1_")
-       ;; strikethrough
-       (replace-regexp-in-string "~~\\(.+?\\)~~" "+\\1+")
-       (replace-regexp-in-string "<s>\\(.+?\\)</s>" "+\\1+")
-       ;; headings
-       (replace-regexp-in-string "^# " "* ")
-       (replace-regexp-in-string "^## " "** ")
-       (replace-regexp-in-string "^### " "*** ")
-       (replace-regexp-in-string "^#### " "**** ")
-       (replace-regexp-in-string "^##### " "***** ")
-       (replace-regexp-in-string "^###### " "***** ")
-       ;; badges
-       (replace-regexp-in-string "\\[\\!\\[.*?\\](\\(.*?\\))\\](\\(.*?\\))" "[[\\2][file:\\1]]")
-       ;;links
-       (replace-regexp-in-string "\\[\\(.*?\\)\\](\\(.*?\\))" "[[\\2][\\1]]")
-       ;; filling long lines
-       (ellama--fill-long-lines)))
+  (thread-last
+    text
+    ;; code blocks
+    (replace-regexp-in-string "^[[:space:]]*```\\(.+\\)$" "#+BEGIN_SRC \\1")
+    (ellama--replace-first-begin-src)
+    (replace-regexp-in-string "^<!-- language: \\(.+\\) -->\n```" "#+BEGIN_SRC \\1")
+    (replace-regexp-in-string "^[[:space:]]*```$" "#+END_SRC")
+    (replace-regexp-in-string "^[[:space:]]*```" "#+END_SRC\n")
+    (replace-regexp-in-string "```" "\n#+END_SRC\n")
+    ;; lists
+    (replace-regexp-in-string "^\\* " "+ ")
+    ;; bold
+    (replace-regexp-in-string "\\*\\*\\(.+?\\)\\*\\*" "*\\1*")
+    (replace-regexp-in-string "__\\(.+?\\)__" "*\\1*")
+    (replace-regexp-in-string "<b>\\(.+?\\)</b>" "*\\1*")
+    ;; italic
+    ;; (replace-regexp-in-string "_\\(.+?\\)_" "/\\1/") ;; most of the time it breaks code blocks, so disable it
+    (replace-regexp-in-string "<i>\\(.+?\\)</i>" "/\\1/")
+    ;; inline code
+    (replace-regexp-in-string "`\\(.+?\\)`" "~\\1~")
+    ;; underlined
+    (replace-regexp-in-string "<u>\\(.+?\\)</u>" "_\\1_")
+    ;; strikethrough
+    (replace-regexp-in-string "~~\\(.+?\\)~~" "+\\1+")
+    (replace-regexp-in-string "<s>\\(.+?\\)</s>" "+\\1+")
+    ;; headings
+    (replace-regexp-in-string "^# " "* ")
+    (replace-regexp-in-string "^## " "** ")
+    (replace-regexp-in-string "^### " "*** ")
+    (replace-regexp-in-string "^#### " "**** ")
+    (replace-regexp-in-string "^##### " "***** ")
+    (replace-regexp-in-string "^###### " "***** ")
+    ;; badges
+    (replace-regexp-in-string "\\[\\!\\[.*?\\](\\(.*?\\))\\](\\(.*?\\))" "[[\\2][file:\\1]]")
+    ;;links
+    (replace-regexp-in-string "\\[\\(.*?\\)\\](\\(.*?\\))" "[[\\2][\\1]]")
+    ;; filling long lines
+    (ellama--fill-long-lines)))
 
 (defcustom ellama-enable-keymap t
   "Enable or disable Ellama keymap."

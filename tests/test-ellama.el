@@ -106,6 +106,76 @@
   (let ((element (ellama-context-element-text :content "123")))
     (should (string-match "123" (ellama-context-element-extract element)))))
 
+(ert-deftest test-ellama-md-to-org-code-simple ()
+  (let ((result (ellama--translate-markdown-to-org-filter "Here is your TikZ code for a blue rectangle:
+```tex
+\\documentclass{article}
+\\usepackage{tikz} \\begin{document}
+\\begin{tikzpicture} \\node[rectangle, draw=blue, fill=blue!20] (mynode) {Text};
+\\end{tikzpicture}
+\\end{document}
+```
+This code will create a rectangle with a blue border and light
+blue filling. You can replace \'Text\' with your desired text or other TikZ
+elements.")))
+    (should (string-equal result "Here is your TikZ code for a blue rectangle:
+#+BEGIN_SRC tex
+\\documentclass{article}
+\\usepackage{tikz} \\begin{document}
+\\begin{tikzpicture} \\node[rectangle, draw=blue, fill=blue!20] (mynode) {Text};
+\\end{tikzpicture}
+\\end{document}
+#+END_SRC
+This code will create a rectangle with a blue border and light
+blue filling. You can replace \'Text\' with your desired text or other TikZ
+elements."))))
+
+(ert-deftest test-ellama-md-to-org-code-hard ()
+  (let ((result (ellama--translate-markdown-to-org-filter "Here is your TikZ code for a blue rectangle:
+```
+\\documentclass{article}
+\\usepackage{tikz} \\begin{document}
+\\begin{tikzpicture} \\node[rectangle, draw=blue, fill=blue!20] (mynode) {Text};
+\\end{tikzpicture}
+\\end{document}
+```
+This code will create a rectangle with a blue border and light
+blue filling. You can replace \'Text\' with your desired text or other TikZ
+elements.")))
+    (should (string-equal result "Here is your TikZ code for a blue rectangle:
+#+BEGIN_SRC
+\\documentclass{article}
+\\usepackage{tikz} \\begin{document}
+\\begin{tikzpicture} \\node[rectangle, draw=blue, fill=blue!20] (mynode) {Text};
+\\end{tikzpicture}
+\\end{document}
+#+END_SRC
+This code will create a rectangle with a blue border and light
+blue filling. You can replace \'Text\' with your desired text or other TikZ
+elements."))))
+
+(ert-deftest test-ellama-md-to-org-code-nightmare ()
+  (let ((result (ellama--translate-markdown-to-org-filter "Here is your TikZ code for a blue rectangle:
+```
+\\documentclass{article}
+\\usepackage{tikz} \\begin{document}
+\\begin{tikzpicture} \\node[rectangle, draw=blue, fill=blue!20] (mynode) {Text};
+\\end{tikzpicture}
+\\end{document}```This code will create a rectangle with a blue border and light
+blue filling. You can replace \'Text\' with your desired text or other TikZ
+elements.")))
+    (should (string-equal result "Here is your TikZ code for a blue rectangle:
+#+BEGIN_SRC
+\\documentclass{article}
+\\usepackage{tikz} \\begin{document}
+\\begin{tikzpicture} \\node[rectangle, draw=blue, fill=blue!20] (mynode) {Text};
+\\end{tikzpicture}
+\\end{document}
+#+END_SRC
+This code will create a rectangle with a blue border and light
+blue filling. You can replace \'Text\' with your desired text or other TikZ
+elements."))))
+
 (provide 'test-ellama)
 
 ;;; test-ellama.el ends here
