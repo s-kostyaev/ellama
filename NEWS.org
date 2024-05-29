@@ -1,3 +1,6 @@
+* Version 0.9.5
+- Establish a fresh chat session whenever the ~ellama-chat~ function
+  is invoked with a provider different from the one currently in use.
 * Version 0.9.4
 - Improve code blocks translation from markdown to org.
 * Version 0.9.3
