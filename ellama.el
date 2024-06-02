@@ -374,6 +374,17 @@ Too low value can break generated code by splitting long comment lines."
       (replace-regexp-in-string "^[[:space:]]*```\\(\\(.\\|\n\\)*\\)" "#+BEGIN_SRC\\1" text)
     text))
 
+(defun ellama--replace-bad-code-blocks (text)
+  "Replace code src blocks in TEXT."
+  (with-temp-buffer
+    (insert text)
+    (goto-char (point-min))
+    ;; skip good code blocks
+    (while (re-search-forward "#\\+BEGIN_SRC\\(.\\|\n\\)*?#\\+END_SRC" nil t))
+    (while (re-search-forward "#\\+END_SRC\\(\\(.\\|\n\\)*?\\)#\\+END_SRC" nil t)
+      (replace-match "#+BEGIN_SRC\\1#+END_SRC"))
+    (buffer-substring-no-properties (point-min) (point-max))))
+
 (defun ellama--translate-markdown-to-org-filter (text)
   "Filter to translate code blocks from markdown syntax to org syntax in TEXT.
 This filter contains only subset of markdown syntax to be good enough."
@@ -386,6 +397,7 @@ This filter contains only subset of markdown syntax to be good enough."
     (replace-regexp-in-string "^[[:space:]]*```$" "#+END_SRC")
     (replace-regexp-in-string "^[[:space:]]*```" "#+END_SRC\n")
     (replace-regexp-in-string "```" "\n#+END_SRC\n")
+    (ellama--replace-bad-code-blocks)
     ;; lists
     (replace-regexp-in-string "^\\* " "+ ")
     ;; bold
