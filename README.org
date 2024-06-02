@@ -315,6 +315,8 @@ argument generated text string.
 - ~ellama-chat-translation-enabled~: Enable chat translations if set.
 - ~ellama-translation-provider~: LLM translation provider.
   ~ellama-provider~ will be used if not set.
+- ~ellama-show-quotes~: Show quotes content in chat buffer. Disabled
+  by default.
 
 ** Acknowledgments
 
