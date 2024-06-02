@@ -86,6 +86,39 @@
   (let ((element (ellama-context-element-text :content "123")))
     (should (equal "123" (ellama-context-element-format element 'org-mode)))))
 
+(ert-deftest test-ellama-context-element-format-webpage-quote-disabled-markdown ()
+  (let ((element (ellama-context-element-webpage-quote :name "test name" :url "https://example.com/" :content "1\n\n2"))
+	(ellama-show-quotes nil))
+    (should (equal "[test name](https://example.com/)" (ellama-context-element-format element 'markdown-mode)))))
+
+(ert-deftest test-ellama-context-element-format-webpage-quote-enabled-markdown ()
+  (let ((element (ellama-context-element-webpage-quote :name "test name" :url "https://example.com/" :content "1\n\n2"))
+	(ellama-show-quotes t))
+    (should (equal "[test name](https://example.com/):
+> 1
+> 
+> 2
+
+"
+		   (ellama-context-element-format element 'markdown-mode)))))
+
+(ert-deftest test-ellama-context-element-format-webpage-quote-disabled-org-mode ()
+  (let ((element (ellama-context-element-webpage-quote :name "test name" :url "https://example.com/" :content "1\n\n2"))
+	(ellama-show-quotes nil))
+    (should (equal "[[https://example.com/][test name]]" (ellama-context-element-format element 'org-mode)))))
+
+(ert-deftest test-ellama-context-element-format-webpage-quote-enabled-org-mode ()
+  (let ((element (ellama-context-element-webpage-quote :name "test name" :url "https://example.com/" :content "1\n\n2"))
+	(ellama-show-quotes t))
+    (should (equal "[[https://example.com/][test name]]:
+#+BEGIN_QUOTE
+1
+
+2
+#+END_QUOTE
+"
+		   (ellama-context-element-format element 'org-mode)))))
+
 (ert-deftest test-ellama-context-element-extract-buffer ()
   (with-temp-buffer
     (insert "123")
@@ -105,6 +138,10 @@
 (ert-deftest test-ellama-context-element-extract-text ()
   (let ((element (ellama-context-element-text :content "123")))
     (should (string-match "123" (ellama-context-element-extract element)))))
+
+(ert-deftest test-ellama-context-element-extract-webpage-quote ()
+  (let ((element (ellama-context-element-webpage-quote :content "123")))
+    (should (equal "123" (ellama-context-element-extract element)))))
 
 (ert-deftest test-ellama-md-to-org-code-simple ()
   (let ((result (ellama--translate-markdown-to-org-filter "Here is your TikZ code for a blue rectangle:

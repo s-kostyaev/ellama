@@ -41,6 +41,7 @@
 (require 'spinner)
 (require 'info)
 (require 'shr)
+(require 'eww)
 (eval-when-compile (require 'rx))
 
 (defgroup ellama nil
@@ -319,6 +320,11 @@ Too low value can break generated code by splitting long comment lines."
 
 (defcustom ellama-session-auto-save t
   "Automatically save ellama sessions if set."
+  :group 'ellama
+  :type 'boolean)
+
+(defcustom ellama-show-quotes nil
+  "Show quotes in chat context."
   :group 'ellama
   :type 'boolean)
 
@@ -893,6 +899,52 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (ignore mode)
   (oref element content))
 
+;; Webpage quote context elements
+
+(defclass ellama-context-element-webpage-quote (ellama-context-element)
+  ((name :initarg :name :type string)
+   (url :initarg :url :type string)
+   (content :initarg :content :type string))
+  "A structure for holding information about a context element.")
+
+(cl-defmethod ellama-context-element-extract
+  ((element ellama-context-element-webpage-quote))
+  "Extract the content of the context ELEMENT."
+  (oref element content))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-webpage-quote) (mode (eql 'markdown-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name url content) element
+    (if ellama-show-quotes
+	(format "[%s](%s):\n%s\n\n"
+		name url
+		(ellama--md-quote content))
+      (format "[%s](%s)" name url))))
+
+(defun ellama--md-quote (content)
+  "Return quoted CONTENT for markdown."
+  (with-temp-buffer
+    (insert (propertize content 'hard t))
+    (let ((fill-prefix "> ")
+	  (fill-column ellama-long-lines-length)
+	  (use-hard-newlines t)
+	  (comment-start ">")
+	  (comment-empty-lines t))
+      (comment-region (point-min) (point-max) ">")
+      (fill-region (point-min) (point-max) nil t t))
+    (buffer-substring-no-properties (point-min) (point-max))))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-webpage-quote) (mode (eql 'org-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name url content) element
+    (if ellama-show-quotes
+	(format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n" url name content)
+      (format "[[%s][%s]]" url name))))
+
 ;;;###autoload
 (defun ellama-context-add-file ()
   "Add file to context."
@@ -924,6 +976,29 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (interactive (list (Info-copy-current-node-name)))
   (let ((element (ellama-context-element-info-node :name node)))
     (ellama-context-element-add element)))
+
+(defun ellama-context-add-webpage-quote (name url content)
+  "Add webpage with NAME and URL quote CONTENT to context."
+  (let ((element (ellama-context-element-webpage-quote
+		  :name name :url url :content content)))
+    (ellama-context-element-add element)))
+
+;;;###autoload
+(defun ellama-context-add-webpage-quote-eww ()
+  "Add webpage quote to context interactively from `eww'."
+  (interactive)
+  (if (eq major-mode 'eww-mode)
+      (let* ((name (plist-get eww-data :title))
+	     (url (eww-current-url))
+	     (content (if (region-active-p)
+			  (buffer-substring-no-properties
+			   (region-beginning)
+			   (region-end))
+			(buffer-substring-no-properties
+			 (point-min)
+			 (point-max)))))
+	(ellama-context-add-webpage-quote name url content))
+    (warn "Should be called from `eww'.")))
 
 (defun ellama--translate-string (s)
   "Translate string S to `ellama-language' syncronously."
