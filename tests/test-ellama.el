@@ -176,6 +176,34 @@ This code will create a rectangle with a blue border and light
 blue filling. You can replace \'Text\' with your desired text or other TikZ
 elements."))))
 
+(ert-deftest test-ellama-md-to-org-code-multiple-bad-blocks ()
+  (let ((result (ellama--translate-markdown-to-org-filter "Some text:
+```
+First block
+```
+other text:
+```
+Second block
+```
+more text:
+```
+third block
+```
+That's it.")))
+    (should (string-equal result "Some text:
+#+BEGIN_SRC
+First block
+#+END_SRC
+other text:
+#+BEGIN_SRC
+Second block
+#+END_SRC
+more text:
+#+BEGIN_SRC
+third block
+#+END_SRC
+That's it."))))
+
 (provide 'test-ellama)
 
 ;;; test-ellama.el ends here
