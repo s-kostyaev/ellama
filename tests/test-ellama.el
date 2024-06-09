@@ -119,6 +119,28 @@
 "
 		   (ellama-context-element-format element 'org-mode)))))
 
+(ert-deftest test-ellama-context-element-format-info-node-quote-disabled-markdown ()
+  (let ((element (ellama-context-element-info-node-quote :name "(emacs)Top" :content "1\n\n2"))
+	(ellama-show-quotes nil))
+    (should (equal "```emacs-lisp\n(info \"(emacs)Top\")\n```\n" (ellama-context-element-format element 'markdown-mode)))))
+
+(ert-deftest test-ellama-context-element-format-info-node-quote-enabled-markdown ()
+  (let ((element (ellama-context-element-info-node-quote :name "(emacs)Top" :content "1\n\n2"))
+	(ellama-show-quotes t))
+    (should (equal "```emacs-lisp\n(info \"(emacs)Top\")\n```\n> 1\n> \n> 2\n\n"
+		   (ellama-context-element-format element 'markdown-mode)))))
+
+(ert-deftest test-ellama-context-element-format-info-node-quote-disabled-org-mode ()
+  (let ((element (ellama-context-element-info-node-quote :name "(emacs)Top" :content "1\n\n2"))
+	(ellama-show-quotes nil))
+    (should (equal "[[(emacs)Top][(emacs)Top]]" (ellama-context-element-format element 'org-mode)))))
+
+(ert-deftest test-ellama-context-element-format-info-node-quote-enabled-org-mode ()
+  (let ((element (ellama-context-element-info-node-quote :name "(emacs)Top" :content "1\n\n2"))
+	(ellama-show-quotes t))
+    (should (equal "[[(emacs)Top][(emacs)Top]]:\n#+BEGIN_QUOTE\n1\n\n2\n#+END_QUOTE\n"
+		   (ellama-context-element-format element 'org-mode)))))
+
 (ert-deftest test-ellama-context-element-extract-buffer ()
   (with-temp-buffer
     (insert "123")
@@ -141,6 +163,10 @@
 
 (ert-deftest test-ellama-context-element-extract-webpage-quote ()
   (let ((element (ellama-context-element-webpage-quote :content "123")))
+    (should (equal "123" (ellama-context-element-extract element)))))
+
+(ert-deftest test-ellama-context-element-extract-info-node-quote ()
+  (let ((element (ellama-context-element-info-node-quote :content "123")))
     (should (equal "123" (ellama-context-element-extract element)))))
 
 (ert-deftest test-ellama-md-to-org-code-simple ()

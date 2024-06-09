@@ -953,6 +953,51 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	(format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n" url name content)
       (format "[[%s][%s]]" url name))))
 
+;; Info node quote context elements
+
+(defclass ellama-context-element-info-node-quote (ellama-context-element)
+  ((name :initarg :name :type string)
+   (content :initarg :content :type string))
+  "A structure for holding information about a context element.")
+
+(cl-defmethod ellama-context-element-extract
+  ((element ellama-context-element-info-node-quote))
+  "Extract the content of the context ELEMENT."
+  (oref element content))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-info-node-quote) (mode (eql 'markdown-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name content) element
+    (if ellama-show-quotes
+	(format "```emacs-lisp\n(info \"%s\")\n```\n%s\n\n"
+		name
+		(ellama--md-quote content))
+      (format "```emacs-lisp\n(info \"%s\")\n```\n" name))))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-info-node-quote) (mode (eql 'org-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name content) element
+    (if ellama-show-quotes
+	(format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n"
+		(replace-regexp-in-string
+		 "(\\(.?*\\)) \\(.*\\)" "info:\\1#\\2" name)
+		(if (and ellama-chat-translation-enabled
+			 (not ellama--current-session))
+		    (ellama--translate-string name)
+		  name)
+		content)
+      (format "[[%s][%s]]"
+	      (replace-regexp-in-string
+	       "(\\(.?*\\)) \\(.*\\)" "info:\\1#\\2" name)
+	      (if (and ellama-chat-translation-enabled
+		       (not ellama--current-session))
+		  (ellama--translate-string name)
+		name)))))
+
 ;;;###autoload
 (defun ellama-context-add-file ()
   "Add file to context."
@@ -984,6 +1029,28 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (interactive (list (Info-copy-current-node-name)))
   (let ((element (ellama-context-element-info-node :name node)))
     (ellama-context-element-add element)))
+
+(defun ellama-context-add-info-node-quote-noninteractive (name content)
+  "Add webpage with NAME quote CONTENT to context."
+  (let ((element (ellama-context-element-info-node-quote
+		  :name name :content content)))
+    (ellama-context-element-add element)))
+
+;;;###autoload
+(defun ellama-context-add-info-node-quote ()
+  "Add info node quote to context interactively."
+  (interactive)
+  (let ((name (Info-copy-current-node-name))
+	(content (if (region-active-p)
+		     (buffer-substring-no-properties
+		      (region-beginning)
+		      (region-end))
+		   (buffer-substring-no-properties
+		    (point-min)
+		    (point-max)))))
+    (if (not name)
+	(warn "should be called from `info' buffer")
+      (ellama-context-add-info-node-quote-noninteractive name content))))
 
 (defun ellama-context-add-webpage-quote (name url content)
   "Add webpage with NAME and URL quote CONTENT to context."
