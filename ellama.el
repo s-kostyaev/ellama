@@ -567,8 +567,16 @@ If EPHEMERAL non nil new session will not be associated with any file."
 		      (file-name-concat
 		       ellama-sessions-directory
 		       (concat id "." (ellama-get-session-file-extension)))))
+ 	 (previous-session
+	  (when ellama--current-session-id
+	    (with-current-buffer
+		(ellama-get-session-buffer ellama--current-session-id)
+	      ellama--current-session)))
 	 (session (make-ellama-session
-		   :id id :provider provider :file file-name :context ellama--new-session-context))
+		   :id id :provider provider :file file-name
+		   :context (if previous-session
+				(ellama-session-context previous-session)
+			      ellama--new-session-context)))
 	 (buffer (if file-name
 		     (progn
 		       (make-directory ellama-sessions-directory t)
