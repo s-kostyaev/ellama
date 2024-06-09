@@ -1,3 +1,5 @@
+* Version 0.9.9
+- Add info node quote context elements.
 * Version 0.9.8
 - Copy context from previous session on creating new session. This is
   useful when you create new session by calling ~ellama-ask-about~
