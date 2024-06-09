@@ -1,3 +1,5 @@
+* Version 0.9.10
+- Add file quote context elements.
 * Version 0.9.9
 - Add info node quote context elements.
 * Version 0.9.8
