@@ -998,6 +998,39 @@ If EPHEMERAL non nil new session will not be associated with any file."
 		  (ellama--translate-string name)
 		name)))))
 
+;; File quote context elements
+
+(defclass ellama-context-element-file-quote (ellama-context-element)
+  ((path :initarg :path :type string)
+   (content :initarg :content :type string))
+  "A structure for holding information about a context element.")
+
+(cl-defmethod ellama-context-element-extract
+  ((element ellama-context-element-file-quote))
+  "Extract the content of the context ELEMENT."
+  (oref element content))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-file-quote) (mode (eql 'markdown-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (path content) element
+    (if ellama-show-quotes
+	(format "[%s](%s):\n%s\n\n"
+		path path
+		(ellama--md-quote content))
+      (format "[%s](%s)" path path))))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-file-quote) (mode (eql 'org-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (path content) element
+    (if ellama-show-quotes
+	(format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n" path path content)
+      (format "[[%s][%s]]" path path))))
+
+
 ;;;###autoload
 (defun ellama-context-add-file ()
   "Add file to context."
@@ -1005,6 +1038,28 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (let* ((file-name (read-file-name "Select file: " nil nil t))
          (element (ellama-context-element-file :name file-name)))
     (ellama-context-element-add element)))
+
+(defun ellama-context-add-file-quote-noninteractive (path content)
+  "Add file with PATH quote CONTENT to context."
+  (let ((element (ellama-context-element-file-quote
+		  :path path :content content)))
+    (ellama-context-element-add element)))
+
+;;;###autoload
+(defun ellama-context-add-file-quote ()
+  "Add file quote to context interactively."
+  (interactive)
+  (let ((path (buffer-file-name (current-buffer)))
+	(content (if (region-active-p)
+		     (buffer-substring-no-properties
+		      (region-beginning)
+		      (region-end))
+		   (buffer-substring-no-properties
+		    (point-min)
+		    (point-max)))))
+    (if (not path)
+	(warn "should be called from buffer associated with file")
+      (ellama-context-add-file-quote-noninteractive path content))))
 
 ;;;###autoload
 (defun ellama-context-add-buffer (buf)
@@ -1031,7 +1086,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
     (ellama-context-element-add element)))
 
 (defun ellama-context-add-info-node-quote-noninteractive (name content)
-  "Add webpage with NAME quote CONTENT to context."
+  "Add info node with NAME quote CONTENT to context."
   (let ((element (ellama-context-element-info-node-quote
 		  :name name :content content)))
     (ellama-context-element-add element)))
@@ -1052,7 +1107,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	(warn "should be called from `info' buffer")
       (ellama-context-add-info-node-quote-noninteractive name content))))
 
-(defun ellama-context-add-webpage-quote (name url content)
+(defun ellama-context-add-webpage-quote-noninteractive (name url content)
   "Add webpage with NAME and URL quote CONTENT to context."
   (let ((element (ellama-context-element-webpage-quote
 		  :name name :url url :content content)))
@@ -1072,7 +1127,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 			(buffer-substring-no-properties
 			 (point-min)
 			 (point-max)))))
-	(ellama-context-add-webpage-quote name url content))
+	(ellama-context-add-webpage-quote-noninteractive name url content))
     (warn "Should be called from `eww'.")))
 
 (defun ellama--translate-string (s)

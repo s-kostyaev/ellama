@@ -141,6 +141,39 @@
     (should (equal "[[(emacs)Top][(emacs)Top]]:\n#+BEGIN_QUOTE\n1\n\n2\n#+END_QUOTE\n"
 		   (ellama-context-element-format element 'org-mode)))))
 
+(ert-deftest test-ellama-context-element-format-file-quote-disabled-markdown ()
+  (let ((element (ellama-context-element-file-quote :path "/tmp/test.txt" :content "1\n\n2"))
+	(ellama-show-quotes nil))
+    (should (equal "[/tmp/test.txt](/tmp/test.txt)" (ellama-context-element-format element 'markdown-mode)))))
+
+(ert-deftest test-ellama-context-element-format-file-quote-enabled-markdown ()
+  (let ((element (ellama-context-element-file-quote :path "/tmp/test.txt" :content "1\n\n2"))
+	(ellama-show-quotes t))
+    (should (equal "[/tmp/test.txt](/tmp/test.txt):
+> 1
+> 
+> 2
+
+"
+		   (ellama-context-element-format element 'markdown-mode)))))
+
+(ert-deftest test-ellama-context-element-format-file-quote-disabled-org-mode ()
+  (let ((element (ellama-context-element-file-quote :path "/tmp/test.txt" :content "1\n\n2"))
+	(ellama-show-quotes nil))
+    (should (equal "[[/tmp/test.txt][/tmp/test.txt]]" (ellama-context-element-format element 'org-mode)))))
+
+(ert-deftest test-ellama-context-element-format-file-quote-enabled-org-mode ()
+  (let ((element (ellama-context-element-file-quote :path "/tmp/test.txt" :content "1\n\n2"))
+	(ellama-show-quotes t))
+    (should (equal "[[/tmp/test.txt][/tmp/test.txt]]:
+#+BEGIN_QUOTE
+1
+
+2
+#+END_QUOTE
+"
+		   (ellama-context-element-format element 'org-mode)))))
+
 (ert-deftest test-ellama-context-element-extract-buffer ()
   (with-temp-buffer
     (insert "123")
@@ -167,6 +200,10 @@
 
 (ert-deftest test-ellama-context-element-extract-info-node-quote ()
   (let ((element (ellama-context-element-info-node-quote :content "123")))
+    (should (equal "123" (ellama-context-element-extract element)))))
+
+(ert-deftest test-ellama-context-element-extract-file-quote ()
+  (let ((element (ellama-context-element-file-quote :content "123")))
     (should (equal "123" (ellama-context-element-extract element)))))
 
 (ert-deftest test-ellama-md-to-org-code-simple ()
