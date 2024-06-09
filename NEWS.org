@@ -1,3 +1,7 @@
+* Version 0.9.8
+- Copy context from previous session on creating new session. This is
+  useful when you create new session by calling ~ellama-ask-about~
+  with prefix argument.
 * Version 0.9.7
 - Add webpage quote context elements.
 * Version 0.9.6
