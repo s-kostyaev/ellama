@@ -108,13 +108,13 @@
     (should (equal "[[https://example.com/][test name]]" (ellama-context-element-format element 'org-mode)))))
 
 (ert-deftest test-ellama-context-element-format-webpage-quote-enabled-org-mode ()
-  (let ((element (ellama-context-element-webpage-quote :name "test name" :url "https://example.com/" :content "1\n\n2"))
+  (let ((element (ellama-context-element-webpage-quote :name "test name" :url "https://example.com/" :content "1\n\n* 2"))
 	(ellama-show-quotes t))
     (should (equal "[[https://example.com/][test name]]:
 #+BEGIN_QUOTE
 1
 
-2
+ * 2
 #+END_QUOTE
 "
 		   (ellama-context-element-format element 'org-mode)))))
@@ -136,9 +136,9 @@
     (should (equal "[[(emacs)Top][(emacs)Top]]" (ellama-context-element-format element 'org-mode)))))
 
 (ert-deftest test-ellama-context-element-format-info-node-quote-enabled-org-mode ()
-  (let ((element (ellama-context-element-info-node-quote :name "(emacs)Top" :content "1\n\n2"))
+  (let ((element (ellama-context-element-info-node-quote :name "(emacs)Top" :content "1\n\n* 2"))
 	(ellama-show-quotes t))
-    (should (equal "[[(emacs)Top][(emacs)Top]]:\n#+BEGIN_QUOTE\n1\n\n2\n#+END_QUOTE\n"
+    (should (equal "[[(emacs)Top][(emacs)Top]]:\n#+BEGIN_QUOTE\n1\n\n * 2\n#+END_QUOTE\n"
 		   (ellama-context-element-format element 'org-mode)))))
 
 (ert-deftest test-ellama-context-element-format-file-quote-disabled-markdown ()
@@ -163,13 +163,13 @@
     (should (equal "[[/tmp/test.txt][/tmp/test.txt]]" (ellama-context-element-format element 'org-mode)))))
 
 (ert-deftest test-ellama-context-element-format-file-quote-enabled-org-mode ()
-  (let ((element (ellama-context-element-file-quote :path "/tmp/test.txt" :content "1\n\n2"))
+  (let ((element (ellama-context-element-file-quote :path "/tmp/test.txt" :content "1\n\n* 2"))
 	(ellama-show-quotes t))
     (should (equal "[[/tmp/test.txt][/tmp/test.txt]]:
 #+BEGIN_QUOTE
 1
 
-2
+ * 2
 #+END_QUOTE
 "
 		   (ellama-context-element-format element 'org-mode)))))

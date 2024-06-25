@@ -944,13 +944,18 @@ If EPHEMERAL non nil new session will not be associated with any file."
       (fill-region (point-min) (point-max) nil t t))
     (buffer-substring-no-properties (point-min) (point-max))))
 
+(defun ellama--org-quote (content)
+  "Return transformed CONTENT for org quotes."
+  (replace-regexp-in-string "^*" " *" content))
+
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-webpage-quote) (mode (eql 'org-mode)))
   "Format the context ELEMENT for the major MODE."
   (ignore mode)
   (with-slots (name url content) element
     (if ellama-show-quotes
-	(format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n" url name content)
+	(format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n"
+		url name (ellama--org-quote content))
       (format "[[%s][%s]]" url name))))
 
 ;; Info node quote context elements
@@ -989,7 +994,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 			 (not ellama--current-session))
 		    (ellama--translate-string name)
 		  name)
-		content)
+		(ellama--org-quote content))
       (format "[[%s][%s]]"
 	      (replace-regexp-in-string
 	       "(\\(.?*\\)) \\(.*\\)" "info:\\1#\\2" name)
@@ -1027,7 +1032,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (ignore mode)
   (with-slots (path content) element
     (if ellama-show-quotes
-	(format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n" path path content)
+	(format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n"
+		path path (ellama--org-quote content))
       (format "[[%s][%s]]" path path))))
 
 
