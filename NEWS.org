@@ -1,3 +1,5 @@
+* Version 0.9.11
+- Transform org quote content to avoid rendering issues.
 * Version 0.9.10
 - Add file quote context elements.
 * Version 0.9.9
