@@ -1334,8 +1334,10 @@ last step only.
 		  (when tl
 		    (ellama-chain res tl (cons res acc))))))))
 
+;;;###autoload
 (defun ellama-solve-reasoning-problem (problem)
-  "Solve reasoning PROBLEM with absctraction of thought."
+  "Solve reasoning PROBLEM with absctraction of thought.
+Problem will be solved with the chain of questions to LLM."
   (interactive "sProblem: ")
   (ellama-chain
    problem
