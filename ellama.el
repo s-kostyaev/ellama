@@ -1193,8 +1193,8 @@ file by default.
 :on-error ON-ERROR -- ON-ERROR a function that's called with an error message on
 failure (with BUFFER current).
 
-:on-done ON-DONE -- ON-DONE a function that's called with the full response text
-when the request completes (with BUFFER current)."
+:on-done ON-DONE -- ON-DONE a function or list of functions that's called with
+ the full response text when the request completes (with BUFFER current)."
   (let* ((session (plist-get args :session))
 	 (provider (if session
 		       (ellama-session-provider session)
@@ -1267,7 +1267,10 @@ when the request completes (with BUFFER current)."
 				    (with-current-buffer buffer
 				      (accept-change-group ellama--change-group)
 				      (spinner-stop)
-				      (funcall donecb text)
+				      (if (listp donecb)
+					  (mapc (lambda (fn) (funcall fn text))
+						donecb)
+					(funcall donecb text))
 				      (setq ellama--current-request nil)
 				      (ellama-request-mode -1)))
 				  (lambda (_ msg)
@@ -1278,14 +1281,15 @@ when the request completes (with BUFFER current)."
 				      (setq ellama--current-request nil)
 				      (ellama-request-mode -1)))))))))
 
-(defun ellama-chain (initial-prompt forms)
+(defun ellama-chain (initial-prompt forms &optional acc)
   "Call chain of FORMS on INITIAL-PROMPT.
+ACC will collect responses in reverse order (previous answer will be on top).
 Each form is a plist that can contain different options:
 
 :provider PROVIDER - use PROVIDER instead of `ellama-provider'.
 
 :transform FUNCTION - use FUNCTION to transform result of previous step to new
-prompt.
+prompt.  FUCTION will be called with two arguments INITIAL-PROMPT and ACC.
 
 :session SESSION - use SESSION in current step.
 
@@ -1296,12 +1300,14 @@ last step only.
   (let* ((hd (car forms))
 	 (tl (cdr forms))
 	 (provider (or (plist-get hd :provider) ellama-provider))
-	 (transform (or (plist-get hd :transform) #'identity))
-	 (prompt (apply transform (list initial-prompt)))
+	 (transform (plist-get hd :transform))
+	 (prompt (if transform
+		     (apply transform (list initial-prompt acc))
+		   initial-prompt))
 	 (session (plist-get hd :session))
 	 (chat (plist-get hd :chat))
-	 (show (or (plist-get hd :show) ellama-always-show-chain-steps chat))
-	 (buf (if (or (and tl (not chat)) (not session))
+	 (show (or (plist-get hd :show) ellama-always-show-chain-steps))
+	 (buf (if (or (and (not chat)) (not session))
 		  (get-buffer-create (make-temp-name
 				      (ellama-generate-name provider real-this-command prompt)))
 		(ellama-get-session-buffer ellama--current-session-id))))
@@ -1310,7 +1316,13 @@ last step only.
     (with-current-buffer buf
       (funcall ellama-major-mode))
     (if chat
-	(ellama-chat prompt nil :provider provider)
+	(ellama-chat
+	 prompt
+	 nil
+	 :provider provider
+	 :on-done (lambda (res)
+		    (when tl
+		      (ellama-chain res tl (cons res acc)))))
       (ellama-stream
        prompt
        :provider provider
@@ -1320,18 +1332,44 @@ last step only.
 		 #'ellama--translate-markdown-to-org-filter)
        :on-done (lambda (res)
 		  (when tl
-		    (ellama-chain res tl)))))))
+		    (ellama-chain res tl (cons res acc))))))))
 
-(defun ellama-chat-done (text)
+;;;###autoload
+(defun ellama-solve-reasoning-problem (problem)
+  "Solve reasoning PROBLEM with absctraction of thought.
+Problem will be solved with the chain of questions to LLM."
+  (interactive "sProblem: ")
+  (ellama-chain
+   problem
+   '((:chat t
+	    :transform (lambda (problem _)
+			 (format "Problem:
+%s
+
+Let's think logically and provide abstract higher order plan how to solve this kind
+of problems. Don't dive into small details only provide high-level plan." problem)))
+     (:chat t
+	    :transform (lambda (_ _)
+			 "Provide more detailed plan. On what details should we pay attention?"))
+     (:chat t
+	    :transform (lambda (_ _)
+			 "Now revise the plan and provide the final solution."))
+     (:chat t
+	    :transform (lambda (_ _)
+			 "Provide short final answer based on final solution.")))))
+
+(defun ellama-chat-done (text &optional on-done)
   "Chat done.
-Will call `ellama-chat-done-callback' on TEXT."
+Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
   (save-excursion
     (goto-char (point-max))
     (insert "\n\n")
     (when ellama-session-auto-save
       (save-buffer)))
   (when ellama-chat-done-callback
-    (funcall ellama-chat-done-callback text)))
+    (funcall ellama-chat-done-callback text))
+  (when on-done
+    (funcall on-done text)))
 
 (defun ellama--translate-generated-text-on-done (translation-buffer)
   "Translate generated text into TRANSLATION-BUFFER."
@@ -1399,7 +1437,10 @@ Will call `ellama-chat-done-callback' on TEXT."
 If CREATE-SESSION set, creates new session even if there is an active session.
 ARGS contains keys for fine control.
 
-:provider PROVIDER -- PROVIDER is an llm provider for generation."
+:provider PROVIDER -- PROVIDER is an llm provider for generation.
+
+:on-done ON-DONE -- ON-DONE a function that's called with
+the full response text when the request completes (with BUFFER current)."
   (interactive "sAsk ellama: ")
   (let* ((providers (append
                      `(("default model" . ellama-provider)
@@ -1407,10 +1448,13 @@ ARGS contains keys for fine control.
 			    '("ollama model" . (ellama-get-ollama-local-model))))
                      ellama-providers))
 	 (variants (mapcar #'car providers))
+	 (donecb (plist-get args :on-done))
 	 (provider (if current-prefix-arg
-		       (eval (alist-get
-			      (completing-read "Select model: " variants)
-			      providers nil nil #'string=))
+		       (progn
+			 (setq current-prefix-arg nil)
+			 (eval (alist-get
+				(completing-read "Select model: " variants)
+				providers nil nil #'string=)))
 		     (or (plist-get args :provider)
 			 ellama-provider)))
 	 (session (if (or create-session
@@ -1451,7 +1495,8 @@ ARGS contains keys for fine control.
 		  (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
 	  (ellama-stream prompt
 			 :session session
-			 :on-done #'ellama-chat-done
+			 :on-done (if donecb (list 'ellama-chat-done donecb)
+				    'ellama-chat-done)
 			 :filter (when (derived-mode-p 'org-mode)
 				   #'ellama--translate-markdown-to-org-filter)))))))
 
