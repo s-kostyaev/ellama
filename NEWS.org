@@ -1,3 +1,9 @@
+* Version 0.10.0
+- Add ~ellama-solve-reasoning-problem~ command that implements
+  [[https://arxiv.org/pdf/2406.12442][Absctraction of Thought]] technique. It uses a chain of multiple
+  messages to LLM and help it to provide much better answers on
+  reasoning problems. Even small LLMs like [[https://ollama.com/library/phi3][phi3-mini]] provides much
+  better results on reasoning tasks using AoT.
 * Version 0.9.11
 - Transform org quote content to avoid rendering issues.
 * Version 0.9.10
