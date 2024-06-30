@@ -236,6 +236,11 @@ uses a chain of multiple messages to LLM and help it to provide much
 better answers on reasoning problems. Even small LLMs like [[https://ollama.com/library/phi3][phi3-mini]]
 provides much better results on reasoning tasks using AoT.
 
+*** ellama-solve-domain-specific-problem
+
+Solve domain specific problem with simple chain. It makes LLMs act
+like a professional and adds a planning step.
+
 ** Keymap
 
 Here is a table of keybindings and their associated functions in

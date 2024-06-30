@@ -1,3 +1,7 @@
+* Version 0.10.1
+- Add ~ellama-solve-domain-specific-problem~ command. It leverages the
+  popular "act like a professional" prompt engineering method,
+  enhanced by an automated planning step.
 * Version 0.10.0
 - Add ~ellama-solve-reasoning-problem~ command that implements
   [[https://arxiv.org/pdf/2406.12442][Absctraction of Thought]] technique. It uses a chain of multiple
