@@ -391,6 +391,23 @@ Too low value can break generated code by splitting long comment lines."
       (replace-match "#+BEGIN_SRC\\1#+END_SRC"))
     (buffer-substring-no-properties (point-min) (point-max))))
 
+(defun ellama--replace-top-level-headings (text)
+  "Replace top level headings in TEXT if no source blocks."
+  ;; TODO: improve this code to replace all top level headings outside
+  ;; of code blocks. For example we can collect all begin_src
+  ;; positions, all end_src positions, sort it and safely replace all
+  ;; top level headings outside of this regions. If there is non-pair
+  ;; begin_src we should act like end_src at (point-max).
+  (with-temp-buffer
+    (insert text)
+    (goto-char (point-min))
+    (when (and (re-search-forward "^# " nil t)
+	       (not (re-search-backward "#\\+BEGIN_SRC" nil t)))
+      (goto-char (point-min))
+      (while (re-search-forward "^# " nil t)
+	(replace-match "* ")))
+    (buffer-substring-no-properties (point-min) (point-max))))
+
 (defun ellama--translate-markdown-to-org-filter (text)
   "Filter to translate code blocks from markdown syntax to org syntax in TEXT.
 This filter contains only subset of markdown syntax to be good enough."
@@ -421,7 +438,7 @@ This filter contains only subset of markdown syntax to be good enough."
     (replace-regexp-in-string "~~\\(.+?\\)~~" "+\\1+")
     (replace-regexp-in-string "<s>\\(.+?\\)</s>" "+\\1+")
     ;; headings
-    (replace-regexp-in-string "^# " "* ")
+    (ellama--replace-top-level-headings)
     (replace-regexp-in-string "^## " "** ")
     (replace-regexp-in-string "^### " "*** ")
     (replace-regexp-in-string "^#### " "**** ")
