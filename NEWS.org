@@ -1,3 +1,6 @@
+* Version 0.10.2
+- Fix bug when translation from markdown to org syntax breaks python
+  code blocks.
 * Version 0.10.1
 - Add ~ellama-solve-domain-specific-problem~ command. It leverages the
   popular "act like a professional" prompt engineering method,
