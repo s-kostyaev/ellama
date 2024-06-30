@@ -1358,6 +1358,37 @@ of problems. Don't dive into small details only provide high-level plan." proble
 	    :transform (lambda (_ _)
 			 "Provide short final answer based on final solution.")))))
 
+;;;###autoload
+(defun ellama-solve-domain-specific-problem (problem)
+  "Solve domain-specific PROBLEM with `ellama-chain'."
+  (interactive "sProblem: ")
+  (ellama-chain
+   problem
+   `((:transform (lambda (problem _)
+		   (format "Problem:
+%s
+
+Which specialist suits better for solving this kind of problems?"
+			   problem)))
+     (:transform (lambda (res _)
+		   (format "Message:
+%s
+
+Extract profession from this message. Be short and concise."
+			   res)))
+     (:chat t
+	    :transform (lambda (profession _)
+			 (format
+			  "You are professional %s. Do your best and create detailed plan how to solve this problem:
+%s"
+			  (string-trim profession) ,problem)))
+     (:chat t
+	    :transform (lambda (_ _)
+			 "Now revise the plan and provide the final solution."))
+     (:chat t
+	    :transform (lambda (_ _)
+			 "Provide short final answer based on final solution.")))))
+
 (defun ellama-chat-done (text &optional on-done)
   "Chat done.
 Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
