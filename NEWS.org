@@ -1,3 +1,6 @@
+* Version 0.11.0
+- Refactor markdown to org conversion code. Now all transformations
+  will be applied only outside of code blocks.
 * Version 0.10.2
 - Fix bug when translation from markdown to org syntax breaks python
   code blocks.
