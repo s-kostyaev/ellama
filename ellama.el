@@ -391,8 +391,8 @@ Too low value can break generated code by splitting long comment lines."
       (replace-match "#+BEGIN_SRC\\1#+END_SRC"))
     (buffer-substring-no-properties (point-min) (point-max))))
 
-(defun ellama--replace-top-level-headings (text)
-  "Replace top level headings in TEXT if no source blocks."
+(defun ellama--replace-outside-of-code-blocks (text)
+  "Replace some markdown elements to org in TEXT if no source blocks."
   ;; TODO: improve this code to replace all top level headings outside
   ;; of code blocks. For example we can collect all begin_src
   ;; positions, all end_src positions, sort it and safely replace all
@@ -405,7 +405,10 @@ Too low value can break generated code by splitting long comment lines."
 	       (not (re-search-backward "#\\+BEGIN_SRC" nil t)))
       (goto-char (point-min))
       (while (re-search-forward "^# " nil t)
-	(replace-match "* ")))
+	(replace-match "* "))
+      (goto-char (point-min))
+      (while (re-search-forward "__\\(.+?\\)__" nil t)
+	(replace-match "*\\1*")))
     (buffer-substring-no-properties (point-min) (point-max))))
 
 (defun ellama--translate-markdown-to-org-filter (text)
@@ -425,7 +428,6 @@ This filter contains only subset of markdown syntax to be good enough."
     (replace-regexp-in-string "^\\* " "+ ")
     ;; bold
     (replace-regexp-in-string "\\*\\*\\(.+?\\)\\*\\*" "*\\1*")
-    (replace-regexp-in-string "__\\(.+?\\)__" "*\\1*")
     (replace-regexp-in-string "<b>\\(.+?\\)</b>" "*\\1*")
     ;; italic
     ;; (replace-regexp-in-string "_\\(.+?\\)_" "/\\1/") ;; most of the time it breaks code blocks, so disable it
@@ -438,7 +440,7 @@ This filter contains only subset of markdown syntax to be good enough."
     (replace-regexp-in-string "~~\\(.+?\\)~~" "+\\1+")
     (replace-regexp-in-string "<s>\\(.+?\\)</s>" "+\\1+")
     ;; headings
-    (ellama--replace-top-level-headings)
+    (ellama--replace-outside-of-code-blocks)
     (replace-regexp-in-string "^## " "** ")
     (replace-regexp-in-string "^### " "*** ")
     (replace-regexp-in-string "^#### " "**** ")
