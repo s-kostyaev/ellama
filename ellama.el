@@ -391,21 +391,65 @@ Too low value can break generated code by splitting long comment lines."
       (replace-match "#+BEGIN_SRC\\1#+END_SRC"))
     (buffer-substring-no-properties (point-min) (point-max))))
 
-(defun ellama--replace-top-level-headings (text)
-  "Replace top level headings in TEXT if no source blocks."
-  ;; TODO: improve this code to replace all top level headings outside
-  ;; of code blocks. For example we can collect all begin_src
-  ;; positions, all end_src positions, sort it and safely replace all
-  ;; top level headings outside of this regions. If there is non-pair
-  ;; begin_src we should act like end_src at (point-max).
+(defun ellama--replace (from to beg end)
+  "Replace FROM to TO in region BEG END."
+  (goto-char beg)
+  (while (re-search-forward from end t)
+    (replace-match to)))
+
+(defun ellama--apply-transformations (beg end)
+  "Apply md to org transformations for region BEG END."
+  ;; headings
+  (ellama--replace "^# " "* " beg end)
+  (ellama--replace "^## " "** " beg end)
+  (ellama--replace "^### " "*** " beg end)
+  (ellama--replace "^#### " "**** " beg end)
+  (ellama--replace "^##### " "***** " beg end)
+  (ellama--replace "^###### " "****** " beg end)
+  ;; bold
+  (ellama--replace "__\\(.+?\\)__" "*\\1*" beg end)
+  (ellama--replace "\\*\\*\\(.+?\\)\\*\\*" "*\\1*" beg end)
+  (ellama--replace "<b>\\(.+?\\)</b>" "*\\1*" beg end)
+  ;; italic
+  (ellama--replace "_\\(.+?\\)_" "/\\1/" beg end)
+  (ellama--replace "<i>\\(.+?\\)</i>" "/\\1/" beg end)
+  ;; underlined
+  (ellama--replace "<u>\\(.+?\\)</u>" "_\\1_" beg end)
+  ;; inline code
+  (ellama--replace "`\\(.+?\\)`" "~\\1~" beg end)
+  ;; lists
+  (ellama--replace "^\\* " "+ " beg end)
+  ;; strikethrough
+  (ellama--replace "~~\\(.+?\\)~~" "+\\1+" beg end)
+  (ellama--replace "<s>\\(.+?\\)</s>" "+\\1+" beg end)
+  ;; badges
+  (ellama--replace "\\[\\!\\[.*?\\](\\(.*?\\))\\](\\(.*?\\))" "[[\\2][file:\\1]]" beg end)
+  ;;links
+  (ellama--replace "\\[\\(.*?\\)\\](\\(.*?\\))" "[[\\2][\\1]]" beg end)
+
+  ;; filling long lines
+  (goto-char beg)
+  (let ((fill-column ellama-long-lines-length)
+	(use-hard-newlines t))
+    (fill-region beg end nil t t)))
+
+(defun ellama--replace-outside-of-code-blocks (text)
+  "Replace some markdown elements to org in TEXT outside of code blocks."
   (with-temp-buffer
-    (insert text)
+    (insert (propertize text 'hard t))
     (goto-char (point-min))
-    (when (and (re-search-forward "^# " nil t)
-	       (not (re-search-backward "#\\+BEGIN_SRC" nil t)))
-      (goto-char (point-min))
-      (while (re-search-forward "^# " nil t)
-	(replace-match "* ")))
+    ;; apply transformations outside of code blocks
+    (let ((beg (point-min))
+	  (end (or (re-search-forward "#\\+BEGIN_SRC" nil t)
+		   (point-max))))
+      (ellama--apply-transformations beg end)
+      (goto-char beg)
+      (re-search-forward "#\\+BEGIN_SRC" nil t)
+      (while (when-let ((beg (re-search-forward "#\\+END_SRC" nil t))
+			(end (or (re-search-forward "#\\+BEGIN_SRC" nil t)
+				 (point-max))))
+	       (ellama--apply-transformations beg end)
+	       (goto-char beg))))
     (buffer-substring-no-properties (point-min) (point-max))))
 
 (defun ellama--translate-markdown-to-org-filter (text)
@@ -421,35 +465,7 @@ This filter contains only subset of markdown syntax to be good enough."
     (replace-regexp-in-string "^[[:space:]]*```" "#+END_SRC\n")
     (replace-regexp-in-string "```" "\n#+END_SRC\n")
     (ellama--replace-bad-code-blocks)
-    ;; lists
-    (replace-regexp-in-string "^\\* " "+ ")
-    ;; bold
-    (replace-regexp-in-string "\\*\\*\\(.+?\\)\\*\\*" "*\\1*")
-    (replace-regexp-in-string "__\\(.+?\\)__" "*\\1*")
-    (replace-regexp-in-string "<b>\\(.+?\\)</b>" "*\\1*")
-    ;; italic
-    ;; (replace-regexp-in-string "_\\(.+?\\)_" "/\\1/") ;; most of the time it breaks code blocks, so disable it
-    (replace-regexp-in-string "<i>\\(.+?\\)</i>" "/\\1/")
-    ;; inline code
-    (replace-regexp-in-string "`\\(.+?\\)`" "~\\1~")
-    ;; underlined
-    (replace-regexp-in-string "<u>\\(.+?\\)</u>" "_\\1_")
-    ;; strikethrough
-    (replace-regexp-in-string "~~\\(.+?\\)~~" "+\\1+")
-    (replace-regexp-in-string "<s>\\(.+?\\)</s>" "+\\1+")
-    ;; headings
-    (ellama--replace-top-level-headings)
-    (replace-regexp-in-string "^## " "** ")
-    (replace-regexp-in-string "^### " "*** ")
-    (replace-regexp-in-string "^#### " "**** ")
-    (replace-regexp-in-string "^##### " "***** ")
-    (replace-regexp-in-string "^###### " "***** ")
-    ;; badges
-    (replace-regexp-in-string "\\[\\!\\[.*?\\](\\(.*?\\))\\](\\(.*?\\))" "[[\\2][file:\\1]]")
-    ;;links
-    (replace-regexp-in-string "\\[\\(.*?\\)\\](\\(.*?\\))" "[[\\2][\\1]]")
-    ;; filling long lines
-    (ellama--fill-long-lines)))
+    (ellama--replace-outside-of-code-blocks)))
 
 (defcustom ellama-enable-keymap t
   "Enable or disable Ellama keymap."
