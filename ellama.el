@@ -1117,6 +1117,11 @@ If EPHEMERAL non nil new session will not be associated with any file."
         (ellama-context-element-add element))
     (warn "No active region")))
 
+(defun ellama-context-add-text (text)
+  "Add TEXT to context."
+  (let ((element (ellama-context-element-text :content text)))
+    (ellama-context-element-add element)))
+
 ;;;###autoload
 (defun ellama-context-add-info-node (node)
   "Add info NODE to context."
