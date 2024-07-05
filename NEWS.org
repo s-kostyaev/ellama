@@ -1,3 +1,5 @@
+* Version 0.11.2
+- Inability to use closures on stream done is fixed.
 * Version 0.11.1
 - Add function ~ellama-context-add-text~ for non-intercative usage.
 * Version 0.11.0
