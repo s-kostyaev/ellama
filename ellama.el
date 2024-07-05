@@ -1305,7 +1305,8 @@ failure (with BUFFER current).
 				    (with-current-buffer buffer
 				      (accept-change-group ellama--change-group)
 				      (spinner-stop)
-				      (if (listp donecb)
+				      (if (and (listp donecb)
+					       (functionp (car donecb)))
 					  (mapc (lambda (fn) (funcall fn text))
 						donecb)
 					(funcall donecb text))
