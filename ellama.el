@@ -282,12 +282,15 @@ PROMPT is a prompt string."
   :type 'string)
 
 (defcustom ellama-get-name-template "I will get you user query, you should return short topic only, what this conversation about. NEVER respond to query itself. Topic must be short and concise.
-For example:
+<example>
 Query: Why is sky blue?
 Topic: Blue sky
-
-Query: %s
-Topic:"
+</example>
+<query>
+%s
+</query>
+Topic:
+"
   "Prompt template for `ellama-get-name'."
   :group 'ellama
   :type 'string)
