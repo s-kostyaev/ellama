@@ -1209,6 +1209,11 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	      prompt)
     prompt))
 
+(defun ellama-chat-buffer-p (buffer)
+  "Return non-nil if BUFFER is an ellama chat buffer."
+  (with-current-buffer buffer
+    (not (not ellama--current-session))))
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
@@ -1283,9 +1288,10 @@ failure (with BUFFER current).
 		    (goto-char pt))
 		  (when-let ((ellama-auto-scroll)
 			     (window (get-buffer-window buffer)))
-		    (with-selected-window window
-		      (goto-char (point-max))
-		      (recenter -1)))
+		    (when (ellama-chat-buffer-p buffer)
+		      (with-selected-window window
+			(goto-char (point-max))
+			(recenter -1))))
 		  (undo-amalgamate-change-group ellama--change-group)))))
 	(setq ellama--change-group (prepare-change-group))
 	(activate-change-group ellama--change-group)
