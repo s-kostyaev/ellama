@@ -246,22 +246,22 @@ PROMPT is a prompt string."
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-code-edit-prompt-template "Regarding the following code, %s, only output the result code in format ```language\n...\n```:\n```\n%s\n```"
+(defcustom ellama-code-edit-prompt-template "Regarding the following code, %s, only output the result code in format ```language\n...\n```:\n```\n%s\n```\nWrite all the code in single code block."
   "Prompt template for `ellama-code-edit'."
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-code-improve-prompt-template "Enhance the following code, only output the result code in format ```language\n...\n```:\n```\n%s\n```"
+(defcustom ellama-code-improve-prompt-template "Enhance the following code, only output the result code in format ```language\n...\n```:\n```\n%s\n```\nWrite all the code in single code block."
   "Prompt template for `ellama-code-improve'."
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-code-complete-prompt-template "Continue the following code, only write new code in format ```language\n...\n```:\n```\n%s\n```"
+(defcustom ellama-code-complete-prompt-template "Continue the following code, only write new code in format ```language\n...\n```:\n```\n%s\n```\nWrite all the code in single code block."
   "Prompt template for `ellama-code-complete'."
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-code-add-prompt-template "Context: \n```\n%s\n```\nBased on this context, %s, only output the result in format ```\n...\n```"
+(defcustom ellama-code-add-prompt-template "Context: \n```\n%s\n```\nBased on this context, %s, only output the result in format ```\n...\n```\nWrite all the code in single code block."
   "Prompt template for `ellama-code-add'."
   :group 'ellama
   :type 'string)
