@@ -1310,7 +1310,7 @@ failure (with BUFFER current).
 				  llm-prompt
 				  insert-text
 				  (lambda (text)
-				    (funcall insert-text text)
+				    (funcall insert-text (string-trim text))
 				    (with-current-buffer buffer
 				      (accept-change-group ellama--change-group)
 				      (spinner-stop)
