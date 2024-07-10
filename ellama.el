@@ -956,6 +956,15 @@ If EPHEMERAL non nil new session will not be associated with any file."
   "Extract the content of the context ELEMENT."
   (oref element content))
 
+(defun ellama--quote-buffer (quote)
+  "Return buffer name for QUOTE."
+  (let* ((buf-name (concat (make-temp-name "*ellama-quote-") "*"))
+	 (buf (get-buffer-create buf-name t)))
+    (with-current-buffer buf
+      (with-silent-modifications
+	(insert quote)))
+    buf-name))
+
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-webpage-quote) (mode (eql 'markdown-mode)))
   "Format the context ELEMENT for the major MODE."
@@ -965,7 +974,9 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	(format "[%s](%s):\n%s\n\n"
 		name url
 		(ellama--md-quote content))
-      (format "[%s](%s)" name url))))
+      (format
+       "[%s](%s):\n```emacs-lisp\n(display-buffer \"%s\")\n```\n"
+       name url (ellama--quote-buffer content)))))
 
 (defun ellama--md-quote (content)
   "Return quoted CONTENT for markdown."
@@ -992,7 +1003,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
     (if ellama-show-quotes
 	(format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n"
 		url name (ellama--org-quote content))
-      (format "[[%s][%s]]" url name))))
+      (format "[[%s][%s]] [[elisp:(display-buffer \"%s\")][show]]"
+	      url name (ellama--quote-buffer content)))))
 
 ;; Info node quote context elements
 
@@ -1015,7 +1027,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	(format "```emacs-lisp\n(info \"%s\")\n```\n%s\n\n"
 		name
 		(ellama--md-quote content))
-      (format "```emacs-lisp\n(info \"%s\")\n```\n" name))))
+      (format "```emacs-lisp\n(info \"%s\")\n```\nshow:\n```emacs-lisp\n(display-buffer \"%s\")\n```\n" name (ellama--quote-buffer content)))))
 
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-info-node-quote) (mode (eql 'org-mode)))
@@ -1031,13 +1043,14 @@ If EPHEMERAL non nil new session will not be associated with any file."
 		    (ellama--translate-string name)
 		  name)
 		(ellama--org-quote content))
-      (format "[[%s][%s]]"
+      (format "[[%s][%s]] [[elisp:(display-buffer \"%s\")][show]]"
 	      (replace-regexp-in-string
 	       "(\\(.?*\\)) \\(.*\\)" "info:\\1#\\2" name)
 	      (if (and ellama-chat-translation-enabled
 		       (not ellama--current-session))
 		  (ellama--translate-string name)
-		name)))))
+		name)
+	      (ellama--quote-buffer content)))))
 
 ;; File quote context elements
 
@@ -1060,7 +1073,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	(format "[%s](%s):\n%s\n\n"
 		path path
 		(ellama--md-quote content))
-      (format "[%s](%s)" path path))))
+      (format "[%s](%s):\n```emacs-lisp\n(display-buffer \"%s\")"
+	      path path (ellama--quote-buffer content)))))
 
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-file-quote) (mode (eql 'org-mode)))
@@ -1070,7 +1084,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
     (if ellama-show-quotes
 	(format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n"
 		path path (ellama--org-quote content))
-      (format "[[%s][%s]]" path path))))
+      (format "[[%s][%s]] [[elisp:(display-buffer \"%s\")][show]]"
+	      path path (ellama--quote-buffer content)))))
 
 
 ;;;###autoload
