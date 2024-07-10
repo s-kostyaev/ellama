@@ -170,6 +170,10 @@ provided change using Ellama.
 Change selected code or code in the current buffer according to a
 provided change using Ellama.
 
+*** ellama-generate-commit-message
+
+Generate commit message based on diff.
+
 *** ellama-improve-wording
 
 Enhance the wording in the currently selected region or buffer using Ellama.
