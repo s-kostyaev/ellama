@@ -5,7 +5,7 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4"))
+;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4") (compat "29.1"))
 ;; Version: 0.11.6
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
@@ -42,6 +42,8 @@
 (require 'info)
 (require 'shr)
 (require 'eww)
+(require 'vc)
+(require 'compat)
 (eval-when-compile (require 'rx))
 
 (defgroup ellama nil
@@ -263,6 +265,17 @@ PROMPT is a prompt string."
 
 (defcustom ellama-code-add-prompt-template "Context: \n```\n%s\n```\nBased on this context, %s, only output the result in format ```\n...\n```\nWrite all the code in single code block."
   "Prompt template for `ellama-code-add'."
+  :group 'ellama
+  :type 'string)
+
+(defcustom ellama-generate-commit-message-template "You are professional software developer.
+Write concise commit message based on diff. First line should
+contain short title described major change in functionality. Then
+one empty line. Then detailed description of all changes. Reply
+with commit message only. Diff:
+
+%s"
+  "Prompt template for `ellama-generate-commit-message'."
   :group 'ellama
   :type 'string)
 
@@ -1625,6 +1638,26 @@ the full response text when the request completes (with BUFFER current)."
 		(point)))
 	 (text (buffer-substring-no-properties beg end)))
     (ellama-stream text)))
+
+;;;###autoload
+(defun ellama-generate-commit-message ()
+  "Generate commit message based on diff."
+  (interactive)
+  (let* ((default-directory
+	  (if (string= ".git"
+		       (car (reverse
+			     (cl-remove
+			      ""
+			      (file-name-split default-directory)
+			      :test #'string=))))
+	      (file-name-parent-directory default-directory)
+	    default-directory))
+	 (diff (with-temp-buffer
+		 (vc-diff-internal
+		  nil (vc-deduce-fileset t) nil nil nil (current-buffer))
+		 (buffer-substring-no-properties (point-min) (point-max)))))
+    (ellama-stream
+     (format ellama-generate-commit-message-template diff))))
 
 ;;;###autoload
 (defun ellama-ask-line ()
