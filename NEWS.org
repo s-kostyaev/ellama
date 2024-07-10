@@ -1,3 +1,5 @@
+* Version 0.11.6
+- Add link to quoted content in a separate buffer.
 * Version 0.11.5
 - Prevent unnecessary line breaks at the end of generated text.
 * Version 0.11.4
