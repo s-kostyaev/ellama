@@ -1,3 +1,7 @@
+* Version 0.11.9
+- Fix issue when current window was changed after calling
+  ~ellama-generate-commit-message~.
+- Add ~ellama-generate-commit-message~ to keymap.
 * Version 0.11.8
 - Allow ollama-binary to accept the executable's base name.
 * Version 0.11.7
