@@ -257,6 +257,7 @@ Ellama, using the ~ellama-keymap-prefix~ prefix (not set by default):
 | "c e"  | ellama-code-edit                | Code edit                    |
 | "c i"  | ellama-code-improve             | Code improve                 |
 | "c r"  | ellama-code-review              | Code review                  |
+| "c m"  | ellama-generate-commit-message  | Generate commit message      |
 | "s s"  | ellama-summarize                | Summarize                    |
 | "s w"  | ellama-summarize-webpage        | Summarize webpage            |
 | "s c"  | ellama-summarize-killring       | Summarize killring           |

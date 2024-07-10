@@ -111,6 +111,7 @@
     (define-key map (kbd "c e") 'ellama-code-edit)
     (define-key map (kbd "c i") 'ellama-code-improve)
     (define-key map (kbd "c r") 'ellama-code-review)
+    (define-key map (kbd "c m") 'ellama-generate-commit-message)
     ;; summarize
     (define-key map (kbd "s s") 'ellama-summarize)
     (define-key map (kbd "s w") 'ellama-summarize-webpage)
@@ -1645,21 +1646,22 @@ the full response text when the request completes (with BUFFER current)."
 (defun ellama-generate-commit-message ()
   "Generate commit message based on diff."
   (interactive)
-  (let* ((default-directory
-	  (if (string= ".git"
-		       (car (reverse
-			     (cl-remove
-			      ""
-			      (file-name-split default-directory)
-			      :test #'string=))))
-	      (file-name-parent-directory default-directory)
-	    default-directory))
-	 (diff (with-temp-buffer
-		 (vc-diff-internal
-		  nil (vc-deduce-fileset t) nil nil nil (current-buffer))
-		 (buffer-substring-no-properties (point-min) (point-max)))))
-    (ellama-stream
-     (format ellama-generate-commit-message-template diff))))
+  (save-window-excursion
+    (let* ((default-directory
+	    (if (string= ".git"
+			 (car (reverse
+			       (cl-remove
+				""
+				(file-name-split default-directory)
+				:test #'string=))))
+		(file-name-parent-directory default-directory)
+	      default-directory))
+	   (diff (with-temp-buffer
+		   (vc-diff-internal
+		    nil (vc-deduce-fileset t) nil nil nil (current-buffer))
+		   (buffer-substring-no-properties (point-min) (point-max)))))
+      (ellama-stream
+       (format ellama-generate-commit-message-template diff)))))
 
 ;;;###autoload
 (defun ellama-ask-line ()
