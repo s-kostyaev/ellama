@@ -172,7 +172,7 @@
 	   (ellama-setup-keymap)))
   :group 'ellama)
 
-(defcustom ellama-ollama-binary (executable-find "ollama")
+(defcustom ellama-ollama-binary "ollama"
   "Path to ollama binary."
   :type 'string
   :group 'ellama)
@@ -1549,9 +1549,11 @@ ARGS contains keys for fine control.
 :on-done ON-DONE -- ON-DONE a function that's called with
 the full response text when the request completes (with BUFFER current)."
   (interactive "sAsk ellama: ")
-  (let* ((providers (append
+  (let* ((ollama-binary (executable-find ellama-ollama-binary))
+	 (providers (append
                      `(("default model" . ellama-provider)
-		       ,(if (and ellama-ollama-binary (file-exists-p ellama-ollama-binary))
+		       ,(if (and ollama-binary
+				 (file-exists-p ollama-binary))
 			    '("ollama model" . (ellama-get-ollama-local-model))))
                      ellama-providers))
 	 (variants (mapcar #'car providers))
@@ -1926,7 +1928,9 @@ otherwise prompt user for URL to summarize."
 			  (mapcar (lambda (s)
 				    (car (split-string s)))
 				  (seq-drop
-				   (process-lines ellama-ollama-binary "ls") 1))))
+				   (process-lines
+				    (executable-find ellama-ollama-binary) "ls")
+				   1))))
 	(host (when (llm-ollama-p ellama-provider)
 		(llm-ollama-host ellama-provider)))
 	(port (when (llm-ollama-p ellama-provider)
@@ -1941,12 +1945,14 @@ otherwise prompt user for URL to summarize."
 (defun ellama-provider-select ()
   "Select ellama provider."
   (interactive)
-  (let* ((providers (append
+  (let* ((ollama-binary (executable-find ellama-ollama-binary))
+	 (providers (append
                      `(("default model" . ellama-provider)
-		               ,(if (and ellama-ollama-binary (file-exists-p ellama-ollama-binary))
-			                '("ollama model" . (ellama-get-ollama-local-model))))
+		       ,(if (and ollama-binary
+				 (file-exists-p ollama-binary))
+			    '("ollama model" . (ellama-get-ollama-local-model))))
                      ellama-providers))
-	     (variants (mapcar #'car providers)))
+	 (variants (mapcar #'car providers)))
     (setq ellama-provider
 	  (eval (alist-get
 		 (completing-read "Select model: " variants)
