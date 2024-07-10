@@ -111,6 +111,7 @@
     (define-key map (kbd "c e") 'ellama-code-edit)
     (define-key map (kbd "c i") 'ellama-code-improve)
     (define-key map (kbd "c r") 'ellama-code-review)
+    (define-key map (kbd "c m") 'ellama-generate-commit-message)
     ;; summarize
     (define-key map (kbd "s s") 'ellama-summarize)
     (define-key map (kbd "s w") 'ellama-summarize-webpage)
