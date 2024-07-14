@@ -1,3 +1,5 @@
+* Version 0.11.10
+- Fix commit message generation for partial commits.
 * Version 0.11.9
 - Fix issue when current window was changed after calling
   ~ellama-generate-commit-message~.
