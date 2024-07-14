@@ -1642,24 +1642,62 @@ the full response text when the request completes (with BUFFER current)."
 	 (text (buffer-substring-no-properties beg end)))
     (ellama-stream text)))
 
+(defun ellama--diff-cached ()
+  "Diff staged."
+  (let* ((default-directory
+	  (if (string= ".git"
+		       (car (reverse
+			     (cl-remove
+			      ""
+			      (file-name-split default-directory)
+			      :test #'string=))))
+	      (file-name-parent-directory default-directory)
+	    default-directory))
+	 (vc-git-diff-switches "--cached")
+	 (diff (with-temp-buffer
+		 (vc-diff-internal
+		  nil (vc-deduce-fileset t) nil nil nil (current-buffer))
+		 (buffer-substring-no-properties (point-min) (point-max)))))
+    (if (string-empty-p diff)
+	nil
+      diff)))
+
+(defun ellama--diff ()
+  "Diff unstaged."
+  (let* ((default-directory
+	  (if (string= ".git"
+		       (car (reverse
+			     (cl-remove
+			      ""
+			      (file-name-split default-directory)
+			      :test #'string=))))
+	      (file-name-parent-directory default-directory)
+	    default-directory))
+	 (vc-git-diff-switches t)
+	 (diff (with-temp-buffer
+		 (vc-diff-internal
+		  nil (vc-deduce-fileset t) nil nil nil (current-buffer))
+		 (buffer-substring-no-properties (point-min) (point-max)))))
+    (if (string-empty-p diff)
+	nil
+      diff)))
+
 ;;;###autoload
 (defun ellama-generate-commit-message ()
   "Generate commit message based on diff."
   (interactive)
   (save-window-excursion
-    (let* ((default-directory
-	    (if (string= ".git"
-			 (car (reverse
-			       (cl-remove
-				""
-				(file-name-split default-directory)
-				:test #'string=))))
-		(file-name-parent-directory default-directory)
-	      default-directory))
-	   (diff (with-temp-buffer
-		   (vc-diff-internal
-		    nil (vc-deduce-fileset t) nil nil nil (current-buffer))
-		   (buffer-substring-no-properties (point-min) (point-max)))))
+    (when-let* ((default-directory
+		 (if (string= ".git"
+			      (car (reverse
+				    (cl-remove
+				     ""
+				     (file-name-split default-directory)
+				     :test #'string=))))
+		     (file-name-parent-directory default-directory)
+		   default-directory))
+		(diff (or (ellama--diff-cached)
+			  (ellama--diff))))
       (ellama-stream
        (format ellama-generate-commit-message-template diff)))))
 
