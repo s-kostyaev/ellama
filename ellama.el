@@ -38,6 +38,7 @@
 (require 'eieio)
 (require 'json)
 (require 'llm)
+(require 'llm-provider-utils)
 (require 'spinner)
 (require 'info)
 (require 'shr)
@@ -78,7 +79,7 @@
      :chat-model "zephyr" :embedding-model "zephyr"))
   "Backend LLM provider."
   :group 'ellama
-  :type '(sexp :validate 'cl-struct-p))
+  :type '(sexp :validate 'llm-standard-provider-p))
 
 (defcustom ellama-chat-translation-enabled nil
   "Enable chat translations."
@@ -88,12 +89,13 @@
 (defcustom ellama-translation-provider nil
   "LLM provider for chat translation."
   :group 'ellama
-  :type '(sexp :validate 'cl-struct-p))
+  :type '(sexp :validate 'llm-standard-provider-p))
 
 (defcustom ellama-providers nil
   "LLM provider list for fast switching."
   :group 'ellama
-  :type '(alist :key-type string))
+  :type '(alist :key-type string
+		:value-type '(sexp :validate 'llm-standard-provider-p)))
 
 (defcustom ellama-spinner-type 'progress-bar
   "Spinner type for ellama."
@@ -506,7 +508,7 @@ This filter contains only subset of markdown syntax to be good enough."
 (defcustom ellama-naming-provider nil
   "LLM provider for generating names."
   :group 'ellama
-  :type '(sexp :validate 'cl-struct-p))
+  :type '(sexp :validate 'llm-standard-provider-p))
 
 (defcustom ellama-always-show-chain-steps nil
   "Always show ellama chain buffers."
