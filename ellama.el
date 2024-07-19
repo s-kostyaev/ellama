@@ -95,7 +95,7 @@
   "LLM provider list for fast switching."
   :group 'ellama
   :type '(alist :key-type string
-		:value-type '(sexp :validate 'llm-standard-provider-p)))
+		:value-type (sexp :validate 'llm-standard-provider-p)))
 
 (defcustom ellama-spinner-type 'progress-bar
   "Spinner type for ellama."
