@@ -780,6 +780,10 @@ If EPHEMERAL non nil new session will not be associated with any file."
     (when (file-exists-p translation-file)
       (delete-file translation-file t))))
 
+(defun ellama-activate-session (id)
+  "Change current active session to session with ID."
+  (setq ellama--current-session-id id))
+
 ;;;###autoload
 (defun ellama-session-switch ()
   "Change current active session."
@@ -788,7 +792,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	      "Select session to activate: "
 	      (hash-table-keys ellama--active-sessions)))
 	 (buffer (ellama-get-session-buffer id)))
-    (setq ellama--current-session-id id)
+    (ellama-activate-session id)
     (display-buffer buffer)))
 
 ;;;###autoload
