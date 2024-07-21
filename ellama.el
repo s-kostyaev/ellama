@@ -1248,6 +1248,24 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (with-current-buffer buffer
     (not (not ellama--current-session))))
 
+(defun ellama-get-current-session-id ()
+  "Return current session id.
+If buffer contains ellama session return its id.
+Otherwire return id of current active session."
+  (if ellama--current-session
+      (ellama-session-id ellama--current-session)
+    ellama--current-session-id))
+
+(defun ellama-get-current-session ()
+  "Return current session.
+If buffer contains ellama session return it.
+Otherwire return current active session."
+  (if ellama--current-session
+      ellama--current-session
+    (when ellama--current-session-id
+      (with-current-buffer (ellama-get-session-buffer ellama--current-session-id)
+	ellama--current-session))))
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
@@ -1264,6 +1282,8 @@ strings before they're inserted into the BUFFER.
 
 :session SESSION -- SESSION is a ellama conversation session.
 
+:session-id ID -- ID is a ellama session unique identifier.
+
 :ephemeral-session BOOL -- if BOOL is set session will not be saved to named
 file by default.
 
@@ -1272,7 +1292,11 @@ failure (with BUFFER current).
 
 :on-done ON-DONE -- ON-DONE a function or list of functions that's called with
  the full response text when the request completes (with BUFFER current)."
-  (let* ((session (plist-get args :session))
+  (let* ((session-id (plist-get args :session-id))
+	 (session (or (plist-get args :session)
+		      (when session-id
+			(with-current-buffer (ellama-get-session-buffer session-id)
+			  ellama--current-session))))
 	 (provider (if session
 		       (ellama-session-provider session)
 		     (or (plist-get args :provider) ellama-provider)))
@@ -1372,6 +1396,8 @@ prompt.  FUCTION will be called with two arguments INITIAL-PROMPT and ACC.
 
 :session SESSION - use SESSION in current step.
 
+:session-id ID -- ID is a ellama session unique identifier.
+
 :chat BOOL - if BOOL use chat buffer, otherwise use temp buffer.  Make sense for
 last step only.
 
@@ -1383,7 +1409,11 @@ last step only.
 	 (prompt (if transform
 		     (apply transform (list initial-prompt acc))
 		   initial-prompt))
-	 (session (plist-get hd :session))
+	 (session-id (plist-get hd :session-id))
+	 (session (or (plist-get hd :session)
+		      (when session-id
+			(with-current-buffer (ellama-get-session-buffer session-id)
+			  ellama--current-session))))
 	 (chat (plist-get hd :chat))
 	 (show (or (plist-get hd :show) ellama-always-show-chain-steps))
 	 (buf (if (or (and (not chat)) (not session))
@@ -1549,6 +1579,10 @@ ARGS contains keys for fine control.
 
 :provider PROVIDER -- PROVIDER is an llm provider for generation.
 
+:session SESSION -- SESSION is a ellama conversation session.
+
+:session-id ID -- ID is a ellama session unique identifier.
+
 :on-done ON-DONE -- ON-DONE a function that's called with
 the full response text when the request completes (with BUFFER current)."
   (interactive "sAsk ellama: ")
@@ -1569,24 +1603,26 @@ the full response text when the request completes (with BUFFER current)."
 				providers nil nil #'string=)))
 		     (or (plist-get args :provider)
 			 ellama-provider)))
-	 (session (if (or create-session
-			  current-prefix-arg
-			  (and provider
-			       (or (plist-get args :provider)
-				   (not (equal provider ellama-provider)))
-			       ellama--current-session-id
-			       (with-current-buffer (ellama-get-session-buffer
-						     ellama--current-session-id)
-				 (not (equal
-				       provider
-				       (ellama-session-provider ellama--current-session)))))
-			  (and (not ellama--current-session)
-			       (not ellama--current-session-id)))
-		      (ellama-new-session provider prompt)
-		    (or ellama--current-session
-			(with-current-buffer (ellama-get-session-buffer
-					      ellama--current-session-id)
-			  ellama--current-session))))
+	 (session (or (plist-get args :session)
+		      (if (or create-session
+			      current-prefix-arg
+			      (and provider
+				   (or (plist-get args :provider)
+				       (not (equal provider ellama-provider)))
+				   ellama--current-session-id
+				   (with-current-buffer (ellama-get-session-buffer
+							 ellama--current-session-id)
+				     (not (equal
+					   provider
+					   (ellama-session-provider ellama--current-session)))))
+			      (and (not ellama--current-session)
+				   (not ellama--current-session-id)))
+			  (ellama-new-session provider prompt)
+			(or ellama--current-session
+			    (with-current-buffer (ellama-get-session-buffer
+						  (or (plist-get args :session-id)
+						      ellama--current-session-id))
+			      ellama--current-session)))))
 	 (buffer (ellama-get-session-buffer
 		  (ellama-session-id session)))
 	 (file-name (ellama-session-file session))
