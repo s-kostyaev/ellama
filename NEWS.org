@@ -1,3 +1,6 @@
+* Version 0.11.14
+- Add interactive template modification for ellama-improve-* functions
+  with universal prefix argument.
 * Version 0.11.13
 - Add ability to use sessions in other elisp packages.
 * Version 0.11.12
