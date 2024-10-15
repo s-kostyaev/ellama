@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4") (transient "0.7.6") (compat "29.1"))
-;; Version: 0.12.0
+;; Version: 0.12.1
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -1601,11 +1601,9 @@ the full response text when the request completes (with BUFFER current)."
 	 (variants (mapcar #'car providers))
 	 (donecb (plist-get args :on-done))
 	 (provider (if current-prefix-arg
-		       (progn
-			 (setq current-prefix-arg nil)
-			 (eval (alist-get
-				(completing-read "Select model: " variants)
-				providers nil nil #'string=)))
+		       (eval (alist-get
+			      (completing-read "Select model: " variants)
+			      providers nil nil #'string=))
 		     (or (plist-get args :provider)
 			 ellama-provider)))
 	 (session (or (plist-get args :session)
