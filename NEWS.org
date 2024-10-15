@@ -1,3 +1,5 @@
+* Version 0.12.0
+- Add transient menu.
 * Version 0.11.14
 - Add interactive template modification for ellama-improve-* functions
   with universal prefix argument.
