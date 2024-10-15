@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4") (transient "0.7.6") (compat "29.1"))
-;; Version: 0.12.1
+;; Version: 0.12.2
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -2118,6 +2118,9 @@ otherwise prompt user for URL to summarize."
     ("S" "Session Commands" ellama-transient-session-menu)
     ("x" "Context Commands" ellama-transient-context-menu)
     ("p" "Provider selection" ellama-provider-select)]]
+  [["Problem solving"
+    ("R" "Solve reasoning problem" ellama-solve-reasoning-problem)
+    ("D" "Solve domain specific problem" ellama-solve-domain-specific-problem)]]
   [["Quit" ("q" "Quit" transient-quit-one)]])
 
 ;;;###autoload
