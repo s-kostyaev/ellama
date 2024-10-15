@@ -2081,7 +2081,7 @@ otherwise prompt user for URL to summarize."
 (transient-define-prefix ellama-transient-ask-menu ()
   "Ask Commands."
   [["Ask Commands"
-    ("i" "Chat" ellama-chat)
+    ("c" "Chat" ellama-chat)
     ("l" "Ask Line" ellama-ask-line)
     ("s" "Ask Selection" ellama-ask-selection)
     ("a" "Ask About" ellama-ask-about)]
@@ -2106,17 +2106,12 @@ otherwise prompt user for URL to summarize."
     ("i" "Add Info Node" ellama-context-add-info-node)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
-(transient-define-prefix ellama-transient-provider-menu ()
-  "Provider Commands."
-  [["Provider Commands"
-    ("s" "Select Provider" ellama-provider-select)]
-   ["Quit" ("q" "Quit" transient-quit-one)]])
-
 (transient-define-prefix ellama-transient-main-menu ()
   "Main Menu."
   [["Chat"
+    ("c" "Chat" ellama-chat)
     ("a" "Ask" ellama-transient-ask-menu)
-    ("c" "Code" ellama-transient-code-menu)]]
+    ("C" "Code" ellama-transient-code-menu)]]
   [["Text"
     ("s" "Summarize" ellama-transient-summarize-menu)
     ("i" "Improve" ellama-transient-improve-menu)
@@ -2125,7 +2120,7 @@ otherwise prompt user for URL to summarize."
   [["System"
     ("S" "Session" ellama-transient-session-menu)
     ("x" "Context" ellama-transient-context-menu)
-    ("p" "Provider" ellama-transient-provider-menu)]]
+    ("p" "Provider" ellama-provider-select)]]
   [["Quit" ("q" "Quit" transient-quit-one)]])
 
 ;;;###autoload
