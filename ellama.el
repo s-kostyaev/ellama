@@ -5,7 +5,7 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4") (compat "29.1"))
+;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4") (transient "0.7.6") (compat "29.1"))
 ;; Version: 0.11.14
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
@@ -40,6 +40,7 @@
 (require 'llm)
 (require 'llm-provider-utils)
 (require 'spinner)
+(require 'transient)
 (require 'info)
 (require 'shr)
 (require 'eww)
@@ -2032,6 +2033,94 @@ otherwise prompt user for URL to summarize."
 	 :chat-model model-name :embedding-model model-name :host host :port port)
       (make-llm-ollama
        :chat-model model-name :embedding-model model-name))))
+
+(transient-define-prefix ellama-transient-code-menu ()
+  "Code Commands."
+  [["Code Commands"
+    ("c" "Complete" ellama-code-complete)
+    ("a" "Add" ellama-code-add)
+    ("e" "Edit" ellama-code-edit)
+    ("i" "Improve" ellama-code-improve)
+    ("r" "Review" ellama-code-review)
+    ("m" "Generate Commit Message" ellama-generate-commit-message)]
+   ["Quit" ("q" "Quit" transient-quit-one)]])
+
+(transient-define-prefix ellama-transient-summarize-menu ()
+  "Summarize Commands."
+  [["Summarize Commands"
+    ("s" "Summarize" ellama-summarize)
+    ("w" "Summarize Webpage" ellama-summarize-webpage)
+    ("k" "Summarize Killring" ellama-summarize-killring)]
+   ["Quit" ("q" "Quit" transient-quit-one)]])
+
+(transient-define-prefix ellama-transient-session-menu ()
+  "Session Commands."
+  [["Session Commands"
+    ("l" "Load Session" ellama-load-session)
+    ("r" "Rename Session" ellama-session-rename)
+    ("d" "Remove Session" ellama-session-remove)
+    ("a" "Activate Session" ellama-session-switch)]
+   ["Quit" ("q" "Quit" transient-quit-one)]])
+
+(transient-define-prefix ellama-transient-improve-menu ()
+  "Improve Commands."
+  [["Improve Commands"
+    ("w" "Improve Wording" ellama-improve-wording)
+    ("g" "Improve Grammar" ellama-improve-grammar)
+    ("c" "Improve Conciseness" ellama-improve-conciseness)]
+   ["Quit" ("q" "Quit" transient-quit-one)]])
+
+(transient-define-prefix ellama-transient-make-menu ()
+  "Make Commands."
+  [["Make Commands"
+    ("l" "Make List" ellama-make-list)
+    ("t" "Make Table" ellama-make-table)
+    ("f" "Make Format" ellama-make-format)]
+   ["Quit" ("q" "Quit" transient-quit-one)]])
+
+(transient-define-prefix ellama-transient-ask-menu ()
+  "Ask Commands."
+  [["Ask Commands"
+    ("l" "Ask Line" ellama-ask-line)
+    ("s" "Ask Selection" ellama-ask-selection)
+    ("a" "Ask About" ellama-ask-about)]
+   ["Quit" ("q" "Quit" transient-quit-one)]])
+
+(transient-define-prefix ellama-transient-translate-menu ()
+  "Translate Commands."
+  [["Translate Commands"
+    ("t" "Translate Text" ellama-translate)
+    ("b" "Translate Buffer" ellama-translate-buffer)
+    ("e" "Enable Translation" ellama-chat-translation-enable)
+    ("d" "Disable Translation" ellama-chat-translation-disable)]
+   ["Quit" ("q" "Quit" transient-quit-one)]])
+
+(transient-define-prefix ellama-transient-context-menu ()
+  "Context Commands."
+  [["Context Commands"
+    ("b" "Add Buffer" ellama-context-add-buffer)
+    ("f" "Add File" ellama-context-add-file)
+    ("s" "Add Selection" ellama-context-add-selection)
+    ("i" "Add Info Node" ellama-context-add-info-node)]
+   ["Quit" ("q" "Quit" transient-quit-one)]])
+
+(transient-define-prefix ellama-transient-main-menu ()
+  "Main Menu."
+  [["Main"
+    ("c" "Chat" ellama-chat)
+    ("a" "Ask Commands" ellama-transient-ask-menu)
+    ("C" "Code Commands" ellama-transient-code-menu)]]
+  [["Text"
+    ("s" "Summarize Commands" ellama-transient-summarize-menu)
+    ("i" "Improve Commands" ellama-transient-improve-menu)
+    ("t" "Translate Commands" ellama-transient-translate-menu)
+    ("m" "Make Commands" ellama-transient-make-menu)
+    ("k" "Text Complete" ellama-complete)]]
+  [["System"
+    ("S" "Session Commands" ellama-transient-session-menu)
+    ("x" "Context Commands" ellama-transient-context-menu)
+    ("p" "Provider selection" ellama-provider-select)]]
+  [["Quit" ("q" "Quit" transient-quit-one)]])
 
 ;;;###autoload
 (defun ellama-provider-select ()
