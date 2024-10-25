@@ -93,7 +93,7 @@
   :type '(sexp :validate 'llm-standard-provider-p))
 
 (defcustom ellama-summarization-provider nil
-  "LLM provider for chat translation."
+  "LLM provider for summarization."
   :group 'ellama
   :type '(sexp :validate 'llm-standard-provider-p))
 
@@ -290,13 +290,26 @@ You are a summarizer. You write a summary of the input **IN THE SAME LANGUAGE AS
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-generate-commit-message-template "You are professional software developer.
-Write concise commit message based on diff. First line should
-contain short title described major change in functionality. Then
-one empty line. Then detailed description of all changes. Reply
-with commit message only. Diff:
+(defcustom ellama-generate-commit-message-template "<INSTRUCTIONS>
+You are professional software developer.
 
-%s"
+Write concise commit message based on diff in the following format:
+<FORMAT>
+First line should contain short title described major change in functionality.
+Then one empty line. Then detailed description of all changes.
+</FORMAT>
+<EXAMPLE>
+Improve abc
+
+Improved abc feature by adding new xyz module.
+</EXAMPLE>
+
+**Reply with commit message only without any quotes.**
+</INSTRUCTIONS>
+
+<DIFF>
+%s
+</DIFF>"
   "Prompt template for `ellama-generate-commit-message'."
   :group 'ellama
   :type 'string)
@@ -330,11 +343,18 @@ Topic:
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-translation-template "Translate this text to %s.
-Original text:
+(defcustom ellama-translation-template "<INSTRUCTIONS>
+You are expert text translator. Translate input text to %s. Do
+not explain what you are doing. Do not self reference. You are an
+expert translator that will be tasked with translating and
+improving the spelling/grammar/literary quality of a piece of
+text. Please rewrite the translated text in your tone of voice
+and writing style. Ensure that the meaning of the original text
+is not changed.
+</INSTRUCTIONS>
+<INPUT>
 %s
-Translation to %s:
-"
+</INPUT>"
   "Translation template."
   :group 'ellama
   :type 'string)
