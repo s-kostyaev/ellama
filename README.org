@@ -74,9 +74,12 @@ In that case you should customize ellama configuration like this:
 	     :default-chat-non-standard-params '(("stop" . ("\n")))))
     (setopt ellama-naming-scheme 'ellama-generate-name-by-llm)
     ;; Translation llm provider
-    (setopt ellama-translation-provider (make-llm-ollama
-					 :chat-model "phi3:14b-medium-128k-instruct-q6_K"
-					 :embedding-model "nomic-embed-text")))
+    (setopt ellama-translation-provider
+	  (make-llm-ollama
+	   :chat-model "qwen2.5:3b"
+	   :embedding-model "nomic-embed-text"
+	   :default-chat-non-standard-params
+	   '(("num_ctx" . 32768)))))
 #+END_SRC
 
 ** Commands
@@ -335,6 +338,8 @@ argument generated text string.
   by LLM. If not set ~ellama-provider~ will be used.
 - ~ellama-chat-translation-enabled~: Enable chat translations if set.
 - ~ellama-translation-provider~: LLM translation provider.
+  ~ellama-provider~ will be used if not set.
+- ~ellama-summarization-provider~ LLM summarization provider.
   ~ellama-provider~ will be used if not set.
 - ~ellama-show-quotes~: Show quotes content in chat buffer. Disabled
   by default.

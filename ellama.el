@@ -93,7 +93,7 @@
   :type '(sexp :validate 'llm-standard-provider-p))
 
 (defcustom ellama-summarization-provider nil
-  "LLM provider for chat translation."
+  "LLM provider for summarization."
   :group 'ellama
   :type '(sexp :validate 'llm-standard-provider-p))
 
