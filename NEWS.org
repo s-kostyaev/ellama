@@ -1,3 +1,6 @@
+* Version 0.12.3
+- Add separated summarization provider customization option.
+- Improve summarization prompt template.
 * Version 0.12.2
 - Add problem solving chains to transient menu.
 * Version 0.12.1
