@@ -290,13 +290,26 @@ You are a summarizer. You write a summary of the input **IN THE SAME LANGUAGE AS
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-generate-commit-message-template "You are professional software developer.
-Write concise commit message based on diff. First line should
-contain short title described major change in functionality. Then
-one empty line. Then detailed description of all changes. Reply
-with commit message only. Diff:
+(defcustom ellama-generate-commit-message-template "<INSTRUCTIONS>
+You are professional software developer.
 
-%s"
+Write concise commit message based on diff in the following format:
+<FORMAT>
+First line should contain short title described major change in functionality.
+Then one empty line. Then detailed description of all changes.
+</FORMAT>
+<EXAMPLE>
+Improve abc
+
+Improved abc feature by adding new xyz module.
+</EXAMPLE>
+
+**Reply with commit message only without any quotes.**
+</INSTRUCTIONS>
+
+<DIFF>
+%s
+</DIFF>"
   "Prompt template for `ellama-generate-commit-message'."
   :group 'ellama
   :type 'string)
