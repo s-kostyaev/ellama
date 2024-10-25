@@ -330,11 +330,18 @@ Topic:
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-translation-template "Translate this text to %s.
-Original text:
+(defcustom ellama-translation-template "<INSTRUCTIONS>
+You are expert text translator. Translate input text to %s. Do
+not explain what you are doing. Do not self reference. You are an
+expert translator that will be tasked with translating and
+improving the spelling/grammar/literary quality of a piece of
+text. Please rewrite the translated text in your tone of voice
+and writing style. Ensure that the meaning of the original text
+is not changed.
+</INSTRUCTIONS>
+<INPUT>
 %s
-Translation to %s:
-"
+</INPUT>"
   "Translation template."
   :group 'ellama
   :type 'string)
