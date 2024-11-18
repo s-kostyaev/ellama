@@ -97,6 +97,11 @@
   :group 'ellama
   :type '(sexp :validate 'llm-standard-provider-p))
 
+(defcustom ellama-coding-provider nil
+  "LLM provider for coding tasks."
+  :group 'ellama
+  :type '(sexp :validate 'llm-standard-provider-p))
+
 (defcustom ellama-providers nil
   "LLM provider list for fast switching."
   :group 'ellama
@@ -1778,7 +1783,8 @@ the full response text when the request completes (with BUFFER current)."
 		(diff (or (ellama--diff-cached)
 			  (ellama--diff))))
       (ellama-stream
-       (format ellama-generate-commit-message-template diff)))))
+       (format ellama-generate-commit-message-template diff)
+       :provider ellama-coding-provider))))
 
 ;;;###autoload
 (defun ellama-ask-line ()
@@ -1866,7 +1872,8 @@ ARGS contains keys for fine control.
   (let ((text (if (region-active-p)
 		  (buffer-substring-no-properties (region-beginning) (region-end))
 		(buffer-substring-no-properties (point-min) (point-max)))))
-    (ellama-instant (format ellama-code-review-prompt-template text))))
+    (ellama-instant (format ellama-code-review-prompt-template text)
+                    :provider ellama-coding-provider)))
 
 ;;;###autoload
 (defun ellama-change (change &optional edit-template)
@@ -1930,6 +1937,7 @@ prefix (\\[universal-argument]), prompt the user to amend the template."
      (format
       ellama-code-edit-prompt-template
       change text)
+     :provider ellama-coding-provider
      :filter #'ellama--code-filter
      :point beg)))
 
@@ -1949,6 +1957,7 @@ prefix (\\[universal-argument]), prompt the user to amend the template."
      (format
       ellama-code-improve-prompt-template
       text)
+     :provider ellama-coding-provider
      :filter #'ellama--code-filter
      :point beg)))
 
@@ -1967,6 +1976,7 @@ prefix (\\[universal-argument]), prompt the user to amend the template."
      (format
       ellama-code-complete-prompt-template
       text)
+     :provider ellama-coding-provider
      :filter #'ellama--code-filter
      :point end)))
 
@@ -1987,6 +1997,7 @@ buffer."
      (format
       ellama-code-add-prompt-template
       text description)
+     :provider ellama-coding-provider
      :filter #'ellama--code-filter)))
 
 
