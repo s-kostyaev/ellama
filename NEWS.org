@@ -1,3 +1,5 @@
+* Version 0.12.5
+- Add coding provider customization option.
 * Version 0.12.4
 - Fix documentation.
 - Improve translation template.
