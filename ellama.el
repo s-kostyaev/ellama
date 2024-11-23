@@ -36,7 +36,6 @@
 ;;; Code:
 
 (require 'eieio)
-(require 'json)
 (require 'llm)
 (require 'llm-provider-utils)
 (require 'spinner)
