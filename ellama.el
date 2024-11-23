@@ -41,7 +41,6 @@
 (require 'spinner)
 (require 'transient)
 (require 'info)
-(require 'vc)
 (require 'compat)
 (eval-when-compile (require 'rx))
 
@@ -1725,8 +1724,13 @@ the full response text when the request completes (with BUFFER current)."
 	 (text (buffer-substring-no-properties beg end)))
     (ellama-stream text)))
 
+(defvar vc-git-diff-switches)
+(declare-function vc-diff-internal "vc")
+(declare-function vc-deduce-fileset "vc")
+
 (defun ellama--diff-cached ()
   "Diff staged."
+  (require 'vc)
   (let* ((default-directory
 	  (if (string= ".git"
 		       (car (reverse
@@ -1747,6 +1751,7 @@ the full response text when the request completes (with BUFFER current)."
 
 (defun ellama--diff ()
   "Diff unstaged."
+  (require 'vc)
   (let* ((default-directory
 	  (if (string= ".git"
 		       (car (reverse
