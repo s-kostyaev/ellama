@@ -40,7 +40,6 @@
 (require 'llm-provider-utils)
 (require 'spinner)
 (require 'transient)
-(require 'info)
 (require 'compat)
 (eval-when-compile (require 'rx))
 
@@ -1199,6 +1198,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
   "Add TEXT to context."
   (let ((element (ellama-context-element-text :content text)))
     (ellama-context-element-add element)))
+
+(declare-function Info-copy-current-node-name "info")
 
 ;;;###autoload
 (defun ellama-context-add-info-node (node)
