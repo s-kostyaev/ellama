@@ -5,7 +5,7 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4") (transient "0.7.6") (compat "29.1"))
+;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4") (transient "0.7") (compat "29.1"))
 ;; Version: 0.12.5
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
@@ -36,15 +36,10 @@
 ;;; Code:
 
 (require 'eieio)
-(require 'json)
 (require 'llm)
 (require 'llm-provider-utils)
 (require 'spinner)
 (require 'transient)
-(require 'info)
-(require 'shr)
-(require 'eww)
-(require 'vc)
 (require 'compat)
 (eval-when-compile (require 'rx))
 
@@ -1204,6 +1199,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (let ((element (ellama-context-element-text :content text)))
     (ellama-context-element-add element)))
 
+(declare-function Info-copy-current-node-name "info")
+
 ;;;###autoload
 (defun ellama-context-add-info-node (node)
   "Add info NODE to context."
@@ -1243,6 +1240,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
 (defun ellama-context-add-webpage-quote-eww ()
   "Add webpage quote to context interactively from `eww'."
   (interactive)
+  (defvar eww-data)
+  (declare-function eww-current-url "eww")
   (if (eq major-mode 'eww-mode)
       (let* ((name (plist-get eww-data :title))
 	     (url (eww-current-url))
@@ -1726,8 +1725,13 @@ the full response text when the request completes (with BUFFER current)."
 	 (text (buffer-substring-no-properties beg end)))
     (ellama-stream text)))
 
+(defvar vc-git-diff-switches)
+(declare-function vc-diff-internal "vc")
+(declare-function vc-deduce-fileset "vc")
+
 (defun ellama--diff-cached ()
   "Diff staged."
+  (require 'vc)
   (let* ((default-directory
 	  (if (string= ".git"
 		       (car (reverse
@@ -1748,6 +1752,7 @@ the full response text when the request completes (with BUFFER current)."
 
 (defun ellama--diff ()
   "Diff unstaged."
+  (require 'vc)
   (let* ((default-directory
 	  (if (string= ".git"
 		       (car (reverse
@@ -2040,7 +2045,7 @@ otherwise prompt user for URL to summarize."
   (interactive
    (list
     (if-let ((url (or (and (fboundp 'thing-at-point) (thing-at-point 'url))
-                      (shr-url-at-point nil))))
+                      (and (fboundp 'shr-url-at-point) (shr-url-at-point nil)))))
         url
       (read-string "Enter URL you want to summarize: "))))
   (let ((buffer-name (url-retrieve-synchronously url t)))
