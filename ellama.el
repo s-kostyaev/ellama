@@ -42,8 +42,6 @@
 (require 'spinner)
 (require 'transient)
 (require 'info)
-(require 'shr)
-(require 'eww)
 (require 'vc)
 (require 'compat)
 (eval-when-compile (require 'rx))
@@ -1243,6 +1241,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
 (defun ellama-context-add-webpage-quote-eww ()
   "Add webpage quote to context interactively from `eww'."
   (interactive)
+  (defvar eww-data)
+  (declare-function eww-current-url "eww")
   (if (eq major-mode 'eww-mode)
       (let* ((name (plist-get eww-data :title))
 	     (url (eww-current-url))
@@ -2040,7 +2040,7 @@ otherwise prompt user for URL to summarize."
   (interactive
    (list
     (if-let ((url (or (and (fboundp 'thing-at-point) (thing-at-point 'url))
-                      (shr-url-at-point nil))))
+                      (and (fboundp 'shr-url-at-point) (shr-url-at-point nil)))))
         url
       (read-string "Enter URL you want to summarize: "))))
   (let ((buffer-name (url-retrieve-synchronously url t)))
