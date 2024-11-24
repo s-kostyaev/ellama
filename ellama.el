@@ -2169,7 +2169,8 @@ otherwise prompt user for URL to summarize."
     ("i" "Improve Commands" ellama-transient-improve-menu)
     ("t" "Translate Commands" ellama-transient-translate-menu)
     ("m" "Make Commands" ellama-transient-make-menu)
-    ("k" "Text Complete" ellama-complete)]]
+    ("k" "Text Complete" ellama-complete)
+    ("g" "Text change" ellama-change)]]
   [["System"
     ("S" "Session Commands" ellama-transient-session-menu)
     ("x" "Context Commands" ellama-transient-context-menu)
