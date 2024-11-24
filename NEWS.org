@@ -1,3 +1,5 @@
+* Version 0.12.7
+- Add change command to transient menu.
 * Version 0.12.6
 - Fixed transient dependency version.
 - Refined the code for lazy loading some dependencies.
