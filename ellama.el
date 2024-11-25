@@ -2145,20 +2145,25 @@ otherwise prompt user for URL to summarize."
       (kill-region (point) (point-max))
       (ellama-summarize))))
 
+(defun ellama-get-ollama-model-name ()
+  "Get ollama model name from installed locally."
+  (interactive)
+  (completing-read
+   "Select ollama model: "
+   (mapcar (lambda (s)
+	     (car (split-string s)))
+	   (seq-drop
+	    (process-lines
+	     (executable-find ellama-ollama-binary) "ls")
+	    1))))
+
 (defun ellama-get-ollama-local-model ()
   "Return llm provider for interactively selected ollama model."
   (interactive)
   (declare-function llm-ollama-p "ext:llm-ollama")
   (declare-function llm-ollama-host "ext:llm-ollama")
   (declare-function llm-ollama-port "ext:llm-ollama")
-  (let ((model-name
-	 (completing-read "Select ollama model: "
-			  (mapcar (lambda (s)
-				    (car (split-string s)))
-				  (seq-drop
-				   (process-lines
-				    (executable-find ellama-ollama-binary) "ls")
-				   1))))
+  (let ((model-name (ellama-get-ollama-model-name))
 	(host (when (llm-ollama-p ellama-provider)
 		(llm-ollama-host ellama-provider)))
 	(port (when (llm-ollama-p ellama-provider)
@@ -2168,6 +2173,21 @@ otherwise prompt user for URL to summarize."
 	 :chat-model model-name :embedding-model model-name :host host :port port)
       (make-llm-ollama
        :chat-model model-name :embedding-model model-name))))
+
+(defvar ellama-transient-ollama-model-name "")
+
+(transient-define-suffix ellama-transient-set-ollama-model ()
+  "Set ollama model name."
+  (interactive)
+  (setq ellama-transient-ollama-model-name (ellama-get-ollama-model-name)))
+
+(transient-define-prefix ellama-select-ollama-model ()
+  "Select ollama model."
+  [["Model"
+    ("m" "Model" ellama-transient-set-ollama-model
+     :transient t
+     :description (lambda () (format "Model (%s)" ellama-transient-ollama-model-name)))]
+   ["Quit" ("q" "Quit" transient-quit-one)]])
 
 (transient-define-prefix ellama-transient-code-menu ()
   "Code Commands."
