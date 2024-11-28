@@ -1,3 +1,6 @@
+* Version 0.12.8
+- Provide code review in chat session.
+- Improve code review prompt template.
 * Version 0.12.7
 - Add change command to transient menu.
 * Version 0.12.6
