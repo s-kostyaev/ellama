@@ -245,7 +245,7 @@ You are a summarizer. You write a summary of the input **IN THE SAME LANGUAGE AS
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-code-review-prompt-template "Review the following code and make concise suggestions:\n```\n%s\n```"
+(defcustom ellama-code-review-prompt-template "You are professional software engineer. Review provided code and make concise suggestions."
   "Prompt template for `ellama-code-review'."
   :group 'ellama
   :type 'string)
@@ -1874,11 +1874,10 @@ ARGS contains keys for fine control.
 (defun ellama-code-review ()
   "Review code in selected region or current buffer."
   (interactive)
-  (let ((text (if (region-active-p)
-		  (buffer-substring-no-properties (region-beginning) (region-end))
-		(buffer-substring-no-properties (point-min) (point-max)))))
-    (ellama-instant (format ellama-code-review-prompt-template text)
-                    :provider ellama-coding-provider)))
+  (if (region-active-p)
+      (ellama-context-add-selection)
+    (ellama-context-add-buffer (current-buffer)))
+  (ellama-chat ellama-code-review-prompt-template nil :provider ellama-coding-provider))
 
 ;;;###autoload
 (defun ellama-change (change &optional edit-template)
