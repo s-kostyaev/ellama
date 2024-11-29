@@ -85,6 +85,10 @@ In that case you should customize ellama configuration like this:
 	     :embedding-model "nomic-embed-text"
 	     :default-chat-non-standard-params
 	     '(("num_ctx" . 32768))))
+      ;; customize display buffer behaviour
+      ;; see ~(info "(elisp) Buffer Display Action Functions")~
+      (setopt ellama-chat-display-action-function #'display-buffer-full-frame)
+      (setopt ellama-instant-display-action-function #'display-buffer-at-bottom)
       :config
       ;; send last message in chat buffer with C-c C-c
       (add-hook 'org-ctrl-c-ctrl-c-hook #'ellama-chat-send-last-message))
@@ -357,6 +361,8 @@ argument generated text string.
   ~ellama-provider~ will be used if not set.
 - ~ellama-show-quotes~: Show quotes content in chat buffer. Disabled
   by default.
+- ~ellama-chat-display-action-function~: Display action function for ~ellama-chat~.
+- ~ellama-instant-display-action-function~: Display action function for ~ellama-instant~.
 
 ** Acknowledgments
 

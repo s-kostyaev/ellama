@@ -386,6 +386,16 @@ Too low value can break generated code by splitting long comment lines."
   :group 'ellama
   :type 'boolean)
 
+(defcustom ellama-chat-display-action-function nil
+  "Display action function for `ellama-chat'."
+  :group 'ellama
+  :type 'function)
+
+(defcustom ellama-instant-display-action-function nil
+  "Display action function for `ellama-instant'."
+  :group 'ellama
+  :type 'function)
+
 (define-minor-mode ellama-session-mode
   "Minor mode for ellama session buffers."
   :interactive nil
@@ -803,7 +813,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	       buffer ellama--active-sessions)
       (ellama-session-mode +1))
     (kill-buffer session-buffer)
-    (display-buffer buffer)))
+    (display-buffer buffer (when ellama-chat-display-action-function
+			     `((ignore . (,ellama-chat-display-action-function)))))))
 
 ;;;###autoload
 (defun ellama-session-remove ()
@@ -842,7 +853,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	      (hash-table-keys ellama--active-sessions)))
 	 (buffer (ellama-get-session-buffer id)))
     (ellama-activate-session id)
-    (display-buffer buffer)))
+    (display-buffer buffer (when ellama-chat-display-action-function
+			     `((ignore . (,ellama-chat-display-action-function)))))))
 
 ;;;###autoload
 (defun ellama-session-rename ()
@@ -1478,7 +1490,10 @@ last step only.
 				      (ellama-generate-name provider real-this-command prompt)))
 		(ellama-get-session-buffer ellama--current-session-id))))
     (when show
-      (display-buffer buf))
+      (display-buffer buf (if chat (when ellama-chat-display-action-function
+				     `((ignore . (,ellama-chat-display-action-function))))
+			    (when ellama-instant-display-action-function
+			      `((ignore . (,ellama-instant-display-action-function)))))))
     (with-current-buffer buf
       (funcall ellama-major-mode))
     (if chat
@@ -1556,12 +1571,14 @@ Extract profession from this message. Be short and concise."
 			 "Provide short final answer based on final solution.")))))
 
 (declare-function org-export-to-buffer "ox")
+(defvar org-export-show-temporary-export-buffer)
 
 (defun ellama-convert-org-to-md (text)
   "Translate TEXT from org syntax to markdown syntax."
   (require 'ox)
   (require 'ox-md)
-  (let ((buf (make-temp-name "ellama-")))
+  (let ((buf (make-temp-name "ellama-"))
+	(org-export-show-temporary-export-buffer nil))
     (with-temp-buffer
       (insert "#+OPTIONS: toc:nil\n" text)
       (org-export-to-buffer 'md buf
@@ -1598,7 +1615,8 @@ Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
   "Translate generated text into TRANSLATION-BUFFER."
   (lambda (generated)
     (ellama-chat-done generated)
-    (display-buffer translation-buffer)
+    (display-buffer translation-buffer (when ellama-chat-display-action-function
+					 `((ignore . (,ellama-chat-display-action-function)))))
     (with-current-buffer translation-buffer
       (save-excursion
 	(goto-char (point-max))
@@ -1620,7 +1638,8 @@ Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
       (goto-char (point-max))
       (delete-char -2)
       (delete-char (- (length result))))
-    (display-buffer buffer)
+    (display-buffer buffer (when ellama-chat-display-action-function
+			     `((ignore . (,ellama-chat-display-action-function)))))
     (with-current-buffer buffer
       (save-excursion
 	(goto-char (point-max))
@@ -1635,7 +1654,8 @@ Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
 
 (defun ellama--translate-interaction (prompt translation-buffer buffer session)
   "Translate chat PROMPT in TRANSLATION-BUFFER for BUFFER with SESSION."
-  (display-buffer translation-buffer)
+  (display-buffer translation-buffer (when ellama-chat-display-action-function
+				       `((ignore . (,ellama-chat-display-action-function)))))
   (with-current-buffer translation-buffer
     (save-excursion
       (goto-char (point-max))
@@ -1715,7 +1735,8 @@ the full response text when the request completes (with BUFFER current)."
 				 (get-buffer-create (ellama-session-id session))))))
     (if ellama-chat-translation-enabled
 	(ellama--translate-interaction prompt translation-buffer buffer session)
-      (display-buffer buffer)
+      (display-buffer buffer (when ellama-chat-display-action-function
+			       `((ignore . (,ellama-chat-display-action-function)))))
       (with-current-buffer buffer
 	(save-excursion
 	  (goto-char (point-max))
@@ -1875,7 +1896,8 @@ ARGS contains keys for fine control.
       (funcall ellama-major-mode)
       (when (derived-mode-p 'org-mode)
 	(setq filter 'ellama--translate-markdown-to-org-filter)))
-    (display-buffer buffer)
+    (display-buffer buffer (when ellama-instant-display-action-function
+			     `((ignore . (,ellama-instant-display-action-function)))))
     (ellama-stream prompt
 		   :buffer buffer
 		   :filter filter
