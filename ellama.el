@@ -779,6 +779,16 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	(save-buffer)
 	(goto-char (point-min))))
     (with-current-buffer buffer
+      ;; support sessions without user nick at the end of buffer
+      (when (not (save-excursion
+		   (save-match-data
+		     (goto-char (point-max))
+		     (and (search-backward (concat (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n") nil t)
+			  (search-forward (concat (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n") nil t)
+			  (equal (point) (point-max))))))
+	(goto-char (point-max))
+	(insert (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n")
+	(save-buffer))
       (let ((session (read session-buffer)))
 	(setq ellama--current-session
 	      (make-ellama-session
@@ -1566,7 +1576,7 @@ Extract profession from this message. Be short and concise."
 Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
   (save-excursion
     (goto-char (point-max))
-    (insert "\n\n")
+    (insert "\n\n" (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n")
     (when ellama-session-auto-save
       (save-buffer)))
   (when ellama-chat-done-callback
@@ -1699,9 +1709,12 @@ the full response text when the request completes (with BUFFER current)."
       (with-current-buffer buffer
 	(save-excursion
 	  (goto-char (point-max))
-	  (insert (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n"
-		  (ellama--format-context session) (ellama--fill-long-lines prompt) "\n\n"
-		  (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
+	  (if (equal (point-min) (point-max)) ;; empty buffer
+	      (insert (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n"
+		      (ellama--format-context session) (ellama--fill-long-lines prompt) "\n\n"
+		      (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
+	    (insert (ellama--format-context session) (ellama--fill-long-lines prompt) "\n\n"
+		    (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n"))
 	  (ellama-stream prompt
 			 :session session
 			 :on-done (if donecb (list 'ellama-chat-done donecb)
