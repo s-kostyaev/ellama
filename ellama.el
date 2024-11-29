@@ -1571,6 +1571,16 @@ Extract profession from this message. Be short and concise."
 	  (string-trim (buffer-substring-no-properties (point-min) (point-max)))
 	(kill-buffer)))))
 
+(defun ellama-get-last-user-message ()
+  "Return last not sent user message in current session buffer."
+  (when ellama--current-session
+    (save-excursion
+      (save-match-data
+	(goto-char (point-max))
+	(and (search-backward (concat (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n") nil t)
+	     (search-forward (concat (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n") nil t)
+	     (buffer-substring-no-properties (point) (point-max)))))))
+
 (defun ellama-chat-done (text &optional on-done)
   "Chat done.
 Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
@@ -1721,6 +1731,27 @@ the full response text when the request completes (with BUFFER current)."
 				    'ellama-chat-done)
 			 :filter (when (derived-mode-p 'org-mode)
 				   #'ellama--translate-markdown-to-org-filter)))))))
+
+;;;###autoload
+(defun ellama-chat-send-last-message ()
+  "Send last user message extracted from current ellama chat buffer."
+  (interactive)
+  (when-let* ((session ellama--current-session)
+	      (message (ellama-get-last-user-message))
+	      ((length> message 0))
+	      (text (if (derived-mode-p 'org-mode)
+			(ellama-convert-org-to-md message)
+		      message)))
+    (goto-char (point-max))
+    (insert "\n\n")
+    (when (ellama-session-context session)
+      (insert (ellama--format-context session)))
+    (insert (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
+    (ellama-stream text
+		   :session session
+		   :on-done #'ellama-chat-done
+		   :filter (when (derived-mode-p 'org-mode)
+			     #'ellama--translate-markdown-to-org-filter))))
 
 ;;;###autoload
 (defun ellama-ask-about ()
