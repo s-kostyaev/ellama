@@ -1545,6 +1545,22 @@ Extract profession from this message. Be short and concise."
 	    :transform (lambda (_ _)
 			 "Provide short final answer based on final solution.")))))
 
+(declare-function org-export-to-buffer "ox")
+
+(defun ellama-convert-org-to-md (text)
+  "Translate TEXT from org syntax to markdown syntax."
+  (require 'ox)
+  (require 'ox-md)
+  (let ((buf (make-temp-name "ellama-")))
+    (with-temp-buffer
+      (insert "#+OPTIONS: toc:nil\n" text)
+      (org-export-to-buffer 'md buf
+	nil nil t t nil (lambda () (text-mode))))
+    (with-current-buffer buf
+      (prog1
+	  (string-trim (buffer-substring-no-properties (point-min) (point-max)))
+	(kill-buffer)))))
+
 (defun ellama-chat-done (text &optional on-done)
   "Chat done.
 Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
