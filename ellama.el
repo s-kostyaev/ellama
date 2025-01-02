@@ -359,6 +359,19 @@ is not changed.
   :group 'ellama
   :type 'string)
 
+(defcustom ellama-extract-string-list-template "You are professional data extractor. Extract %s as json array of strings
+<EXAMPLE>
+{\"data\":[\"First element\", \"Second element\"]}
+</EXAMPLE>"
+  "Extract list template."
+  :group 'ellama
+  :type 'string)
+
+(defcustom ellama-extraction-provider nil
+  "LLM provider for data extraction."
+  :group 'ellama
+  :type '(sexp :validate 'llm-standard-provider-p))
+
 (defcustom ellama-chat-done-callback nil
   "Callback that will be called on ellama chat response generation done.
 It should be a function with single argument generated text string."
@@ -2178,6 +2191,44 @@ otherwise prompt user for URL to summarize."
       (beginning-of-line)
       (kill-region (point) (point-max))
       (ellama-summarize))))
+
+(defun ellama--make-extract-string-list-prompt (elements input)
+  "Create LLM prompt for list of ELEMENTS extraction from INPUT."
+  (llm-make-chat-prompt
+   input
+   :context (format ellama-extract-string-list-template elements)
+   :response-format '(:type object :properties
+			    (:data (:type array :items (:type string)))
+			    :required (data))))
+
+(defun ellama-extract-string-list (elements input)
+  "Extract list of ELEMENTS from INPUT syncronously.
+Return list of strings."
+  (let ((provider (or ellama-extraction-provider ellama-provider)))
+    (plist-get (json-parse-string
+		(llm-chat
+		 provider
+		 (ellama--make-extract-string-list-prompt elements input))
+		:object-type 'plist
+		:array-type 'list)
+	       :data)))
+
+(defun ellama-extract-string-list-async (elements callback input)
+  "Extract list of ELEMENTS from INPUT asyncronously.
+Call CALLBACK on result list of strings."
+  (let ((provider (or ellama-extraction-provider ellama-provider)))
+    (llm-chat-async
+     provider
+     (ellama--make-extract-string-list-prompt elements input)
+     (lambda (res)
+       (funcall callback
+		(plist-get (json-parse-string
+			    res
+			    :object-type 'plist
+			    :array-type 'list)
+			   :data)))
+     (lambda (err)
+       (user-error err)))))
 
 (defun ellama-get-ollama-local-model ()
   "Return llm provider for interactively selected ollama model."
