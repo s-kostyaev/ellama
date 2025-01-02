@@ -581,8 +581,10 @@ FILE is a path to file contains string representation of this session, string.
 
 PROMPT is a variable contains last prompt in this session.
 
-CONTEXT contains context for next request."
-  id provider file prompt context)
+CONTEXT contains context for next request.
+
+EXTRA contains additional information."
+  id provider file prompt context extra)
 
 (defun ellama-get-session-buffer (id)
   "Return ellama session buffer by provided ID."
@@ -799,14 +801,20 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	(goto-char (point-max))
 	(insert (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n")
 	(save-buffer))
-      (let ((session (read session-buffer)))
+      (let* ((session (read session-buffer))
+	     ;; workaround for old sessions
+	     (offset (cl-struct-slot-offset 'ellama-session 'extra))
+	     (extra (when (> (length session)
+			     offset)
+		      (aref session offset))))
 	(setq ellama--current-session
 	      (make-ellama-session
 	       :id (ellama-session-id session)
 	       :provider (ellama-session-provider session)
 	       :file (ellama-session-file session)
 	       :prompt (ellama-session-prompt session)
-	       :context ellama--new-session-context)))
+	       :context ellama--new-session-context
+	       :extra extra)))
       (setq ellama--new-session-context nil)
       (setq ellama--current-session-id (ellama-session-id ellama--current-session))
       (puthash (ellama-session-id ellama--current-session)
