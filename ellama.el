@@ -1,12 +1,12 @@
 ;;; ellama.el --- Tool for interacting with LLMs -*- lexical-binding: t -*-
 
-;; Copyright (C) 2023, 2024  Free Software Foundation, Inc.
+;; Copyright (C) 2023-2025  Free Software Foundation, Inc.
 
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4") (transient "0.7") (compat "29.1"))
-;; Version: 0.13.0
+;; Version: 0.13.1
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 

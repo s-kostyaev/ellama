@@ -1,3 +1,5 @@
+* Version 0.13.1
+- Add support for extra information in ellama session.
 * Version 0.13.0
 - Add command ~ellama-chat-send-last-message~ to compose and modify
   messages within the chat buffer and send them directly from there.
