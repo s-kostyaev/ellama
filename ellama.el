@@ -1931,13 +1931,17 @@ the full response text when the request completes (with BUFFER current)."
 
 ARGS contains keys for fine control.
 
-:provider PROVIDER -- PROVIDER is an llm provider for generation."
+:provider PROVIDER -- PROVIDER is an llm provider for generation.
+
+:on-done ON-DONE -- ON-DONE a function or list of functions that's called with
+ the full response text when the request completes (with BUFFER current)."
   (let* ((provider (or (plist-get args :provider)
 		       ellama-provider))
 	 (buffer-name (ellama-generate-name provider real-this-command prompt))
 	 (buffer (get-buffer-create (if (get-buffer buffer-name)
 					(make-temp-name (concat buffer-name " "))
 				      buffer-name)))
+	 (donecb (plist-get args :on-done))
 	 filter)
     (with-current-buffer buffer
       (funcall ellama-major-mode)
@@ -1948,7 +1952,8 @@ ARGS contains keys for fine control.
     (ellama-stream prompt
 		   :buffer buffer
 		   :filter filter
-		   :provider provider)))
+		   :provider provider
+		   :on-done donecb)))
 
 ;;;###autoload
 (defun ellama-translate ()
