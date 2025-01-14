@@ -1,3 +1,5 @@
+* Version 0.13.2
+- Fix inline latex translation during markdown to org transformations.
 * Version 0.13.1
 - Add support for extra information in ellama session.
 * Version 0.13.0
