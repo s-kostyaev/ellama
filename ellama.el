@@ -376,6 +376,11 @@ Too low value can break generated code by splitting long comment lines."
   :group 'ellama
   :type 'integer)
 
+(defcustom ellama-translate-italic t
+  "Translate italic during markdown to org transformations."
+  :group 'ellama
+  :type 'boolean)
+
 (defcustom ellama-session-auto-save t
   "Automatically save ellama sessions if set."
   :group 'ellama
@@ -462,7 +467,9 @@ Too low value can break generated code by splitting long comment lines."
 (defun ellama--replace (from to beg end)
   "Replace FROM to TO in region BEG END."
   (goto-char beg)
-  (while (re-search-forward from end t)
+  (while (and
+	  (> end beg)
+	  (re-search-forward from end t))
     (replace-match to)))
 
 (defun ellama--apply-transformations (beg end)
@@ -479,7 +486,8 @@ Too low value can break generated code by splitting long comment lines."
   (ellama--replace "\\*\\*\\(.+?\\)\\*\\*" "*\\1*" beg end)
   (ellama--replace "<b>\\(.+?\\)</b>" "*\\1*" beg end)
   ;; italic
-  (ellama--replace "_\\(.+?\\)_" "/\\1/" beg end)
+  (when ellama-translate-italic
+    (ellama--replace "_\\(.+?\\)_" "/\\1/" beg end))
   (ellama--replace "<i>\\(.+?\\)</i>" "/\\1/" beg end)
   ;; underlined
   (ellama--replace "<u>\\(.+?\\)</u>" "_\\1_" beg end)
@@ -509,15 +517,48 @@ Too low value can break generated code by splitting long comment lines."
     ;; apply transformations outside of code blocks
     (let ((beg (point-min))
 	  (end (or (re-search-forward "#\\+BEGIN_SRC" nil t)
-		   (point-max))))
+		   (point-max)))
+	  (quit nil))
+      (goto-char beg)
+      (setq end (or (progn
+		      (re-search-forward "\\$\\$.+\\$\\$" end t)
+		      (match-beginning 0))
+		    (progn
+		      (re-search-forward "\\$.+\\$" end t)
+		      (match-beginning 0))
+		    end))
+      (goto-char beg)
       (ellama--apply-transformations beg end)
       (goto-char beg)
-      (re-search-forward "#\\+BEGIN_SRC" nil t)
-      (while (when-let ((beg (re-search-forward "#\\+END_SRC" nil t))
-			(end (or (re-search-forward "#\\+BEGIN_SRC" nil t)
-				 (point-max))))
+      (when-let ((points (cl-remove-if
+			  #'not
+			  (list (progn (goto-char beg)
+				       (re-search-forward "#\\+BEGIN_SRC" nil t))
+				(progn (goto-char beg)
+				       (re-search-forward "\\$\\$.+\\$\\$" nil t))
+				(progn (goto-char beg)
+				       (re-search-forward "\\$.+\\$" nil t)))))
+		 (new-beg (cl-reduce #'min points)))
+	(goto-char new-beg))
+      (when (equal end (point-max))
+	(setq quit t))
+      (while (when-let* ((continue (not quit))
+			 (beg (point))
+			 (points (cl-remove-if
+				  #'not
+				  (list (progn (goto-char beg)
+					       (re-search-forward "#\\+BEGIN_SRC" nil t))
+					(progn (goto-char beg)
+					       (re-search-forward "\\$\\$.+\\$\\$" nil t))
+					(progn (goto-char beg)
+					       (re-search-forward "\\$.+\\$" nil t))
+					(point-max))))
+			 (end (cl-reduce #'min points)))
+	       (goto-char beg)
+	       (when (equal end (point-max))
+		 (setq quit t))
 	       (ellama--apply-transformations beg end)
-	       (goto-char beg))))
+	       (goto-char end))))
     (buffer-substring-no-properties (point-min) (point-max))))
 
 (defun ellama--translate-markdown-to-org-filter (text)
