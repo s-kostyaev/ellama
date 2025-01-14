@@ -303,6 +303,41 @@ third block
 #+END_SRC
 That's it."))))
 
+(ert-deftest test-ellama-md-to-org-code-inline-latex ()
+  (let ((result (ellama--translate-markdown-to-org-filter "_some italic_
+$$P_\\theta(Y_T, ..., Y_2|Y_1, x_1, ..., x_T)$$
+_more italic_
+$P_\\theta$
+_more italic_")))
+    (should (string-equal result "/some italic/
+$$P_\\theta(Y_T, ..., Y_2|Y_1, x_1, ..., x_T)$$
+/more italic/
+$P_\\theta$
+/more italic/"))))
+
+
+(ert-deftest test-ellama-md-to-org-code-inline-latex-with-code ()
+  (let ((result (ellama--translate-markdown-to-org-filter "_some italic_
+$$P_\\theta(Y_T, ..., Y_2|Y_1, x_1, ..., x_T)$$
+_more italic_
+```emacs-lisp
+(msg \"ok\")
+```
+$P_\\theta$
+_more italic_")))
+    (should (string-equal result "/some italic/
+$$P_\\theta(Y_T, ..., Y_2|Y_1, x_1, ..., x_T)$$
+/more italic/
+#+BEGIN_SRC emacs-lisp
+(msg \"ok\")
+#+END_SRC
+$P_\\theta$
+/more italic/"))))
+
+(ert-deftest test-ellama-replace-outside-of-code-blocks-minimal ()
+  (let ((result (ellama--replace-outside-of-code-blocks "This")))
+    (should (string-equal result "This"))))
+
 (provide 'test-ellama)
 
 ;;; test-ellama.el ends here
