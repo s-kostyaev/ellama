@@ -363,7 +363,7 @@ is not changed.
 <EXAMPLE>
 {\"data\":[\"First element\", \"Second element\"]}
 </EXAMPLE>"
-  "Extract list template."
+  "Extract string list template."
   :group 'ellama
   :type 'string)
 
@@ -2208,7 +2208,7 @@ otherwise prompt user for URL to summarize."
 
 (defun ellama-extract-string-list (elements input &rest args)
   "Extract list of ELEMENTS from INPUT syncronously.
-Return list of strings. ARGS contains keys for fine control.
+Return list of strings.  ARGS contains keys for fine control.
 
 :provider PROVIDER -- PROVIDER is an llm provider for generation."
   (let ((provider (or (plist-get args :provider)
@@ -2224,7 +2224,7 @@ Return list of strings. ARGS contains keys for fine control.
 
 (defun ellama-extract-string-list-async (elements callback input &rest args)
   "Extract list of ELEMENTS from INPUT asyncronously.
-Call CALLBACK on result list of strings. ARGS contains keys for fine control.
+Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 
 :provider PROVIDER -- PROVIDER is an llm provider for generation."
   (let ((provider (or (plist-get args :provider)
