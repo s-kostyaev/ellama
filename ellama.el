@@ -2206,10 +2206,14 @@ otherwise prompt user for URL to summarize."
 			    (:data (:type array :items (:type string)))
 			    :required (data))))
 
-(defun ellama-extract-string-list (elements input)
+(defun ellama-extract-string-list (elements input &rest args)
   "Extract list of ELEMENTS from INPUT syncronously.
-Return list of strings."
-  (let ((provider (or ellama-extraction-provider ellama-provider)))
+Return list of strings. ARGS contains keys for fine control.
+
+:provider PROVIDER -- PROVIDER is an llm provider for generation."
+  (let ((provider (or (plist-get args :provider)
+		      ellama-extraction-provider
+		      ellama-provider)))
     (plist-get (json-parse-string
 		(llm-chat
 		 provider
@@ -2218,10 +2222,14 @@ Return list of strings."
 		:array-type 'list)
 	       :data)))
 
-(defun ellama-extract-string-list-async (elements callback input)
+(defun ellama-extract-string-list-async (elements callback input &rest args)
   "Extract list of ELEMENTS from INPUT asyncronously.
-Call CALLBACK on result list of strings."
-  (let ((provider (or ellama-extraction-provider ellama-provider)))
+Call CALLBACK on result list of strings. ARGS contains keys for fine control.
+
+:provider PROVIDER -- PROVIDER is an llm provider for generation."
+  (let ((provider (or (plist-get args :provider)
+		      ellama-extraction-provider
+		      ellama-provider)))
     (llm-chat-async
      provider
      (ellama--make-extract-string-list-prompt elements input)
