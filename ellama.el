@@ -510,56 +510,41 @@ Too low value can break generated code by splitting long comment lines."
     (fill-region beg end nil t t)))
 
 (defun ellama--replace-outside-of-code-blocks (text)
-  "Replace some markdown elements to org in TEXT outside of code blocks."
+  "Replace markdown elements in TEXT with org equivalents.
+Skip code blocks and math environments."
   (with-temp-buffer
     (insert (propertize text 'hard t))
     (goto-char (point-min))
-    ;; apply transformations outside of code blocks
-    (let ((beg (point-min))
-	  (end (or (re-search-forward "#\\+BEGIN_SRC" nil t)
-		   (point-max)))
-	  (quit nil))
-      (goto-char beg)
-      (setq end (or (progn
-		      (re-search-forward "\\$\\$.+\\$\\$" end t)
-		      (match-beginning 0))
-		    (progn
-		      (re-search-forward "\\$.+\\$" end t)
-		      (match-beginning 0))
-		    end))
-      (goto-char beg)
-      (ellama--apply-transformations beg end)
-      (goto-char beg)
-      (when-let ((points (cl-remove-if
-			  #'not
-			  (list (progn (goto-char beg)
-				       (re-search-forward "#\\+BEGIN_SRC" nil t))
-				(progn (goto-char beg)
-				       (re-search-forward "\\$\\$.+\\$\\$" nil t))
-				(progn (goto-char beg)
-				       (re-search-forward "\\$.+\\$" nil t)))))
-		 (new-beg (cl-reduce #'min points)))
-	(goto-char new-beg))
-      (when (equal end (point-max))
-	(setq quit t))
-      (while (when-let* ((continue (not quit))
-			 (beg (point))
-			 (points (cl-remove-if
-				  #'not
-				  (list (progn (goto-char beg)
-					       (re-search-forward "#\\+BEGIN_SRC" nil t))
-					(progn (goto-char beg)
-					       (re-search-forward "\\$\\$.+\\$\\$" nil t))
-					(progn (goto-char beg)
-					       (re-search-forward "\\$.+\\$" nil t))
-					(point-max))))
-			 (end (cl-reduce #'min points)))
-	       (goto-char beg)
-	       (when (equal end (point-max))
-		 (setq quit t))
-	       (ellama--apply-transformations beg end)
-	       (goto-char end))))
-    (buffer-substring-no-properties (point-min) (point-max))))
+    (let (block-start
+	  block-end
+	  (prev-point (point-min)))
+      ;; Process regions outside of blocks
+      (while (re-search-forward "\\(#\\+BEGIN_SRC\\|\\$\\$\\|\\$\\)" nil t)
+        (setq block-start (match-beginning 0))
+	(goto-char block-start)
+        (let ((block-type (cond ((looking-at "#\\+BEGIN_SRC") 'src)
+                                ((looking-at "\\$\\$") 'math-display)
+                                ((looking-at "\\$") 'math-inline))))
+          ;; Apply transformations to text before the block
+          (ellama--apply-transformations prev-point block-start)
+          ;; Skip over the block content
+          (goto-char block-start)
+          (setq block-end
+		(cond
+		 ((eq block-type 'src)
+                  (if (re-search-forward "#\\+END_SRC" nil t) (point) (point-max)))
+		 ((eq block-type 'math-display)
+                  (if (re-search-forward "\\$\\$.+\\$\\$" nil t) (point) (point-max)))
+		 ((eq block-type 'math-inline)
+                  (if (re-search-forward "\\$.+\\$" nil t) (point) (point-max)))))
+          (when block-end
+	    (goto-char block-end))
+	  (setq prev-point (point))))
+      ;; Process any remaining text after the last block
+      (ellama--apply-transformations prev-point (point-max)))
+    (prog1
+	(buffer-substring-no-properties (point-min) (point-max))
+      (kill-buffer))))
 
 (defun ellama--translate-markdown-to-org-filter (text)
   "Filter to translate code blocks from markdown syntax to org syntax in TEXT.
