@@ -1,3 +1,6 @@
+* Version 0.13.3
+- Refactor markdown to org translation.
+- Fix bug when transformations was applied inside code blocks.
 * Version 0.13.2
 - Fix inline latex translation during markdown to org transformations.
 * Version 0.13.1
