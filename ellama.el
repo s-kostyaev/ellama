@@ -5,7 +5,7 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (llm "0.6.0") (spinner "1.7.4") (transient "0.7") (compat "29.1"))
+;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (spinner "1.7.4") (transient "0.7") (compat "29.1"))
 ;; Version: 0.13.3
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
@@ -358,6 +358,19 @@ is not changed.
   "Translation template."
   :group 'ellama
   :type 'string)
+
+(defcustom ellama-extract-string-list-template "You are professional data extractor. Extract %s as json array of strings
+<EXAMPLE>
+{\"data\":[\"First element\", \"Second element\"]}
+</EXAMPLE>"
+  "Extract string list template."
+  :group 'ellama
+  :type 'string)
+
+(defcustom ellama-extraction-provider nil
+  "LLM provider for data extraction."
+  :group 'ellama
+  :type '(sexp :validate 'llm-standard-provider-p))
 
 (defcustom ellama-chat-done-callback nil
   "Callback that will be called on ellama chat response generation done.
@@ -1918,13 +1931,17 @@ the full response text when the request completes (with BUFFER current)."
 
 ARGS contains keys for fine control.
 
-:provider PROVIDER -- PROVIDER is an llm provider for generation."
+:provider PROVIDER -- PROVIDER is an llm provider for generation.
+
+:on-done ON-DONE -- ON-DONE a function or list of functions that's called with
+ the full response text when the request completes (with BUFFER current)."
   (let* ((provider (or (plist-get args :provider)
 		       ellama-provider))
 	 (buffer-name (ellama-generate-name provider real-this-command prompt))
 	 (buffer (get-buffer-create (if (get-buffer buffer-name)
 					(make-temp-name (concat buffer-name " "))
 				      buffer-name)))
+	 (donecb (plist-get args :on-done))
 	 filter)
     (with-current-buffer buffer
       (funcall ellama-major-mode)
@@ -1935,7 +1952,8 @@ ARGS contains keys for fine control.
     (ellama-stream prompt
 		   :buffer buffer
 		   :filter filter
-		   :provider provider)))
+		   :provider provider
+		   :on-done donecb)))
 
 ;;;###autoload
 (defun ellama-translate ()
@@ -2178,6 +2196,52 @@ otherwise prompt user for URL to summarize."
       (beginning-of-line)
       (kill-region (point) (point-max))
       (ellama-summarize))))
+
+(defun ellama--make-extract-string-list-prompt (elements input)
+  "Create LLM prompt for list of ELEMENTS extraction from INPUT."
+  (llm-make-chat-prompt
+   input
+   :context (format ellama-extract-string-list-template elements)
+   :response-format '(:type object :properties
+			    (:data (:type array :items (:type string)))
+			    :required (data))))
+
+(defun ellama-extract-string-list (elements input &rest args)
+  "Extract list of ELEMENTS from INPUT syncronously.
+Return list of strings.  ARGS contains keys for fine control.
+
+:provider PROVIDER -- PROVIDER is an llm provider for generation."
+  (let ((provider (or (plist-get args :provider)
+		      ellama-extraction-provider
+		      ellama-provider)))
+    (plist-get (json-parse-string
+		(llm-chat
+		 provider
+		 (ellama--make-extract-string-list-prompt elements input))
+		:object-type 'plist
+		:array-type 'list)
+	       :data)))
+
+(defun ellama-extract-string-list-async (elements callback input &rest args)
+  "Extract list of ELEMENTS from INPUT asyncronously.
+Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
+
+:provider PROVIDER -- PROVIDER is an llm provider for generation."
+  (let ((provider (or (plist-get args :provider)
+		      ellama-extraction-provider
+		      ellama-provider)))
+    (llm-chat-async
+     provider
+     (ellama--make-extract-string-list-prompt elements input)
+     (lambda (res)
+       (funcall callback
+		(plist-get (json-parse-string
+			    res
+			    :object-type 'plist
+			    :array-type 'list)
+			   :data)))
+     (lambda (err)
+       (user-error err)))))
 
 (defun ellama-get-ollama-local-model ()
   "Return llm provider for interactively selected ollama model."
