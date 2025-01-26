@@ -338,6 +338,56 @@ $P_\\theta$
   (let ((result (ellama--replace-outside-of-code-blocks "This")))
     (should (string-equal result "This"))))
 
+(ert-deftest test-ellama-md-to-org-code-snake-case ()
+  (let ((result (ellama--translate-markdown-to-org-filter "```python
+# Example of snake case variables and functions
+
+# Variable names using snake_case
+student_name = \"Alice Johnson\"
+class_name = \"Mathematics\"
+grade_level = 10
+
+# Function name using snake_case
+def calculate_average_score(math_score, science_score, english_score):
+    average_score = (math_score + science_score + english_score) / 3
+    return average_score
+
+# Using the function
+student_math_score = 85
+student_science_score = 90
+student_english_score = 78
+
+average_score = calculate_average_score(student_math_score, student_science_score, student_english_score)
+print(f\"The average score of {student_name} in {class_name} is: {average_score:.2f}\")
+```
+
+In this example:
+- Variable names like `student_name`, `class_name`, and `grade_level` use snake_case.
+- The function name `calculate_average_score` also follows the snake_case convention.
+
+Snake case helps improve readability, especially in languages that are sensitive to capitalization like Python.")))
+    (should (string-equal result "#+BEGIN_SRC python
+# Example of snake case variables and functions
+
+# Variable names using snake_case
+student_name = \"Alice Johnson\"
+class_name = \"Mathematics\"
+grade_level = 10
+
+# Function name using snake_case
+def calculate_average_score(math_score, science_score, english_score):
+    average_score = (math_score + science_score + english_score) / 3
+    return average_score
+
+# Using the function
+student_math_score = 85
+student_science_score = 90
+student_english_score = 78
+
+average_score = calculate_average_score(student_math_score, student_science_score, student_english_score)
+print(f\"The average score of {student_name} in {class_name} is: {average_score:.2f}\")
+#+END_SRC\n\nIn this example:\n- Variable names like ~student/name~, ~class/name~, and ~grade/level~ use snake/case.\n- The function name ~calculate/average/score~ also follows the snake_case convention.\n\nSnake case helps improve readability, especially in languages that are sensitive to capitalization\nlike Python."))))
+
 (provide 'test-ellama)
 
 ;;; test-ellama.el ends here
