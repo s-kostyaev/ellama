@@ -1,3 +1,5 @@
+* Version 0.13.5
+- Fix defcustom validation. Remove unnecessary quote.
 * Version 0.13.4
 - Add string list extraction functions. Can be useful for creating LLM workflows.
 * Version 0.13.3
