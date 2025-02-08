@@ -367,6 +367,20 @@ is not changed.
   :group 'ellama
   :type 'string)
 
+(defcustom ellama-semantic-identity-template "Determine if two texts have the same meaning. If they are similar but differ in key aspects, they are not the same. Return the answer as a JSON object.
+<TEXT_1>
+%s
+</TEXT_1>
+<TEXT_2>
+%s
+</TEXT_2>
+<EXAMPLE>
+{\"same\": true}
+</EXAMPLE>"
+  "Extract string list template."
+  :group 'ellama
+  :type 'string)
+
 (defcustom ellama-extraction-provider nil
   "LLM provider for data extraction."
   :group 'ellama
@@ -2196,6 +2210,21 @@ otherwise prompt user for URL to summarize."
       (beginning-of-line)
       (kill-region (point) (point-max))
       (ellama-summarize))))
+
+(defun ellama-semantic-similar-p (text1 text2)
+  "Check if TEXT1 means the same as TEXT2."
+  (plist-get
+   (json-parse-string
+    (llm-chat
+     (or ellama-extraction-provider ellama-provider)
+     (llm-make-chat-prompt
+      (format ellama-semantic-identity-template text1 text2)
+      :response-format '(:type object :properties
+			       (:same (:type boolean))
+			       :required (same))))
+    :object-type 'plist
+    :false-object nil)
+   :same))
 
 (defun ellama--make-extract-string-list-prompt (elements input)
   "Create LLM prompt for list of ELEMENTS extraction from INPUT."
