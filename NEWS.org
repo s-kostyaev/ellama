@@ -1,3 +1,7 @@
+* Version 0.13.6
+- Add function ~ellama-semantic-similar-p~. It can be useful for
+  creating lists without duplicates by meaning.
+- Add integration tests.
 * Version 0.13.5
 - Fix defcustom validation. Remove unnecessary quote.
 * Version 0.13.4
