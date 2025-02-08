@@ -24,6 +24,9 @@
 
 ;;; Code:
 
+(require 'ellama)
+(require 'ert)
+
 (ert-deftest ellama-extract-sting-list-test ()
   "Check if `ellama-extract-string-list' works correctly."
   (should (equal-including-properties
