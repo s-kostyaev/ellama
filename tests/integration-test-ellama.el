@@ -48,6 +48,24 @@
 	   '("How many r's in strawberry?"
 	     "How many times letter e appears in word strawberry?"))))
 
+(ert-deftest ellama-semantic-similar-reasoning-test ()
+  "Check if `ellama-make-semantic-similar-p-with-context' works correctly."
+  (let ((testfn (ellama-make-semantic-similar-p-with-context
+		 "Communication between user and assistant")))
+    (should (equal-including-properties
+	     (let ((res))
+	       (dolist (el '("How many r's in strawberry?"
+			     "How many times letter r appears in word strawberry?"
+			     "How many r's in strawberry?"
+			     "How many times letter e appears in word strawberry?"
+			     "Define RAPTOR"
+			     "What does mean RAPTOR?"))
+		 (cl-pushnew el res :test testfn))
+	       (reverse res))
+	     '("How many r's in strawberry?"
+	       "How many times letter e appears in word strawberry?"
+	       "Define RAPTOR")))))
+
 (provide 'integration-test-ellama)
 
 ;;; integration-test-ellama.el ends here
