@@ -1302,7 +1302,10 @@ If EPHEMERAL non nil new session will not be associated with any file."
 (defun ellama-context-add-buffer (buf)
   "Add BUF to context."
   (interactive "bSelect buffer: ")
-  (let ((element (ellama-context-element-buffer :name buf)))
+  (let* ((buffer-name (if (stringp buf)
+			  buf
+			(buffer-name buf)))
+	 (element (ellama-context-element-buffer :name buffer-name)))
     (ellama-context-element-add element)))
 
 ;;;###autoload
