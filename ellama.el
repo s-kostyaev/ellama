@@ -643,6 +643,24 @@ EXTRA contains additional information."
   "Return ellama session buffer by provided ID."
   (gethash id ellama--active-sessions))
 
+(defun ellama--fix-file-name (name)
+  "Change forbidden characters in the NAME to acceptable."
+  (replace-regexp-in-string (rx (or (literal "/")
+				    (literal "\\")
+				    (literal "?")
+				    (literal "%")
+				    (literal "*")
+				    (literal ":")
+				    (literal "|")
+				    (literal "\"")
+				    (literal "<")
+				    (literal ">")
+				    (literal ".")
+				    (literal ";")
+				    (literal "=")))
+			    "_"
+			    name))
+
 (defun ellama-generate-name-by-words (provider action prompt)
   "Generate name for ACTION by PROVIDER by getting first N words from PROMPT."
   (let* ((cleaned-prompt (replace-regexp-in-string "/" "_" prompt))
@@ -687,7 +705,7 @@ EXTRA contains additional information."
 
 (defun ellama-generate-name (provider action prompt)
   "Generate name for ellama ACTION by PROVIDER according to PROMPT."
-  (replace-regexp-in-string "/" "_" (funcall ellama-naming-scheme provider action prompt)))
+  (ellama--fix-file-name (funcall ellama-naming-scheme provider action prompt)))
 
 (defvar ellama--new-session-context nil)
 
