@@ -220,6 +220,7 @@ PROMPT is a prompt string."
           (const :tag "By first N words of prompt" ellama-generate-name-by-words)
           (const :tag "By current time" ellama-generate-name-by-time)
 	  (const :tag "By generating name with LLM based on prompt." ellama-generate-name-by-llm)
+	  (const :tag "By generating name with reasoning LLM based on prompt." ellama-generate-name-by-reasoning-llm)
           (function :tag "By custom function")))
 
 (defcustom ellama-define-word-prompt-template "Define %s"
@@ -329,7 +330,7 @@ Improved abc feature by adding new xyz module.
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-get-name-template "I will get you user query, you should return short topic only, what this conversation about. NEVER respond to query itself. Topic must be short and concise.
+(defcustom ellama-get-name-template "I will get you user query, you should return short topic only, what this conversation about. NEVER respond to query itself. Topic must be short and concise. Do not add additional words like 'the topic is', respond with topic only.
 <example>
 Query: Why is sky blue?
 Topic: Blue sky
@@ -467,12 +468,14 @@ Too low value can break generated code by splitting long comment lines."
 
 (defun ellama--fill-long-lines (text)
   "Fill long lines only in TEXT."
-  (with-temp-buffer
-    (insert (propertize text 'hard t))
-    (let ((fill-column ellama-long-lines-length)
-	  (use-hard-newlines t))
-      (fill-region (point-min) (point-max) nil t t))
-    (buffer-substring-no-properties (point-min) (point-max))))
+  (if ellama-fill-paragraphs
+      (with-temp-buffer
+	(insert (propertize text 'hard t))
+	(let ((fill-column ellama-long-lines-length)
+	      (use-hard-newlines t))
+	  (fill-region (point-min) (point-max) nil t t))
+	(buffer-substring-no-properties (point-min) (point-max)))
+    text))
 
 (defun ellama--replace-first-begin-src (text)
   "Replace first begin src in TEXT."
@@ -532,9 +535,10 @@ Too low value can break generated code by splitting long comment lines."
 
   ;; filling long lines
   (goto-char beg)
-  (let ((fill-column ellama-long-lines-length)
-	(use-hard-newlines t))
-    (fill-region beg end nil t t)))
+  (when ellama-fill-paragraphs
+    (let ((fill-column ellama-long-lines-length)
+	  (use-hard-newlines t))
+      (fill-region beg end nil t t))))
 
 (defun ellama--replace-outside-of-code-blocks (text)
   "Replace markdown elements in TEXT with org equivalents.
@@ -643,6 +647,24 @@ EXTRA contains additional information."
   "Return ellama session buffer by provided ID."
   (gethash id ellama--active-sessions))
 
+(defun ellama--fix-file-name (name)
+  "Change forbidden characters in the NAME to acceptable."
+  (replace-regexp-in-string (rx (or (literal "/")
+				    (literal "\\")
+				    (literal "?")
+				    (literal "%")
+				    (literal "*")
+				    (literal ":")
+				    (literal "|")
+				    (literal "\"")
+				    (literal "<")
+				    (literal ">")
+				    (literal ".")
+				    (literal ";")
+				    (literal "=")))
+			    "_"
+			    name))
+
 (defun ellama-generate-name-by-words (provider action prompt)
   "Generate name for ACTION by PROVIDER by getting first N words from PROMPT."
   (let* ((cleaned-prompt (replace-regexp-in-string "/" "_" prompt))
@@ -669,10 +691,26 @@ EXTRA contains additional information."
 	"\n")))
      "\\.")))
 
+(defun ellama-remove-reasoning (text)
+  "Remove R1-like reasoning from TEXT."
+  (string-trim (replace-regexp-in-string
+		"<think>\\(.\\|\n\\)*</think>"
+		""
+		text)))
+
 (defun ellama-generate-name-by-llm (provider _action prompt)
   "Generate name for ellama ACTION by PROVIDER and PROMPT by LLM."
   (format "%s (%s)"
 	  (ellama-get-name prompt)
+	  (llm-name provider)))
+
+(defun ellama-generate-name-by-reasoning-llm (provider _action prompt)
+  "Generate name for ellama ACTION by PROVIDER and PROMPT by LLM."
+  (format "%s (%s)"
+	  (ellama-remove-reasoning
+	   (llm-chat (or ellama-naming-provider ellama-provider)
+		     (llm-make-simple-chat-prompt
+		      (format ellama-get-name-template prompt))))
 	  (llm-name provider)))
 
 (defun ellama-get-current-time ()
@@ -687,7 +725,7 @@ EXTRA contains additional information."
 
 (defun ellama-generate-name (provider action prompt)
   "Generate name for ellama ACTION by PROVIDER according to PROMPT."
-  (replace-regexp-in-string "/" "_" (funcall ellama-naming-scheme provider action prompt)))
+  (ellama--fix-file-name (funcall ellama-naming-scheme provider action prompt)))
 
 (defvar ellama--new-session-context nil)
 
@@ -1466,12 +1504,13 @@ failure (with BUFFER current).
 		    (goto-char start)
 		    (delete-region start end)
 		    (insert (funcall filter text))
-                    (when (pcase ellama-fill-paragraphs
-                            ((cl-type function) (funcall ellama-fill-paragraphs))
-                            ((cl-type boolean) ellama-fill-paragraphs)
-                            ((cl-type list) (and (apply #'derived-mode-p
-							ellama-fill-paragraphs)
-						 (not (equal major-mode 'org-mode)))))
+                    (when (and ellama-fill-paragraphs
+			       (pcase ellama-fill-paragraphs
+				 ((cl-type function) (funcall ellama-fill-paragraphs))
+				 ((cl-type boolean) ellama-fill-paragraphs)
+				 ((cl-type list) (and (apply #'derived-mode-p
+							     ellama-fill-paragraphs)
+						      (not (equal major-mode 'org-mode))))))
                       (fill-region start (point)))
 		    (goto-char pt))
 		  (when-let ((ellama-auto-scroll)
@@ -2378,7 +2417,8 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
     ("t" "Translate Commands" ellama-transient-translate-menu)
     ("m" "Make Commands" ellama-transient-make-menu)
     ("k" "Text Complete" ellama-complete)
-    ("g" "Text change" ellama-change)]]
+    ("g" "Text change" ellama-change)
+    ("d" "Define word" ellama-define-word)]]
   [["System"
     ("S" "Session Commands" ellama-transient-session-menu)
     ("x" "Context Commands" ellama-transient-context-menu)

@@ -388,6 +388,11 @@ average_score = calculate_average_score(student_math_score, student_science_scor
 print(f\"The average score of {student_name} in {class_name} is: {average_score:.2f}\")
 #+END_SRC\n\nIn this example:\n- Variable names like ~student/name~, ~class/name~, and ~grade/level~ use snake/case.\n- The function name ~calculate/average/score~ also follows the snake_case convention.\n\nSnake case helps improve readability, especially in languages that are sensitive to capitalization\nlike Python."))))
 
+(ert-deftest test-ellama--fix-file-name ()
+  (should (string=
+	   (ellama--fix-file-name "a/\\?%*:|\"<>.;=")
+	   "a_____________")))
+
 (provide 'test-ellama)
 
 ;;; test-ellama.el ends here
