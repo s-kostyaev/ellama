@@ -1,3 +1,9 @@
+* Version 0.13.8
+- Fixed file name generation for all operating systems.
+- Fix disable paragraphs filling.
+- Add ~ellama-define-word~ command to transient menu.
+- Add ~ellama-generate-name-by-reasoning-llm~ funtion to use
+r1 distilled models for naming new sessions.
 * Version 0.13.7
 - Add missing requires for integration tests.
 * Version 0.13.6
