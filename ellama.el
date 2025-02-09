@@ -647,23 +647,14 @@ EXTRA contains additional information."
   "Return ellama session buffer by provided ID."
   (gethash id ellama--active-sessions))
 
+(defconst ellama--forbidden-file-name-characters (rx (any "/\\?%*:|\"<>.;=")))
+
 (defun ellama--fix-file-name (name)
   "Change forbidden characters in the NAME to acceptable."
-  (replace-regexp-in-string (rx (or (literal "/")
-				    (literal "\\")
-				    (literal "?")
-				    (literal "%")
-				    (literal "*")
-				    (literal ":")
-				    (literal "|")
-				    (literal "\"")
-				    (literal "<")
-				    (literal ">")
-				    (literal ".")
-				    (literal ";")
-				    (literal "=")))
-			    "_"
-			    name))
+  (replace-regexp-in-string
+   ellama--forbidden-file-name-characters
+   "_"
+   name))
 
 (defun ellama-generate-name-by-words (provider action prompt)
   "Generate name for ACTION by PROVIDER by getting first N words from PROMPT."
