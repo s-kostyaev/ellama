@@ -1,3 +1,5 @@
+* Version 0.13.9
+- Fix adding buffer to context.
 * Version 0.13.8
 - Fixed file name generation for all operating systems.
 - Fix disable paragraphs filling.
