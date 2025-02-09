@@ -220,6 +220,7 @@ PROMPT is a prompt string."
           (const :tag "By first N words of prompt" ellama-generate-name-by-words)
           (const :tag "By current time" ellama-generate-name-by-time)
 	  (const :tag "By generating name with LLM based on prompt." ellama-generate-name-by-llm)
+	  (const :tag "By generating name with reasoning LLM based on prompt." ellama-generate-name-by-reasoning-llm)
           (function :tag "By custom function")))
 
 (defcustom ellama-define-word-prompt-template "Define %s"
@@ -329,7 +330,7 @@ Improved abc feature by adding new xyz module.
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-get-name-template "I will get you user query, you should return short topic only, what this conversation about. NEVER respond to query itself. Topic must be short and concise.
+(defcustom ellama-get-name-template "I will get you user query, you should return short topic only, what this conversation about. NEVER respond to query itself. Topic must be short and concise. Do not add additional words like 'the topic is', respond with topic only.
 <example>
 Query: Why is sky blue?
 Topic: Blue sky
@@ -690,10 +691,26 @@ EXTRA contains additional information."
 	"\n")))
      "\\.")))
 
+(defun ellama-remove-reasoning (text)
+  "Remove R1-like reasoning from TEXT."
+  (string-trim (replace-regexp-in-string
+		"<think>\\(.\\|\n\\)*</think>"
+		""
+		text)))
+
 (defun ellama-generate-name-by-llm (provider _action prompt)
   "Generate name for ellama ACTION by PROVIDER and PROMPT by LLM."
   (format "%s (%s)"
 	  (ellama-get-name prompt)
+	  (llm-name provider)))
+
+(defun ellama-generate-name-by-reasoning-llm (provider _action prompt)
+  "Generate name for ellama ACTION by PROVIDER and PROMPT by LLM."
+  (format "%s (%s)"
+	  (ellama-remove-reasoning
+	   (llm-chat (or ellama-naming-provider ellama-provider)
+		     (llm-make-simple-chat-prompt
+		      (format ellama-get-name-template prompt))))
 	  (llm-name provider)))
 
 (defun ellama-get-current-time ()
