@@ -467,12 +467,14 @@ Too low value can break generated code by splitting long comment lines."
 
 (defun ellama--fill-long-lines (text)
   "Fill long lines only in TEXT."
-  (with-temp-buffer
-    (insert (propertize text 'hard t))
-    (let ((fill-column ellama-long-lines-length)
-	  (use-hard-newlines t))
-      (fill-region (point-min) (point-max) nil t t))
-    (buffer-substring-no-properties (point-min) (point-max))))
+  (if ellama-fill-paragraphs
+      (with-temp-buffer
+	(insert (propertize text 'hard t))
+	(let ((fill-column ellama-long-lines-length)
+	      (use-hard-newlines t))
+	  (fill-region (point-min) (point-max) nil t t))
+	(buffer-substring-no-properties (point-min) (point-max)))
+    text))
 
 (defun ellama--replace-first-begin-src (text)
   "Replace first begin src in TEXT."
@@ -532,9 +534,10 @@ Too low value can break generated code by splitting long comment lines."
 
   ;; filling long lines
   (goto-char beg)
-  (let ((fill-column ellama-long-lines-length)
-	(use-hard-newlines t))
-    (fill-region beg end nil t t)))
+  (when ellama-fill-paragraphs
+    (let ((fill-column ellama-long-lines-length)
+	  (use-hard-newlines t))
+      (fill-region beg end nil t t))))
 
 (defun ellama--replace-outside-of-code-blocks (text)
   "Replace markdown elements in TEXT with org equivalents.
@@ -1484,12 +1487,13 @@ failure (with BUFFER current).
 		    (goto-char start)
 		    (delete-region start end)
 		    (insert (funcall filter text))
-                    (when (pcase ellama-fill-paragraphs
-                            ((cl-type function) (funcall ellama-fill-paragraphs))
-                            ((cl-type boolean) ellama-fill-paragraphs)
-                            ((cl-type list) (and (apply #'derived-mode-p
-							ellama-fill-paragraphs)
-						 (not (equal major-mode 'org-mode)))))
+                    (when (and ellama-fill-paragraphs
+			       (pcase ellama-fill-paragraphs
+				 ((cl-type function) (funcall ellama-fill-paragraphs))
+				 ((cl-type boolean) ellama-fill-paragraphs)
+				 ((cl-type list) (and (apply #'derived-mode-p
+							     ellama-fill-paragraphs)
+						      (not (equal major-mode 'org-mode))))))
                       (fill-region start (point)))
 		    (goto-char pt))
 		  (when-let ((ellama-auto-scroll)
