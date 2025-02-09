@@ -382,6 +382,26 @@ is not changed.
   :group 'ellama
   :type 'string)
 
+(defcustom ellama-semantic-identity-reasoning-template "Determine if two texts have the same meaning. If they are similar but differ in key aspects, they are not the same. Return the answer as a JSON object.
+<CONTEXT>
+%s
+</CONTEXT>
+<TEXT_1>
+%s
+</TEXT_1>
+<TEXT_2>
+%s
+</TEXT_2>
+<EXAMPLE>
+{
+  \"think\": \"Think if texts have same meaning in provided context\",
+  \"same\": true
+}
+</EXAMPLE>"
+  "Extract string list template with context and reasoning."
+  :group 'ellama
+  :type 'string)
+
 (defcustom ellama-extraction-provider nil
   "LLM provider for data extraction."
   :group 'ellama
@@ -2244,6 +2264,24 @@ otherwise prompt user for URL to summarize."
       (kill-region (point) (point-max))
       (ellama-summarize))))
 
+(defun ellama-make-semantic-similar-p-with-context (context)
+  "Return function for checking semantic similarity of two texts in CONTEXT."
+  (lambda (text1 text2)
+    "Check if TEXT1 means the same as TEXT2."
+    (plist-get
+     (json-parse-string
+      (llm-chat
+       (or ellama-extraction-provider ellama-provider)
+       (llm-make-chat-prompt
+	(format ellama-semantic-identity-reasoning-template context text1 text2)
+	:response-format '(:type object :properties
+				 (:think (:type string)
+					 :same (:type boolean))
+				 :required ["think" "same"])))
+      :object-type 'plist
+      :false-object nil)
+     :same)))
+
 (defun ellama-semantic-similar-p (text1 text2)
   "Check if TEXT1 means the same as TEXT2."
   (plist-get
@@ -2254,7 +2292,7 @@ otherwise prompt user for URL to summarize."
       (format ellama-semantic-identity-template text1 text2)
       :response-format '(:type object :properties
 			       (:same (:type boolean))
-			       :required (same))))
+			       :required ["same"])))
     :object-type 'plist
     :false-object nil)
    :same))
