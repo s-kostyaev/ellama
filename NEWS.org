@@ -1,3 +1,8 @@
+* Version 0.13.11
+- Add function ~ellama-make-semantic-similar-p-with-context~ that
+  return test function for checking if two provided texts are meaning
+  the same in provided context. It can be useful for creating
+  semantically uniq lists of strings.
 * Version 0.13.10
 - Refactor file name fixing logic. Change the regular expression for
   handling forbidden filename characters to improve efficiency.
