@@ -2024,7 +2024,7 @@ ARGS contains keys for fine control.
   (interactive)
   (if (region-active-p)
       (ellama-context-add-selection)
-    (ellama-context-add-buffer (current-buffer)))
+    (ellama-context-add-buffer (buffer-name (current-buffer))))
   (ellama-chat ellama-code-review-prompt-template nil :provider ellama-coding-provider))
 
 ;;;###autoload
