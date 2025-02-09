@@ -2400,7 +2400,8 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
     ("t" "Translate Commands" ellama-transient-translate-menu)
     ("m" "Make Commands" ellama-transient-make-menu)
     ("k" "Text Complete" ellama-complete)
-    ("g" "Text change" ellama-change)]]
+    ("g" "Text change" ellama-change)
+    ("d" "Define word" ellama-define-word)]]
   [["System"
     ("S" "Session Commands" ellama-transient-session-menu)
     ("x" "Context Commands" ellama-transient-context-menu)
