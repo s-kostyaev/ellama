@@ -1,3 +1,6 @@
+* Version 0.13.10
+- Refactor file name fixing logic. Change the regular expression for
+  handling forbidden filename characters to improve efficiency.
 * Version 0.13.9
 - Fix adding buffer to context.
 * Version 0.13.8
