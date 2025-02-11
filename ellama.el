@@ -156,6 +156,7 @@
     (define-key map (kbd "x f") 'ellama-context-add-file)
     (define-key map (kbd "x s") 'ellama-context-add-selection)
     (define-key map (kbd "x i") 'ellama-context-add-info-node)
+    (define-key map (kbd "x r") 'ellama-context-reset)
     ;; provider
     (define-key map (kbd "p s") 'ellama-provider-select)
     map)
