@@ -108,6 +108,13 @@ buffer and continue conversation. If called with universal argument
 (~C-u~) will start new session with llm model interactive selection.
 [[imgs/ellama-ask.gif]]
 
+*** ellama-write
+
+This command allows you to generate text using an LLM. When called
+interactively, it prompts for an instruction that is then used to
+generate text based on the context. If a region is active, the
+selected text is added to the context before generating the response.
+
 *** ellama-chat-send-last-message
 
 Send last user message extracted from current ellama chat buffer.
@@ -288,6 +295,7 @@ Ellama, using the ~ellama-keymap-prefix~ prefix (not set by default):
 
 | Keymap | Function                        | Description                  |
 |--------+---------------------------------+------------------------------|
+| "w"    | ellama-write                    | Write                        |
 | "c c"  | ellama-code-complete            | Code complete                |
 | "c a"  | ellama-code-add                 | Code add                     |
 | "c e"  | ellama-code-edit                | Code edit                    |

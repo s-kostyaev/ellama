@@ -145,6 +145,7 @@
     (define-key map (kbd "a l") 'ellama-ask-line)
     (define-key map (kbd "a s") 'ellama-ask-selection)
     ;; text
+    (define-key map (kbd "w") 'ellama-write)
     (define-key map (kbd "t t") 'ellama-translate)
     (define-key map (kbd "t b") 'ellama-translate-buffer)
     (define-key map (kbd "t c") 'ellama-complete)
@@ -256,6 +257,16 @@ You are a summarizer. You write a summary of the input **IN THE SAME LANGUAGE AS
 
 (defcustom ellama-change-prompt-template "Change the following text, %s, just output the final text without additional quotes around it:\n%s"
   "Prompt template for `ellama-change'."
+  :group 'ellama
+  :type 'string)
+
+(defcustom ellama-write-prompt-template "<SYSTEM>
+Write text, based on provided context and instruction. Do not add any explanation or acknowledgement, just follow instruction.
+</SYSTEM>
+<INSTRUCTION>
+%s
+</INSTRUCTION>"
+  "Prompt template for `ellama-write'."
   :group 'ellama
   :type 'string)
 
@@ -2194,6 +2205,15 @@ ARGS contains keys for fine control.
   (ellama-chat ellama-code-review-prompt-template nil :provider ellama-coding-provider))
 
 ;;;###autoload
+(defun ellama-write (instruction)
+  "Write text based on context and INSTRUCTION at point."
+  (interactive "sInstruction: ")
+  (when (region-active-p)
+    (ellama-context-add-selection))
+  (ellama-stream (format ellama-write-prompt-template instruction)
+		 :point (point)))
+
+;;;###autoload
 (defun ellama-change (change &optional edit-template)
   "Change selected text or text in current buffer according to provided CHANGE.
 When the value of EDIT-TEMPLATE is 4, or with one `universal-argument' as
@@ -2563,6 +2583,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
   "Main Menu."
   [["Main"
     ("c" "Chat" ellama-chat)
+    ("w" "Write" ellama-write)
     ("P" "Proofread" ellama-proofread)
     ("a" "Ask Commands" ellama-transient-ask-menu)
     ("C" "Code Commands" ellama-transient-code-menu)]]
