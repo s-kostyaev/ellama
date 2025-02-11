@@ -5,7 +5,7 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (spinner "1.7.4") (transient "0.7") (compat "29.1"))
+;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (spinner "1.7.4") (transient "0.7") (compat "29.1") (posframe "1.4.0"))
 ;; Version: 0.13.11
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
@@ -41,6 +41,7 @@
 (require 'spinner)
 (require 'transient)
 (require 'compat)
+(require 'posframe)
 (eval-when-compile (require 'rx))
 
 (defgroup ellama nil
@@ -1000,6 +1001,20 @@ If EPHEMERAL non nil new session will not be associated with any file."
     (remhash id ellama--active-sessions)
     (puthash new-id buffer ellama--active-sessions)))
 
+(defvar ellama--global-context nil
+  "Global context.")
+
+(defvar ellama--context-buffer " *ellama-context*")
+
+;;;###autoload
+(defun ellama-context-reset ()
+  "Clear global context."
+  (interactive)
+  (setq ellama--global-context nil)
+  (with-current-buffer ellama--context-buffer
+    (erase-buffer))
+  (posframe-hide ellama--context-buffer))
+
 ;; Context elements
 
 (defclass ellama-context-element () ()
@@ -1011,8 +1026,26 @@ If EPHEMERAL non nil new session will not be associated with any file."
 (cl-defgeneric ellama-context-element-extract (element)
   "Extract the content of the context ELEMENT.")
 
+(cl-defgeneric ellama-context-element-display (element)
+  "Display the context ELEMENT.")
+
 (cl-defgeneric ellama-context-element-format (element mode)
   "Format the context ELEMENT for the major MODE.")
+
+(defcustom ellama-context-poshandler 'posframe-poshandler-frame-top-center
+  "Position handler for displaying context buffer."
+  :group 'ellama
+  :type 'function)
+
+(defcustom ellama-context-border-width 1
+  "Border width for the context buffer."
+  :group 'ellama
+  :type 'integer)
+
+(defcustom ellama-context-element-padding-size 20
+  "Padding size for context elements."
+  :group 'ellama
+  :type 'integer)
 
 (cl-defmethod ellama-context-element-add ((element ellama-context-element))
   "Add the ELEMENT to the Ellama context."
@@ -1020,7 +1053,25 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	    (session (with-current-buffer (ellama-get-session-buffer id)
 		       ellama--current-session)))
       (push element (ellama-session-context session))
-    (push element ellama--new-session-context)))
+    (push element ellama--new-session-context))
+  (push element ellama--global-context)
+  (get-buffer-create ellama--context-buffer t)
+  (with-current-buffer ellama--context-buffer
+    (erase-buffer)
+    (insert (format
+	     "context: %s"
+	     (string-join
+	      (mapcar
+	       (lambda (el)
+		 (string-pad
+		  (ellama-context-element-display el) ellama-context-element-padding-size))
+	       ellama--global-context)
+	      "  "))))
+  (posframe-show
+   ellama--context-buffer
+   :poshandler ellama-context-poshandler
+   :internal-border-width ellama-context-border-width))
+
 
 ;; Buffer context element
 
@@ -1034,6 +1085,12 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (with-slots (name) element
     (with-current-buffer name
       (buffer-substring-no-properties (point-min) (point-max)))))
+
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-buffer))
+  "Display the context ELEMENT."
+  (with-slots (name) element
+    name))
 
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-buffer) (mode (eql 'markdown-mode)))
@@ -1063,6 +1120,12 @@ If EPHEMERAL non nil new session will not be associated with any file."
       (insert-file-contents name)
       (buffer-substring-no-properties (point-min) (point-max)))))
 
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-file))
+  "Display the context ELEMENT."
+  (with-slots (name) element
+    (file-name-nondirectory name)))
+
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-file) (mode (eql 'markdown-mode)))
   "Format the context ELEMENT for the major MODE."
@@ -1090,6 +1153,12 @@ If EPHEMERAL non nil new session will not be associated with any file."
     (with-temp-buffer
       (info name (current-buffer))
       (buffer-substring-no-properties (point-min) (point-max)))))
+
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-info-node))
+  "Display the context ELEMENT."
+  (with-slots (name) element
+    (format "(info \"%s\")" name)))
 
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-info-node) (mode (eql 'markdown-mode)))
@@ -1122,6 +1191,21 @@ If EPHEMERAL non nil new session will not be associated with any file."
   "Extract the content of the context ELEMENT."
   (oref element content))
 
+(defcustom ellama-text-display-limit 15
+  "Limit for text display in context elements."
+  :group 'ellama
+  :type 'integer)
+
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-text))
+  "Display the context ELEMENT."
+  (with-slots (content) element
+    (format "\"%s\"" (concat
+		      (string-limit
+		       content
+		       ellama-text-display-limit)
+		      "..."))))
+
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-text) (mode (eql 'markdown-mode)))
   "Format the context ELEMENT for the major MODE."
@@ -1146,6 +1230,18 @@ If EPHEMERAL non nil new session will not be associated with any file."
   ((element ellama-context-element-webpage-quote))
   "Extract the content of the context ELEMENT."
   (oref element content))
+
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-webpage-quote))
+  "Display the context ELEMENT."
+  (with-slots (name) element
+    name))
+
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-webpage-quote))
+  "Display the context ELEMENT."
+  (with-slots (name) element
+    name))
 
 (defun ellama--quote-buffer (quote)
   "Return buffer name for QUOTE."
@@ -1209,6 +1305,12 @@ If EPHEMERAL non nil new session will not be associated with any file."
   "Extract the content of the context ELEMENT."
   (oref element content))
 
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-info-node-quote))
+  "Display the context ELEMENT."
+  (with-slots (name) element
+    (format "(info \"%s\")" name)))
+
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-info-node-quote) (mode (eql 'markdown-mode)))
   "Format the context ELEMENT for the major MODE."
@@ -1254,6 +1356,12 @@ If EPHEMERAL non nil new session will not be associated with any file."
   ((element ellama-context-element-file-quote))
   "Extract the content of the context ELEMENT."
   (oref element content))
+
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-file-quote))
+  "Display the context ELEMENT."
+  (with-slots (path) element
+    (file-name-nondirectory path)))
 
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-file-quote) (mode (eql 'markdown-mode)))
@@ -1415,15 +1523,16 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 (defun ellama--prompt-with-context (prompt)
   "Add context to PROMPT for sending to llm."
-  (if-let* ((session ellama--current-session)
-	    (context (ellama-session-context session)))
-      (concat (string-join
-	       (cons "Context:"
-		     (mapcar #'ellama-context-element-extract context))
-	       "\n")
-	      "\n\n"
-	      prompt)
-    prompt))
+  (let* ((session ellama--current-session)
+	 (context (if session
+		      (ellama-session-context session)
+		    ellama--global-context)))
+    (concat (string-join
+	     (cons "Context:"
+		   (mapcar #'ellama-context-element-extract context))
+	     "\n")
+	    "\n\n"
+	    prompt)))
 
 (defun ellama-chat-buffer-p (buffer)
   "Return non-nil if BUFFER is an ellama chat buffer."
@@ -2434,7 +2543,8 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
     ("b" "Add Buffer" ellama-context-add-buffer)
     ("f" "Add File" ellama-context-add-file)
     ("s" "Add Selection" ellama-context-add-selection)
-    ("i" "Add Info Node" ellama-context-add-info-node)]
+    ("i" "Add Info Node" ellama-context-add-info-node)
+    ("r" "Context reset" ellama-context-reset)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 (transient-define-prefix ellama-transient-main-menu ()
