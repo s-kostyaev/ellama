@@ -5,8 +5,8 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (spinner "1.7.4") (transient "0.7") (compat "29.1"))
-;; Version: 0.13.11
+;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (spinner "1.7.4") (transient "0.7") (compat "29.1") (posframe "1.4.0"))
+;; Version: 1.0.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -41,6 +41,7 @@
 (require 'spinner)
 (require 'transient)
 (require 'compat)
+(require 'posframe)
 (eval-when-compile (require 'rx))
 
 (defgroup ellama nil
@@ -133,6 +134,7 @@
     (define-key map (kbd "i w") 'ellama-improve-wording)
     (define-key map (kbd "i g") 'ellama-improve-grammar)
     (define-key map (kbd "i c") 'ellama-improve-conciseness)
+    (define-key map (kbd "P") 'ellama-proofread)
     ;; make
     (define-key map (kbd "m l") 'ellama-make-list)
     (define-key map (kbd "m t") 'ellama-make-table)
@@ -143,6 +145,7 @@
     (define-key map (kbd "a l") 'ellama-ask-line)
     (define-key map (kbd "a s") 'ellama-ask-selection)
     ;; text
+    (define-key map (kbd "w") 'ellama-write)
     (define-key map (kbd "t t") 'ellama-translate)
     (define-key map (kbd "t b") 'ellama-translate-buffer)
     (define-key map (kbd "t c") 'ellama-complete)
@@ -155,6 +158,7 @@
     (define-key map (kbd "x f") 'ellama-context-add-file)
     (define-key map (kbd "x s") 'ellama-context-add-selection)
     (define-key map (kbd "x i") 'ellama-context-add-info-node)
+    (define-key map (kbd "x r") 'ellama-context-reset)
     ;; provider
     (define-key map (kbd "p s") 'ellama-provider-select)
     map)
@@ -256,6 +260,16 @@ You are a summarizer. You write a summary of the input **IN THE SAME LANGUAGE AS
   :group 'ellama
   :type 'string)
 
+(defcustom ellama-write-prompt-template "<SYSTEM>
+Write text, based on provided context and instruction. Do not add any explanation or acknowledgement, just follow instruction.
+</SYSTEM>
+<INSTRUCTION>
+%s
+</INSTRUCTION>"
+  "Prompt template for `ellama-write'."
+  :group 'ellama
+  :type 'string)
+
 (defcustom ellama-improve-grammar-prompt-template "improve grammar and spelling"
   "Prompt template for `ellama-improve-grammar'."
   :group 'ellama
@@ -263,6 +277,11 @@ You are a summarizer. You write a summary of the input **IN THE SAME LANGUAGE AS
 
 (defcustom ellama-improve-wording-prompt-template "use better wording"
   "Prompt template for `ellama-improve-wording'."
+  :group 'ellama
+  :type 'string)
+
+(defcustom ellama-proofread-prompt-template "proofread"
+  "Prompt template for `ellama-proofread'."
   :group 'ellama
   :type 'string)
 
@@ -738,8 +757,6 @@ EXTRA contains additional information."
   "Generate name for ellama ACTION by PROVIDER according to PROMPT."
   (ellama--fix-file-name (funcall ellama-naming-scheme provider action prompt)))
 
-(defvar ellama--new-session-context nil)
-
 (defun ellama-get-nick-prefix-for-mode ()
   "Return preferred header prefix char based om the current mode.
 Defaults to #, but supports `org-mode'.  Depends on `ellama-major-mode'."
@@ -779,15 +796,14 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	      ellama--current-session)))
 	 (session (make-ellama-session
 		   :id id :provider provider :file file-name
-		   :context (if previous-session
-				(ellama-session-context previous-session)
-			      ellama--new-session-context)))
+		   :context (or (when previous-session
+				  (ellama-session-context previous-session))
+				ellama--global-context)))
 	 (buffer (if file-name
 		     (progn
 		       (make-directory ellama-sessions-directory t)
 		       (find-file-noselect file-name))
 		   (get-buffer-create id))))
-    (setq ellama--new-session-context nil)
     (setq ellama--current-session-id id)
     (puthash id buffer ellama--active-sessions)
     (with-current-buffer buffer
@@ -915,9 +931,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	       :provider (ellama-session-provider session)
 	       :file (ellama-session-file session)
 	       :prompt (ellama-session-prompt session)
-	       :context ellama--new-session-context
+	       :context ellama--global-context
 	       :extra extra)))
-      (setq ellama--new-session-context nil)
       (setq ellama--current-session-id (ellama-session-id ellama--current-session))
       (puthash (ellama-session-id ellama--current-session)
 	       buffer ellama--active-sessions)
@@ -1000,6 +1015,20 @@ If EPHEMERAL non nil new session will not be associated with any file."
     (remhash id ellama--active-sessions)
     (puthash new-id buffer ellama--active-sessions)))
 
+(defvar ellama--global-context nil
+  "Global context.")
+
+(defvar ellama--context-buffer " *ellama-context*")
+
+;;;###autoload
+(defun ellama-context-reset ()
+  "Clear global context."
+  (interactive)
+  (setq ellama--global-context nil)
+  (with-current-buffer ellama--context-buffer
+    (erase-buffer))
+  (posframe-hide ellama--context-buffer))
+
 ;; Context elements
 
 (defclass ellama-context-element () ()
@@ -1011,16 +1040,51 @@ If EPHEMERAL non nil new session will not be associated with any file."
 (cl-defgeneric ellama-context-element-extract (element)
   "Extract the content of the context ELEMENT.")
 
+(cl-defgeneric ellama-context-element-display (element)
+  "Display the context ELEMENT.")
+
 (cl-defgeneric ellama-context-element-format (element mode)
   "Format the context ELEMENT for the major MODE.")
+
+(defcustom ellama-context-poshandler 'posframe-poshandler-frame-top-center
+  "Position handler for displaying context buffer."
+  :group 'ellama
+  :type 'function)
+
+(defcustom ellama-context-border-width 1
+  "Border width for the context buffer."
+  :group 'ellama
+  :type 'integer)
+
+(defcustom ellama-context-element-padding-size 20
+  "Padding size for context elements."
+  :group 'ellama
+  :type 'integer)
 
 (cl-defmethod ellama-context-element-add ((element ellama-context-element))
   "Add the ELEMENT to the Ellama context."
   (if-let* ((id ellama--current-session-id)
 	    (session (with-current-buffer (ellama-get-session-buffer id)
 		       ellama--current-session)))
-      (push element (ellama-session-context session))
-    (push element ellama--new-session-context)))
+      (push element (ellama-session-context session)))
+  (push element ellama--global-context)
+  (get-buffer-create ellama--context-buffer t)
+  (with-current-buffer ellama--context-buffer
+    (erase-buffer)
+    (insert (format
+	     "context: %s"
+	     (string-join
+	      (mapcar
+	       (lambda (el)
+		 (string-pad
+		  (ellama-context-element-display el) ellama-context-element-padding-size))
+	       ellama--global-context)
+	      "  "))))
+  (posframe-show
+   ellama--context-buffer
+   :poshandler ellama-context-poshandler
+   :internal-border-width ellama-context-border-width))
+
 
 ;; Buffer context element
 
@@ -1034,6 +1098,12 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (with-slots (name) element
     (with-current-buffer name
       (buffer-substring-no-properties (point-min) (point-max)))))
+
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-buffer))
+  "Display the context ELEMENT."
+  (with-slots (name) element
+    name))
 
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-buffer) (mode (eql 'markdown-mode)))
@@ -1063,6 +1133,12 @@ If EPHEMERAL non nil new session will not be associated with any file."
       (insert-file-contents name)
       (buffer-substring-no-properties (point-min) (point-max)))))
 
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-file))
+  "Display the context ELEMENT."
+  (with-slots (name) element
+    (file-name-nondirectory name)))
+
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-file) (mode (eql 'markdown-mode)))
   "Format the context ELEMENT for the major MODE."
@@ -1090,6 +1166,12 @@ If EPHEMERAL non nil new session will not be associated with any file."
     (with-temp-buffer
       (info name (current-buffer))
       (buffer-substring-no-properties (point-min) (point-max)))))
+
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-info-node))
+  "Display the context ELEMENT."
+  (with-slots (name) element
+    (format "(info \"%s\")" name)))
 
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-info-node) (mode (eql 'markdown-mode)))
@@ -1122,6 +1204,21 @@ If EPHEMERAL non nil new session will not be associated with any file."
   "Extract the content of the context ELEMENT."
   (oref element content))
 
+(defcustom ellama-text-display-limit 15
+  "Limit for text display in context elements."
+  :group 'ellama
+  :type 'integer)
+
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-text))
+  "Display the context ELEMENT."
+  (with-slots (content) element
+    (format "\"%s\"" (concat
+		      (string-limit
+		       content
+		       ellama-text-display-limit)
+		      "..."))))
+
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-text) (mode (eql 'markdown-mode)))
   "Format the context ELEMENT for the major MODE."
@@ -1146,6 +1243,18 @@ If EPHEMERAL non nil new session will not be associated with any file."
   ((element ellama-context-element-webpage-quote))
   "Extract the content of the context ELEMENT."
   (oref element content))
+
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-webpage-quote))
+  "Display the context ELEMENT."
+  (with-slots (name) element
+    name))
+
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-webpage-quote))
+  "Display the context ELEMENT."
+  (with-slots (name) element
+    name))
 
 (defun ellama--quote-buffer (quote)
   "Return buffer name for QUOTE."
@@ -1209,6 +1318,12 @@ If EPHEMERAL non nil new session will not be associated with any file."
   "Extract the content of the context ELEMENT."
   (oref element content))
 
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-info-node-quote))
+  "Display the context ELEMENT."
+  (with-slots (name) element
+    (format "(info \"%s\")" name)))
+
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-info-node-quote) (mode (eql 'markdown-mode)))
   "Format the context ELEMENT for the major MODE."
@@ -1254,6 +1369,12 @@ If EPHEMERAL non nil new session will not be associated with any file."
   ((element ellama-context-element-file-quote))
   "Extract the content of the context ELEMENT."
   (oref element content))
+
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-file-quote))
+  "Display the context ELEMENT."
+  (with-slots (path) element
+    (file-name-nondirectory path)))
 
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-file-quote) (mode (eql 'markdown-mode)))
@@ -1415,15 +1536,18 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 (defun ellama--prompt-with-context (prompt)
   "Add context to PROMPT for sending to llm."
-  (if-let* ((session ellama--current-session)
-	    (context (ellama-session-context session)))
-      (concat (string-join
-	       (cons "Context:"
-		     (mapcar #'ellama-context-element-extract context))
-	       "\n")
-	      "\n\n"
-	      prompt)
-    prompt))
+  (let* ((session ellama--current-session)
+	 (context (or (when session
+			(ellama-session-context session))
+		      ellama--global-context)))
+    (if context
+	(concat (string-join
+		 (cons "Context:"
+		       (mapcar #'ellama-context-element-extract context))
+		 "\n")
+		"\n\n"
+		prompt)
+      prompt)))
 
 (defun ellama-chat-buffer-p (buffer)
   "Return non-nil if BUFFER is an ellama chat buffer."
@@ -2081,6 +2205,17 @@ ARGS contains keys for fine control.
   (ellama-chat ellama-code-review-prompt-template nil :provider ellama-coding-provider))
 
 ;;;###autoload
+(defun ellama-write (instruction)
+  "Write text based on context and INSTRUCTION at point."
+  (interactive "sInstruction: ")
+  (when (region-active-p)
+    (ellama-context-add-selection))
+  (ellama-stream (format ellama-write-prompt-template instruction)
+		 :point (point)
+		 :filter (when (derived-mode-p 'org-mode)
+			   #'ellama--translate-markdown-to-org-filter)))
+
+;;;###autoload
 (defun ellama-change (change &optional edit-template)
   "Change selected text or text in current buffer according to provided CHANGE.
 When the value of EDIT-TEMPLATE is 4, or with one `universal-argument' as
@@ -2117,6 +2252,14 @@ When the value of EDIT-TEMPLATE is 4, or with one `universal-argument' as
 prefix (\\[universal-argument]), prompt the user to amend the template."
   (interactive "p")
   (ellama-change ellama-improve-wording-prompt-template edit-template))
+
+;;;###autoload
+(defun ellama-proofread (&optional edit-template)
+  "Proofread the currently selected region or buffer.
+When the value of EDIT-TEMPLATE is 4, or with one `universal-argument' as
+prefix (\\[universal-argument]), prompt the user to amend the template."
+  (interactive "p")
+  (ellama-change ellama-proofread-prompt-template edit-template))
 
 ;;;###autoload
 (defun ellama-improve-conciseness (&optional edit-template)
@@ -2434,13 +2577,16 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
     ("b" "Add Buffer" ellama-context-add-buffer)
     ("f" "Add File" ellama-context-add-file)
     ("s" "Add Selection" ellama-context-add-selection)
-    ("i" "Add Info Node" ellama-context-add-info-node)]
+    ("i" "Add Info Node" ellama-context-add-info-node)
+    ("r" "Context reset" ellama-context-reset)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 (transient-define-prefix ellama-transient-main-menu ()
   "Main Menu."
   [["Main"
     ("c" "Chat" ellama-chat)
+    ("w" "Write" ellama-write)
+    ("P" "Proofread" ellama-proofread)
     ("a" "Ask Commands" ellama-transient-ask-menu)
     ("C" "Code Commands" ellama-transient-code-menu)]]
   [["Text"

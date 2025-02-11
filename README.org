@@ -108,6 +108,13 @@ buffer and continue conversation. If called with universal argument
 (~C-u~) will start new session with llm model interactive selection.
 [[imgs/ellama-ask.gif]]
 
+*** ellama-write
+
+This command allows you to generate text using an LLM. When called
+interactively, it prompts for an instruction that is then used to
+generate text based on the context. If a region is active, the
+selected text is added to the context before generating the response.
+
 *** ellama-chat-send-last-message
 
 Send last user message extracted from current ellama chat buffer.
@@ -202,6 +209,10 @@ provided change using Ellama.
 
 Generate commit message based on diff.
 
+*** ellama-proofread
+
+Proofread selected text.
+
 *** ellama-improve-wording
 
 Enhance the wording in the currently selected region or buffer using Ellama.
@@ -253,6 +264,10 @@ Add selected region to context.
 
 Add info node to context.
 
+*** ellama-context-reset
+
+Clear global context.
+
 *** ellama-chat-translation-enable
 
 Chat translation enable.
@@ -280,6 +295,7 @@ Ellama, using the ~ellama-keymap-prefix~ prefix (not set by default):
 
 | Keymap | Function                        | Description                  |
 |--------+---------------------------------+------------------------------|
+| "w"    | ellama-write                    | Write                        |
 | "c c"  | ellama-code-complete            | Code complete                |
 | "c a"  | ellama-code-add                 | Code add                     |
 | "c e"  | ellama-code-edit                | Code edit                    |
@@ -293,6 +309,7 @@ Ellama, using the ~ellama-keymap-prefix~ prefix (not set by default):
 | "s r"  | ellama-session-rename           | Session rename               |
 | "s d"  | ellama-session-remove           | Session delete               |
 | "s a"  | ellama-session-switch           | Session activate             |
+| "P"    | ellama-proofread                | Proofread                    |
 | "i w"  | ellama-improve-wording          | Improve wording              |
 | "i g"  | ellama-improve-grammar          | Improve grammar and spelling |
 | "i c"  | ellama-improve-conciseness      | Improve conciseness          |
@@ -313,6 +330,7 @@ Ellama, using the ~ellama-keymap-prefix~ prefix (not set by default):
 | "x f"  | ellama-context-add-file         | Context add file             |
 | "x s"  | ellama-context-add-selection    | Context add selection        |
 | "x i"  | ellama-context-add-info-node    | Context add info node        |
+| "x r"  | ellama-context-reset            | Context reset                |
 | "p s"  | ellama-provider-select          | Provider select              |
 
 ** Configuration
@@ -371,6 +389,11 @@ argument generated text string.
 - ~ellama-translate-italic~: Translate italic during markdown to org
   transformations. Enabled by default.
 - ~ellama-extraction-provider~: LLM provider for data extraction.
+- ~ellama-text-display-limit~: Limit for text display in context elements.
+- ~ellama-context-poshandler~: Position handler for displaying context buffer.
+  ~posframe-poshandler-frame-top-center~ will be used if not set.
+- ~ellama-context-border-width~: Border width for the context buffer.
+- ~ellama-context-element-padding-size~: Padding size for context elements.
 
 ** Acknowledgments
 

@@ -205,6 +205,36 @@
   (let ((element (ellama-context-element-file-quote :content "123")))
     (should (equal "123" (ellama-context-element-extract element)))))
 
+(ert-deftest test-ellama-context-element-display-buffer ()
+  (with-temp-buffer
+    (let ((element (ellama-context-element-buffer :name (buffer-name))))
+      (should (equal (buffer-name) (ellama-context-element-display element))))))
+
+(ert-deftest test-ellama-context-element-display-file ()
+  (let* ((filename (expand-file-name "LICENSE" (locate-dominating-file "." ".git")))
+         (element (ellama-context-element-file :name filename)))
+    (should (equal (file-name-nondirectory filename) (ellama-context-element-display element)))))
+
+(ert-deftest test-ellama-context-element-display-info-node ()
+  (let ((element (ellama-context-element-info-node :name "(dir)Top")))
+    (should (equal "(info \"(dir)Top\")" (ellama-context-element-display element)))))
+
+(ert-deftest test-ellama-context-element-display-text ()
+  (let ((element (ellama-context-element-text :content "123")))
+    (should (equal "\"123...\"" (ellama-context-element-display element)))))
+
+(ert-deftest test-ellama-context-element-display-webpage-quote ()
+  (let ((element (ellama-context-element-webpage-quote :name "Example" :url "http://example.com" :content "123")))
+    (should (equal "Example" (ellama-context-element-display element)))))
+
+(ert-deftest test-ellama-context-element-display-info-node-quote ()
+  (let ((element (ellama-context-element-info-node-quote :name "Example" :content "123")))
+    (should (equal "(info \"Example\")" (ellama-context-element-display element)))))
+
+(ert-deftest test-ellama-context-element-display-file-quote ()
+  (let ((element (ellama-context-element-file-quote :path "/path/to/file" :content "123")))
+    (should (equal "file" (ellama-context-element-display element)))))
+
 (ert-deftest test-ellama-md-to-org-code-simple ()
   (let ((result (ellama--translate-markdown-to-org-filter "Here is your TikZ code for a blue rectangle:
 ```tex

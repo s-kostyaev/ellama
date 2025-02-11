@@ -1,3 +1,7 @@
+* Version 1.0.0
+- Added ~ellama-write~ command.
+- Added ~ellama-proofread~ command.
+- Added global context management, including functions to reset context.
 * Version 0.13.11
 - Add function ~ellama-make-semantic-similar-p-with-context~ that
   return test function for checking if two provided texts are meaning
