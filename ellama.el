@@ -134,6 +134,7 @@
     (define-key map (kbd "i w") 'ellama-improve-wording)
     (define-key map (kbd "i g") 'ellama-improve-grammar)
     (define-key map (kbd "i c") 'ellama-improve-conciseness)
+    (define-key map (kbd "P") 'ellama-proofread)
     ;; make
     (define-key map (kbd "m l") 'ellama-make-list)
     (define-key map (kbd "m t") 'ellama-make-table)
@@ -265,6 +266,11 @@ You are a summarizer. You write a summary of the input **IN THE SAME LANGUAGE AS
 
 (defcustom ellama-improve-wording-prompt-template "use better wording"
   "Prompt template for `ellama-improve-wording'."
+  :group 'ellama
+  :type 'string)
+
+(defcustom ellama-proofread-prompt-template "proofread"
+  "Prompt template for `ellama-proofread'."
   :group 'ellama
   :type 'string)
 
@@ -2226,6 +2232,14 @@ prefix (\\[universal-argument]), prompt the user to amend the template."
   (ellama-change ellama-improve-wording-prompt-template edit-template))
 
 ;;;###autoload
+(defun ellama-proofread (&optional edit-template)
+  "Proofread the currently selected region or buffer.
+When the value of EDIT-TEMPLATE is 4, or with one `universal-argument' as
+prefix (\\[universal-argument]), prompt the user to amend the template."
+  (interactive "p")
+  (ellama-change ellama-proofread-prompt-template edit-template))
+
+;;;###autoload
 (defun ellama-improve-conciseness (&optional edit-template)
   "Make the text of the currently selected region or buffer concise and simple.
 When the value of EDIT-TEMPLATE is 4, or with one `universal-argument' as
@@ -2549,6 +2563,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
   "Main Menu."
   [["Main"
     ("c" "Chat" ellama-chat)
+    ("P" "Proofread" ellama-proofread)
     ("a" "Ask Commands" ellama-transient-ask-menu)
     ("C" "Code Commands" ellama-transient-code-menu)]]
   [["Text"
