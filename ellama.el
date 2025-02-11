@@ -739,8 +739,6 @@ EXTRA contains additional information."
   "Generate name for ellama ACTION by PROVIDER according to PROMPT."
   (ellama--fix-file-name (funcall ellama-naming-scheme provider action prompt)))
 
-(defvar ellama--new-session-context nil)
-
 (defun ellama-get-nick-prefix-for-mode ()
   "Return preferred header prefix char based om the current mode.
 Defaults to #, but supports `org-mode'.  Depends on `ellama-major-mode'."
@@ -780,15 +778,14 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	      ellama--current-session)))
 	 (session (make-ellama-session
 		   :id id :provider provider :file file-name
-		   :context (if previous-session
-				(ellama-session-context previous-session)
-			      ellama--new-session-context)))
+		   :context (or (when previous-session
+				  (ellama-session-context previous-session))
+				ellama--global-context)))
 	 (buffer (if file-name
 		     (progn
 		       (make-directory ellama-sessions-directory t)
 		       (find-file-noselect file-name))
 		   (get-buffer-create id))))
-    (setq ellama--new-session-context nil)
     (setq ellama--current-session-id id)
     (puthash id buffer ellama--active-sessions)
     (with-current-buffer buffer
@@ -916,9 +913,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	       :provider (ellama-session-provider session)
 	       :file (ellama-session-file session)
 	       :prompt (ellama-session-prompt session)
-	       :context ellama--new-session-context
+	       :context ellama--global-context
 	       :extra extra)))
-      (setq ellama--new-session-context nil)
       (setq ellama--current-session-id (ellama-session-id ellama--current-session))
       (puthash (ellama-session-id ellama--current-session)
 	       buffer ellama--active-sessions)
@@ -1052,8 +1048,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (if-let* ((id ellama--current-session-id)
 	    (session (with-current-buffer (ellama-get-session-buffer id)
 		       ellama--current-session)))
-      (push element (ellama-session-context session))
-    (push element ellama--new-session-context))
+      (push element (ellama-session-context session)))
   (push element ellama--global-context)
   (get-buffer-create ellama--context-buffer t)
   (with-current-buffer ellama--context-buffer
@@ -1524,15 +1519,17 @@ If EPHEMERAL non nil new session will not be associated with any file."
 (defun ellama--prompt-with-context (prompt)
   "Add context to PROMPT for sending to llm."
   (let* ((session ellama--current-session)
-	 (context (if session
-		      (ellama-session-context session)
-		    ellama--global-context)))
-    (concat (string-join
-	     (cons "Context:"
-		   (mapcar #'ellama-context-element-extract context))
-	     "\n")
-	    "\n\n"
-	    prompt)))
+	 (context (or (when session
+			(ellama-session-context session))
+		      ellama--global-context)))
+    (if context
+	(concat (string-join
+		 (cons "Context:"
+		       (mapcar #'ellama-context-element-extract context))
+		 "\n")
+		"\n\n"
+		prompt)
+      prompt)))
 
 (defun ellama-chat-buffer-p (buffer)
   "Return non-nil if BUFFER is an ellama chat buffer."
