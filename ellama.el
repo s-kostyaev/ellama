@@ -2211,7 +2211,9 @@ ARGS contains keys for fine control.
   (when (region-active-p)
     (ellama-context-add-selection))
   (ellama-stream (format ellama-write-prompt-template instruction)
-		 :point (point)))
+		 :point (point)
+		 :filter (when (derived-mode-p 'org-mode)
+			   #'ellama--translate-markdown-to-org-filter)))
 
 ;;;###autoload
 (defun ellama-change (change &optional edit-template)
