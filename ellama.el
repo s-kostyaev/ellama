@@ -2512,19 +2512,90 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
        :chat-model model-name :embedding-model model-name))))
 
 (defvar ellama-transient-ollama-model-name "")
+(defvar ellama-transient-temperature 0.7)
+(defvar ellama-transient-context-length 4096)
+(defvar ellama-transient-host nil)
+(defvar ellama-transient-port nil)
 
 (transient-define-suffix ellama-transient-set-ollama-model ()
   "Set ollama model name."
   (interactive)
   (setq ellama-transient-ollama-model-name (ellama-get-ollama-model-name)))
 
+(transient-define-suffix ellama-transient-set-temperature ()
+  "Set temperature value."
+  (interactive)
+  (setq ellama-transient-temperature (read-number "Enter temperature: ")))
+
+(transient-define-suffix ellama-transient-set-context-length ()
+  "Set context length."
+  (interactive)
+  (setq ellama-transient-context-length (read-number "Enter context length: ")))
+
+(transient-define-suffix ellama-transient-set-host ()
+  "Set host address."
+  (interactive)
+  (setq ellama-transient-host (read-string "Enter host: ")))
+
+(transient-define-suffix ellama-transient-set-port ()
+  "Set port number."
+  (interactive)
+  (setq ellama-transient-port (read-number "Enter port: ")))
+
 (transient-define-prefix ellama-select-ollama-model ()
   "Select ollama model."
   [["Model"
-    ("m" "Model" ellama-transient-set-ollama-model
+    ("m" "Set Model" ellama-transient-set-ollama-model
      :transient t
-     :description (lambda () (format "Model (%s)" ellama-transient-ollama-model-name)))]
+     :description (lambda () (format "Model (%s)" ellama-transient-ollama-model-name)))
+    ("t" "Set Temperature" ellama-transient-set-temperature
+     :transient t
+     :description (lambda () (format "Temperature (%.2f)" ellama-transient-temperature)))
+    ("c" "Set Context Length" ellama-transient-set-context-length
+     :transient t
+     :description (lambda () (format "Context Length (%d)" ellama-transient-context-length)))]
+   ["Connection"
+    ("h" "Set Host" ellama-transient-set-host
+     :transient t
+     :description (lambda () (if ellama-transient-host
+				 (format "Host (%s)" ellama-transient-host)
+			       "Host")))
+    ("p" "Set Port" ellama-transient-set-port
+     :transient t
+     :description (lambda () (if ellama-transient-port
+				 (format "Port (%s)" ellama-transient-port)
+			       "Port")))]
    ["Quit" ("q" "Quit" transient-quit-one)]])
+
+(defun ellama-fill-transient-ollama-model (provider)
+  "Set transient ollama model from PROVIDER."
+  (declare-function llm-ollama-p "ext:llm-ollama")
+  (declare-function llm-ollama-host "ext:llm-ollama")
+  (declare-function llm-ollama-port "ext:llm-ollama")
+  (declare-function llm-ollama-chat-model "ext:llm-ollama")
+  (declare-function llm-ollama-default-chat-temperature "ext:llm-ollama")
+  (declare-function llm-ollama-default-chat-non-standard-params "ext:llm-ollama")
+  (when (llm-ollama-p provider)
+    (setq ellama-transient-ollama-model-name (llm-ollama-chat-model provider))
+    (setq ellama-transient-temperature (or (llm-ollama-default-chat-temperature provider) 0.7))
+    (setq ellama-transient-host (llm-ollama-host provider))
+    (setq ellama-transient-port (llm-ollama-port provider))
+    (let* ((other-params (llm-ollama-default-chat-non-standard-params provider))
+	   (ctx-len (when other-params (alist-get
+					"num_ctx"
+					(seq--into-list other-params)
+					nil nil #'string=))))
+      (setq ellama-transient-context-length (or ctx-len 4096)))))
+
+(defun ellama-construct-ollama-provider-from-transient ()
+  "Make provider with ollama mode in transient menu."
+  (make-llm-ollama
+   :chat-model ellama-transient-ollama-model-name
+   :default-chat-temperature ellama-transient-temperature
+   :host ellama-transient-host
+   :port ellama-transient-port
+   :default-chat-non-standard-params
+   `[("num_ctx" . ,ellama-transient-context-length)]))
 
 (transient-define-prefix ellama-transient-code-menu ()
   "Code Commands."
