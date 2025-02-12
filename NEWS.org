@@ -1,3 +1,9 @@
+* Version 1.0.1
+- Refactor ellama-code-add function for better efficiency. Remove
+  redundant context handling in ~ellama-code-add~. Simplify the prompt
+  template by removing unnecessary context instructions. Improve
+  function documentation for clarity. Add region selection handling
+  outside of ~ellama-stream~ call.
 * Version 1.0.0
 - Added ~ellama-write~ command.
 - Added ~ellama-proofread~ command.
