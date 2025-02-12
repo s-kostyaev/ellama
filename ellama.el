@@ -771,6 +771,9 @@ Defaults to md, but supports org.  Depends on \"ellama-major-mode.\""
   (cond ((provided-mode-derived-p ellama-major-mode 'org-mode) "org")
         (t "md")))
 
+(defvar ellama--global-context nil
+  "Global context.")
+
 (defun ellama-new-session (provider prompt &optional ephemeral)
   "Create new ellama session with unique id.
 Provided PROVIDER and PROMPT will be used in new session.
@@ -1014,9 +1017,6 @@ If EPHEMERAL non nil new session will not be associated with any file."
       (setq ellama--current-session-id new-id))
     (remhash id ellama--active-sessions)
     (puthash new-id buffer ellama--active-sessions)))
-
-(defvar ellama--global-context nil
-  "Global context.")
 
 (defvar ellama--context-buffer " *ellama-context*")
 
