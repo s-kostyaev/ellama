@@ -1,3 +1,5 @@
+* Version 1.0.2
+- Add ollama model selection to transient menu.
 * Version 1.0.1
 - Refactor ellama-code-add function for better efficiency. Remove
   redundant context handling in ~ellama-code-add~. Simplify the prompt
