@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (spinner "1.7.4") (transient "0.7") (compat "29.1") (posframe "1.4.0"))
-;; Version: 1.0.0
+;; Version: 1.0.1
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -305,7 +305,7 @@ Write text, based on provided context and instruction. Do not add any explanatio
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-code-add-prompt-template "Context: \n```\n%s\n```\nBased on this context, %s, only output the result in format ```\n...\n```\nWrite all the code in single code block."
+(defcustom ellama-code-add-prompt-template "Based on context, %s, only output the result in format ```\n...\n```\nWrite all the code in single code block."
   "Prompt template for `ellama-code-add'."
   :group 'ellama
   :type 'string)
@@ -2330,23 +2330,19 @@ prefix (\\[universal-argument]), prompt the user to amend the template."
 
 ;;;###autoload
 (defun ellama-code-add (description)
-  "Add new code according to DESCRIPTION.
-Code will be generated with provided context from selected region or current
-buffer."
+  "Generate and insert new code based on DESCRIPTION.
+This function prompts the user to describe the code they want to generate.
+If a region is active, it includes the selected text as context for code
+generation."
   (interactive "sDescribe the code to be generated: ")
-  (let* ((beg (if (region-active-p)
-		  (region-beginning)
-		(point-min)))
-	 (end (if (region-active-p)
-		  (region-end)
-		(point-max)))
-	 (text (buffer-substring-no-properties beg end)))
-    (ellama-stream
-     (format
-      ellama-code-add-prompt-template
-      text description)
-     :provider ellama-coding-provider
-     :filter #'ellama--code-filter)))
+  (when (region-active-p)
+    (ellama-context-add-selection))
+  (ellama-stream
+   (format
+    ellama-code-add-prompt-template
+    description)
+   :provider ellama-coding-provider
+   :filter #'ellama--code-filter))
 
 
 ;;;###autoload
