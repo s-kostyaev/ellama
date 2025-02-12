@@ -2542,9 +2542,35 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
   (interactive)
   (setq ellama-transient-port (read-number "Enter port: ")))
 
+(defvar ellama-provider-list '('ellama-provider
+			       'ellama-coding-provider
+			       'ellama-translation-provider
+			       'ellama-extraction-provider
+			       'ellama-summarization-provider
+			       'ellama-naming-provider)
+  "List of ollama providers.")
+
+(transient-define-suffix ellama-transient-model-get-from-provider ()
+  "Fill transient model from provider."
+  (interactive)
+  (ellama-fill-transient-ollama-model
+   (eval (read
+	  (completing-read "Select provider: "
+			   (mapcar #'prin1-to-string ellama-provider-list))))))
+
+(transient-define-suffix ellama-transient-set-provider ()
+  "Set transient model to provider."
+  (interactive)
+  (set (read
+	(completing-read "Select provider: "
+			 (mapcar #'prin1-to-string ellama-provider-list)))
+       (ellama-construct-ollama-provider-from-transient)))
+
 (transient-define-prefix ellama-select-ollama-model ()
   "Select ollama model."
   [["Model"
+    ("f" "Load from provider" ellama-transient-model-get-from-provider
+     :transient t)
     ("m" "Set Model" ellama-transient-set-ollama-model
      :transient t
      :description (lambda () (format "Model (%s)" ellama-transient-ollama-model-name)))
@@ -2553,7 +2579,10 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
      :description (lambda () (format "Temperature (%.2f)" ellama-transient-temperature)))
     ("c" "Set Context Length" ellama-transient-set-context-length
      :transient t
-     :description (lambda () (format "Context Length (%d)" ellama-transient-context-length)))]
+     :description (lambda () (format "Context Length (%d)" ellama-transient-context-length)))
+    ("S" "Set provider" ellama-transient-set-provider
+     :transient t)
+    ("s" "Set provider and quit" ellama-transient-set-provider)]
    ["Connection"
     ("h" "Set Host" ellama-transient-set-host
      :transient t
@@ -2675,7 +2704,8 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
     ("w" "Write" ellama-write)
     ("P" "Proofread" ellama-proofread)
     ("a" "Ask Commands" ellama-transient-ask-menu)
-    ("C" "Code Commands" ellama-transient-code-menu)]]
+    ("C" "Code Commands" ellama-transient-code-menu)
+    ("o" "Ollama model" ellama-select-ollama-model)]]
   [["Text"
     ("s" "Summarize Commands" ellama-transient-summarize-menu)
     ("i" "Improve Commands" ellama-transient-improve-menu)
