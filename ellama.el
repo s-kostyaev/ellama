@@ -84,6 +84,11 @@ This can improve long-term communication with reasoning models."
   :group 'ellama
   :type 'boolean)
 
+(defcustom ellama-session-hide-org-quotes t
+  "Hide org quotes in ellama session buffer."
+  :group 'ellama
+  :type 'boolean)
+
 (defcustom ellama-chat-translation-enabled nil
   "Enable chat translations."
   :group 'ellama
@@ -629,6 +634,8 @@ This filter contains only subset of markdown syntax to be good enough."
     (replace-regexp-in-string "^[[:space:]]*```$" "#+END_SRC")
     (replace-regexp-in-string "^[[:space:]]*```" "#+END_SRC\n")
     (replace-regexp-in-string "```" "\n#+END_SRC\n")
+    (replace-regexp-in-string "<think>[\n]?" "#+BEGIN_QUOTE\n")
+    (replace-regexp-in-string "</think>[\n]?" "#+END_QUOTE\n")
     (ellama--replace-bad-code-blocks)
     (ellama--replace-outside-of-code-blocks)))
 
@@ -942,6 +949,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	       buffer ellama--active-sessions)
       (ellama-session-mode +1))
     (kill-buffer session-buffer)
+    (ellama-hide-quotes)
     (display-buffer buffer (when ellama-chat-display-action-function
 			     `((ignore . (,ellama-chat-display-action-function)))))))
 
@@ -1573,6 +1581,28 @@ Otherwire return current active session."
       (with-current-buffer (ellama-get-session-buffer ellama--current-session-id)
 	ellama--current-session))))
 
+(defun ellama-collapse-org-quotes ()
+  "Collapse quote blocks in curent buffer."
+  (declare-function org-element-map "ext:org-element")
+  (declare-function org-element-parse-buffer "ext:org-element")
+  (declare-function org-element-property "ext:org-element")
+  (declare-function org-hide-block-toggle "ext:org-compat")
+  (when (derived-mode-p 'org-mode)
+    (progn (save-excursion
+	     (goto-char (point-min))
+	     (org-element-map (org-element-parse-buffer) 'quote-block
+	       (lambda (block)
+		 (goto-char (org-element-property :begin block))
+		 (org-hide-block-toggle 't)))))))
+
+(defun ellama-hide-quotes ()
+  "Hide quotes in current session buffer if needed."
+  (when-let* ((ellama-session-hide-org-quotes)
+	      (session-id ellama--current-session-id)
+	      (buf (ellama-get-session-buffer session-id)))
+    (with-current-buffer buf
+      (ellama-collapse-org-quotes))))
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
@@ -1682,6 +1712,8 @@ failure (with BUFFER current).
 					  (mapc (lambda (fn) (funcall fn text))
 						donecb)
 					(funcall donecb text))
+				      (when ellama-session-hide-org-quotes
+					(ellama-collapse-org-quotes))
 				      (when (and ellama--current-session
 						 ellama-session-remove-reasoning)
 					(mapc (lambda (interaction)
