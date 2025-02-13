@@ -1,3 +1,6 @@
+* Version 1.1.1
+- Improve ~ellama-add-selection~.
+- Add buffer quote context element.
 * Version 1.1.0
 - Enhancing interaction with reasoning models. Thinking tags within
   session buffers will be collapsed by default after generation.

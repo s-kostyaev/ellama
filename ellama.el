@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (spinner "1.7.4") (transient "0.7") (compat "29.1") (posframe "1.4.0"))
-;; Version: 1.1.0
+;; Version: 1.1.1
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -1134,6 +1134,46 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (with-slots (name) element
     (format "[[elisp:(display-buffer \"%s\")][%s]]" name name)))
 
+;; Buffer quote context elements
+
+(defclass ellama-context-element-buffer-quote (ellama-context-element)
+  ((name :initarg :name :type string)
+   (content :initarg :content :type string))
+  "A structure for holding information about a context element.")
+
+(cl-defmethod ellama-context-element-extract
+  ((element ellama-context-element-buffer-quote))
+  "Extract the content of the context ELEMENT."
+  (oref element content))
+
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-buffer-quote))
+  "Display the context ELEMENT."
+  (oref element name))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-buffer-quote) (mode (eql 'markdown-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name content) element
+    (if ellama-show-quotes
+	(format "[%s](%s):\n%s\n\n"
+		name name
+		(ellama--md-quote content))
+      (format "[%s](%s):\n```emacs-lisp\n(display-buffer \"%s\")"
+	      name name (ellama--quote-buffer content)))))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-buffer-quote) (mode (eql 'org-mode)))
+  "Format the context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name content) element
+    (if ellama-show-quotes
+	(format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n"
+		name name (ellama--org-quote content))
+      (format "[[%s][%s]] [[elisp:(display-buffer \"%s\")][show]]"
+	      name name (ellama--quote-buffer content)))))
+
 ;; File context element
 
 (defclass ellama-context-element-file (ellama-context-element)
@@ -1457,11 +1497,16 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 ;;;###autoload
 (defun ellama-context-add-selection ()
-  "Add file to context."
+  "Add active region to context."
   (interactive)
   (if (region-active-p)
       (let* ((content (buffer-substring-no-properties (region-beginning) (region-end)))
-             (element (ellama-context-element-text :content content)))
+	     (file-name (buffer-file-name))
+	     (buffer-name (buffer-name (current-buffer)))
+             (element (if file-name
+			  (ellama-context-element-file-quote :path file-name
+							     :content content)
+			(ellama-context-element-buffer-quote :name buffer-name :content content))))
         (ellama-context-element-add element))
     (warn "No active region")))
 
