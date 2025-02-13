@@ -396,6 +396,9 @@ argument generated text string.
   ~posframe-poshandler-frame-top-center~ will be used if not set.
 - ~ellama-context-border-width~: Border width for the context buffer.
 - ~ellama-context-element-padding-size~: Padding size for context elements.
+- ~ellama-session-remove-reasoning~: Remove internal reasoning from
+  the session after ellama provide an answer. This can improve
+  long-term communication with reasoning models. Enabled by default.
 
 ** Acknowledgments
 
