@@ -78,6 +78,12 @@
   :group 'ellama
   :type '(sexp :validate llm-standard-provider-p))
 
+(defcustom ellama-session-remove-reasoning t
+  "Remove internal reasoning from the session after ellama provide an answer.
+This can improve long-term communication with reasoning models."
+  :group 'ellama
+  :type 'boolean)
+
 (defcustom ellama-chat-translation-enabled nil
   "Enable chat translations."
   :group 'ellama
@@ -1681,6 +1687,17 @@ failure (with BUFFER current).
 					  (mapc (lambda (fn) (funcall fn text))
 						donecb)
 					(funcall donecb text))
+				      (when (and ellama--current-session
+						 ellama-session-remove-reasoning)
+					(mapc (lambda (interaction)
+						(setf (llm-chat-prompt-interaction-content
+						       interaction)
+						      (ellama-remove-reasoning
+						       (llm-chat-prompt-interaction-content
+							interaction))))
+					      (llm-chat-prompt-interactions
+					       (ellama-session-prompt
+						ellama--current-session))))
 				      (setq ellama--current-request nil)
 				      (ellama-request-mode -1)))
 				  (lambda (_ msg)
