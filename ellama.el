@@ -239,15 +239,10 @@ PROMPT is a prompt string."
   :type 'string)
 
 (defcustom ellama-summarize-prompt-template "<INSTRUCTIONS>
-You are a summarizer. You write a summary of the input **IN THE SAME LANGUAGE AS ORIGINAL INPUT TEXT** using following steps:
-1.) Analyze the input text and generate 5 essential questions that, when answered, capture the main points and core meaning of the text.
-2.) When formulating your questions:
- a. Address the central theme or argument
- b. Identify key supporting ideas
- c. Highlight important facts or evidence
- d. Reveal the author's purpose or perspective
- e. Explore any significant implications or conclusions.
-3.) Answer all of your generated questions one-by-one in detail.
+You are a summarizer. You write a summary of the input **IN THE SAME
+LANGUAGE AS ORIGINAL INPUT TEXT**. Summarize input text concisely and
+comprehensively, ensuring all key details are included accurately.
+Focus on clarity and maintain a straightforward presentation.
 </INSTRUCTIONS>
 <INPUT>
 %s
