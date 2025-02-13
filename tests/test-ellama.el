@@ -235,6 +235,17 @@
   (let ((element (ellama-context-element-file-quote :path "/path/to/file" :content "123")))
     (should (equal "file" (ellama-context-element-display element)))))
 
+(ert-deftest test-ellama-context-element-extract-buffer-quote ()
+  (with-temp-buffer
+    (insert "123")
+    (let ((element (ellama-context-element-buffer-quote :name (buffer-name) :content "123")))
+      (should (equal "123" (ellama-context-element-extract element))))))
+
+(ert-deftest test-ellama-context-element-display-buffer-quote ()
+  (with-temp-buffer
+    (let ((element (ellama-context-element-buffer-quote :name (buffer-name) :content "123")))
+      (should (equal (buffer-name) (ellama-context-element-display element))))))
+
 (ert-deftest test-ellama-md-to-org-code-simple ()
   (let ((result (ellama--translate-markdown-to-org-filter "Here is your TikZ code for a blue rectangle:
 ```tex
