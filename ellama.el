@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (spinner "1.7.4") (transient "0.7") (compat "29.1") (posframe "1.4.0"))
-;; Version: 1.1.0
+;; Version: 1.1.1
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -1497,7 +1497,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 ;;;###autoload
 (defun ellama-context-add-selection ()
-  "Add file to context."
+  "Add active region to context."
   (interactive)
   (if (region-active-p)
       (let* ((content (buffer-substring-no-properties (region-beginning) (region-end)))
