@@ -1,3 +1,6 @@
+* Version 1.1.2
+- Clear session context on calling reset context commant to prevent
+  suprising behaviour.
 * Version 1.1.1
 - Improve ~ellama-add-selection~.
 - Add buffer quote context element.
