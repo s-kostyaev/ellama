@@ -84,6 +84,12 @@ This can improve long-term communication with reasoning models."
   :group 'ellama
   :type 'boolean)
 
+(defcustom ellama-output-remove-reasoning t
+  "Remove internal reasoning from ellama output.
+Make reasoning models more useful for many cases."
+  :group 'ellama
+  :type 'boolean)
+
 (defcustom ellama-session-hide-org-quotes t
   "Hide org quotes in ellama session buffer."
   :group 'ellama
@@ -1703,7 +1709,12 @@ failure (with BUFFER current).
 				  llm-prompt
 				  insert-text
 				  (lambda (text)
-				    (funcall insert-text (string-trim text))
+				    (funcall insert-text
+					     (string-trim
+					      (if (and ellama-output-remove-reasoning
+						       (not session))
+						  (ellama-remove-reasoning text)
+						text)))
 				    (with-current-buffer buffer
 				      (accept-change-group ellama--change-group)
 				      (spinner-stop)

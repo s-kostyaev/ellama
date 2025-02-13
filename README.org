@@ -402,7 +402,10 @@ argument generated text string.
 - ~ellama-session-hide-org-quotes~: Hide org quotes in the Ellama
   session buffer. From now on, think tags will be replaced with
   quote blocks. If this flag is enabled, reasoning steps will be collapsed
-  after generation and upon session loading.
+  after generation and upon session loading. Enabled by default.
+- ~ellama-output-remove-reasoning~: Eliminate internal reasoning from
+  ellama output to enhance the versatility of reasoning models across
+  diverse applications.
 
 ** Acknowledgments
 
