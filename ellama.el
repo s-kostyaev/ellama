@@ -2542,12 +2542,12 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
   (interactive)
   (setq ellama-transient-port (read-number "Enter port: ")))
 
-(defvar ellama-provider-list '('ellama-provider
-			       'ellama-coding-provider
-			       'ellama-translation-provider
-			       'ellama-extraction-provider
-			       'ellama-summarization-provider
-			       'ellama-naming-provider)
+(defvar ellama-provider-list '(ellama-provider
+			       ellama-coding-provider
+			       ellama-translation-provider
+			       ellama-extraction-provider
+			       ellama-summarization-provider
+			       ellama-naming-provider)
   "List of ollama providers.")
 
 (transient-define-suffix ellama-transient-model-get-from-provider ()
