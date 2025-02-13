@@ -1,3 +1,9 @@
+* Version 1.1.0
+- Enhancing interaction with reasoning models. Thinking tags within
+  session buffers will be collapsed by default after generation.
+  Outside of ellama sessions reasoning will be removed from model
+  output. This ensures a seamless experience for users interacting
+  with reasoning models.
 * Version 1.0.3
 - Unquote symbols in ~ellama-provider-list~.
 * Version 1.0.2

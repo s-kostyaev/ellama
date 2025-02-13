@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (spinner "1.7.4") (transient "0.7") (compat "29.1") (posframe "1.4.0"))
-;; Version: 1.0.3
+;; Version: 1.1.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -77,6 +77,23 @@
   "Backend LLM provider."
   :group 'ellama
   :type '(sexp :validate llm-standard-provider-p))
+
+(defcustom ellama-session-remove-reasoning t
+  "Remove internal reasoning from the session after ellama provide an answer.
+This can improve long-term communication with reasoning models."
+  :group 'ellama
+  :type 'boolean)
+
+(defcustom ellama-output-remove-reasoning t
+  "Remove internal reasoning from ellama output.
+Make reasoning models more useful for many cases."
+  :group 'ellama
+  :type 'boolean)
+
+(defcustom ellama-session-hide-org-quotes t
+  "Hide org quotes in ellama session buffer."
+  :group 'ellama
+  :type 'boolean)
 
 (defcustom ellama-chat-translation-enabled nil
   "Enable chat translations."
@@ -233,15 +250,10 @@ PROMPT is a prompt string."
   :type 'string)
 
 (defcustom ellama-summarize-prompt-template "<INSTRUCTIONS>
-You are a summarizer. You write a summary of the input **IN THE SAME LANGUAGE AS ORIGINAL INPUT TEXT** using following steps:
-1.) Analyze the input text and generate 5 essential questions that, when answered, capture the main points and core meaning of the text.
-2.) When formulating your questions:
- a. Address the central theme or argument
- b. Identify key supporting ideas
- c. Highlight important facts or evidence
- d. Reveal the author's purpose or perspective
- e. Explore any significant implications or conclusions.
-3.) Answer all of your generated questions one-by-one in detail.
+You are a summarizer. You write a summary of the input **IN THE SAME
+LANGUAGE AS ORIGINAL INPUT TEXT**. Summarize input text concisely and
+comprehensively, ensuring all key details are included accurately.
+Focus on clarity and maintain a straightforward presentation.
 </INSTRUCTIONS>
 <INPUT>
 %s
@@ -628,6 +640,8 @@ This filter contains only subset of markdown syntax to be good enough."
     (replace-regexp-in-string "^[[:space:]]*```$" "#+END_SRC")
     (replace-regexp-in-string "^[[:space:]]*```" "#+END_SRC\n")
     (replace-regexp-in-string "```" "\n#+END_SRC\n")
+    (replace-regexp-in-string "<think>[\n]?" "#+BEGIN_QUOTE\n")
+    (replace-regexp-in-string "</think>[\n]?" "#+END_QUOTE\n")
     (ellama--replace-bad-code-blocks)
     (ellama--replace-outside-of-code-blocks)))
 
@@ -941,6 +955,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	       buffer ellama--active-sessions)
       (ellama-session-mode +1))
     (kill-buffer session-buffer)
+    (ellama-hide-quotes)
     (display-buffer buffer (when ellama-chat-display-action-function
 			     `((ignore . (,ellama-chat-display-action-function)))))))
 
@@ -1572,6 +1587,28 @@ Otherwire return current active session."
       (with-current-buffer (ellama-get-session-buffer ellama--current-session-id)
 	ellama--current-session))))
 
+(defun ellama-collapse-org-quotes ()
+  "Collapse quote blocks in curent buffer."
+  (declare-function org-element-map "ext:org-element")
+  (declare-function org-element-parse-buffer "ext:org-element")
+  (declare-function org-element-property "ext:org-element")
+  (declare-function org-hide-block-toggle "ext:org-compat")
+  (when (derived-mode-p 'org-mode)
+    (progn (save-excursion
+	     (goto-char (point-min))
+	     (org-element-map (org-element-parse-buffer) 'quote-block
+	       (lambda (block)
+		 (goto-char (org-element-property :begin block))
+		 (org-hide-block-toggle 't)))))))
+
+(defun ellama-hide-quotes ()
+  "Hide quotes in current session buffer if needed."
+  (when-let* ((ellama-session-hide-org-quotes)
+	      (session-id ellama--current-session-id)
+	      (buf (ellama-get-session-buffer session-id)))
+    (with-current-buffer buf
+      (ellama-collapse-org-quotes))))
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
@@ -1672,7 +1709,12 @@ failure (with BUFFER current).
 				  llm-prompt
 				  insert-text
 				  (lambda (text)
-				    (funcall insert-text (string-trim text))
+				    (funcall insert-text
+					     (string-trim
+					      (if (and ellama-output-remove-reasoning
+						       (not session))
+						  (ellama-remove-reasoning text)
+						text)))
 				    (with-current-buffer buffer
 				      (accept-change-group ellama--change-group)
 				      (spinner-stop)
@@ -1681,6 +1723,19 @@ failure (with BUFFER current).
 					  (mapc (lambda (fn) (funcall fn text))
 						donecb)
 					(funcall donecb text))
+				      (when ellama-session-hide-org-quotes
+					(ellama-collapse-org-quotes))
+				      (when (and ellama--current-session
+						 ellama-session-remove-reasoning)
+					(mapc (lambda (interaction)
+						(setf (llm-chat-prompt-interaction-content
+						       interaction)
+						      (ellama-remove-reasoning
+						       (llm-chat-prompt-interaction-content
+							interaction))))
+					      (llm-chat-prompt-interactions
+					       (ellama-session-prompt
+						ellama--current-session))))
 				      (setq ellama--current-request nil)
 				      (ellama-request-mode -1)))
 				  (lambda (_ msg)

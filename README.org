@@ -396,6 +396,16 @@ argument generated text string.
   ~posframe-poshandler-frame-top-center~ will be used if not set.
 - ~ellama-context-border-width~: Border width for the context buffer.
 - ~ellama-context-element-padding-size~: Padding size for context elements.
+- ~ellama-session-remove-reasoning~: Remove internal reasoning from
+  the session after ellama provide an answer. This can improve
+  long-term communication with reasoning models. Enabled by default.
+- ~ellama-session-hide-org-quotes~: Hide org quotes in the Ellama
+  session buffer. From now on, think tags will be replaced with
+  quote blocks. If this flag is enabled, reasoning steps will be collapsed
+  after generation and upon session loading. Enabled by default.
+- ~ellama-output-remove-reasoning~: Eliminate internal reasoning from
+  ellama output to enhance the versatility of reasoning models across
+  diverse applications.
 
 ** Acknowledgments
 
