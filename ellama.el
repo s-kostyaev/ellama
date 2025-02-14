@@ -2617,8 +2617,8 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 (defvar ellama-transient-ollama-model-name "")
 (defvar ellama-transient-temperature 0.7)
 (defvar ellama-transient-context-length 4096)
-(defvar ellama-transient-host nil)
-(defvar ellama-transient-port nil)
+(defvar ellama-transient-host "localhost")
+(defvar ellama-transient-port 11434)
 
 (transient-define-suffix ellama-transient-set-ollama-model ()
   "Set ollama model name."
