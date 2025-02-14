@@ -1115,7 +1115,11 @@ If EPHEMERAL non nil new session will not be associated with any file."
   "Extract the content of the context ELEMENT."
   (with-slots (name) element
     (with-current-buffer name
-      (buffer-substring-no-properties (point-min) (point-max)))))
+      (let* ((data (buffer-substring-no-properties (point-min) (point-max)))
+	     (content (if (derived-mode-p 'org-mode)
+			  (ellama-convert-org-to-md data)
+			data)))
+	content))))
 
 (cl-defmethod ellama-context-element-display
   ((element ellama-context-element-buffer))
@@ -1189,7 +1193,11 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (with-slots (name) element
     (with-temp-buffer
       (insert-file-contents name)
-      (buffer-substring-no-properties (point-min) (point-max)))))
+      (let* ((data (buffer-substring-no-properties (point-min) (point-max)))
+	     (ext (file-name-extension name)))
+	(if (string= ext "org")
+	    (ellama-convert-org-to-md data)
+	  data)))))
 
 (cl-defmethod ellama-context-element-display
   ((element ellama-context-element-file))
@@ -1503,7 +1511,10 @@ If EPHEMERAL non nil new session will not be associated with any file."
   "Add active region to context."
   (interactive)
   (if (region-active-p)
-      (let* ((content (buffer-substring-no-properties (region-beginning) (region-end)))
+      (let* ((data (buffer-substring-no-properties (region-beginning) (region-end)))
+	     (content (if (derived-mode-p 'org-mode)
+			  (ellama-convert-org-to-md data)
+			data))
 	     (file-name (buffer-file-name))
 	     (buffer-name (buffer-name (current-buffer)))
              (element (if file-name
