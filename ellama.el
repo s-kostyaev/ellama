@@ -1084,8 +1084,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (if-let* ((id ellama--current-session-id)
 	    (session (with-current-buffer (ellama-get-session-buffer id)
 		       ellama--current-session)))
-      (push element (ellama-session-context session)))
-  (push element ellama--global-context)
+      (cl-pushnew element (ellama-session-context session) :test #'equal-including-properties))
+  (cl-pushnew element ellama--global-context :test #'equal-including-properties)
   (get-buffer-create ellama--context-buffer t)
   (with-current-buffer ellama--context-buffer
     (erase-buffer)
