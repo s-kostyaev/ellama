@@ -1,6 +1,14 @@
+* Version 1.1.3
+- Ensure unique elements in session and global contexts.
+- Change default transient host and port to fix ollama provider setup.
+- Deactivate ellama session on setting ellama-provider.
+- Added functionality to convert Org mode content to Markdown when
+  extracting buffer or file content for the context. This ensures that
+  any Org mode files are properly formatted as Markdown before being
+  processed further.
 * Version 1.1.2
-- Clear session context on calling reset context commant to prevent
-  suprising behaviour.
+- Clear session context when resetting context to prevent unexpected
+  behavior.
 * Version 1.1.1
 - Improve ~ellama-add-selection~.
 - Add buffer quote context element.

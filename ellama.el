@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (spinner "1.7.4") (transient "0.7") (compat "29.1") (posframe "1.4.0"))
-;; Version: 1.1.2
+;; Version: 1.1.3
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -1084,8 +1084,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (if-let* ((id ellama--current-session-id)
 	    (session (with-current-buffer (ellama-get-session-buffer id)
 		       ellama--current-session)))
-      (push element (ellama-session-context session)))
-  (push element ellama--global-context)
+      (cl-pushnew element (ellama-session-context session) :test #'equal-including-properties))
+  (cl-pushnew element ellama--global-context :test #'equal-including-properties)
   (get-buffer-create ellama--context-buffer t)
   (with-current-buffer ellama--context-buffer
     (erase-buffer)
@@ -1115,7 +1115,11 @@ If EPHEMERAL non nil new session will not be associated with any file."
   "Extract the content of the context ELEMENT."
   (with-slots (name) element
     (with-current-buffer name
-      (buffer-substring-no-properties (point-min) (point-max)))))
+      (let* ((data (buffer-substring-no-properties (point-min) (point-max)))
+	     (content (if (derived-mode-p 'org-mode)
+			  (ellama-convert-org-to-md data)
+			data)))
+	content))))
 
 (cl-defmethod ellama-context-element-display
   ((element ellama-context-element-buffer))
@@ -1189,7 +1193,11 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (with-slots (name) element
     (with-temp-buffer
       (insert-file-contents name)
-      (buffer-substring-no-properties (point-min) (point-max)))))
+      (let* ((data (buffer-substring-no-properties (point-min) (point-max)))
+	     (ext (file-name-extension name)))
+	(if (string= ext "org")
+	    (ellama-convert-org-to-md data)
+	  data)))))
 
 (cl-defmethod ellama-context-element-display
   ((element ellama-context-element-file))
@@ -1503,7 +1511,10 @@ If EPHEMERAL non nil new session will not be associated with any file."
   "Add active region to context."
   (interactive)
   (if (region-active-p)
-      (let* ((content (buffer-substring-no-properties (region-beginning) (region-end)))
+      (let* ((data (buffer-substring-no-properties (region-beginning) (region-end)))
+	     (content (if (derived-mode-p 'org-mode)
+			  (ellama-convert-org-to-md data)
+			data))
 	     (file-name (buffer-file-name))
 	     (buffer-name (buffer-name (current-buffer)))
              (element (if file-name
@@ -2617,8 +2628,8 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 (defvar ellama-transient-ollama-model-name "")
 (defvar ellama-transient-temperature 0.7)
 (defvar ellama-transient-context-length 4096)
-(defvar ellama-transient-host nil)
-(defvar ellama-transient-port nil)
+(defvar ellama-transient-host "localhost")
+(defvar ellama-transient-port 11434)
 
 (transient-define-suffix ellama-transient-set-ollama-model ()
   "Set ollama model name."
@@ -2664,10 +2675,14 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 (transient-define-suffix ellama-transient-set-provider ()
   "Set transient model to provider."
   (interactive)
-  (set (read
-	(completing-read "Select provider: "
-			 (mapcar #'prin1-to-string ellama-provider-list)))
-       (ellama-construct-ollama-provider-from-transient)))
+  (let ((provider (read
+		   (completing-read "Select provider: "
+				    (mapcar #'prin1-to-string ellama-provider-list)))))
+    (set provider
+	 (ellama-construct-ollama-provider-from-transient))
+    ;; if you change `ellama-provider' you probably want to start new chat session
+    (when (equal provider 'ellama-provider)
+      (setq ellama--current-session-id nil))))
 
 (transient-define-prefix ellama-select-ollama-model ()
   "Select ollama model."
