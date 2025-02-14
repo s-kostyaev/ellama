@@ -2664,10 +2664,14 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 (transient-define-suffix ellama-transient-set-provider ()
   "Set transient model to provider."
   (interactive)
-  (set (read
-	(completing-read "Select provider: "
-			 (mapcar #'prin1-to-string ellama-provider-list)))
-       (ellama-construct-ollama-provider-from-transient)))
+  (let ((provider (read
+		   (completing-read "Select provider: "
+				    (mapcar #'prin1-to-string ellama-provider-list)))))
+    (set provider
+	 (ellama-construct-ollama-provider-from-transient))
+    ;; if you change `ellama-provider' you probably want to start new chat session
+    (when (equal provider 'ellama-provider)
+      (setq ellama--current-session-id nil))))
 
 (transient-define-prefix ellama-select-ollama-model ()
   "Select ollama model."
