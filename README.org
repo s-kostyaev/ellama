@@ -33,6 +33,7 @@ In that case you should customize ellama configuration like this:
 
 #+BEGIN_SRC  emacs-lisp
 (use-package ellama
+  :ensure t
   :bind ("C-c e" . ellama-transient-main-menu)
   :init
   ;; setup key bindings
