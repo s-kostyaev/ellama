@@ -42,11 +42,14 @@
 	     (dolist (el '("How many r's in strawberry?"
 			   "How many times letter r appears in word strawberry?"
 			   "How many r's in strawberry?"
-			   "How many times letter e appears in word strawberry?"))
+			   "How many times letter e appears in word strawberry?"
+			   "Define RAPTOR"
+			   "What does mean RAPTOR?"))
 	       (cl-pushnew el res :test #'ellama-semantic-similar-p))
 	     (reverse res))
 	   '("How many r's in strawberry?"
-	     "How many times letter e appears in word strawberry?"))))
+	     "How many times letter e appears in word strawberry?"
+	     "Define RAPTOR"))))
 
 (ert-deftest ellama-semantic-similar-reasoning-test ()
   "Check if `ellama-make-semantic-similar-p-with-context' works correctly."

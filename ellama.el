@@ -407,7 +407,10 @@ is not changed.
 %s
 </TEXT_2>
 <EXAMPLE>
-{\"same\": true}
+{
+  \"think\": \"Think if texts have same meaning\",
+  \"same\": true
+}
 </EXAMPLE>"
   "Extract string list template."
   :group 'ellama
@@ -2544,8 +2547,9 @@ otherwise prompt user for URL to summarize."
      (llm-make-chat-prompt
       (format ellama-semantic-identity-template text1 text2)
       :response-format '(:type object :properties
-			       (:same (:type boolean))
-			       :required ["same"])))
+			       (:think (:type string)
+				       :same (:type boolean))
+			       :required ["think" "same"])))
     :object-type 'plist
     :false-object nil)
    :same))
