@@ -14,6 +14,7 @@ output, making it effortless to use with your preferred text editor.
 
 The name "ellama" is derived from "Emacs Large LAnguage Model
 Assistant". Previous sentence was written by Ellama itself.
+[[file:imgs/reasoning-models.gif]]
 
 ** Installation
 
@@ -197,6 +198,7 @@ Generate and insert new code based on description. This function
 prompts the user to describe the code they want to generate. If a
 region is active, it includes the selected text as context for code
 generation.
+[[file:imgs/writing-code.gif]]
 
 *** ellama-code-edit
 
