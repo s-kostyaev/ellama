@@ -1,5 +1,9 @@
+* Version 1.1.5
+- Fix cancel current stream by pressing ~C-g~ in buffer with active
+  streaming.
 * Version 1.1.4
-- Improve the accuracy and reliability of the ~ellama-semantic-similar-p~ function.
+- Improve the accuracy and reliability of the
+  ~ellama-semantic-similar-p~ function.
 * Version 1.1.3
 - Ensure unique elements in session and global contexts.
 - Change default transient host and port to fix ollama provider setup.
