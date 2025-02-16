@@ -836,12 +836,14 @@ If EPHEMERAL non nil new session will not be associated with any file."
   "Cancel current running request."
   (when ellama--current-request
     (llm-cancel-request ellama--current-request)
+    (spinner-stop)
     (setq ellama--current-request nil)))
 
 (defun ellama--cancel-current-request-and-quit ()
   "Cancel the current request and quit."
   (interactive)
   (ellama--cancel-current-request)
+  (ellama-request-mode -1)
   (keyboard-quit))
 
 (defun ellama--session-deactivate ()
@@ -1766,47 +1768,48 @@ failure (with BUFFER current).
 	(spinner-start ellama-spinner-type)
 	(when session
 	  (setf (ellama-session-context session) nil))
-	(setq ellama--current-request
-	      (llm-chat-streaming provider
-				  llm-prompt
-				  insert-text
-				  (lambda (text)
-				    (funcall insert-text
-					     (string-trim
-					      (if (and ellama-output-remove-reasoning
-						       (not session))
-						  (ellama-remove-reasoning text)
-						text)))
-				    (with-current-buffer buffer
-				      (accept-change-group ellama--change-group)
-				      (spinner-stop)
-				      (if (and (listp donecb)
-					       (functionp (car donecb)))
-					  (mapc (lambda (fn) (funcall fn text))
-						donecb)
-					(funcall donecb text))
-				      (when ellama-session-hide-org-quotes
-					(ellama-collapse-org-quotes))
-				      (when (and ellama--current-session
-						 ellama-session-remove-reasoning)
-					(mapc (lambda (interaction)
-						(setf (llm-chat-prompt-interaction-content
-						       interaction)
-						      (ellama-remove-reasoning
-						       (llm-chat-prompt-interaction-content
-							interaction))))
-					      (llm-chat-prompt-interactions
-					       (ellama-session-prompt
-						ellama--current-session))))
-				      (setq ellama--current-request nil)
-				      (ellama-request-mode -1)))
-				  (lambda (_ msg)
-				    (with-current-buffer buffer
-				      (cancel-change-group ellama--change-group)
-				      (spinner-stop)
-				      (funcall errcb msg)
-				      (setq ellama--current-request nil)
-				      (ellama-request-mode -1)))))))))
+	(let ((request (llm-chat-streaming provider
+					   llm-prompt
+					   insert-text
+					   (lambda (text)
+					     (funcall insert-text
+						      (string-trim
+						       (if (and ellama-output-remove-reasoning
+								(not session))
+							   (ellama-remove-reasoning text)
+							 text)))
+					     (with-current-buffer buffer
+					       (accept-change-group ellama--change-group)
+					       (spinner-stop)
+					       (if (and (listp donecb)
+							(functionp (car donecb)))
+						   (mapc (lambda (fn) (funcall fn text))
+							 donecb)
+						 (funcall donecb text))
+					       (when ellama-session-hide-org-quotes
+						 (ellama-collapse-org-quotes))
+					       (when (and ellama--current-session
+							  ellama-session-remove-reasoning)
+						 (mapc (lambda (interaction)
+							 (setf (llm-chat-prompt-interaction-content
+								interaction)
+							       (ellama-remove-reasoning
+								(llm-chat-prompt-interaction-content
+								 interaction))))
+						       (llm-chat-prompt-interactions
+							(ellama-session-prompt
+							 ellama--current-session))))
+					       (setq ellama--current-request nil)
+					       (ellama-request-mode -1)))
+					   (lambda (_ msg)
+					     (with-current-buffer buffer
+					       (cancel-change-group ellama--change-group)
+					       (spinner-stop)
+					       (funcall errcb msg)
+					       (setq ellama--current-request nil)
+					       (ellama-request-mode -1))))))
+	  (with-current-buffer buffer
+	    (setq ellama--current-request request)))))))
 
 (defun ellama-chain (initial-prompt forms &optional acc)
   "Call chain of FORMS on INITIAL-PROMPT.
