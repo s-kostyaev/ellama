@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (spinner "1.7.4") (transient "0.7") (compat "29.1") (posframe "1.4.0"))
-;; Version: 1.1.5
+;; Version: 1.1.6
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -629,7 +629,7 @@ Skip code blocks and math environments."
       (ellama--apply-transformations prev-point (point-max)))
     (prog1
 	(buffer-substring-no-properties (point-min) (point-max))
-      (kill-buffer))))
+      (kill-buffer (current-buffer)))))
 
 (defun ellama--translate-markdown-to-org-filter (text)
   "Filter to translate code blocks from markdown syntax to org syntax in TEXT.
@@ -644,7 +644,7 @@ This filter contains only subset of markdown syntax to be good enough."
     (replace-regexp-in-string "^[[:space:]]*```" "#+END_SRC\n")
     (replace-regexp-in-string "```" "\n#+END_SRC\n")
     (replace-regexp-in-string "<think>[\n]?" "#+BEGIN_QUOTE\n")
-    (replace-regexp-in-string "</think>[\n]?" "#+END_QUOTE\n")
+    (replace-regexp-in-string "[\n]?</think>[\n]?" "\n#+END_QUOTE\n")
     (ellama--replace-bad-code-blocks)
     (ellama--replace-outside-of-code-blocks)))
 
@@ -1694,6 +1694,8 @@ strings before they're inserted into the BUFFER.
 :ephemeral-session BOOL -- if BOOL is set session will not be saved to named
 file by default.
 
+:system STR -- send STR to model as system message.
+
 :on-error ON-ERROR -- ON-ERROR a function that's called with an error message on
 failure (with BUFFER current).
 
@@ -1719,15 +1721,20 @@ failure (with BUFFER current).
 		      (error "Error calling the LLM: %s" msg))))
 	 (donecb (or (plist-get args :on-done) #'ignore))
 	 (prompt-with-ctx (ellama--prompt-with-context prompt))
+	 (system (plist-get args :system))
 	 (llm-prompt (if session
 			 (if (llm-chat-prompt-p (ellama-session-prompt session))
 			     (progn
 			       (llm-chat-prompt-append-response
 				(ellama-session-prompt session)
 				prompt-with-ctx)
+			       (when system
+				 (llm-chat-prompt-append-response
+				  (ellama-session-prompt session)
+				  system 'system))
 			       (ellama-session-prompt session))
 			   (setf (ellama-session-prompt session)
-				 (llm-make-simple-chat-prompt prompt-with-ctx)))
+				 (llm-make-chat-prompt prompt-with-ctx :context system)))
 		       (llm-make-simple-chat-prompt prompt-with-ctx))))
     (with-current-buffer buffer
       (ellama-request-mode +1)
@@ -1944,7 +1951,7 @@ Extract profession from this message. Be short and concise."
     (with-current-buffer buf
       (prog1
 	  (string-trim (buffer-substring-no-properties (point-min) (point-max)))
-	(kill-buffer)))))
+	(kill-buffer buf)))))
 
 (defun ellama-get-last-user-message ()
   "Return last not sent user message in current session buffer."
@@ -2044,6 +2051,8 @@ ARGS contains keys for fine control.
 
 :session-id ID -- ID is a ellama session unique identifier.
 
+:system STR -- send STR to model as system message.
+
 :on-done ON-DONE -- ON-DONE a function that's called with
 the full response text when the request completes (with BUFFER current)."
   (interactive "sAsk ellama: ")
@@ -2055,6 +2064,7 @@ the full response text when the request completes (with BUFFER current)."
 			    '("ollama model" . (ellama-get-ollama-local-model))))
                      ellama-providers))
 	 (variants (mapcar #'car providers))
+	 (system (plist-get args :system))
 	 (donecb (plist-get args :on-done))
 	 (provider (if current-prefix-arg
 		       (eval (alist-get
@@ -2106,6 +2116,7 @@ the full response text when the request completes (with BUFFER current)."
 		    (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n"))
 	  (ellama-stream prompt
 			 :session session
+			 :system system
 			 :on-done (if donecb (list 'ellama-chat-done donecb)
 				    'ellama-chat-done)
 			 :filter (when (derived-mode-p 'org-mode)
@@ -2244,6 +2255,8 @@ ARGS contains keys for fine control.
 
 :provider PROVIDER -- PROVIDER is an llm provider for generation.
 
+:system STR -- send STR to model as system message.
+
 :on-done ON-DONE -- ON-DONE a function or list of functions that's called with
  the full response text when the request completes (with BUFFER current)."
   (let* ((provider (or (plist-get args :provider)
@@ -2252,6 +2265,7 @@ ARGS contains keys for fine control.
 	 (buffer (get-buffer-create (if (get-buffer buffer-name)
 					(make-temp-name (concat buffer-name " "))
 				      buffer-name)))
+	 (system (plist-get args :system))
 	 (donecb (plist-get args :on-done))
 	 filter)
     (with-current-buffer buffer
@@ -2261,6 +2275,7 @@ ARGS contains keys for fine control.
     (display-buffer buffer (when ellama-instant-display-action-function
 			     `((ignore . (,ellama-instant-display-action-function)))))
     (ellama-stream prompt
+		   :system system
 		   :buffer buffer
 		   :filter filter
 		   :provider provider
