@@ -629,7 +629,7 @@ Skip code blocks and math environments."
       (ellama--apply-transformations prev-point (point-max)))
     (prog1
 	(buffer-substring-no-properties (point-min) (point-max))
-      (kill-buffer))))
+      (kill-buffer (current-buffer)))))
 
 (defun ellama--translate-markdown-to-org-filter (text)
   "Filter to translate code blocks from markdown syntax to org syntax in TEXT.
@@ -1944,7 +1944,7 @@ Extract profession from this message. Be short and concise."
     (with-current-buffer buf
       (prog1
 	  (string-trim (buffer-substring-no-properties (point-min) (point-max)))
-	(kill-buffer)))))
+	(kill-buffer buf)))))
 
 (defun ellama-get-last-user-message ()
   "Return last not sent user message in current session buffer."
