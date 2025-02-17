@@ -1,3 +1,9 @@
+* Version 1.1.6
+- Add system message support to ~ellama-stream~, ~ellama-chat~ and
+  ~ellama-instant~.
+- Fix think tag handling for some models.
+- Provide buffer to all ~kill-buffer~ calls. Tried to fix an
+  unreproducible in my environment bug.
 * Version 1.1.5
 - Fix cancel current stream by pressing ~C-g~ in buffer with active
   streaming.
