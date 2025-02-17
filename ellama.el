@@ -1694,6 +1694,8 @@ strings before they're inserted into the BUFFER.
 :ephemeral-session BOOL -- if BOOL is set session will not be saved to named
 file by default.
 
+:system STR -- send STR to model as system message.
+
 :on-error ON-ERROR -- ON-ERROR a function that's called with an error message on
 failure (with BUFFER current).
 
@@ -1719,15 +1721,20 @@ failure (with BUFFER current).
 		      (error "Error calling the LLM: %s" msg))))
 	 (donecb (or (plist-get args :on-done) #'ignore))
 	 (prompt-with-ctx (ellama--prompt-with-context prompt))
+	 (system (plist-get args :system))
 	 (llm-prompt (if session
 			 (if (llm-chat-prompt-p (ellama-session-prompt session))
 			     (progn
 			       (llm-chat-prompt-append-response
 				(ellama-session-prompt session)
 				prompt-with-ctx)
+			       (when system
+				 (llm-chat-prompt-append-response
+				  (ellama-session-prompt session)
+				  system 'system))
 			       (ellama-session-prompt session))
 			   (setf (ellama-session-prompt session)
-				 (llm-make-simple-chat-prompt prompt-with-ctx)))
+				 (llm-make-chat-prompt prompt-with-ctx :context system)))
 		       (llm-make-simple-chat-prompt prompt-with-ctx))))
     (with-current-buffer buffer
       (ellama-request-mode +1)
@@ -2044,6 +2051,8 @@ ARGS contains keys for fine control.
 
 :session-id ID -- ID is a ellama session unique identifier.
 
+:system STR -- send STR to model as system message.
+
 :on-done ON-DONE -- ON-DONE a function that's called with
 the full response text when the request completes (with BUFFER current)."
   (interactive "sAsk ellama: ")
@@ -2055,6 +2064,7 @@ the full response text when the request completes (with BUFFER current)."
 			    '("ollama model" . (ellama-get-ollama-local-model))))
                      ellama-providers))
 	 (variants (mapcar #'car providers))
+	 (system (plist-get args :system))
 	 (donecb (plist-get args :on-done))
 	 (provider (if current-prefix-arg
 		       (eval (alist-get
@@ -2106,6 +2116,7 @@ the full response text when the request completes (with BUFFER current)."
 		    (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n"))
 	  (ellama-stream prompt
 			 :session session
+			 :system system
 			 :on-done (if donecb (list 'ellama-chat-done donecb)
 				    'ellama-chat-done)
 			 :filter (when (derived-mode-p 'org-mode)
@@ -2244,6 +2255,8 @@ ARGS contains keys for fine control.
 
 :provider PROVIDER -- PROVIDER is an llm provider for generation.
 
+:system STR -- send STR to model as system message.
+
 :on-done ON-DONE -- ON-DONE a function or list of functions that's called with
  the full response text when the request completes (with BUFFER current)."
   (let* ((provider (or (plist-get args :provider)
@@ -2252,6 +2265,7 @@ ARGS contains keys for fine control.
 	 (buffer (get-buffer-create (if (get-buffer buffer-name)
 					(make-temp-name (concat buffer-name " "))
 				      buffer-name)))
+	 (system (plist-get args :system))
 	 (donecb (plist-get args :on-done))
 	 filter)
     (with-current-buffer buffer
@@ -2261,6 +2275,7 @@ ARGS contains keys for fine control.
     (display-buffer buffer (when ellama-instant-display-action-function
 			     `((ignore . (,ellama-instant-display-action-function)))))
     (ellama-stream prompt
+		   :system system
 		   :buffer buffer
 		   :filter filter
 		   :provider provider
