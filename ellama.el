@@ -644,7 +644,7 @@ This filter contains only subset of markdown syntax to be good enough."
     (replace-regexp-in-string "^[[:space:]]*```" "#+END_SRC\n")
     (replace-regexp-in-string "```" "\n#+END_SRC\n")
     (replace-regexp-in-string "<think>[\n]?" "#+BEGIN_QUOTE\n")
-    (replace-regexp-in-string "</think>[\n]?" "#+END_QUOTE\n")
+    (replace-regexp-in-string "[\n]?</think>[\n]?" "\n#+END_QUOTE\n")
     (ellama--replace-bad-code-blocks)
     (ellama--replace-outside-of-code-blocks)))
 
