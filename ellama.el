@@ -2694,6 +2694,14 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 	  (completing-read "Select provider: "
 			   (mapcar #'prin1-to-string ellama-provider-list))))))
 
+(transient-define-suffix ellama-transient-model-get-from-current-session ()
+  "Fill transient model from current session."
+  (interactive)
+  (when ellama--current-session-id
+    (ellama-fill-transient-ollama-model
+     (with-current-buffer (ellama-get-session-buffer ellama--current-session-id)
+       (ellama-session-provider ellama--current-session)))))
+
 (transient-define-suffix ellama-transient-set-provider ()
   "Set transient model to provider."
   (interactive)
@@ -2710,6 +2718,8 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
   "Select ollama model."
   [["Model"
     ("f" "Load from provider" ellama-transient-model-get-from-provider
+     :transient t)
+    ("F" "Load from current session" ellama-transient-model-get-from-current-session
      :transient t)
     ("m" "Set Model" ellama-transient-set-ollama-model
      :transient t
