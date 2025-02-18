@@ -1086,11 +1086,17 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 (cl-defmethod ellama-context-element-add ((element ellama-context-element))
   "Add the ELEMENT to the Ellama context."
-  (if-let* ((id ellama--current-session-id)
-	    (session (with-current-buffer (ellama-get-session-buffer id)
-		       ellama--current-session)))
-      (cl-pushnew element (ellama-session-context session) :test #'equal-including-properties))
-  (cl-pushnew element ellama--global-context :test #'equal-including-properties)
+  (when-let* ((id ellama--current-session-id)
+	      (session (with-current-buffer (ellama-get-session-buffer id)
+			 ellama--current-session)))
+    (setf (ellama-session-context session) (nreverse (ellama-session-context session)))
+    (cl-pushnew element (ellama-session-context session)
+		:test #'equal-including-properties)
+    (setf (ellama-session-context session) (nreverse (ellama-session-context session))))
+  (setf ellama--global-context (nreverse ellama--global-context))
+  (cl-pushnew element ellama--global-context
+	      :test #'equal-including-properties)
+  (setf ellama--global-context (nreverse ellama--global-context))
   (get-buffer-create ellama--context-buffer t)
   (with-current-buffer ellama--context-buffer
     (erase-buffer)
