@@ -1,0 +1,9 @@
+* About this project
+
+This project is written in emacs lisp.
+
+* Rules
+
+- Write simple and readable code.
+- Always use ~ert~ for tests.
+- All function names and custom variable names should start with ~ellama-~.
