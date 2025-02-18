@@ -1040,6 +1040,11 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 (defvar ellama--context-buffer " *ellama-context*")
 
+(defcustom ellama-context-posframe-enabled t
+  "Enable showing posframe with ellama context."
+  :group 'ellama
+  :type 'boolean)
+
 ;;;###autoload
 (defun ellama-context-reset ()
   "Clear global context."
@@ -1050,7 +1055,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (when ellama--current-session-id
     (with-current-buffer (ellama-get-session-buffer ellama--current-session-id)
       (setf (ellama-session-context ellama--current-session) nil)))
-  (posframe-hide ellama--context-buffer))
+  (when ellama-context-posframe-enabled
+    (posframe-hide ellama--context-buffer)))
 
 ;; Context elements
 
@@ -1086,24 +1092,25 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 (defun ellama-update-context-posframe-show ()
   "Update and show context posframe."
-  (with-current-buffer ellama--context-buffer
-    (erase-buffer)
-    (when ellama--global-context
-      (insert (format
-	       "context: %s"
-	       (string-join
-		(mapcar
-		 (lambda (el)
-		   (string-pad
-		    (ellama-context-element-display el) ellama-context-element-padding-size))
-		 ellama--global-context)
-		"  ")))))
-  (if ellama--global-context
-      (posframe-show
-       ellama--context-buffer
-       :poshandler ellama-context-poshandler
-       :internal-border-width ellama-context-border-width)
-    (posframe-hide ellama--context-buffer)))
+  (when ellama-context-posframe-enabled
+    (with-current-buffer ellama--context-buffer
+      (erase-buffer)
+      (when ellama--global-context
+	(insert (format
+		 "context: %s"
+		 (string-join
+		  (mapcar
+		   (lambda (el)
+		     (string-pad
+		      (ellama-context-element-display el) ellama-context-element-padding-size))
+		   ellama--global-context)
+		  "  ")))))
+    (if ellama--global-context
+	(posframe-show
+	 ellama--context-buffer
+	 :poshandler ellama-context-poshandler
+	 :internal-border-width ellama-context-border-width)
+      (posframe-hide ellama--context-buffer))))
 
 (cl-defmethod ellama-context-element-add ((element ellama-context-element))
   "Add the ELEMENT to the Ellama context."
