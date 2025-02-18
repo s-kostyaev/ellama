@@ -694,7 +694,7 @@ FILE is a path to file contains string representation of this session, string.
 
 PROMPT is a variable contains last prompt in this session.
 
-CONTEXT contains context for next request.
+CONTEXT will be ignored.  Use global context instead.
 
 EXTRA contains additional information."
   id provider file prompt context extra)
@@ -809,16 +809,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
 		      (file-name-concat
 		       ellama-sessions-directory
 		       (concat id "." (ellama-get-session-file-extension)))))
- 	 (previous-session
-	  (when ellama--current-session-id
-	    (with-current-buffer
-		(ellama-get-session-buffer ellama--current-session-id)
-	      ellama--current-session)))
 	 (session (make-ellama-session
-		   :id id :provider provider :file file-name
-		   :context (or (when previous-session
-				  (ellama-session-context previous-session))
-				ellama--global-context)))
+		   :id id :provider provider :file file-name))
 	 (buffer (if file-name
 		     (progn
 		       (make-directory ellama-sessions-directory t)
@@ -953,7 +945,6 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	       :provider (ellama-session-provider session)
 	       :file (ellama-session-file session)
 	       :prompt (ellama-session-prompt session)
-	       :context ellama--global-context
 	       :extra extra)))
       (setq ellama--current-session-id (ellama-session-id ellama--current-session))
       (puthash (ellama-session-id ellama--current-session)
@@ -1052,9 +1043,6 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (setq ellama--global-context nil)
   (with-current-buffer ellama--context-buffer
     (erase-buffer))
-  (when ellama--current-session-id
-    (with-current-buffer (ellama-get-session-buffer ellama--current-session-id)
-      (setf (ellama-session-context ellama--current-session) nil)))
   (when ellama-context-posframe-enabled
     (posframe-hide ellama--context-buffer)))
 
@@ -1114,13 +1102,6 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 (cl-defmethod ellama-context-element-add ((element ellama-context-element))
   "Add the ELEMENT to the Ellama context."
-  (when-let* ((id ellama--current-session-id)
-	      (session (with-current-buffer (ellama-get-session-buffer id)
-			 ellama--current-session)))
-    (setf (ellama-session-context session) (nreverse (ellama-session-context session)))
-    (cl-pushnew element (ellama-session-context session)
-		:test #'equal-including-properties)
-    (setf (ellama-session-context session) (nreverse (ellama-session-context session))))
   (setf ellama--global-context (nreverse ellama--global-context))
   (cl-pushnew element ellama--global-context
 	      :test #'equal-including-properties)
@@ -1718,10 +1699,10 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	    s
 	    ellama-language))))
 
-(defun ellama--format-context (session)
-  "Format SESSION context for chat buffer."
+(defun ellama--format-context (_)
+  "Format context for chat buffer."
   (let ((mode (if (derived-mode-p 'org-mode) 'org-mode 'markdown-mode)))
-    (if-let* ((context (ellama-session-context session)))
+    (if-let* ((context ellama--global-context))
         (concat (string-join
 	         (cons "Context:"
                        (mapcar (lambda (elt)
@@ -1733,10 +1714,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 (defun ellama--prompt-with-context (prompt)
   "Add context to PROMPT for sending to llm."
-  (let* ((session ellama--current-session)
-	 (context (or (when session
-			(ellama-session-context session))
-		      ellama--global-context)))
+  (let* ((context ellama--global-context))
     (if context
 	(concat (string-join
 		 (cons "Context:"
@@ -1891,8 +1869,6 @@ failure (with BUFFER current).
 	(set-marker-insertion-type start nil)
 	(set-marker-insertion-type end t)
 	(spinner-start ellama-spinner-type)
-	(when session
-	  (setf (ellama-session-context session) nil))
 	(let ((request (llm-chat-streaming provider
 					   llm-prompt
 					   insert-text
@@ -2252,7 +2228,7 @@ the full response text when the request completes (with BUFFER current)."
 		      message)))
     (goto-char (point-max))
     (insert "\n\n")
-    (when (ellama-session-context session)
+    (when ellama--global-context
       (insert (ellama--format-context session)))
     (insert (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
     (ellama-stream text
