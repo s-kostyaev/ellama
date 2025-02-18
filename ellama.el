@@ -1084,6 +1084,27 @@ If EPHEMERAL non nil new session will not be associated with any file."
   :group 'ellama
   :type 'integer)
 
+(defun ellama-update-context-posframe-show ()
+  "Update and show context posframe."
+  (with-current-buffer ellama--context-buffer
+    (erase-buffer)
+    (when ellama--global-context
+      (insert (format
+	       "context: %s"
+	       (string-join
+		(mapcar
+		 (lambda (el)
+		   (string-pad
+		    (ellama-context-element-display el) ellama-context-element-padding-size))
+		 ellama--global-context)
+		"  ")))))
+  (if ellama--global-context
+      (posframe-show
+       ellama--context-buffer
+       :poshandler ellama-context-poshandler
+       :internal-border-width ellama-context-border-width)
+    (posframe-hide ellama--context-buffer)))
+
 (cl-defmethod ellama-context-element-add ((element ellama-context-element))
   "Add the ELEMENT to the Ellama context."
   (when-let* ((id ellama--current-session-id)
@@ -1098,22 +1119,106 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	      :test #'equal-including-properties)
   (setf ellama--global-context (nreverse ellama--global-context))
   (get-buffer-create ellama--context-buffer t)
-  (with-current-buffer ellama--context-buffer
-    (erase-buffer)
-    (insert (format
-	     "context: %s"
-	     (string-join
-	      (mapcar
-	       (lambda (el)
-		 (string-pad
-		  (ellama-context-element-display el) ellama-context-element-padding-size))
-	       ellama--global-context)
-	      "  "))))
-  (posframe-show
-   ellama--context-buffer
-   :poshandler ellama-context-poshandler
-   :internal-border-width ellama-context-border-width))
+  (ellama-update-context-posframe-show))
 
+(defcustom ellama-manage-context-display-action-function #'display-buffer-same-window
+  "Display action function for `ellama-render-context'."
+  :group 'ellama
+  :type 'function)
+
+(defvar ellama-context-buffer "*ellama-context*")
+
+(defvar-keymap ellama-context-mode-map
+  :doc "Local keymap for Ellama context mode buffers."
+  :full t
+  :parent special-mode-map
+  "n"       #'next-line
+  "p"       #'previous-line
+  "q"       #'quit-window
+  "g"       #'ellama-manage-context
+  "a"       #'ellama-transient-context-menu
+  "d"       #'ellama-remove-context-element-at-point
+  "RET"     #'ellama-preview-context-element-at-point)
+
+(define-minor-mode ellama-context-mode
+  "Toggle Ellama Context mode."
+  :keymap ellama-context-mode-map
+  :group 'ellama)
+
+;;;###autoload
+(defun ellama-manage-context ()
+  "Manage the global context."
+  (interactive)
+  (let* ((buf (get-buffer-create ellama-context-buffer))
+         (inhibit-read-only t))
+    (with-current-buffer buf
+      (read-only-mode +1)
+      (ellama-context-mode +1)
+      (erase-buffer)
+      (dolist (el ellama--global-context)
+        (insert (ellama-context-element-display el))
+        (put-text-property (pos-bol) (pos-eol) 'context-element el)
+        (insert "\n"))
+      (goto-char (point-min))
+      (display-buffer
+       buf
+       (when ellama-manage-context-display-action-function
+	 `((ignore . (,ellama-manage-context-display-action-function))))))))
+
+(defvar-keymap ellama-preview-context-mode-map
+  :doc "Local keymap for Ellama preview context mode buffers."
+  :full t
+  :parent special-mode-map
+  "q"       #'quit-window)
+
+(define-minor-mode ellama-preview-context-mode
+  "Toggle Ellama Preview Context mode."
+  :keymap ellama-preview-context-mode-map
+  :group 'ellama)
+
+(defcustom ellama-preview-context-element-display-action-function nil
+  "Display action function for `ellama-preview-context-element'."
+  :group 'ellama
+  :type 'function)
+
+(defun ellama-preview-context-element (element)
+  "Preview context ELEMENT content."
+  (let* ((name
+	  (concat (make-temp-name
+		   (concat " *ellama-context-"
+			   (ellama-context-element-display element)
+			   "-"))
+		  "*"))
+	 (buf (get-buffer-create name)))
+    (with-current-buffer buf
+      (insert (ellama-context-element-extract element))
+      (read-only-mode +1)
+      (ellama-preview-context-mode +1)
+      (display-buffer
+       buf
+       (when ellama-preview-context-element-display-action-function
+	 `((ignore . (,ellama-preview-context-element-display-action-function))))))))
+
+(defun ellama-remove-context-element (element)
+  "Remove context ELEMENT from global context."
+  (setf ellama--global-context
+	(cl-remove element ellama--global-context :test #'equal-including-properties)))
+
+;;;###autoload
+(defun ellama-preview-context-element-at-point ()
+  "Preview ellama context element at point."
+  (interactive)
+  (when-let ((elt (get-text-property (point) 'context-element)))
+    (ellama-preview-context-element elt)))
+
+;;;###autoload
+(defun ellama-remove-context-element-at-point ()
+  "Remove ellama context element at point from global context."
+  (interactive)
+  (when-let ((elt (get-text-property (point) 'context-element)))
+    (ellama-remove-context-element elt)
+    (ellama-manage-context)
+    (ellama-update-context-posframe-show)))
 
 ;; Buffer context element
 
@@ -2850,6 +2955,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
     ("f" "Add File" ellama-context-add-file)
     ("s" "Add Selection" ellama-context-add-selection)
     ("i" "Add Info Node" ellama-context-add-info-node)
+    ("m" "Manage context" ellama-manage-context)
     ("r" "Context reset" ellama-context-reset)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
