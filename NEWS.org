@@ -1,3 +1,9 @@
+* Version 1.2.0
+- Add interactive context management in special buffer with preview.
+- Fix context element ordering.
+- Deprecate local session context.
+- Add option to toggle posframe showing global context.
+- Add instruction document for simplify help from ellama.
 * Version 1.1.7
 - Added transient suffix to load model from the current session.
 * Version 1.1.6

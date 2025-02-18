@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (spinner "1.7.4") (transient "0.7") (compat "29.1") (posframe "1.4.0"))
-;; Version: 1.1.7
+;; Version: 1.2.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -694,7 +694,7 @@ FILE is a path to file contains string representation of this session, string.
 
 PROMPT is a variable contains last prompt in this session.
 
-CONTEXT contains context for next request.
+CONTEXT will be ignored.  Use global context instead.
 
 EXTRA contains additional information."
   id provider file prompt context extra)
@@ -809,16 +809,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
 		      (file-name-concat
 		       ellama-sessions-directory
 		       (concat id "." (ellama-get-session-file-extension)))))
- 	 (previous-session
-	  (when ellama--current-session-id
-	    (with-current-buffer
-		(ellama-get-session-buffer ellama--current-session-id)
-	      ellama--current-session)))
 	 (session (make-ellama-session
-		   :id id :provider provider :file file-name
-		   :context (or (when previous-session
-				  (ellama-session-context previous-session))
-				ellama--global-context)))
+		   :id id :provider provider :file file-name))
 	 (buffer (if file-name
 		     (progn
 		       (make-directory ellama-sessions-directory t)
@@ -953,7 +945,6 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	       :provider (ellama-session-provider session)
 	       :file (ellama-session-file session)
 	       :prompt (ellama-session-prompt session)
-	       :context ellama--global-context
 	       :extra extra)))
       (setq ellama--current-session-id (ellama-session-id ellama--current-session))
       (puthash (ellama-session-id ellama--current-session)
@@ -1040,6 +1031,11 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 (defvar ellama--context-buffer " *ellama-context*")
 
+(defcustom ellama-context-posframe-enabled t
+  "Enable showing posframe with ellama context."
+  :group 'ellama
+  :type 'boolean)
+
 ;;;###autoload
 (defun ellama-context-reset ()
   "Clear global context."
@@ -1047,10 +1043,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (setq ellama--global-context nil)
   (with-current-buffer ellama--context-buffer
     (erase-buffer))
-  (when ellama--current-session-id
-    (with-current-buffer (ellama-get-session-buffer ellama--current-session-id)
-      (setf (ellama-session-context ellama--current-session) nil)))
-  (posframe-hide ellama--context-buffer))
+  (when ellama-context-posframe-enabled
+    (posframe-hide ellama--context-buffer)))
 
 ;; Context elements
 
@@ -1084,30 +1078,135 @@ If EPHEMERAL non nil new session will not be associated with any file."
   :group 'ellama
   :type 'integer)
 
+(defun ellama-update-context-posframe-show ()
+  "Update and show context posframe."
+  (when ellama-context-posframe-enabled
+    (with-current-buffer ellama--context-buffer
+      (erase-buffer)
+      (when ellama--global-context
+	(insert (format
+		 "context: %s"
+		 (string-join
+		  (mapcar
+		   (lambda (el)
+		     (string-pad
+		      (ellama-context-element-display el) ellama-context-element-padding-size))
+		   ellama--global-context)
+		  "  ")))))
+    (if ellama--global-context
+	(posframe-show
+	 ellama--context-buffer
+	 :poshandler ellama-context-poshandler
+	 :internal-border-width ellama-context-border-width)
+      (posframe-hide ellama--context-buffer))))
+
 (cl-defmethod ellama-context-element-add ((element ellama-context-element))
   "Add the ELEMENT to the Ellama context."
-  (if-let* ((id ellama--current-session-id)
-	    (session (with-current-buffer (ellama-get-session-buffer id)
-		       ellama--current-session)))
-      (cl-pushnew element (ellama-session-context session) :test #'equal-including-properties))
-  (cl-pushnew element ellama--global-context :test #'equal-including-properties)
+  (setf ellama--global-context (nreverse ellama--global-context))
+  (cl-pushnew element ellama--global-context
+	      :test #'equal-including-properties)
+  (setf ellama--global-context (nreverse ellama--global-context))
   (get-buffer-create ellama--context-buffer t)
-  (with-current-buffer ellama--context-buffer
-    (erase-buffer)
-    (insert (format
-	     "context: %s"
-	     (string-join
-	      (mapcar
-	       (lambda (el)
-		 (string-pad
-		  (ellama-context-element-display el) ellama-context-element-padding-size))
-	       ellama--global-context)
-	      "  "))))
-  (posframe-show
-   ellama--context-buffer
-   :poshandler ellama-context-poshandler
-   :internal-border-width ellama-context-border-width))
+  (ellama-update-context-posframe-show))
 
+(defcustom ellama-manage-context-display-action-function #'display-buffer-same-window
+  "Display action function for `ellama-render-context'."
+  :group 'ellama
+  :type 'function)
+
+(defvar ellama-context-buffer "*ellama-context*")
+
+(defvar-keymap ellama-context-mode-map
+  :doc "Local keymap for Ellama context mode buffers."
+  :full t
+  :parent special-mode-map
+  "n"       #'next-line
+  "p"       #'previous-line
+  "q"       #'quit-window
+  "g"       #'ellama-manage-context
+  "a"       #'ellama-transient-context-menu
+  "d"       #'ellama-remove-context-element-at-point
+  "RET"     #'ellama-preview-context-element-at-point)
+
+(define-minor-mode ellama-context-mode
+  "Toggle Ellama Context mode."
+  :keymap ellama-context-mode-map
+  :group 'ellama)
+
+;;;###autoload
+(defun ellama-manage-context ()
+  "Manage the global context."
+  (interactive)
+  (let* ((buf (get-buffer-create ellama-context-buffer))
+         (inhibit-read-only t))
+    (with-current-buffer buf
+      (read-only-mode +1)
+      (ellama-context-mode +1)
+      (erase-buffer)
+      (dolist (el ellama--global-context)
+        (insert (ellama-context-element-display el))
+        (put-text-property (pos-bol) (pos-eol) 'context-element el)
+        (insert "\n"))
+      (goto-char (point-min))
+      (display-buffer
+       buf
+       (when ellama-manage-context-display-action-function
+	 `((ignore . (,ellama-manage-context-display-action-function))))))))
+
+(defvar-keymap ellama-preview-context-mode-map
+  :doc "Local keymap for Ellama preview context mode buffers."
+  :full t
+  :parent special-mode-map
+  "q"       #'quit-window)
+
+(define-minor-mode ellama-preview-context-mode
+  "Toggle Ellama Preview Context mode."
+  :keymap ellama-preview-context-mode-map
+  :group 'ellama)
+
+(defcustom ellama-preview-context-element-display-action-function nil
+  "Display action function for `ellama-preview-context-element'."
+  :group 'ellama
+  :type 'function)
+
+(defun ellama-preview-context-element (element)
+  "Preview context ELEMENT content."
+  (let* ((name
+	  (concat (make-temp-name
+		   (concat " *ellama-context-"
+			   (ellama-context-element-display element)
+			   "-"))
+		  "*"))
+	 (buf (get-buffer-create name)))
+    (with-current-buffer buf
+      (insert (ellama-context-element-extract element))
+      (read-only-mode +1)
+      (ellama-preview-context-mode +1)
+      (display-buffer
+       buf
+       (when ellama-preview-context-element-display-action-function
+	 `((ignore . (,ellama-preview-context-element-display-action-function))))))))
+
+(defun ellama-remove-context-element (element)
+  "Remove context ELEMENT from global context."
+  (setf ellama--global-context
+	(cl-remove element ellama--global-context :test #'equal-including-properties)))
+
+;;;###autoload
+(defun ellama-preview-context-element-at-point ()
+  "Preview ellama context element at point."
+  (interactive)
+  (when-let ((elt (get-text-property (point) 'context-element)))
+    (ellama-preview-context-element elt)))
+
+;;;###autoload
+(defun ellama-remove-context-element-at-point ()
+  "Remove ellama context element at point from global context."
+  (interactive)
+  (when-let ((elt (get-text-property (point) 'context-element)))
+    (ellama-remove-context-element elt)
+    (ellama-manage-context)
+    (ellama-update-context-posframe-show)))
 
 ;; Buffer context element
 
@@ -1600,10 +1699,10 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	    s
 	    ellama-language))))
 
-(defun ellama--format-context (session)
-  "Format SESSION context for chat buffer."
+(defun ellama--format-context (_)
+  "Format context for chat buffer."
   (let ((mode (if (derived-mode-p 'org-mode) 'org-mode 'markdown-mode)))
-    (if-let* ((context (ellama-session-context session)))
+    (if-let* ((context ellama--global-context))
         (concat (string-join
 	         (cons "Context:"
                        (mapcar (lambda (elt)
@@ -1615,10 +1714,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 (defun ellama--prompt-with-context (prompt)
   "Add context to PROMPT for sending to llm."
-  (let* ((session ellama--current-session)
-	 (context (or (when session
-			(ellama-session-context session))
-		      ellama--global-context)))
+  (let* ((context ellama--global-context))
     (if context
 	(concat (string-join
 		 (cons "Context:"
@@ -1773,8 +1869,6 @@ failure (with BUFFER current).
 	(set-marker-insertion-type start nil)
 	(set-marker-insertion-type end t)
 	(spinner-start ellama-spinner-type)
-	(when session
-	  (setf (ellama-session-context session) nil))
 	(let ((request (llm-chat-streaming provider
 					   llm-prompt
 					   insert-text
@@ -2134,7 +2228,7 @@ the full response text when the request completes (with BUFFER current)."
 		      message)))
     (goto-char (point-max))
     (insert "\n\n")
-    (when (ellama-session-context session)
+    (when ellama--global-context
       (insert (ellama--format-context session)))
     (insert (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
     (ellama-stream text
@@ -2844,6 +2938,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
     ("f" "Add File" ellama-context-add-file)
     ("s" "Add Selection" ellama-context-add-selection)
     ("i" "Add Info Node" ellama-context-add-info-node)
+    ("m" "Manage context" ellama-manage-context)
     ("r" "Context reset" ellama-context-reset)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
