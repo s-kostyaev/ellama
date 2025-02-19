@@ -257,6 +257,10 @@ Rename current ellama session.
 
 Add file to context.
 
+*** ellama-context-add-directory
+
+Add all files in directory to the context.
+
 *** ellama-context-add-buffer
 
 Add buffer to context.
@@ -358,8 +362,10 @@ Ellama, using the ~ellama-keymap-prefix~ prefix (not set by default):
 | "d w"  | ellama-define-word              | Define word                  |
 | "x b"  | ellama-context-add-buffer       | Context add buffer           |
 | "x f"  | ellama-context-add-file         | Context add file             |
+| "x d"  | ellama-context-add-directory    | Context add directory        |
 | "x s"  | ellama-context-add-selection    | Context add selection        |
 | "x i"  | ellama-context-add-info-node    | Context add info node        |
+| "x r"  | ellama-context-reset            | Context reset                |
 | "x r"  | ellama-context-reset            | Context reset                |
 | "p s"  | ellama-provider-select          | Provider select              |
 

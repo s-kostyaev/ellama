@@ -1,3 +1,5 @@
+* Version 1.2.1
+- Add ~ellama-context-add-directory~ command.
 * Version 1.2.0
 - Add interactive context management in special buffer with preview.
 - Fix context element ordering.

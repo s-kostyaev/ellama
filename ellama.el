@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (spinner "1.7.4") (transient "0.7") (compat "29.1") (posframe "1.4.0"))
-;; Version: 1.2.0
+;; Version: 1.2.1
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -176,6 +176,7 @@ Make reasoning models more useful for many cases."
     (define-key map (kbd "x f") 'ellama-context-add-file)
     (define-key map (kbd "x s") 'ellama-context-add-selection)
     (define-key map (kbd "x i") 'ellama-context-add-info-node)
+    (define-key map (kbd "x m") 'ellama-manage-context)
     (define-key map (kbd "x r") 'ellama-context-reset)
     ;; provider
     (define-key map (kbd "p s") 'ellama-provider-select)
