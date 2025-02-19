@@ -366,7 +366,6 @@ Ellama, using the ~ellama-keymap-prefix~ prefix (not set by default):
 | "x s"  | ellama-context-add-selection    | Context add selection        |
 | "x i"  | ellama-context-add-info-node    | Context add info node        |
 | "x r"  | ellama-context-reset            | Context reset                |
-| "x r"  | ellama-context-reset            | Context reset                |
 | "p s"  | ellama-provider-select          | Provider select              |
 
 ** Configuration
