@@ -1,3 +1,5 @@
+* Version 1.2.2
+- Fix org to markdown conversion with broken links.
 * Version 1.2.1
 - Add ~ellama-context-add-directory~ command.
 * Version 1.2.0
