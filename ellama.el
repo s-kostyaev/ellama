@@ -1875,10 +1875,7 @@ failure (with BUFFER current).
 		  (undo-amalgamate-change-group ellama--change-group)))))
 	(setq ellama--change-group (prepare-change-group))
 	(activate-change-group ellama--change-group)
-	(set-marker start point)
-	(set-marker end point)
-	(set-marker-insertion-type start nil)
-	(set-marker-insertion-type end t)
+	(ellama-set-markers start end point)
 	(spinner-start ellama-spinner-type)
 	(let ((request (llm-chat-streaming provider
 					   llm-prompt
@@ -1922,6 +1919,13 @@ failure (with BUFFER current).
 					       (ellama-request-mode -1))))))
 	  (with-current-buffer buffer
 	    (setq ellama--current-request request)))))))
+
+(defun ellama-set-markers (start end point)
+  "Set markers for START and END positions at POINT."
+  (set-marker start point)
+  (set-marker end point)
+  (set-marker-insertion-type start nil)
+  (set-marker-insertion-type end t))
 
 (defun ellama-chain (initial-prompt forms &optional acc)
   "Call chain of FORMS on INITIAL-PROMPT.
