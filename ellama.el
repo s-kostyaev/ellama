@@ -1616,8 +1616,9 @@ If EPHEMERAL non nil new session will not be associated with any file."
   "Add all files in DIR to the context."
   (interactive "DSelect directory: ")
   (dolist (file-name (directory-files dir t "^[^\.].*"))
-    (let ((element (ellama-context-element-file :name file-name)))
-      (ellama-context-element-add element))))
+    (unless (file-directory-p file-name)
+      (let ((element (ellama-context-element-file :name file-name)))
+        (ellama-context-element-add element)))))
 
 ;;;###autoload
 (defun ellama-context-add-selection ()
