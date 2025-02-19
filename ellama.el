@@ -172,6 +172,7 @@ Make reasoning models more useful for many cases."
     (define-key map (kbd "d w") 'ellama-define-word)
     ;; context
     (define-key map (kbd "x b") 'ellama-context-add-buffer)
+    (define-key map (kbd "x d") 'ellama-context-add-directory)
     (define-key map (kbd "x f") 'ellama-context-add-file)
     (define-key map (kbd "x s") 'ellama-context-add-selection)
     (define-key map (kbd "x i") 'ellama-context-add-info-node)
@@ -1611,6 +1612,14 @@ If EPHEMERAL non nil new session will not be associated with any file."
     (ellama-context-element-add element)))
 
 ;;;###autoload
+(defun ellama-context-add-directory (dir)
+  "Add all files in DIR to the context."
+  (interactive "DSelect directory: ")
+  (dolist (file-name (directory-files dir t "^[^\.].*"))
+    (let ((element (ellama-context-element-file :name file-name)))
+      (ellama-context-element-add element))))
+
+;;;###autoload
 (defun ellama-context-add-selection ()
   "Add active region to context."
   (interactive)
@@ -2935,6 +2944,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
   "Context Commands."
   [["Context Commands"
     ("b" "Add Buffer" ellama-context-add-buffer)
+    ("d" "Add Directory" ellama-context-add-directory)
     ("f" "Add File" ellama-context-add-file)
     ("s" "Add Selection" ellama-context-add-selection)
     ("i" "Add Info Node" ellama-context-add-info-node)
