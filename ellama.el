@@ -1862,53 +1862,55 @@ failure (with BUFFER current).
 							     ellama-fill-paragraphs)
 						      (not (equal major-mode 'org-mode))))))
                       (fill-region start (point)))
-		    (goto-char pt))
+		    (unless ellama-auto-scroll
+		      (goto-char pt)))
 		  (ellama--scroll buffer)
 		  (undo-amalgamate-change-group ellama--change-group)))))
 	(setq ellama--change-group (prepare-change-group))
 	(activate-change-group ellama--change-group)
 	(ellama-set-markers start end point)
 	(spinner-start ellama-spinner-type)
-	(let ((request (llm-chat-streaming provider
-					   llm-prompt
-					   insert-text
-					   (lambda (text)
-					     (funcall insert-text
-						      (string-trim
-						       (if (and ellama-output-remove-reasoning
-								(not session))
-							   (ellama-remove-reasoning text)
-							 text)))
-					     (with-current-buffer buffer
-					       (accept-change-group ellama--change-group)
-					       (spinner-stop)
-					       (if (and (listp donecb)
-							(functionp (car donecb)))
-						   (mapc (lambda (fn) (funcall fn text))
-							 donecb)
-						 (funcall donecb text))
-					       (when ellama-session-hide-org-quotes
-						 (ellama-collapse-org-quotes))
-					       (when (and ellama--current-session
-							  ellama-session-remove-reasoning)
-						 (mapc (lambda (interaction)
-							 (setf (llm-chat-prompt-interaction-content
-								interaction)
-							       (ellama-remove-reasoning
-								(llm-chat-prompt-interaction-content
-								 interaction))))
-						       (llm-chat-prompt-interactions
-							(ellama-session-prompt
-							 ellama--current-session))))
-					       (setq ellama--current-request nil)
-					       (ellama-request-mode -1)))
-					   (lambda (_ msg)
-					     (with-current-buffer buffer
-					       (cancel-change-group ellama--change-group)
-					       (spinner-stop)
-					       (funcall errcb msg)
-					       (setq ellama--current-request nil)
-					       (ellama-request-mode -1))))))
+	(let ((request (llm-chat-streaming
+			provider
+			llm-prompt
+			insert-text
+			(lambda (text)
+			  (funcall insert-text
+				   (string-trim
+				    (if (and ellama-output-remove-reasoning
+					     (not session))
+					(ellama-remove-reasoning text)
+				      text)))
+			  (with-current-buffer buffer
+			    (accept-change-group ellama--change-group)
+			    (spinner-stop)
+			    (if (and (listp donecb)
+				     (functionp (car donecb)))
+				(mapc (lambda (fn) (funcall fn text))
+				      donecb)
+			      (funcall donecb text))
+			    (when ellama-session-hide-org-quotes
+			      (ellama-collapse-org-quotes))
+			    (when (and ellama--current-session
+				       ellama-session-remove-reasoning)
+			      (mapc (lambda (interaction)
+				      (setf (llm-chat-prompt-interaction-content
+					     interaction)
+					    (ellama-remove-reasoning
+					     (llm-chat-prompt-interaction-content
+					      interaction))))
+				    (llm-chat-prompt-interactions
+				     (ellama-session-prompt
+				      ellama--current-session))))
+			    (setq ellama--current-request nil)
+			    (ellama-request-mode -1)))
+			(lambda (_ msg)
+			  (with-current-buffer buffer
+			    (cancel-change-group ellama--change-group)
+			    (spinner-stop)
+			    (funcall errcb msg)
+			    (setq ellama--current-request nil)
+			    (ellama-request-mode -1))))))
 	  (with-current-buffer buffer
 	    (setq ellama--current-request request)))))))
 
@@ -2070,10 +2072,10 @@ A function for programmatically scrolling the buffer during text generation."
   (when-let ((ellama-auto-scroll)
 	     (buf (or buffer (current-buffer)))
 	     (window (get-buffer-window buf)))
-    (when (ellama-chat-buffer-p buf)
-      (with-selected-window window
-	(goto-char (point-max))
-	(recenter -1)))))
+    (with-selected-window window
+      (when (ellama-chat-buffer-p buffer)
+	(goto-char (point-max)))
+      (recenter -1))))
 
 (defun ellama-chat-done (text &optional on-done)
   "Chat done.
@@ -2171,11 +2173,11 @@ the full response text when the request completes (with BUFFER current)."
   (interactive "sAsk ellama: ")
   (let* ((ollama-binary (executable-find ellama-ollama-binary))
 	 (providers (append
-                     `(("default model" . ellama-provider)
+		     `(("default model" . ellama-provider)
 		       ,(if (and ollama-binary
 				 (file-exists-p ollama-binary))
 			    '("ollama model" . (ellama-get-ollama-local-model))))
-                     ellama-providers))
+		     ellama-providers))
 	 (variants (mapcar #'car providers))
 	 (system (plist-get args :system))
 	 (donecb (plist-get args :on-done))
