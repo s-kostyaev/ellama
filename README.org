@@ -18,19 +18,18 @@ Assistant". Previous sentence was written by Ellama itself.
 
 ** Installation
 
-Just ~M-x~ ~package-install~ @@html:<kbd>@@Enter@@html:</kbd>@@ ~ellama~
-@@html:<kbd>@@Enter@@html:</kbd>@@. By default it uses
-[[https://github.com/jmorganca/ollama][ollama]] provider and
-[[https://ollama.ai/library/zephyr][zephyr]] model. If you ok with it,
-you need to install [[https://github.com/jmorganca/ollama][ollama]]
-and pull [[https://ollama.ai/library/zephyr][zephyr]] like this:
+Just ~M-x~ ~package-install~ @@html:<kbd>@@Enter@@html:</kbd>@@
+~ellama~ @@html:<kbd>@@Enter@@html:</kbd>@@. By default it uses [[https://github.com/jmorganca/ollama][ollama]]
+provider. If you ok with it, you need to install [[https://github.com/jmorganca/ollama][ollama]] and pull
+[[https://ollama.com/models][any ollama model]] like this:
 
 #+BEGIN_SRC shell
-  ollama pull zephyr
+  ollama pull qwen2.5:3b
 #+END_SRC
 
 You can use ~ellama~ with other model or other llm provider.
-In that case you should customize ellama configuration like this:
+Without any configuration, the first available ollama model will be used.
+You can customize ellama configuration like this:
 
 #+BEGIN_SRC  emacs-lisp
 (use-package ellama

@@ -68,12 +68,7 @@
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-provider
-  (progn
-    (declare-function make-llm-ollama "llm-ollama")
-    (require 'llm-ollama)
-    (make-llm-ollama
-     :chat-model "zephyr" :embedding-model "zephyr"))
+(defcustom ellama-provider nil
   "Backend LLM provider."
   :group 'ellama
   :type '(sexp :validate llm-standard-provider-p))
@@ -1815,7 +1810,9 @@ failure (with BUFFER current).
 			  ellama--current-session))))
 	 (provider (if session
 		       (ellama-session-provider session)
-		     (or (plist-get args :provider) ellama-provider)))
+		     (or (plist-get args :provider)
+			 ellama-provider
+			 (ellama-get-first-ollama-chat-model))))
 	 (buffer (or (plist-get args :buffer)
 		     (when (ellama-session-p session)
 		       (ellama-get-session-buffer (ellama-session-id session)))
@@ -1875,10 +1872,7 @@ failure (with BUFFER current).
 		  (undo-amalgamate-change-group ellama--change-group)))))
 	(setq ellama--change-group (prepare-change-group))
 	(activate-change-group ellama--change-group)
-	(set-marker start point)
-	(set-marker end point)
-	(set-marker-insertion-type start nil)
-	(set-marker-insertion-type end t)
+	(ellama-set-markers start end point)
 	(spinner-start ellama-spinner-type)
 	(let ((request (llm-chat-streaming provider
 					   llm-prompt
@@ -1922,6 +1916,13 @@ failure (with BUFFER current).
 					       (ellama-request-mode -1))))))
 	  (with-current-buffer buffer
 	    (setq ellama--current-request request)))))))
+
+(defun ellama-set-markers (start end point)
+  "Set markers for START and END positions at POINT."
+  (set-marker start point)
+  (set-marker end point)
+  (set-marker-insertion-type start nil)
+  (set-marker-insertion-type end t))
 
 (defun ellama-chain (initial-prompt forms &optional acc)
   "Call chain of FORMS on INITIAL-PROMPT.
@@ -2176,7 +2177,8 @@ the full response text when the request completes (with BUFFER current)."
 			      (completing-read "Select model: " variants)
 			      providers nil nil #'string=))
 		     (or (plist-get args :provider)
-			 ellama-provider)))
+			 ellama-provider
+			 (ellama-get-first-ollama-chat-model))))
 	 (session (or (plist-get args :session)
 		      (if (or create-session
 			      current-prefix-arg
@@ -2723,17 +2725,45 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
      (lambda (err)
        (user-error err)))))
 
+(defun ellama-get-ollama-model-names ()
+  "Get ollama model names."
+  (mapcar (lambda (s)
+	    (car (split-string s)))
+	  (seq-drop
+	   (process-lines
+	    (executable-find ellama-ollama-binary)
+	    "ls")
+	   ;; skip header line
+	   1)))
+
+(defun ellama-embedding-model-p (name)
+  "Check if NAME is an embedding model."
+  (when-let ((model (llm-models-match name)))
+    (not (not (member 'embedding (llm-model-capabilities model))))))
+
+(defun ellama-get-ollama-chat-model-names ()
+  "Get ollama chat model names."
+  (cl-remove-if #'ellama-embedding-model-p (ellama-get-ollama-model-names)))
+
+(defun ellama-get-ollama-embedding-model-names ()
+  "Get ollama embedding model names."
+  (cl-remove-if-not #'ellama-embedding-model-p (ellama-get-ollama-model-names)))
+
+(defun ellama-get-first-ollama-chat-model ()
+  "Get first available ollama model."
+  (declare-function make-llm-ollama "ext:llm-ollama")
+  (when (executable-find ellama-ollama-binary)
+    (require 'llm-ollama)
+    (make-llm-ollama
+     :chat-model
+     (car (ellama-get-ollama-chat-model-names)))))
+
 (defun ellama-get-ollama-model-name ()
   "Get ollama model name from installed locally."
   (interactive)
   (completing-read
    "Select ollama model: "
-   (mapcar (lambda (s)
-	     (car (split-string s)))
-	   (seq-drop
-	    (process-lines
-	     (executable-find ellama-ollama-binary) "ls")
-	    1))))
+   (ellama-get-ollama-model-names)))
 
 (defun ellama-get-ollama-local-model ()
   "Return llm provider for interactively selected ollama model."
