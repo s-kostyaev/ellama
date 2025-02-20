@@ -1,3 +1,7 @@
+* Version 1.2.3
+- Remove default ellama provider.
+- Use first available ollama chat model if ellama provider not set.
+  Ensure ~ellama~ is usable with zero configuration.
 * Version 1.2.2
 - Fix org to markdown conversion with broken links.
 * Version 1.2.1
