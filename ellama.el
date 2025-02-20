@@ -1863,12 +1863,7 @@ failure (with BUFFER current).
 						      (not (equal major-mode 'org-mode))))))
                       (fill-region start (point)))
 		    (goto-char pt))
-		  (when-let ((ellama-auto-scroll)
-			     (window (get-buffer-window buffer)))
-		    (when (ellama-chat-buffer-p buffer)
-		      (with-selected-window window
-			(goto-char (point-max))
-			(recenter -1))))
+		  (ellama--scroll buffer)
 		  (undo-amalgamate-change-group ellama--change-group)))))
 	(setq ellama--change-group (prepare-change-group))
 	(activate-change-group ellama--change-group)
@@ -2069,6 +2064,17 @@ Extract profession from this message. Be short and concise."
 	     (search-forward (concat (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n") nil t)
 	     (buffer-substring-no-properties (point) (point-max)))))))
 
+(defun ellama--scroll (&optional buffer)
+  "Scroll within BUFFER.
+A function for programmatically scrolling the buffer during text generation."
+  (when-let ((ellama-auto-scroll)
+	     (buf (or buffer (current-buffer)))
+	     (window (get-buffer-window buf)))
+    (when (ellama-chat-buffer-p buf)
+      (with-selected-window window
+	(goto-char (point-max))
+	(recenter -1)))))
+
 (defun ellama-chat-done (text &optional on-done)
   "Chat done.
 Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
@@ -2077,6 +2083,7 @@ Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
     (insert "\n\n" (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n")
     (when ellama-session-auto-save
       (save-buffer)))
+  (ellama--scroll)
   (when ellama-chat-done-callback
     (funcall ellama-chat-done-callback text))
   (when on-done
