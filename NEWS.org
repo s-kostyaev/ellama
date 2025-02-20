@@ -1,3 +1,7 @@
+* Version 1.2.4
+- Improve the default behavior of auto-scroll. It will now move the
+  cursor to the end of the ellama-chat buffer and enable auto-scroll
+  for all buffers, not just chat buffers.
 * Version 1.2.3
 - Remove default ellama provider.
 - Use first available ollama chat model if ellama provider not set.
