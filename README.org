@@ -404,9 +404,6 @@ argument generated text string.
 - ~ellama-sessions-directory~: Directory for saved ellama sessions.
 - ~ellama-major-mode~: Major mode for ellama commands. Org mode by
   default.
-- ~ellama-long-lines-length~: Long lines length for fill paragraph
-  call. Too low value can break generated code by splitting long
-  comment lines. Default value 100.
 - ~ellama-session-auto-save~: Automatically save ellama sessions if
   set. Enabled by default.
 - ~ellama-naming-scheme~: How to name new sessions.

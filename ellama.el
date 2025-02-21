@@ -456,12 +456,6 @@ It should be a function with single argument generated text string."
   :group 'ellama
   :type 'symbol)
 
-(defcustom ellama-long-lines-length 100
-  "Long lines length for fill paragraph call.
-Too low value can break generated code by splitting long comment lines."
-  :group 'ellama
-  :type 'integer)
-
 (defcustom ellama-translate-italic t
   "Translate italic during markdown to org transformations."
   :group 'ellama
@@ -530,8 +524,7 @@ Too low value can break generated code by splitting long comment lines."
   (if ellama-fill-paragraphs
       (with-temp-buffer
 	(insert (propertize text 'hard t))
-	(let ((fill-column ellama-long-lines-length)
-	      (use-hard-newlines t))
+	(let ((use-hard-newlines t))
 	  (fill-region (point-min) (point-max) nil t t))
 	(buffer-substring-no-properties (point-min) (point-max)))
     text))
@@ -595,8 +588,7 @@ Too low value can break generated code by splitting long comment lines."
   ;; filling long lines
   (goto-char beg)
   (when ellama-fill-paragraphs
-    (let ((fill-column ellama-long-lines-length)
-	  (use-hard-newlines t))
+    (let ((use-hard-newlines t))
       (fill-region beg end nil t t))))
 
 (defun ellama--replace-outside-of-code-blocks (text)
@@ -1505,7 +1497,6 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (with-temp-buffer
     (insert (propertize content 'hard t))
     (let ((fill-prefix "> ")
-	  (fill-column ellama-long-lines-length)
 	  (use-hard-newlines t)
 	  (comment-start ">")
 	  (comment-empty-lines t))
