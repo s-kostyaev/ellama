@@ -1107,11 +1107,24 @@ If EPHEMERAL non nil new session will not be associated with any file."
       (posframe-hide ellama--context-buffer)))
   (ellama-context-update-header-line))
 
+(defface ellama-face '((t (:inherit shadow)))
+  "Base face for all ellama things.")
+
+(defface ellama-context-line-face '((t (:inherit (mode-line-buffer-id ellama-face))))
+  "Face for ellama context line.")
+
 (defun ellama-context-line ()
   "Return current global context line."
-  (with-current-buffer ellama--context-buffer
-    (buffer-substring-no-properties
-     (point-min) (point-max))))
+  (propertize (with-current-buffer ellama--context-buffer
+		(buffer-substring-no-properties
+		 (point-min) (point-max)))
+	      'help-echo "mouse-1: manage ellama context"
+	      'mouse-face 'header-line-format
+	      'face 'ellama-context-line-face
+	      'keymap (let ((m (make-sparse-keymap)))
+			(define-key m [header-line mouse-1] #'ellama-manage-context)
+			(define-key m [mode-line mouse-1] #'ellama-manage-context)
+			m)))
 
 ;;;###autoload
 (define-minor-mode ellama-context-header-line-mode
