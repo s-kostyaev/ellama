@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (spinner "1.7.4") (transient "0.7") (compat "29.1") (posframe "1.4.0"))
-;; Version: 1.2.4
+;; Version: 1.2.5
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -2073,7 +2073,7 @@ A function for programmatically scrolling the buffer during text generation."
 	     (buf (or buffer (current-buffer)))
 	     (window (get-buffer-window buf)))
     (with-selected-window window
-      (when (ellama-chat-buffer-p buffer)
+      (when (ellama-chat-buffer-p buf)
 	(goto-char (point-max)))
       (recenter -1))))
 
