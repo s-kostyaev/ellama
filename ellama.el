@@ -5,7 +5,7 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (spinner "1.7.4") (transient "0.7") (compat "29.1") (posframe "1.4.0"))
+;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (transient "0.7") (compat "29.1"))
 ;; Version: 1.2.5
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
@@ -38,10 +38,8 @@
 (require 'eieio)
 (require 'llm)
 (require 'llm-provider-utils)
-(require 'spinner)
 (require 'transient)
 (require 'compat)
-(require 'posframe)
 (eval-when-compile (require 'rx))
 
 (defgroup ellama nil
@@ -116,13 +114,22 @@ Make reasoning models more useful for many cases."
   :type '(alist :key-type string
 		:value-type (sexp :validate llm-standard-provider-p)))
 
+(defvar spinner-types)
+
 (defcustom ellama-spinner-type 'progress-bar
   "Spinner type for ellama."
   :group 'ellama
-  :type `(choice ,@(mapcar
-		    (lambda (type)
-		      `(const ,(car type)))
-		    spinner-types)))
+  :type `(choice ,@(if (boundp 'spinner-types)
+		       (mapcar
+			(lambda (type)
+			  `(const ,(car type)))
+			spinner-types)
+		     '(const progress-bar))))
+
+(defcustom ellama-spinner-enabled nil
+  "Enable spinner during text generation."
+  :group 'ellama
+  :type 'boolean)
 
 (defcustom ellama-command-map
   (let ((map (make-sparse-keymap)))
@@ -494,6 +501,7 @@ Too low value can break generated code by splitting long comment lines."
 (define-minor-mode ellama-request-mode
   "Minor mode for ellama buffers with active request to llm."
   :interactive nil
+  :lighter " ellama:generating"
   :keymap '(([remap keyboard-quit] . ellama--cancel-current-request-and-quit))
   (if ellama-request-mode
       (add-hook 'kill-buffer-hook 'ellama--cancel-current-request nil t)
@@ -823,9 +831,12 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 (defun ellama--cancel-current-request ()
   "Cancel current running request."
+  (declare-function spinner-stop "ext:spinner")
   (when ellama--current-request
     (llm-cancel-request ellama--current-request)
-    (spinner-stop)
+    (when ellama-spinner-enabled
+      (require 'spinner)
+      (spinner-stop))
     (setq ellama--current-request nil)))
 
 (defun ellama--cancel-current-request-and-quit ()
@@ -1028,7 +1039,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 (defvar ellama--context-buffer " *ellama-context*")
 
-(defcustom ellama-context-posframe-enabled t
+(defcustom ellama-context-posframe-enabled nil
   "Enable showing posframe with ellama context."
   :group 'ellama
   :type 'boolean)
@@ -1040,8 +1051,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (setq ellama--global-context nil)
   (with-current-buffer ellama--context-buffer
     (erase-buffer))
-  (when ellama-context-posframe-enabled
-    (posframe-hide ellama--context-buffer)))
+  (ellama-update-context-show))
 
 ;; Context elements
 
@@ -1070,32 +1080,62 @@ If EPHEMERAL non nil new session will not be associated with any file."
   :group 'ellama
   :type 'integer)
 
-(defcustom ellama-context-element-padding-size 20
-  "Padding size for context elements."
-  :group 'ellama
-  :type 'integer)
-
-(defun ellama-update-context-posframe-show ()
-  "Update and show context posframe."
+(defun ellama-update-context-show ()
+  "Update and show context in posframe of header line."
+  (declare-function posframe-show "ext:posframe")
+  (declare-function posframe-hide "ext:posframe")
+  (with-current-buffer ellama--context-buffer
+    (erase-buffer)
+    (when ellama--global-context
+      (insert (format
+	       " ellama ctx: %s"
+	       (string-join
+		(mapcar
+		 (lambda (el)
+		   (ellama-context-element-display el))
+		 ellama--global-context)
+		"  ")))))
   (when ellama-context-posframe-enabled
-    (with-current-buffer ellama--context-buffer
-      (erase-buffer)
-      (when ellama--global-context
-	(insert (format
-		 "context: %s"
-		 (string-join
-		  (mapcar
-		   (lambda (el)
-		     (string-pad
-		      (ellama-context-element-display el) ellama-context-element-padding-size))
-		   ellama--global-context)
-		  "  ")))))
+    (require 'posframe)
     (if ellama--global-context
 	(posframe-show
 	 ellama--context-buffer
 	 :poshandler ellama-context-poshandler
 	 :internal-border-width ellama-context-border-width)
-      (posframe-hide ellama--context-buffer))))
+      (posframe-hide ellama--context-buffer)))
+  (ellama-context-update-header-line))
+
+(defun ellama-context-line ()
+  "Return current global context line."
+  (with-current-buffer ellama--context-buffer
+    (buffer-substring-no-properties
+     (point-min) (point-max))))
+
+;;;###autoload
+(define-minor-mode ellama-context-header-line-mode
+  "Toggle Ellama Context header line mode."
+  :group 'ellama
+  (add-hook 'window-state-change-hook #'ellama-context-update-header-line)
+  (if ellama-context-header-line-mode
+      (ellama-context-update-header-line)
+    (setq header-line-format (delete '(:eval (ellama-context-line)) header-line-format))))
+
+;;;###autoload
+(define-globalized-minor-mode ellama-context-header-line-global-mode
+  ellama-context-header-line-mode
+  ellama-context-header-line-mode)
+
+(defun ellama-context-turn-on-header-line-mode ()
+  "Turn on `ellama-context-header-line-mode' if appropriate."
+  (when (or (eq major-mode 'text-mode)
+            (derived-mode-p 'text-mode))
+    (ellama-context-header-line-mode 1)))
+
+(defun ellama-context-update-header-line ()
+  "Update and display context information in the header line."
+  (if (and ellama-context-header-line-mode ellama--global-context)
+      (add-to-list 'header-line-format '(:eval (ellama-context-line)) t)
+    (setq header-line-format (delete '(:eval (ellama-context-line)) header-line-format))))
 
 (cl-defmethod ellama-context-element-add ((element ellama-context-element))
   "Add the ELEMENT to the Ellama context."
@@ -1104,7 +1144,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	      :test #'equal-including-properties)
   (setf ellama--global-context (nreverse ellama--global-context))
   (get-buffer-create ellama--context-buffer t)
-  (ellama-update-context-posframe-show))
+  (ellama-update-context-show))
 
 (defcustom ellama-manage-context-display-action-function #'display-buffer-same-window
   "Display action function for `ellama-render-context'."
@@ -1203,7 +1243,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (when-let ((elt (get-text-property (point) 'context-element)))
     (ellama-remove-context-element elt)
     (ellama-manage-context)
-    (ellama-update-context-posframe-show)))
+    (ellama-update-context-show)))
 
 ;; Buffer context element
 
@@ -1803,6 +1843,8 @@ failure (with BUFFER current).
 
 :on-done ON-DONE -- ON-DONE a function or list of functions that's called with
  the full response text when the request completes (with BUFFER current)."
+  (declare-function spinner-start "ext:spinner")
+  (declare-function spinner-stop "ext:spinner")
   (let* ((session-id (plist-get args :session-id))
 	 (session (or (plist-get args :session)
 		      (when session-id
@@ -1869,7 +1911,9 @@ failure (with BUFFER current).
 	(setq ellama--change-group (prepare-change-group))
 	(activate-change-group ellama--change-group)
 	(ellama-set-markers start end point)
-	(spinner-start ellama-spinner-type)
+	(when ellama-spinner-enabled
+	  (require 'spinner)
+	  (spinner-start ellama-spinner-type))
 	(let ((request (llm-chat-streaming
 			provider
 			llm-prompt
@@ -1883,7 +1927,8 @@ failure (with BUFFER current).
 				      text)))
 			  (with-current-buffer buffer
 			    (accept-change-group ellama--change-group)
-			    (spinner-stop)
+			    (when ellama-spinner-enabled
+			      (spinner-stop))
 			    (if (and (listp donecb)
 				     (functionp (car donecb)))
 				(mapc (lambda (fn) (funcall fn text))
@@ -1907,7 +1952,8 @@ failure (with BUFFER current).
 			(lambda (_ msg)
 			  (with-current-buffer buffer
 			    (cancel-change-group ellama--change-group)
-			    (spinner-stop)
+			    (when ellama-spinner-enabled
+			      (spinner-stop))
 			    (funcall errcb msg)
 			    (setq ellama--current-request nil)
 			    (ellama-request-mode -1))))))
