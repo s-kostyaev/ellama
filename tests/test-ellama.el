@@ -380,7 +380,8 @@ $P_\\theta$
     (should (string-equal result "This"))))
 
 (ert-deftest test-ellama-md-to-org-code-snake-case ()
-  (let ((result (ellama--translate-markdown-to-org-filter "```python
+  (let* ((fill-column 70)
+	 (result (ellama--translate-markdown-to-org-filter "```python
 # Example of snake case variables and functions
 
 # Variable names using snake_case
