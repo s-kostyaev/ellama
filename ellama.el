@@ -2073,7 +2073,7 @@ A function for programmatically scrolling the buffer during text generation."
 	     (buf (or buffer (current-buffer)))
 	     (window (get-buffer-window buf)))
     (with-selected-window window
-      (when (ellama-chat-buffer-p buffer)
+      (when (ellama-chat-buffer-p buf)
 	(goto-char (point-max)))
       (recenter -1))))
 
