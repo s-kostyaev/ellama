@@ -1001,35 +1001,40 @@ If EPHEMERAL non nil new session will not be associated with any file."
 (defun ellama-session-rename ()
   "Rename current ellama session."
   (interactive)
-  (when-let* ((id (if ellama--current-session
-		      (ellama-session-id ellama--current-session)
-		    ellama--current-session-id))
-	      (buffer (ellama-get-session-buffer id))
-	      (session (with-current-buffer buffer
-			 ellama--current-session))
-	      (file-name (buffer-file-name buffer))
-	      (file-ext (file-name-extension file-name))
-	      (dir (file-name-directory file-name))
-	      (session-file-name (ellama--get-session-file-name file-name))
-	      (new-id (read-string
-		       "New session name: "
-		       id))
-	      (new-file-name (file-name-concat
-			      dir
-			      (concat new-id "." file-ext)))
-	      (new-session-file-name
-	       (ellama--get-session-file-name new-file-name)))
-    (with-current-buffer buffer
-      (set-visited-file-name new-file-name))
-    (when (file-exists-p file-name)
+  (let* ((id (if ellama--current-session
+		 (ellama-session-id ellama--current-session)
+	       ellama--current-session-id))
+	 (buffer (when id (ellama-get-session-buffer id)))
+	 (session (when buffer (with-current-buffer buffer
+				 ellama--current-session)))
+	 (file-name (when buffer (buffer-file-name buffer)))
+	 (file-ext (when file-name (file-name-extension file-name)))
+	 (dir (when file-name (file-name-directory file-name)))
+	 (session-file-name (when file-name (ellama--get-session-file-name file-name)))
+	 (new-id (read-string
+		  "New session name: "
+		  id))
+	 (new-file-name (when dir (file-name-concat
+				   dir
+				   (concat new-id "." file-ext))))
+	 (new-session-file-name
+	  (when new-file-name (ellama--get-session-file-name new-file-name))))
+    (when new-file-name (with-current-buffer buffer
+			  (set-visited-file-name new-file-name)))
+    (when buffer (with-current-buffer buffer
+		   (rename-buffer (or new-file-name new-id))))
+    (when (and file-name (file-exists-p file-name))
       (rename-file file-name new-file-name))
-    (when (file-exists-p session-file-name)
+    (when (and session-file-name (file-exists-p session-file-name))
       (rename-file session-file-name new-session-file-name))
-    (setf (ellama-session-id session) new-id)
+    (when session (setf (ellama-session-id session) new-id))
     (when (equal ellama--current-session-id id)
       (setq ellama--current-session-id new-id))
     (remhash id ellama--active-sessions)
-    (puthash new-id buffer ellama--active-sessions)))
+    (puthash new-id buffer ellama--active-sessions)
+    (when (and buffer ellama-session-auto-save)
+      (with-current-buffer buffer
+	(save-buffer)))))
 
 (defvar ellama--context-buffer " *ellama-context*")
 
