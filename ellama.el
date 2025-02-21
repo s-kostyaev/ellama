@@ -1137,17 +1137,37 @@ If EPHEMERAL non nil new session will not be associated with any file."
   ellama-context-header-line-mode
   ellama-context-header-line-mode)
 
-(defun ellama-context-turn-on-header-line-mode ()
-  "Turn on `ellama-context-header-line-mode' if appropriate."
-  (when (or (eq major-mode 'text-mode)
-            (derived-mode-p 'text-mode))
-    (ellama-context-header-line-mode 1)))
-
 (defun ellama-context-update-header-line ()
   "Update and display context information in the header line."
   (if (and ellama-context-header-line-mode ellama--global-context)
       (add-to-list 'header-line-format '(:eval (ellama-context-line)) t)
     (setq header-line-format (delete '(:eval (ellama-context-line)) header-line-format))))
+
+;;;###autoload
+(define-minor-mode ellama-context-mode-line-mode
+  "Toggle Ellama Context mode line mode."
+  :group 'ellama
+  (add-hook 'window-state-change-hook #'ellama-context-update-mode-line)
+  (if ellama-context-mode-line-mode
+      (ellama-context-update-mode-line)
+    (setq mode-line-format (delete '(:eval (ellama-context-line)) mode-line-format))))
+
+;;;###autoload
+(define-globalized-minor-mode ellama-context-mode-line-global-mode
+  ellama-context-mode-line-mode
+  ellama-context-mode-line-mode)
+
+(defun ellama-context-turn-on-mode-line-mode ()
+  "Turn on `ellama-context-mode-line-mode' if appropriate."
+  (when (or (eq major-mode 'text-mode)
+            (derived-mode-p 'text-mode))
+    (ellama-context-mode-line-mode 1)))
+
+(defun ellama-context-update-mode-line ()
+  "Update and display context information in the mode line."
+  (if (and ellama-context-mode-line-mode ellama--global-context)
+      (add-to-list 'mode-line-format '(:eval (ellama-context-line)) t)
+    (setq mode-line-format (delete '(:eval (ellama-context-line)) mode-line-format))))
 
 (cl-defmethod ellama-context-element-add ((element ellama-context-element))
   "Add the ELEMENT to the Ellama context."
