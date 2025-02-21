@@ -455,9 +455,8 @@ context-specific information.
 
 *Usage:*
 To enable or disable ~ellama-context-header-line-mode~, use the command:
-#+BEGIN_SRC emacs-lisp
-M-x ellama-context-header-line-mode
-#+END_SRC
+
+    M-x ellama-context-header-line-mode
 
 When enabled, this mode adds a hook to ~window-state-change-hook~ to update the header line whenever
 the window state changes. It also calls ~ellama-context-update-header-line~ to initialize the header
@@ -474,12 +473,45 @@ Globalized version of ~ellama-context-header-line-mode~. This mode ensures that
 
 *Usage:*
 To enable or disable ~ellama-context-header-line-global-mode~, use the command:
-#+BEGIN_SRC emacs-lisp
-M-x ellama-context-header-line-global-mode
-#+END_SRC
+
+    M-x ellama-context-header-line-global-mode
 
 This globalized minor mode provides a convenient way to ensure that context-specific header line
 information is always available, regardless of the buffer being edited.
+
+*** ellama-context-mode-line-mode
+
+*Description:*
+Toggle the Ellama Context mode line mode. This minor mode updates the mode line
+to display context-specific information.
+
+*Usage:*
+To enable or disable ~ellama-context-mode-line-mode~, use the command:
+
+    M-x ellama-context-mode-line-mode
+
+When enabled, this mode adds a hook to ~window-state-change-hook~ to update the
+mode line whenever the window state changes. It also calls
+~ellama-context-update-mode-line~ to initialize the mode line with
+context-specific information.
+
+When disabled, it removes the evaluation of ~(:eval (ellama-context-line))~ from
+~mode-line-format~.
+
+*** ellama-context-mode-line-global-mode
+
+*Description:*
+Globalized version of ~ellama-context-mode-line-mode~. This mode ensures that
+~ellama-context-mode-line-mode~ is enabled in all buffers.
+
+*Usage:*
+To enable or disable ~ellama-context-mode-line-global-mode~, use the command:
+
+    M-x ellama-context-mode-line-global-mode
+
+This globalized minor mode provides a convenient way to ensure that
+context-specific mode line information is always available, regardless of the
+buffer being edited.
 
 ** Acknowledgments
 
