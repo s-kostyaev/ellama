@@ -1,3 +1,5 @@
+* Version 1.2.5
+- Fix scroll function.
 * Version 1.2.4
 - Improve the default behavior of auto-scroll. It will now move the
   cursor to the end of the ellama-chat buffer and enable auto-scroll
