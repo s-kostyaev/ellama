@@ -1057,6 +1057,27 @@ If EPHEMERAL non nil new session will not be associated with any file."
     (erase-buffer))
   (ellama-update-context-show))
 
+(defun ellama-context--element-remove-by-name (name)
+  "Remove all context element that matches by NAME."
+  (setq ellama--global-context
+	(cl-remove-if (lambda (el)
+			(string= name (ellama-context-element-display el)))
+		      ellama--global-context)))
+
+;;;###autoload
+(defun ellama-context-element-remove-by-name ()
+  "Remove a context element by its name from the global context.
+This function prompts the user to select a context element from
+the list of unique elements currently present in the global
+context and removes it.  After removal, it updates the display of
+the context."
+  (interactive)
+  (ellama-context--element-remove-by-name
+   (completing-read
+    "Remove context element: "
+    (seq-uniq (mapcar #'ellama-context-element-display ellama--global-context))))
+  (ellama-update-context-show))
+
 ;; Context elements
 
 (defclass ellama-context-element () ()
@@ -3075,18 +3096,21 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 
 (transient-define-prefix ellama-transient-context-menu ()
   "Context Commands."
-  [["Context Commands"
-    :description (lambda ()
-		   (ellama-update-context-buffer)
-		   (format "Current context:
+  ["Context Commands"
+   :description (lambda ()
+		  (ellama-update-context-buffer)
+		  (format "Current context:
 %s" (with-current-buffer ellama-context-buffer
       (buffer-substring (point-min) (point-max)))))
+   ["Add"
     ("b" "Add Buffer" ellama-context-add-buffer)
     ("d" "Add Directory" ellama-context-add-directory)
     ("f" "Add File" ellama-context-add-file)
     ("s" "Add Selection" ellama-context-add-selection)
-    ("i" "Add Info Node" ellama-context-add-info-node)
+    ("i" "Add Info Node" ellama-context-add-info-node)]
+   ["Manage"
     ("m" "Manage context" ellama-manage-context)
+    ("D" "Delete element" ellama-context-element-remove-by-name)
     ("r" "Context reset" ellama-context-reset)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
