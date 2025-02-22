@@ -1212,10 +1212,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
   :keymap ellama-context-mode-map
   :group 'ellama)
 
-;;;###autoload
-(defun ellama-manage-context ()
-  "Manage the global context."
-  (interactive)
+(defun ellama-update-context-buffer ()
+  "Update ellama context buffer."
   (let* ((buf (get-buffer-create ellama-context-buffer))
          (inhibit-read-only t))
     (with-current-buffer buf
@@ -1226,11 +1224,17 @@ If EPHEMERAL non nil new session will not be associated with any file."
         (insert (ellama-context-element-display el))
         (put-text-property (pos-bol) (pos-eol) 'context-element el)
         (insert "\n"))
-      (goto-char (point-min))
-      (display-buffer
-       buf
-       (when ellama-manage-context-display-action-function
-	 `((ignore . (,ellama-manage-context-display-action-function))))))))
+      (goto-char (point-min)))))
+
+;;;###autoload
+(defun ellama-manage-context ()
+  "Manage the global context."
+  (interactive)
+  (ellama-update-context-buffer)
+  (display-buffer
+   ellama-context-buffer
+   (when ellama-manage-context-display-action-function
+     `((ignore . (,ellama-manage-context-display-action-function))))))
 
 (defvar-keymap ellama-preview-context-mode-map
   :doc "Local keymap for Ellama preview context mode buffers."
@@ -3072,6 +3076,11 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 (transient-define-prefix ellama-transient-context-menu ()
   "Context Commands."
   [["Context Commands"
+    :description (lambda ()
+		   (ellama-update-context-buffer)
+		   (format "Current context:
+%s" (with-current-buffer ellama-context-buffer
+      (buffer-substring (point-min) (point-max)))))
     ("b" "Add Buffer" ellama-context-add-buffer)
     ("d" "Add Directory" ellama-context-add-directory)
     ("f" "Add File" ellama-context-add-file)
