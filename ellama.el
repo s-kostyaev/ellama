@@ -1119,8 +1119,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	      'mouse-face 'header-line-format
 	      'face 'ellama-context-line-face
 	      'keymap (let ((m (make-sparse-keymap)))
-			(define-key m [header-line mouse-1] #'ellama-manage-context)
-			(define-key m [mode-line mouse-1] #'ellama-manage-context)
+			(define-key m [header-line mouse-1] #'ellama-transient-context-menu)
+			(define-key m [mode-line mouse-1] #'ellama-transient-context-menu)
 			m)))
 
 ;;;###autoload
