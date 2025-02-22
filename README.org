@@ -444,6 +444,8 @@ argument generated text string.
   ~display-buffer-same-window~.
 - ~ellama-preview-context-element-display-action-function~: Display
   action function for ~ellama-preview-context-element~.
+- ~ellama-context-line-always-visible~: Make context header or mode line always
+  visible, even with empty context.
 
 ** Minor modes
 

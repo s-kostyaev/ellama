@@ -131,6 +131,11 @@ Make reasoning models more useful for many cases."
   :group 'ellama
   :type 'boolean)
 
+(defcustom ellama-context-line-always-visible nil
+  "Make context header or mode line always visible, even with empty context."
+  :group 'ellama
+  :type 'boolean)
+
 (defcustom ellama-command-map
   (let ((map (make-sparse-keymap)))
     ;; code
@@ -1085,15 +1090,16 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (declare-function posframe-hide "ext:posframe")
   (with-current-buffer ellama--context-buffer
     (erase-buffer)
-    (when ellama--global-context
-      (insert (format
-	       " ellama ctx: %s"
-	       (string-join
-		(mapcar
-		 (lambda (el)
-		   (ellama-context-element-display el))
-		 ellama--global-context)
-		"  ")))))
+    (if ellama--global-context
+	(insert (format
+		 " ellama ctx: %s"
+		 (string-join
+		  (mapcar
+		   (lambda (el)
+		     (ellama-context-element-display el))
+		   ellama--global-context)
+		  "  ")))
+      (insert " ellama ctx")))
   (when ellama-context-posframe-enabled
     (require 'posframe)
     (if ellama--global-context
@@ -1139,7 +1145,9 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 (defun ellama-context-update-header-line ()
   "Update and display context information in the header line."
-  (if (and ellama-context-header-line-mode ellama--global-context)
+  (if (and ellama-context-header-line-mode
+	   (or ellama-context-line-always-visible
+	       ellama--global-context))
       (add-to-list 'header-line-format '(:eval (ellama-context-line)) t)
     (setq header-line-format (delete '(:eval (ellama-context-line)) header-line-format))))
 
@@ -1165,7 +1173,9 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 (defun ellama-context-update-mode-line ()
   "Update and display context information in the mode line."
-  (if (and ellama-context-mode-line-mode ellama--global-context)
+  (if (and ellama-context-mode-line-mode
+	   (or ellama-context-line-always-visible
+	       ellama--global-context))
       (add-to-list 'mode-line-format '(:eval (ellama-context-line)) t)
     (setq mode-line-format (delete '(:eval (ellama-context-line)) mode-line-format))))
 
