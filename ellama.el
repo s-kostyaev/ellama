@@ -1228,7 +1228,9 @@ the context."
   "d"       #'ellama-remove-context-element-at-point
   "RET"     #'ellama-preview-context-element-at-point)
 
-(define-minor-mode ellama-context-mode
+(define-derived-mode ellama-context-mode
+  fundamental-mode
+  "ellama-ctx"
   "Toggle Ellama Context mode."
   :keymap ellama-context-mode-map
   :group 'ellama)
@@ -1239,7 +1241,7 @@ the context."
          (inhibit-read-only t))
     (with-current-buffer buf
       (read-only-mode +1)
-      (ellama-context-mode +1)
+      (ellama-context-mode)
       (erase-buffer)
       (dolist (el ellama--global-context)
         (insert (ellama-context-element-display el))
