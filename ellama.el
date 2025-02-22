@@ -5,8 +5,8 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (spinner "1.7.4") (transient "0.7") (compat "29.1") (posframe "1.4.0"))
-;; Version: 1.2.5
+;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (transient "0.7") (compat "29.1"))
+;; Version: 1.3.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -38,10 +38,8 @@
 (require 'eieio)
 (require 'llm)
 (require 'llm-provider-utils)
-(require 'spinner)
 (require 'transient)
 (require 'compat)
-(require 'posframe)
 (eval-when-compile (require 'rx))
 
 (defgroup ellama nil
@@ -116,13 +114,22 @@ Make reasoning models more useful for many cases."
   :type '(alist :key-type string
 		:value-type (sexp :validate llm-standard-provider-p)))
 
+(defvar spinner-types)
+
 (defcustom ellama-spinner-type 'progress-bar
   "Spinner type for ellama."
   :group 'ellama
-  :type `(choice ,@(mapcar
-		    (lambda (type)
-		      `(const ,(car type)))
-		    spinner-types)))
+  :type `(choice ,@(if (boundp 'spinner-types)
+		       (mapcar
+			(lambda (type)
+			  `(const ,(car type)))
+			spinner-types)
+		     '(const progress-bar))))
+
+(defcustom ellama-spinner-enabled nil
+  "Enable spinner during text generation."
+  :group 'ellama
+  :type 'boolean)
 
 (defcustom ellama-command-map
   (let ((map (make-sparse-keymap)))
@@ -140,7 +147,7 @@ Make reasoning models more useful for many cases."
     ;; session
     (define-key map (kbd "s l") 'ellama-load-session)
     (define-key map (kbd "s r") 'ellama-session-rename)
-    (define-key map (kbd "s d") 'ellama-session-remove)
+    (define-key map (kbd "s d") 'ellama-session-delete)
     (define-key map (kbd "s a") 'ellama-session-switch)
     ;; improve
     (define-key map (kbd "i w") 'ellama-improve-wording)
@@ -449,12 +456,6 @@ It should be a function with single argument generated text string."
   :group 'ellama
   :type 'symbol)
 
-(defcustom ellama-long-lines-length 100
-  "Long lines length for fill paragraph call.
-Too low value can break generated code by splitting long comment lines."
-  :group 'ellama
-  :type 'integer)
-
 (defcustom ellama-translate-italic t
   "Translate italic during markdown to org transformations."
   :group 'ellama
@@ -494,6 +495,7 @@ Too low value can break generated code by splitting long comment lines."
 (define-minor-mode ellama-request-mode
   "Minor mode for ellama buffers with active request to llm."
   :interactive nil
+  :lighter " ellama:generating"
   :keymap '(([remap keyboard-quit] . ellama--cancel-current-request-and-quit))
   (if ellama-request-mode
       (add-hook 'kill-buffer-hook 'ellama--cancel-current-request nil t)
@@ -522,8 +524,7 @@ Too low value can break generated code by splitting long comment lines."
   (if ellama-fill-paragraphs
       (with-temp-buffer
 	(insert (propertize text 'hard t))
-	(let ((fill-column ellama-long-lines-length)
-	      (use-hard-newlines t))
+	(let ((use-hard-newlines t))
 	  (fill-region (point-min) (point-max) nil t t))
 	(buffer-substring-no-properties (point-min) (point-max)))
     text))
@@ -587,8 +588,7 @@ Too low value can break generated code by splitting long comment lines."
   ;; filling long lines
   (goto-char beg)
   (when ellama-fill-paragraphs
-    (let ((fill-column ellama-long-lines-length)
-	  (use-hard-newlines t))
+    (let ((use-hard-newlines t))
       (fill-region beg end nil t t))))
 
 (defun ellama--replace-outside-of-code-blocks (text)
@@ -823,9 +823,12 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 (defun ellama--cancel-current-request ()
   "Cancel current running request."
+  (declare-function spinner-stop "ext:spinner")
   (when ellama--current-request
     (llm-cancel-request ellama--current-request)
-    (spinner-stop)
+    (when ellama-spinner-enabled
+      (require 'spinner)
+      (spinner-stop))
     (setq ellama--current-request nil)))
 
 (defun ellama--cancel-current-request-and-quit ()
@@ -953,27 +956,29 @@ If EPHEMERAL non nil new session will not be associated with any file."
 			     `((ignore . (,ellama-chat-display-action-function)))))))
 
 ;;;###autoload
-(defun ellama-session-remove ()
-  "Remove ellama session."
+(defun ellama-session-delete ()
+  "Delete ellama session."
   (interactive)
   (let* ((id (completing-read
 	      "Select session to remove: "
 	      (hash-table-keys ellama--active-sessions)))
 	 (buffer (ellama-get-session-buffer id))
 	 (file (buffer-file-name buffer))
-	 (session-file (ellama--get-session-file-name file))
-	 (translation-file (ellama--get-translation-file-name file)))
+	 (session-file (when file (ellama--get-session-file-name file)))
+	 (translation-file (when file (ellama--get-translation-file-name file))))
     (kill-buffer buffer)
-    (delete-file file t)
-    (delete-file session-file t)
+    (when file (delete-file file t))
+    (when session-file (delete-file session-file t))
     (mapc
      (lambda (buf)
-       (when (and (buffer-file-name buf)
-		  (file-equal-p (buffer-file-name buf)
-				translation-file))
+       (when (and
+	      translation-file
+	      (buffer-file-name buf)
+	      (file-equal-p (buffer-file-name buf)
+			    translation-file))
 	 (kill-buffer buf)))
      (buffer-list))
-    (when (file-exists-p translation-file)
+    (when (and translation-file (file-exists-p translation-file))
       (delete-file translation-file t))))
 
 (defun ellama-activate-session (id)
@@ -996,39 +1001,44 @@ If EPHEMERAL non nil new session will not be associated with any file."
 (defun ellama-session-rename ()
   "Rename current ellama session."
   (interactive)
-  (when-let* ((id (if ellama--current-session
-		      (ellama-session-id ellama--current-session)
-		    ellama--current-session-id))
-	      (buffer (ellama-get-session-buffer id))
-	      (session (with-current-buffer buffer
-			 ellama--current-session))
-	      (file-name (buffer-file-name buffer))
-	      (file-ext (file-name-extension file-name))
-	      (dir (file-name-directory file-name))
-	      (session-file-name (ellama--get-session-file-name file-name))
-	      (new-id (read-string
-		       "New session name: "
-		       id))
-	      (new-file-name (file-name-concat
-			      dir
-			      (concat new-id "." file-ext)))
-	      (new-session-file-name
-	       (ellama--get-session-file-name new-file-name)))
-    (with-current-buffer buffer
-      (set-visited-file-name new-file-name))
-    (when (file-exists-p file-name)
+  (let* ((id (if ellama--current-session
+		 (ellama-session-id ellama--current-session)
+	       ellama--current-session-id))
+	 (buffer (when id (ellama-get-session-buffer id)))
+	 (session (when buffer (with-current-buffer buffer
+				 ellama--current-session)))
+	 (file-name (when buffer (buffer-file-name buffer)))
+	 (file-ext (when file-name (file-name-extension file-name)))
+	 (dir (when file-name (file-name-directory file-name)))
+	 (session-file-name (when file-name (ellama--get-session-file-name file-name)))
+	 (new-id (read-string
+		  "New session name: "
+		  id))
+	 (new-file-name (when dir (file-name-concat
+				   dir
+				   (concat new-id "." file-ext))))
+	 (new-session-file-name
+	  (when new-file-name (ellama--get-session-file-name new-file-name))))
+    (when new-file-name (with-current-buffer buffer
+			  (set-visited-file-name new-file-name)))
+    (when buffer (with-current-buffer buffer
+		   (rename-buffer (or new-file-name new-id))))
+    (when (and file-name (file-exists-p file-name))
       (rename-file file-name new-file-name))
-    (when (file-exists-p session-file-name)
+    (when (and session-file-name (file-exists-p session-file-name))
       (rename-file session-file-name new-session-file-name))
-    (setf (ellama-session-id session) new-id)
+    (when session (setf (ellama-session-id session) new-id))
     (when (equal ellama--current-session-id id)
       (setq ellama--current-session-id new-id))
     (remhash id ellama--active-sessions)
-    (puthash new-id buffer ellama--active-sessions)))
+    (puthash new-id buffer ellama--active-sessions)
+    (when (and buffer ellama-session-auto-save)
+      (with-current-buffer buffer
+	(save-buffer)))))
 
 (defvar ellama--context-buffer " *ellama-context*")
 
-(defcustom ellama-context-posframe-enabled t
+(defcustom ellama-context-posframe-enabled nil
   "Enable showing posframe with ellama context."
   :group 'ellama
   :type 'boolean)
@@ -1040,8 +1050,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (setq ellama--global-context nil)
   (with-current-buffer ellama--context-buffer
     (erase-buffer))
-  (when ellama-context-posframe-enabled
-    (posframe-hide ellama--context-buffer)))
+  (ellama-update-context-show))
 
 ;; Context elements
 
@@ -1070,32 +1079,95 @@ If EPHEMERAL non nil new session will not be associated with any file."
   :group 'ellama
   :type 'integer)
 
-(defcustom ellama-context-element-padding-size 20
-  "Padding size for context elements."
-  :group 'ellama
-  :type 'integer)
-
-(defun ellama-update-context-posframe-show ()
-  "Update and show context posframe."
+(defun ellama-update-context-show ()
+  "Update and show context in posframe of header line."
+  (declare-function posframe-show "ext:posframe")
+  (declare-function posframe-hide "ext:posframe")
+  (with-current-buffer ellama--context-buffer
+    (erase-buffer)
+    (when ellama--global-context
+      (insert (format
+	       " ellama ctx: %s"
+	       (string-join
+		(mapcar
+		 (lambda (el)
+		   (ellama-context-element-display el))
+		 ellama--global-context)
+		"  ")))))
   (when ellama-context-posframe-enabled
-    (with-current-buffer ellama--context-buffer
-      (erase-buffer)
-      (when ellama--global-context
-	(insert (format
-		 "context: %s"
-		 (string-join
-		  (mapcar
-		   (lambda (el)
-		     (string-pad
-		      (ellama-context-element-display el) ellama-context-element-padding-size))
-		   ellama--global-context)
-		  "  ")))))
+    (require 'posframe)
     (if ellama--global-context
 	(posframe-show
 	 ellama--context-buffer
 	 :poshandler ellama-context-poshandler
 	 :internal-border-width ellama-context-border-width)
-      (posframe-hide ellama--context-buffer))))
+      (posframe-hide ellama--context-buffer)))
+  (ellama-context-update-header-line))
+
+(defface ellama-face '((t (:inherit shadow)))
+  "Base face for all ellama things.")
+
+(defface ellama-context-line-face '((t (:inherit (mode-line-buffer-id ellama-face))))
+  "Face for ellama context line.")
+
+(defun ellama-context-line ()
+  "Return current global context line."
+  (propertize (with-current-buffer ellama--context-buffer
+		(buffer-substring-no-properties
+		 (point-min) (point-max)))
+	      'help-echo "mouse-1: manage ellama context"
+	      'mouse-face 'header-line-format
+	      'face 'ellama-context-line-face
+	      'keymap (let ((m (make-sparse-keymap)))
+			(define-key m [header-line mouse-1] #'ellama-transient-context-menu)
+			(define-key m [mode-line mouse-1] #'ellama-transient-context-menu)
+			m)))
+
+;;;###autoload
+(define-minor-mode ellama-context-header-line-mode
+  "Toggle Ellama Context header line mode."
+  :group 'ellama
+  (add-hook 'window-state-change-hook #'ellama-context-update-header-line)
+  (if ellama-context-header-line-mode
+      (ellama-context-update-header-line)
+    (setq header-line-format (delete '(:eval (ellama-context-line)) header-line-format))))
+
+;;;###autoload
+(define-globalized-minor-mode ellama-context-header-line-global-mode
+  ellama-context-header-line-mode
+  ellama-context-header-line-mode)
+
+(defun ellama-context-update-header-line ()
+  "Update and display context information in the header line."
+  (if (and ellama-context-header-line-mode ellama--global-context)
+      (add-to-list 'header-line-format '(:eval (ellama-context-line)) t)
+    (setq header-line-format (delete '(:eval (ellama-context-line)) header-line-format))))
+
+;;;###autoload
+(define-minor-mode ellama-context-mode-line-mode
+  "Toggle Ellama Context mode line mode."
+  :group 'ellama
+  (add-hook 'window-state-change-hook #'ellama-context-update-mode-line)
+  (if ellama-context-mode-line-mode
+      (ellama-context-update-mode-line)
+    (setq mode-line-format (delete '(:eval (ellama-context-line)) mode-line-format))))
+
+;;;###autoload
+(define-globalized-minor-mode ellama-context-mode-line-global-mode
+  ellama-context-mode-line-mode
+  ellama-context-mode-line-mode)
+
+(defun ellama-context-turn-on-mode-line-mode ()
+  "Turn on `ellama-context-mode-line-mode' if appropriate."
+  (when (or (eq major-mode 'text-mode)
+            (derived-mode-p 'text-mode))
+    (ellama-context-mode-line-mode 1)))
+
+(defun ellama-context-update-mode-line ()
+  "Update and display context information in the mode line."
+  (if (and ellama-context-mode-line-mode ellama--global-context)
+      (add-to-list 'mode-line-format '(:eval (ellama-context-line)) t)
+    (setq mode-line-format (delete '(:eval (ellama-context-line)) mode-line-format))))
 
 (cl-defmethod ellama-context-element-add ((element ellama-context-element))
   "Add the ELEMENT to the Ellama context."
@@ -1104,7 +1176,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	      :test #'equal-including-properties)
   (setf ellama--global-context (nreverse ellama--global-context))
   (get-buffer-create ellama--context-buffer t)
-  (ellama-update-context-posframe-show))
+  (ellama-update-context-show))
 
 (defcustom ellama-manage-context-display-action-function #'display-buffer-same-window
   "Display action function for `ellama-render-context'."
@@ -1203,7 +1275,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (when-let ((elt (get-text-property (point) 'context-element)))
     (ellama-remove-context-element elt)
     (ellama-manage-context)
-    (ellama-update-context-posframe-show)))
+    (ellama-update-context-show)))
 
 ;; Buffer context element
 
@@ -1450,7 +1522,6 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (with-temp-buffer
     (insert (propertize content 'hard t))
     (let ((fill-prefix "> ")
-	  (fill-column ellama-long-lines-length)
 	  (use-hard-newlines t)
 	  (comment-start ">")
 	  (comment-empty-lines t))
@@ -1803,6 +1874,8 @@ failure (with BUFFER current).
 
 :on-done ON-DONE -- ON-DONE a function or list of functions that's called with
  the full response text when the request completes (with BUFFER current)."
+  (declare-function spinner-start "ext:spinner")
+  (declare-function spinner-stop "ext:spinner")
   (let* ((session-id (plist-get args :session-id))
 	 (session (or (plist-get args :session)
 		      (when session-id
@@ -1869,7 +1942,9 @@ failure (with BUFFER current).
 	(setq ellama--change-group (prepare-change-group))
 	(activate-change-group ellama--change-group)
 	(ellama-set-markers start end point)
-	(spinner-start ellama-spinner-type)
+	(when ellama-spinner-enabled
+	  (require 'spinner)
+	  (spinner-start ellama-spinner-type))
 	(let ((request (llm-chat-streaming
 			provider
 			llm-prompt
@@ -1883,7 +1958,8 @@ failure (with BUFFER current).
 				      text)))
 			  (with-current-buffer buffer
 			    (accept-change-group ellama--change-group)
-			    (spinner-stop)
+			    (when ellama-spinner-enabled
+			      (spinner-stop))
 			    (if (and (listp donecb)
 				     (functionp (car donecb)))
 				(mapc (lambda (fn) (funcall fn text))
@@ -1907,7 +1983,8 @@ failure (with BUFFER current).
 			(lambda (_ msg)
 			  (with-current-buffer buffer
 			    (cancel-change-group ellama--change-group)
-			    (spinner-stop)
+			    (when ellama-spinner-enabled
+			      (spinner-stop))
 			    (funcall errcb msg)
 			    (setq ellama--current-request nil)
 			    (ellama-request-mode -1))))))
@@ -2944,7 +3021,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
   [["Session Commands"
     ("l" "Load Session" ellama-load-session)
     ("r" "Rename Session" ellama-session-rename)
-    ("d" "Remove Session" ellama-session-remove)
+    ("d" "Delete Session" ellama-session-delete)
     ("a" "Activate Session" ellama-session-switch)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 

@@ -251,70 +251,70 @@
 ```tex
 \\documentclass{article}
 \\usepackage{tikz} \\begin{document}
-\\begin{tikzpicture} \\node[rectangle, draw=blue, fill=blue!20] (mynode) {Text};
+\\begin{tikzpicture} \\node[rectangle, draw=blue] (mynode) {Text};
 \\end{tikzpicture}
 \\end{document}
 ```
 This code will create a rectangle with a blue border and light
-blue filling. You can replace \'Text\' with your desired text or other TikZ
-elements.")))
+blue filling. You can replace \'Text\' with your desired text
+or other TikZ elements.")))
     (should (string-equal result "Here is your TikZ code for a blue rectangle:
 #+BEGIN_SRC tex
 \\documentclass{article}
 \\usepackage{tikz} \\begin{document}
-\\begin{tikzpicture} \\node[rectangle, draw=blue, fill=blue!20] (mynode) {Text};
+\\begin{tikzpicture} \\node[rectangle, draw=blue] (mynode) {Text};
 \\end{tikzpicture}
 \\end{document}
 #+END_SRC
 This code will create a rectangle with a blue border and light
-blue filling. You can replace \'Text\' with your desired text or other TikZ
-elements."))))
+blue filling. You can replace \'Text\' with your desired text
+or other TikZ elements."))))
 
 (ert-deftest test-ellama-md-to-org-code-hard ()
   (let ((result (ellama--translate-markdown-to-org-filter "Here is your TikZ code for a blue rectangle:
 ```
 \\documentclass{article}
 \\usepackage{tikz} \\begin{document}
-\\begin{tikzpicture} \\node[rectangle, draw=blue, fill=blue!20] (mynode) {Text};
+\\begin{tikzpicture} \\node[rectangle, draw=blue] (mynode) {Text};
 \\end{tikzpicture}
 \\end{document}
 ```
 This code will create a rectangle with a blue border and light
-blue filling. You can replace \'Text\' with your desired text or other TikZ
-elements.")))
+blue filling. You can replace \'Text\' with your desired text or other
+TikZ elements.")))
     (should (string-equal result "Here is your TikZ code for a blue rectangle:
 #+BEGIN_SRC
 \\documentclass{article}
 \\usepackage{tikz} \\begin{document}
-\\begin{tikzpicture} \\node[rectangle, draw=blue, fill=blue!20] (mynode) {Text};
+\\begin{tikzpicture} \\node[rectangle, draw=blue] (mynode) {Text};
 \\end{tikzpicture}
 \\end{document}
 #+END_SRC
 This code will create a rectangle with a blue border and light
-blue filling. You can replace \'Text\' with your desired text or other TikZ
-elements."))))
+blue filling. You can replace \'Text\' with your desired text or other
+TikZ elements."))))
 
 (ert-deftest test-ellama-md-to-org-code-nightmare ()
   (let ((result (ellama--translate-markdown-to-org-filter "Here is your TikZ code for a blue rectangle:
 ```
 \\documentclass{article}
 \\usepackage{tikz} \\begin{document}
-\\begin{tikzpicture} \\node[rectangle, draw=blue, fill=blue!20] (mynode) {Text};
+\\begin{tikzpicture} \\node[rectangle, draw=blue] (mynode) {Text};
 \\end{tikzpicture}
 \\end{document}```This code will create a rectangle with a blue border and light
-blue filling. You can replace \'Text\' with your desired text or other TikZ
-elements.")))
+blue filling. You can replace \'Text\' with your desired text
+or other TikZ elements.")))
     (should (string-equal result "Here is your TikZ code for a blue rectangle:
 #+BEGIN_SRC
 \\documentclass{article}
 \\usepackage{tikz} \\begin{document}
-\\begin{tikzpicture} \\node[rectangle, draw=blue, fill=blue!20] (mynode) {Text};
+\\begin{tikzpicture} \\node[rectangle, draw=blue] (mynode) {Text};
 \\end{tikzpicture}
 \\end{document}
 #+END_SRC
 This code will create a rectangle with a blue border and light
-blue filling. You can replace \'Text\' with your desired text or other TikZ
-elements."))))
+blue filling. You can replace \'Text\' with your desired text
+or other TikZ elements."))))
 
 (ert-deftest test-ellama-md-to-org-code-multiple-bad-blocks ()
   (let ((result (ellama--translate-markdown-to-org-filter "Some text:
@@ -380,7 +380,8 @@ $P_\\theta$
     (should (string-equal result "This"))))
 
 (ert-deftest test-ellama-md-to-org-code-snake-case ()
-  (let ((result (ellama--translate-markdown-to-org-filter "```python
+  (let* ((fill-column 70)
+	 (result (ellama--translate-markdown-to-org-filter "```python
 # Example of snake case variables and functions
 
 # Variable names using snake_case
@@ -407,27 +408,7 @@ In this example:
 - The function name `calculate_average_score` also follows the snake_case convention.
 
 Snake case helps improve readability, especially in languages that are sensitive to capitalization like Python.")))
-    (should (string-equal result "#+BEGIN_SRC python
-# Example of snake case variables and functions
-
-# Variable names using snake_case
-student_name = \"Alice Johnson\"
-class_name = \"Mathematics\"
-grade_level = 10
-
-# Function name using snake_case
-def calculate_average_score(math_score, science_score, english_score):
-    average_score = (math_score + science_score + english_score) / 3
-    return average_score
-
-# Using the function
-student_math_score = 85
-student_science_score = 90
-student_english_score = 78
-
-average_score = calculate_average_score(student_math_score, student_science_score, student_english_score)
-print(f\"The average score of {student_name} in {class_name} is: {average_score:.2f}\")
-#+END_SRC\n\nIn this example:\n- Variable names like ~student/name~, ~class/name~, and ~grade/level~ use snake/case.\n- The function name ~calculate/average/score~ also follows the snake_case convention.\n\nSnake case helps improve readability, especially in languages that are sensitive to capitalization\nlike Python."))))
+    (should (string-equal result "#+BEGIN_SRC python\n# Example of snake case variables and functions\n\n# Variable names using snake_case\nstudent_name = \"Alice Johnson\"\nclass_name = \"Mathematics\"\ngrade_level = 10\n\n# Function name using snake_case\ndef calculate_average_score(math_score, science_score, english_score):\n    average_score = (math_score + science_score + english_score) / 3\n    return average_score\n\n# Using the function\nstudent_math_score = 85\nstudent_science_score = 90\nstudent_english_score = 78\n\naverage_score = calculate_average_score(student_math_score, student_science_score, student_english_score)\nprint(f\"The average score of {student_name} in {class_name} is: {average_score:.2f}\")\n#+END_SRC\n\nIn this example:\n- Variable names like ~student/name~, ~class/name~, and ~grade/level~\n  use snake/case.\n- The function name ~calculate/average/score~ also follows the\n  snake_case convention.\n\nSnake case helps improve readability, especially in languages that are\nsensitive to capitalization like Python."))))
 
 (ert-deftest test-ellama--fix-file-name ()
   (should (string=
