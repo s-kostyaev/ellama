@@ -320,6 +320,16 @@ provides much better results on reasoning tasks using AoT.
 Solve domain specific problem with simple chain. It makes LLMs act
 like a professional and adds a planning step.
 
+*** ellama-community-prompts-select-blueprint
+
+Select a prompt from the community prompt collection.
+The user is prompted to choose a role, and then a
+corresponding prompt is inserted into a blueprint buffer.
+
+*** ellama-community-prompts-update-variables
+
+Prompt user for values of variables found in current buffer and update them.
+
 ** Keymap
 
 In any buffer where there is active ellama streaming, you can press
@@ -446,6 +456,10 @@ argument generated text string.
   action function for ~ellama-preview-context-element~.
 - ~ellama-context-line-always-visible~: Make context header or mode line always
   visible, even with empty context.
+- ~ellama-community-prompts-url~: The URL of the community prompts collection.
+- ~ellama-community-prompts-file~: Path to the CSV file containing community prompts.
+  This file is expected to be located inside an ~ellama~ subdirectory
+  within your ~user-emacs-directory~.
 
 ** Minor modes
 

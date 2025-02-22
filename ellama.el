@@ -1237,6 +1237,30 @@ the context."
   :keymap ellama-context-mode-map
   :group 'ellama)
 
+;;;###autoload
+(defun ellama-send-buffer-to-new-chat ()
+  "Send current buffer to new chat session."
+  (interactive)
+  (ellama-chat
+   (buffer-substring-no-properties (point-min) (point-max))
+   t))
+
+(defvar-keymap ellama-blueprint-mode-map
+  :doc "Local keymap for Ellama blueprint mode buffers."
+  :parent global-map
+  "C-c C-c" #'ellama-send-buffer-to-new-chat
+  "C-c C-k" (lambda () (interactive) (kill-buffer (current-buffer))))
+
+;;;###autoload
+(define-derived-mode ellama-blueprint-mode
+  fundamental-mode
+  "ellama-blueprint"
+  "Toggle Ellama Blueprint mode."
+  :keymap ellama-blueprint-mode-map
+  :group 'ellama
+  (setq header-line-format
+	"'C-c C-c' to send  'C-c C-k' to cancel"))
+
 (defun ellama-update-context-buffer ()
   "Update ellama context buffer."
   (let* ((buf (get-buffer-create ellama-context-buffer))
@@ -3121,7 +3145,8 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 (transient-define-prefix ellama-transient-main-menu ()
   "Main Menu."
   ["Main"
-   [("c" "Chat" ellama-chat)]
+   [("c" "Chat" ellama-chat)
+    ("B" "Community blueprint" ellama-community-prompts-select-blueprint)]
    [("a" "Ask Commands" ellama-transient-ask-menu)
     ("C" "Code Commands" ellama-transient-code-menu)]]
   ["Text"
