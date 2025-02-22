@@ -147,7 +147,7 @@ Make reasoning models more useful for many cases."
     ;; session
     (define-key map (kbd "s l") 'ellama-load-session)
     (define-key map (kbd "s r") 'ellama-session-rename)
-    (define-key map (kbd "s d") 'ellama-session-remove)
+    (define-key map (kbd "s d") 'ellama-session-delete)
     (define-key map (kbd "s a") 'ellama-session-switch)
     ;; improve
     (define-key map (kbd "i w") 'ellama-improve-wording)
@@ -956,8 +956,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
 			     `((ignore . (,ellama-chat-display-action-function)))))))
 
 ;;;###autoload
-(defun ellama-session-remove ()
-  "Remove ellama session."
+(defun ellama-session-delete ()
+  "Delete ellama session."
   (interactive)
   (let* ((id (completing-read
 	      "Select session to remove: "
@@ -3021,7 +3021,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
   [["Session Commands"
     ("l" "Load Session" ellama-load-session)
     ("r" "Rename Session" ellama-session-rename)
-    ("d" "Remove Session" ellama-session-remove)
+    ("d" "Delete Session" ellama-session-delete)
     ("a" "Activate Session" ellama-session-switch)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 

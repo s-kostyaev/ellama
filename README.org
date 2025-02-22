@@ -242,9 +242,9 @@ as a specified format using Ellama.
 
 Load ellama session from file.
 
-*** ellama-session-remove
+*** ellama-session-delete
 
-Remove ellama session.
+Delete ellama session.
 
 *** ellama-session-switch
 
@@ -342,7 +342,7 @@ Ellama, using the ~ellama-keymap-prefix~ prefix (not set by default):
 | "s c"  | ellama-summarize-killring       | Summarize killring           |
 | "s l"  | ellama-load-session             | Session Load                 |
 | "s r"  | ellama-session-rename           | Session rename               |
-| "s d"  | ellama-session-remove           | Session delete               |
+| "s d"  | ellama-session-delete           | Delete delete                |
 | "s a"  | ellama-session-switch           | Session activate             |
 | "P"    | ellama-proofread                | Proofread                    |
 | "i w"  | ellama-improve-wording          | Improve wording              |
