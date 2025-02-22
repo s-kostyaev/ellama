@@ -3072,25 +3072,25 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 
 (transient-define-prefix ellama-transient-main-menu ()
   "Main Menu."
-  [["Main"
-    ("c" "Chat" ellama-chat)
-    ("w" "Write" ellama-write)
+  ["Main"
+   [("c" "Chat" ellama-chat)]
+   [("a" "Ask Commands" ellama-transient-ask-menu)
+    ("C" "Code Commands" ellama-transient-code-menu)]]
+  ["Text"
+   [("w" "Write" ellama-write)
     ("P" "Proofread" ellama-proofread)
-    ("a" "Ask Commands" ellama-transient-ask-menu)
-    ("C" "Code Commands" ellama-transient-code-menu)
-    ("o" "Ollama model" ellama-select-ollama-model)]]
-  [["Text"
-    ("s" "Summarize Commands" ellama-transient-summarize-menu)
-    ("i" "Improve Commands" ellama-transient-improve-menu)
-    ("t" "Translate Commands" ellama-transient-translate-menu)
-    ("m" "Make Commands" ellama-transient-make-menu)
     ("k" "Text Complete" ellama-complete)
     ("g" "Text change" ellama-change)
-    ("d" "Define word" ellama-define-word)]]
-  [["System"
-    ("S" "Session Commands" ellama-transient-session-menu)
-    ("x" "Context Commands" ellama-transient-context-menu)
-    ("p" "Provider selection" ellama-provider-select)]]
+    ("d" "Define word" ellama-define-word)]
+   [("s" "Summarize Commands" ellama-transient-summarize-menu)
+    ("i" "Improve Commands" ellama-transient-improve-menu)
+    ("t" "Translate Commands" ellama-transient-translate-menu)
+    ("m" "Make Commands" ellama-transient-make-menu)]]
+  ["System"
+   [("o" "Ollama model" ellama-select-ollama-model)
+    ("p" "Provider selection" ellama-provider-select)]
+   [("S" "Session Commands" ellama-transient-session-menu)
+    ("x" "Context Commands" ellama-transient-context-menu)]]
   [["Problem solving"
     ("R" "Solve reasoning problem" ellama-solve-reasoning-problem)
     ("D" "Solve domain specific problem" ellama-solve-domain-specific-problem)]]
