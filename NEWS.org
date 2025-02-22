@@ -1,3 +1,11 @@
+* Version 1.3.0
+- Implemented ellama context header line and mode line features.
+- Added ~ellama-context-header-line-mode~, ~ellama-context-mode-line-mode~ and
+  its global versions.
+- Session renaming functionality improvements.
+- Improved session deletion.
+- Renamed ~ellama-session-remove~ to ~ellama-session-delete~.
+- Removed ~ellama-long-lines-length~ customization and related usage
 * Version 1.2.5
 - Fix scroll function.
 * Version 1.2.4
