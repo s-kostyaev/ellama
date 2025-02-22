@@ -2951,6 +2951,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
     ("f" "Load from provider" ellama-transient-model-get-from-provider
      :transient t)
     ("F" "Load from current session" ellama-transient-model-get-from-current-session
+     :description (lambda () (format "Load from current session (%s)" ellama--current-session-id))
      :transient t)
     ("m" "Set Model" ellama-transient-set-ollama-model
      :transient t
