@@ -1157,7 +1157,8 @@ the context."
   (add-hook 'window-state-change-hook #'ellama-context-update-header-line)
   (if ellama-context-header-line-mode
       (ellama-context-update-header-line)
-    (setq header-line-format (delete '(:eval (ellama-context-line)) header-line-format))))
+    (when (listp header-line-format)
+      (setq header-line-format (delete '(:eval (ellama-context-line)) header-line-format)))))
 
 ;;;###autoload
 (define-globalized-minor-mode ellama-context-header-line-global-mode
@@ -1166,11 +1167,12 @@ the context."
 
 (defun ellama-context-update-header-line ()
   "Update and display context information in the header line."
-  (if (and ellama-context-header-line-mode
-	   (or ellama-context-line-always-visible
-	       ellama--global-context))
-      (add-to-list 'header-line-format '(:eval (ellama-context-line)) t)
-    (setq header-line-format (delete '(:eval (ellama-context-line)) header-line-format))))
+  (when (listp header-line-format)
+    (if (and ellama-context-header-line-mode
+	     (or ellama-context-line-always-visible
+		 ellama--global-context))
+	(add-to-list 'header-line-format '(:eval (ellama-context-line)) t)
+      (setq header-line-format (delete '(:eval (ellama-context-line)) header-line-format)))))
 
 ;;;###autoload
 (define-minor-mode ellama-context-mode-line-mode
