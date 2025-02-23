@@ -3157,7 +3157,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
   "Main Menu."
   ["Main"
    [("c" "Chat" ellama-chat)
-    ("B" "Community blueprint" ellama-community-prompts-select-blueprint)]
+    ("B" "Chat with community blueprint" ellama-community-prompts-select-blueprint)]
    [("a" "Ask Commands" ellama-transient-ask-menu)
     ("C" "Code Commands" ellama-transient-code-menu)]]
   ["Text"
