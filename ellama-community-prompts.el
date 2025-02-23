@@ -154,7 +154,7 @@ Optional argument FOR-DEVS filters prompts for developers."
   (let ((acts '())
         selected-act selected-prompt)
     ;; Collect unique acts from the filtered collection
-    (dolist (prompt ellama-community-prompts-collection)
+    (dolist (prompt (ellama-community-prompts-ensure))
       (when (or (not for-devs) (eq for-devs (plist-get prompt :for-devs)))
         (cl-pushnew (plist-get prompt :act) acts)))
     ;; Prompt user to select an act
