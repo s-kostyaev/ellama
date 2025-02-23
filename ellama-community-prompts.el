@@ -1,14 +1,9 @@
-;;; ellama-community-prompts.el --- Community prompt collection -*- lexical-binding: t -*-
+;;; ellama-community-prompts.el --- Community prompt collection -*- lexical-binding: t; package-lint-main-file: "ellama.el"; -*-
 
 ;; Copyright (C) 2023-2025  Free Software Foundation, Inc.
 
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
-;; URL: http://github.com/s-kostyaev/ellama
-;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (transient "0.7") (compat "29.1"))
-;; Version: 1.3.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
-;; Created: 8th Oct 2023
 
 ;; This file is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
