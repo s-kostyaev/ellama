@@ -415,14 +415,6 @@ Snake case helps improve readability, especially in languages that are sensitive
 	   (ellama--fix-file-name "a/\\?%*:|\"<>.;=")
 	   "a_____________")))
 
-(ert-deftest ellama-context-minor-mode-test ()
-  (with-temp-buffer
-    (should-not ellama-context-mode)
-    (ellama-context-mode 1)
-    (should ellama-context-mode)
-    (ellama-context-mode -1)
-    (should-not ellama-context-mode)))
-
 (provide 'test-ellama)
 
 ;;; test-ellama.el ends here

@@ -5,8 +5,8 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (transient "0.7") (compat "29.1"))
-;; Version: 1.3.0
+;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (plz "0.8") (transient "0.7") (compat "29.1"))
+;; Version: 1.4.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -128,6 +128,11 @@ Make reasoning models more useful for many cases."
 
 (defcustom ellama-spinner-enabled nil
   "Enable spinner during text generation."
+  :group 'ellama
+  :type 'boolean)
+
+(defcustom ellama-context-line-always-visible nil
+  "Make context header or mode line always visible, even with empty context."
   :group 'ellama
   :type 'boolean)
 
@@ -998,6 +1003,16 @@ If EPHEMERAL non nil new session will not be associated with any file."
 			     `((ignore . (,ellama-chat-display-action-function)))))))
 
 ;;;###autoload
+(defun ellama-session-kill ()
+  "Select and kill one of active sessions."
+  (interactive)
+  (let* ((id (completing-read
+	      "Select session to kill: "
+	      (hash-table-keys ellama--active-sessions)))
+	 (buffer (ellama-get-session-buffer id)))
+    (kill-buffer buffer)))
+
+;;;###autoload
 (defun ellama-session-rename ()
   "Rename current ellama session."
   (interactive)
@@ -1052,6 +1067,27 @@ If EPHEMERAL non nil new session will not be associated with any file."
     (erase-buffer))
   (ellama-update-context-show))
 
+(defun ellama-context--element-remove-by-name (name)
+  "Remove all context element that matches by NAME."
+  (setq ellama--global-context
+	(cl-remove-if (lambda (el)
+			(string= name (ellama-context-element-display el)))
+		      ellama--global-context)))
+
+;;;###autoload
+(defun ellama-context-element-remove-by-name ()
+  "Remove a context element by its name from the global context.
+This function prompts the user to select a context element from
+the list of unique elements currently present in the global
+context and removes it.  After removal, it updates the display of
+the context."
+  (interactive)
+  (ellama-context--element-remove-by-name
+   (completing-read
+    "Remove context element: "
+    (seq-uniq (mapcar #'ellama-context-element-display ellama--global-context))))
+  (ellama-update-context-show))
+
 ;; Context elements
 
 (defclass ellama-context-element () ()
@@ -1085,15 +1121,16 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (declare-function posframe-hide "ext:posframe")
   (with-current-buffer ellama--context-buffer
     (erase-buffer)
-    (when ellama--global-context
-      (insert (format
-	       " ellama ctx: %s"
-	       (string-join
-		(mapcar
-		 (lambda (el)
-		   (ellama-context-element-display el))
-		 ellama--global-context)
-		"  ")))))
+    (if ellama--global-context
+	(insert (format
+		 " ellama ctx: %s"
+		 (string-join
+		  (mapcar
+		   (lambda (el)
+		     (ellama-context-element-display el))
+		   ellama--global-context)
+		  "  ")))
+      (insert " ellama ctx")))
   (when ellama-context-posframe-enabled
     (require 'posframe)
     (if ellama--global-context
@@ -1130,7 +1167,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (add-hook 'window-state-change-hook #'ellama-context-update-header-line)
   (if ellama-context-header-line-mode
       (ellama-context-update-header-line)
-    (setq header-line-format (delete '(:eval (ellama-context-line)) header-line-format))))
+    (when (listp header-line-format)
+      (setq header-line-format (delete '(:eval (ellama-context-line)) header-line-format)))))
 
 ;;;###autoload
 (define-globalized-minor-mode ellama-context-header-line-global-mode
@@ -1139,9 +1177,12 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 (defun ellama-context-update-header-line ()
   "Update and display context information in the header line."
-  (if (and ellama-context-header-line-mode ellama--global-context)
-      (add-to-list 'header-line-format '(:eval (ellama-context-line)) t)
-    (setq header-line-format (delete '(:eval (ellama-context-line)) header-line-format))))
+  (when (listp header-line-format)
+    (if (and ellama-context-header-line-mode
+	     (or ellama-context-line-always-visible
+		 ellama--global-context))
+	(add-to-list 'header-line-format '(:eval (ellama-context-line)) t)
+      (setq header-line-format (delete '(:eval (ellama-context-line)) header-line-format)))))
 
 ;;;###autoload
 (define-minor-mode ellama-context-mode-line-mode
@@ -1165,7 +1206,9 @@ If EPHEMERAL non nil new session will not be associated with any file."
 
 (defun ellama-context-update-mode-line ()
   "Update and display context information in the mode line."
-  (if (and ellama-context-mode-line-mode ellama--global-context)
+  (if (and ellama-context-mode-line-mode
+	   (or ellama-context-line-always-visible
+	       ellama--global-context))
       (add-to-list 'mode-line-format '(:eval (ellama-context-line)) t)
     (setq mode-line-format (delete '(:eval (ellama-context-line)) mode-line-format))))
 
@@ -1197,30 +1240,60 @@ If EPHEMERAL non nil new session will not be associated with any file."
   "d"       #'ellama-remove-context-element-at-point
   "RET"     #'ellama-preview-context-element-at-point)
 
-(define-minor-mode ellama-context-mode
+(define-derived-mode ellama-context-mode
+  fundamental-mode
+  "ellama-ctx"
   "Toggle Ellama Context mode."
   :keymap ellama-context-mode-map
   :group 'ellama)
 
 ;;;###autoload
-(defun ellama-manage-context ()
-  "Manage the global context."
+(defun ellama-send-buffer-to-new-chat ()
+  "Send current buffer to new chat session."
   (interactive)
+  (ellama-chat
+   (buffer-substring-no-properties (point-min) (point-max))
+   t))
+
+(defvar-keymap ellama-blueprint-mode-map
+  :doc "Local keymap for Ellama blueprint mode buffers."
+  :parent global-map
+  "C-c C-c" #'ellama-send-buffer-to-new-chat
+  "C-c C-k" (lambda () (interactive) (kill-buffer (current-buffer))))
+
+;;;###autoload
+(define-derived-mode ellama-blueprint-mode
+  fundamental-mode
+  "ellama-blueprint"
+  "Toggle Ellama Blueprint mode."
+  :keymap ellama-blueprint-mode-map
+  :group 'ellama
+  (setq header-line-format
+	"'C-c C-c' to send  'C-c C-k' to cancel"))
+
+(defun ellama-update-context-buffer ()
+  "Update ellama context buffer."
   (let* ((buf (get-buffer-create ellama-context-buffer))
          (inhibit-read-only t))
     (with-current-buffer buf
       (read-only-mode +1)
-      (ellama-context-mode +1)
+      (ellama-context-mode)
       (erase-buffer)
       (dolist (el ellama--global-context)
         (insert (ellama-context-element-display el))
         (put-text-property (pos-bol) (pos-eol) 'context-element el)
         (insert "\n"))
-      (goto-char (point-min))
-      (display-buffer
-       buf
-       (when ellama-manage-context-display-action-function
-	 `((ignore . (,ellama-manage-context-display-action-function))))))))
+      (goto-char (point-min)))))
+
+;;;###autoload
+(defun ellama-manage-context ()
+  "Manage the global context."
+  (interactive)
+  (ellama-update-context-buffer)
+  (display-buffer
+   ellama-context-buffer
+   (when ellama-manage-context-display-action-function
+     `((ignore . (,ellama-manage-context-display-action-function))))))
 
 (defvar-keymap ellama-preview-context-mode-map
   :doc "Local keymap for Ellama preview context mode buffers."
@@ -2941,6 +3014,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
     ("f" "Load from provider" ellama-transient-model-get-from-provider
      :transient t)
     ("F" "Load from current session" ellama-transient-model-get-from-current-session
+     :description (lambda () (format "Load from current session (%s)" ellama--current-session-id))
      :transient t)
     ("m" "Set Model" ellama-transient-set-ollama-model
      :transient t
@@ -3022,7 +3096,8 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
     ("l" "Load Session" ellama-load-session)
     ("r" "Rename Session" ellama-session-rename)
     ("d" "Delete Session" ellama-session-delete)
-    ("a" "Activate Session" ellama-session-switch)]
+    ("a" "Activate Session" ellama-session-switch)
+    ("k" "Kill Session" ellama-session-kill)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 (transient-define-prefix ellama-transient-improve-menu ()
@@ -3060,37 +3135,46 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 
 (transient-define-prefix ellama-transient-context-menu ()
   "Context Commands."
-  [["Context Commands"
+  ["Context Commands"
+   :description (lambda ()
+		  (ellama-update-context-buffer)
+		  (format "Current context:
+%s" (with-current-buffer ellama-context-buffer
+      (buffer-substring (point-min) (point-max)))))
+   ["Add"
     ("b" "Add Buffer" ellama-context-add-buffer)
     ("d" "Add Directory" ellama-context-add-directory)
     ("f" "Add File" ellama-context-add-file)
     ("s" "Add Selection" ellama-context-add-selection)
-    ("i" "Add Info Node" ellama-context-add-info-node)
+    ("i" "Add Info Node" ellama-context-add-info-node)]
+   ["Manage"
     ("m" "Manage context" ellama-manage-context)
+    ("D" "Delete element" ellama-context-element-remove-by-name)
     ("r" "Context reset" ellama-context-reset)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 (transient-define-prefix ellama-transient-main-menu ()
   "Main Menu."
-  [["Main"
-    ("c" "Chat" ellama-chat)
-    ("w" "Write" ellama-write)
+  ["Main"
+   [("c" "Chat" ellama-chat)
+    ("B" "Chat with community blueprint" ellama-community-prompts-select-blueprint)]
+   [("a" "Ask Commands" ellama-transient-ask-menu)
+    ("C" "Code Commands" ellama-transient-code-menu)]]
+  ["Text"
+   [("w" "Write" ellama-write)
     ("P" "Proofread" ellama-proofread)
-    ("a" "Ask Commands" ellama-transient-ask-menu)
-    ("C" "Code Commands" ellama-transient-code-menu)
-    ("o" "Ollama model" ellama-select-ollama-model)]]
-  [["Text"
-    ("s" "Summarize Commands" ellama-transient-summarize-menu)
-    ("i" "Improve Commands" ellama-transient-improve-menu)
-    ("t" "Translate Commands" ellama-transient-translate-menu)
-    ("m" "Make Commands" ellama-transient-make-menu)
     ("k" "Text Complete" ellama-complete)
     ("g" "Text change" ellama-change)
-    ("d" "Define word" ellama-define-word)]]
-  [["System"
-    ("S" "Session Commands" ellama-transient-session-menu)
-    ("x" "Context Commands" ellama-transient-context-menu)
-    ("p" "Provider selection" ellama-provider-select)]]
+    ("d" "Define word" ellama-define-word)]
+   [("s" "Summarize Commands" ellama-transient-summarize-menu)
+    ("i" "Improve Commands" ellama-transient-improve-menu)
+    ("t" "Translate Commands" ellama-transient-translate-menu)
+    ("m" "Make Commands" ellama-transient-make-menu)]]
+  ["System"
+   [("o" "Ollama model" ellama-select-ollama-model)
+    ("p" "Provider selection" ellama-provider-select)]
+   [("S" "Session Commands" ellama-transient-session-menu)
+    ("x" "Context Commands" ellama-transient-context-menu)]]
   [["Problem solving"
     ("R" "Solve reasoning problem" ellama-solve-reasoning-problem)
     ("D" "Solve domain specific problem" ellama-solve-domain-specific-problem)]]
