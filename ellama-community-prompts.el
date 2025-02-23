@@ -198,7 +198,7 @@ Optional argument FOR-DEVS filters prompts for developers."
   (interactive)
   (let ((vars (ellama-community-prompts-get-variable-list)))
     (dolist (var vars)
-      (let ((value (read-string (format "Enter value for %s: " var))))
+      (let ((value (read-string (format "Enter value for {%s}: " var))))
         (ellama-community-prompts-set-variable var value)))))
 
 (provide 'ellama-community-prompts)
