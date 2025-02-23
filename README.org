@@ -250,6 +250,10 @@ Delete ellama session.
 
 Change current active session.
 
+*** ellama-session-kill
+
+Select and kill one of active sessions.
+
 *** ellama-session-rename
 
 Rename current ellama session.

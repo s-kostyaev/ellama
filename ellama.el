@@ -1003,6 +1003,16 @@ If EPHEMERAL non nil new session will not be associated with any file."
 			     `((ignore . (,ellama-chat-display-action-function)))))))
 
 ;;;###autoload
+(defun ellama-session-kill ()
+  "Select and kill one of active sessions."
+  (interactive)
+  (let* ((id (completing-read
+	      "Select session to kill: "
+	      (hash-table-keys ellama--active-sessions)))
+	 (buffer (ellama-get-session-buffer id)))
+    (kill-buffer buffer)))
+
+;;;###autoload
 (defun ellama-session-rename ()
   "Rename current ellama session."
   (interactive)
@@ -3086,7 +3096,8 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
     ("l" "Load Session" ellama-load-session)
     ("r" "Rename Session" ellama-session-rename)
     ("d" "Delete Session" ellama-session-delete)
-    ("a" "Activate Session" ellama-session-switch)]
+    ("a" "Activate Session" ellama-session-switch)
+    ("k" "Kill Session" ellama-session-kill)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 (transient-define-prefix ellama-transient-improve-menu ()
