@@ -406,8 +406,7 @@ The following variables can be customized for the Ellama client:
 - ~ellama-assistant-nick~: The assistant nick in logs.
 - ~ellama-language~: The language for Ollama translation. Default
 language is english.
-- ~ellama-provider~: llm provider for ellama. Default provider is
-~ollama~ with [[https://ollama.ai/library/zephyr][zephyr]] model.
+- ~ellama-provider~: llm provider for ellama.
 There are many supported providers: ~ollama~, ~open ai~, ~vertex~,
 ~GPT4All~. For more information see [[https://elpa.gnu.org/packages/llm.html][llm documentation]].
 - ~ellama-providers~: association list of model llm providers with
