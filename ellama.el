@@ -1985,32 +1985,44 @@ failure (with BUFFER current).
 			       (ellama-session-prompt session))
 			   (setf (ellama-session-prompt session)
 				 (llm-make-chat-prompt prompt-with-ctx :context system)))
-		       (llm-make-simple-chat-prompt prompt-with-ctx))))
+		       (llm-make-simple-chat-prompt prompt-with-ctx)))
+	 (stop-scroll))
     (with-current-buffer buffer
       (ellama-request-mode +1)
       (let* ((start (make-marker))
 	     (end (make-marker))
+	     (distance-to-end (- (point-max) (point)))
+	     (new-pt)
 	     (insert-text
 	      (lambda (text)
 		;; Erase and insert the new text between the marker cons.
 		(with-current-buffer buffer
 		  ;; Manually save/restore point as save-excursion doesn't
 		  ;; restore the point into the middle of replaced text.
-		  (let ((pt (point)))
-		    (goto-char start)
-		    (delete-region start end)
-		    (insert (funcall filter text))
-                    (when (and ellama-fill-paragraphs
-			       (pcase ellama-fill-paragraphs
-				 ((cl-type function) (funcall ellama-fill-paragraphs))
-				 ((cl-type boolean) ellama-fill-paragraphs)
-				 ((cl-type list) (and (apply #'derived-mode-p
-							     ellama-fill-paragraphs)
-						      (not (equal major-mode 'org-mode))))))
-                      (fill-region start (point)))
-		    (unless ellama-auto-scroll
+		  (let* ((pt (point))
+			 (new-distance-to-end (- (point-max) (point))))
+		    (save-excursion
+		      (when (and (eq (window-buffer (selected-window))
+				     buffer)
+				 (not (equal distance-to-end new-distance-to-end)))
+			(setq stop-scroll t))
+		      (goto-char start)
+		      (delete-region start end)
+		      (insert (funcall filter text))
+                      (when (and ellama-fill-paragraphs
+				 (pcase ellama-fill-paragraphs
+				   ((cl-type function) (funcall ellama-fill-paragraphs))
+				   ((cl-type boolean) ellama-fill-paragraphs)
+				   ((cl-type list) (and (apply #'derived-mode-p
+							       ellama-fill-paragraphs)
+							(not (equal major-mode 'org-mode))))))
+			(fill-region start (point)))
+		      (setq new-pt (point)))
+		    (if (and ellama-auto-scroll (not stop-scroll))
+			(progn
+			  (goto-char new-pt)
+			  (ellama--scroll buffer))
 		      (goto-char pt)))
-		  (ellama--scroll buffer)
 		  (undo-amalgamate-change-group ellama--change-group)))))
 	(setq ellama--change-group (prepare-change-group))
 	(activate-change-group ellama--change-group)
