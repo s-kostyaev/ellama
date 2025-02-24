@@ -1,3 +1,8 @@
+* Version 1.4.2
+- Fixed the auto-scroll logic in ~ellama.el~ to ensure it correctly sets and
+  resets ~stop-scroll~ based on cursor position changes.
+- Added a ~redisplay~ call at the end of ~ellama--scroll~ to force a refresh of
+  the window display to correctly handle auto-scroll of unfocused windows.
 * Version 1.4.1
 - Fixed a bug where users couldn't move the cursor during generation when
   auto-scroll was enabled.
