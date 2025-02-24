@@ -2002,10 +2002,11 @@ failure (with BUFFER current).
 		  (let* ((pt (point))
 			 (new-distance-to-end (- (point-max) (point))))
 		    (save-excursion
-		      (when (and (eq (window-buffer (selected-window))
-				     buffer)
-				 (not (equal distance-to-end new-distance-to-end)))
-			(setq stop-scroll t))
+		      (if (and (eq (window-buffer (selected-window))
+				   buffer)
+			       (not (equal distance-to-end new-distance-to-end)))
+			  (setq stop-scroll t)
+			(setq stop-scroll nil))
 		      (goto-char start)
 		      (delete-region start end)
 		      (insert (funcall filter text))
@@ -2237,7 +2238,8 @@ A function for programmatically scrolling the buffer during text generation."
     (with-selected-window window
       (when (ellama-chat-buffer-p buf)
 	(goto-char (point-max)))
-      (recenter -1))))
+      (recenter -1)
+      (redisplay))))
 
 (defun ellama-chat-done (text &optional on-done)
   "Chat done.
