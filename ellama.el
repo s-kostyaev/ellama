@@ -2238,8 +2238,7 @@ A function for programmatically scrolling the buffer during text generation."
     (with-selected-window window
       (when (ellama-chat-buffer-p buf)
 	(goto-char (point-max)))
-      (recenter -1)
-      (redisplay))))
+      (recenter -1))))
 
 (defun ellama-chat-done (text &optional on-done)
   "Chat done.
