@@ -1255,11 +1255,16 @@ the context."
    (buffer-substring-no-properties (point-min) (point-max))
    t))
 
+(defun ellama-kill-current-buffer ()
+  "Kill current buffer."
+  (interactive)
+  (kill-buffer (current-buffer)))
+
 (defvar-keymap ellama-blueprint-mode-map
   :doc "Local keymap for Ellama blueprint mode buffers."
   :parent global-map
   "C-c C-c" #'ellama-send-buffer-to-new-chat
-  "C-c C-k" (lambda () (interactive) (kill-buffer (current-buffer))))
+  "C-c C-k" #'ellama-kill-current-buffer)
 
 ;;;###autoload
 (define-derived-mode ellama-blueprint-mode
@@ -1269,7 +1274,8 @@ the context."
   :keymap ellama-blueprint-mode-map
   :group 'ellama
   (setq header-line-format
-	"'C-c C-c' to send  'C-c C-k' to cancel"))
+	(substitute-command-keys
+	 "`\\[ellama-send-buffer-to-new-chat]' to send `\\[ellama-kill-current-buffer]' to cancel")))
 
 (defun ellama-update-context-buffer ()
   "Update ellama context buffer."
