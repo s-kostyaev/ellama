@@ -1314,12 +1314,15 @@ Then kill current buffer."
   :doc "Local keymap for Ellama preview context mode buffers."
   :full t
   :parent special-mode-map
-  "q"       #'quit-window)
+  "q"       #'ellama-kill-current-buffer)
 
 (define-minor-mode ellama-preview-context-mode
   "Toggle Ellama Preview Context mode."
   :keymap ellama-preview-context-mode-map
-  :group 'ellama)
+  :group 'ellama
+  (setq header-line-format
+	(substitute-command-keys
+	 "`\\[ellama-kill-current-buffer]' to quit")))
 
 (defcustom ellama-preview-context-element-display-action-function nil
   "Display action function for `ellama-preview-context-element'."
