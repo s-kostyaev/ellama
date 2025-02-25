@@ -2038,9 +2038,7 @@ failure (with BUFFER current).
 			(fill-region start (point)))
 		      (setq new-pt (point)))
 		    (if (and ellama-auto-scroll (not stop-scroll))
-			(progn
-			  (goto-char new-pt)
-			  (ellama--scroll buffer))
+			(ellama--scroll buffer new-pt)
 		      (goto-char pt)))
 		  (undo-amalgamate-change-group ellama--change-group)))))
 	(setq ellama--change-group (prepare-change-group))
@@ -2247,15 +2245,17 @@ Extract profession from this message. Be short and concise."
 	     (search-forward (concat (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n") nil t)
 	     (buffer-substring-no-properties (point) (point-max)))))))
 
-(defun ellama--scroll (&optional buffer)
+(defun ellama--scroll (&optional buffer point)
   "Scroll within BUFFER.
-A function for programmatically scrolling the buffer during text generation."
+Go to POINT before start scrolling if provided.  A function for
+programmatically scrolling the buffer during text generation."
   (when-let ((ellama-auto-scroll)
 	     (buf (or buffer (current-buffer)))
 	     (window (get-buffer-window buf)))
     (with-selected-window window
       (when (ellama-chat-buffer-p buf)
 	(goto-char (point-max)))
+      (when point (goto-char point))
       (recenter -1))))
 
 (defun ellama-chat-done (text &optional on-done)
