@@ -1,3 +1,9 @@
+* Version 1.4.4
+- Ensured that the buffer ~ellama--context-buffer~ is created if it does not
+  exist before attempting to update and show context to prevent errors related
+  to non-existent buffers.
+- Added calls to ~ellama-update-context-show~ in both header line and mode line
+  minor modes to ensure context is shown when these modes are toggled.
 * Version 1.4.3
 - Added fallback mechanism to use the first available Ollama chat model when no
   specific provider is defined for various ellama functions, ensuring that a

@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (plz "0.8") (transient "0.7") (compat "29.1"))
-;; Version: 1.4.3
+;; Version: 1.4.4
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -1123,7 +1123,7 @@ the context."
   "Update and show context in posframe of header line."
   (declare-function posframe-show "ext:posframe")
   (declare-function posframe-hide "ext:posframe")
-  (with-current-buffer ellama--context-buffer
+  (with-current-buffer (get-buffer-create ellama--context-buffer)
     (erase-buffer)
     (if ellama--global-context
 	(insert (format
@@ -1168,6 +1168,7 @@ the context."
 (define-minor-mode ellama-context-header-line-mode
   "Toggle Ellama Context header line mode."
   :group 'ellama
+  (ellama-update-context-show)
   (add-hook 'window-state-change-hook #'ellama-context-update-header-line)
   (if ellama-context-header-line-mode
       (ellama-context-update-header-line)
@@ -1192,6 +1193,7 @@ the context."
 (define-minor-mode ellama-context-mode-line-mode
   "Toggle Ellama Context mode line mode."
   :group 'ellama
+  (ellama-update-context-show)
   (add-hook 'window-state-change-hook #'ellama-context-update-mode-line)
   (if ellama-context-mode-line-mode
       (ellama-context-update-mode-line)
