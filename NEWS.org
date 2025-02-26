@@ -18,6 +18,7 @@
   lambda. Also, updated the header line format to display the correct command
   names using ~substitute-command-keys~.
 - Removed redisplay call to prevent flickering.
+- Ensure ~llm-ollama~ dependency are loaded.
 * Version 1.4.2
 - Fixed the auto-scroll logic in ~ellama.el~ to ensure it correctly sets and
   resets ~stop-scroll~ based on cursor position changes.

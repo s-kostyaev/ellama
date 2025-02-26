@@ -2989,6 +2989,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 		(llm-ollama-host ellama-provider)))
 	(port (when (llm-ollama-p ellama-provider)
 		(llm-ollama-port ellama-provider))))
+    (require 'llm-ollama)
     (if host
 	(make-llm-ollama
 	 :chat-model model-name :embedding-model model-name :host host :port port)
@@ -3117,6 +3118,8 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 
 (defun ellama-construct-ollama-provider-from-transient ()
   "Make provider with ollama mode in transient menu."
+  (declare-function make-llm-ollama "ext:llm-ollama")
+  (require 'llm-ollama)
   (make-llm-ollama
    :chat-model ellama-transient-ollama-model-name
    :default-chat-temperature ellama-transient-temperature
