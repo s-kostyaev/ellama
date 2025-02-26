@@ -1,3 +1,23 @@
+* Version 1.4.3
+- Added fallback mechanism to use the first available Ollama chat model when no
+  specific provider is defined for various ellama functions, ensuring that a
+  valid provider is always used and preventing potential errors in scenarios
+  where providers are not explicitly set.
+- Refactored ~ellama--scroll~ to accept an optional POINT argument, allowing the
+  function to go to that specific point before scrolling. Updated the caller
+  ~ellama-update-buffer~ to pass the new point.
+- Refactored the ~ellama-preview-context-mode~ by renaming the quit command key
+  binding to use a custom function ~ellama-kill-current-buffer~. Added a header
+  line format that displays the quit command instruction.
+- Added a new function ~ellama-send-buffer-to-new-chat-then-kill~ to send the
+  current buffer to a new chat session and then kill it. Updated the keybinding
+  in ~ellama-blueprint-mode-map~ to use this new function instead of the old
+  one.
+- Added a new function ~ellama-kill-current-buffer~ and updated the keymap in
+  ~ellama-blueprint-mode-map~ to use this function instead of an anonymous
+  lambda. Also, updated the header line format to display the correct command
+  names using ~substitute-command-keys~.
+- Removed redisplay call to prevent flickering.
 * Version 1.4.2
 - Fixed the auto-scroll logic in ~ellama.el~ to ensure it correctly sets and
   resets ~stop-scroll~ based on cursor position changes.
