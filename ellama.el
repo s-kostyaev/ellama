@@ -730,7 +730,9 @@ EXTRA contains additional information."
 
 (defun ellama-get-name (prompt)
   "Generate session name by LLM based on PROMPT."
-  (let ((provider (or ellama-naming-provider ellama-provider)))
+  (let ((provider (or ellama-naming-provider
+		      ellama-provider
+		      (ellama-get-first-ollama-chat-model))))
     (string-trim-right
      (string-trim
       (seq-first
@@ -757,7 +759,9 @@ EXTRA contains additional information."
   "Generate name for ellama ACTION by PROVIDER and PROMPT by LLM."
   (format "%s (%s)"
 	  (ellama-remove-reasoning
-	   (llm-chat (or ellama-naming-provider ellama-provider)
+	   (llm-chat (or ellama-naming-provider
+			 ellama-provider
+			 (ellama-get-first-ollama-chat-model))
 		     (llm-make-simple-chat-prompt
 		      (format ellama-get-name-template prompt))))
 	  (llm-name provider)))
@@ -1860,7 +1864,9 @@ Then kill current buffer."
 (defun ellama--translate-string (s)
   "Translate string S to `ellama-language' syncronously."
   (llm-chat
-   (or ellama-translation-provider ellama-provider)
+   (or ellama-translation-provider
+       ellama-provider
+       (ellama-get-first-ollama-chat-model))
    (llm-make-simple-chat-prompt
     (format ellama-translation-template
 	    ellama-language
@@ -2120,7 +2126,9 @@ last step only.
 :show BOOL - if BOOL show buffer for this step."
   (let* ((hd (car forms))
 	 (tl (cdr forms))
-	 (provider (or (plist-get hd :provider) ellama-provider))
+	 (provider (or (plist-get hd :provider)
+		       ellama-provider
+		       (ellama-get-first-ollama-chat-model)))
 	 (transform (plist-get hd :transform))
 	 (prompt (if transform
 		     (apply transform (list initial-prompt acc))
@@ -2286,7 +2294,9 @@ Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
 		 ellama-language
 		 generated
 		 ellama-language)
-	 :provider (or ellama-translation-provider ellama-provider)
+	 :provider (or ellama-translation-provider
+		       ellama-provider
+		       (ellama-get-first-ollama-chat-model))
 	 :on-done #'ellama-chat-done
 	 :filter (when (derived-mode-p 'org-mode)
 		   #'ellama--translate-markdown-to-org-filter))))))
@@ -2328,7 +2338,9 @@ Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
 	       "english"
 	       prompt
 	       "english")
-       :provider (or ellama-translation-provider ellama-provider)
+       :provider (or ellama-translation-provider
+		     ellama-provider
+		     (ellama-get-first-ollama-chat-model))
        :filter (when (derived-mode-p 'org-mode)
 		 #'ellama--translate-markdown-to-org-filter)
        :on-done
@@ -2557,7 +2569,8 @@ ARGS contains keys for fine control.
 :on-done ON-DONE -- ON-DONE a function or list of functions that's called with
  the full response text when the request completes (with BUFFER current)."
   (let* ((provider (or (plist-get args :provider)
-		       ellama-provider))
+		       ellama-provider
+		       (ellama-get-first-ollama-chat-model)))
 	 (buffer-name (ellama-generate-name provider real-this-command prompt))
 	 (buffer (get-buffer-create (if (get-buffer buffer-name)
 					(make-temp-name (concat buffer-name " "))
@@ -2615,7 +2628,9 @@ ARGS contains keys for fine control.
 		  (buffer-substring-no-properties (region-beginning) (region-end))
 		(buffer-substring-no-properties (point-min) (point-max)))))
     (ellama-instant (format ellama-summarize-prompt-template text)
-		    :provider (or ellama-summarization-provider ellama-provider))))
+		    :provider (or ellama-summarization-provider
+				  ellama-provider
+				  (ellama-get-first-ollama-chat-model)))))
 
 ;;;###autoload
 (defun ellama-summarize-killring ()
@@ -2625,7 +2640,9 @@ ARGS contains keys for fine control.
     (if (string-empty-p text)
         (message "No text in the kill ring to summarize.")
       (ellama-instant (format ellama-summarize-prompt-template text)
-		      :provider (or ellama-summarization-provider ellama-provider)))))
+		      :provider (or ellama-summarization-provider
+				    ellama-provider
+				    (ellama-get-first-ollama-chat-model))))))
 
 ;;;###autoload
 (defun ellama-code-review ()
@@ -2842,7 +2859,9 @@ otherwise prompt user for URL to summarize."
     (plist-get
      (json-parse-string
       (llm-chat
-       (or ellama-extraction-provider ellama-provider)
+       (or ellama-extraction-provider
+	   ellama-provider
+	   (ellama-get-first-ollama-chat-model))
        (llm-make-chat-prompt
 	(format ellama-semantic-identity-reasoning-template context text1 text2)
 	:response-format '(:type object :properties
@@ -2858,7 +2877,9 @@ otherwise prompt user for URL to summarize."
   (plist-get
    (json-parse-string
     (llm-chat
-     (or ellama-extraction-provider ellama-provider)
+     (or ellama-extraction-provider
+	 ellama-provider
+	 (ellama-get-first-ollama-chat-model))
      (llm-make-chat-prompt
       (format ellama-semantic-identity-template text1 text2)
       :response-format '(:type object :properties
@@ -2885,7 +2906,8 @@ Return list of strings.  ARGS contains keys for fine control.
 :provider PROVIDER -- PROVIDER is an llm provider for generation."
   (let ((provider (or (plist-get args :provider)
 		      ellama-extraction-provider
-		      ellama-provider)))
+		      ellama-provider
+		      (ellama-get-first-ollama-chat-model))))
     (plist-get (json-parse-string
 		(llm-chat
 		 provider
@@ -2901,7 +2923,8 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 :provider PROVIDER -- PROVIDER is an llm provider for generation."
   (let ((provider (or (plist-get args :provider)
 		      ellama-extraction-provider
-		      ellama-provider)))
+		      ellama-provider
+		      (ellama-get-first-ollama-chat-model))))
     (llm-chat-async
      provider
      (ellama--make-extract-string-list-prompt elements input)
