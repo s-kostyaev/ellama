@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (plz "0.8") (transient "0.7") (compat "29.1"))
-;; Version: 1.4.2
+;; Version: 1.4.3
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -730,7 +730,9 @@ EXTRA contains additional information."
 
 (defun ellama-get-name (prompt)
   "Generate session name by LLM based on PROMPT."
-  (let ((provider (or ellama-naming-provider ellama-provider)))
+  (let ((provider (or ellama-naming-provider
+		      ellama-provider
+		      (ellama-get-first-ollama-chat-model))))
     (string-trim-right
      (string-trim
       (seq-first
@@ -757,7 +759,9 @@ EXTRA contains additional information."
   "Generate name for ellama ACTION by PROVIDER and PROMPT by LLM."
   (format "%s (%s)"
 	  (ellama-remove-reasoning
-	   (llm-chat (or ellama-naming-provider ellama-provider)
+	   (llm-chat (or ellama-naming-provider
+			 ellama-provider
+			 (ellama-get-first-ollama-chat-model))
 		     (llm-make-simple-chat-prompt
 		      (format ellama-get-name-template prompt))))
 	  (llm-name provider)))
@@ -1255,11 +1259,25 @@ the context."
    (buffer-substring-no-properties (point-min) (point-max))
    t))
 
+;;;###autoload
+(defun ellama-send-buffer-to-new-chat-then-kill ()
+  "Send current buffer to new chat session.
+Then kill current buffer."
+  (interactive)
+  (ellama-send-buffer-to-new-chat)
+  (ellama-kill-current-buffer))
+
+;;;###autoload
+(defun ellama-kill-current-buffer ()
+  "Kill current buffer."
+  (interactive)
+  (kill-buffer (current-buffer)))
+
 (defvar-keymap ellama-blueprint-mode-map
   :doc "Local keymap for Ellama blueprint mode buffers."
   :parent global-map
-  "C-c C-c" #'ellama-send-buffer-to-new-chat
-  "C-c C-k" (lambda () (interactive) (kill-buffer (current-buffer))))
+  "C-c C-c" #'ellama-send-buffer-to-new-chat-then-kill
+  "C-c C-k" #'ellama-kill-current-buffer)
 
 ;;;###autoload
 (define-derived-mode ellama-blueprint-mode
@@ -1269,7 +1287,8 @@ the context."
   :keymap ellama-blueprint-mode-map
   :group 'ellama
   (setq header-line-format
-	"'C-c C-c' to send  'C-c C-k' to cancel"))
+	(substitute-command-keys
+	 "`\\[ellama-send-buffer-to-new-chat-then-kill]' to send `\\[ellama-kill-current-buffer]' to cancel")))
 
 (defun ellama-update-context-buffer ()
   "Update ellama context buffer."
@@ -1299,12 +1318,15 @@ the context."
   :doc "Local keymap for Ellama preview context mode buffers."
   :full t
   :parent special-mode-map
-  "q"       #'quit-window)
+  "q"       #'ellama-kill-current-buffer)
 
 (define-minor-mode ellama-preview-context-mode
   "Toggle Ellama Preview Context mode."
   :keymap ellama-preview-context-mode-map
-  :group 'ellama)
+  :group 'ellama
+  (setq header-line-format
+	(substitute-command-keys
+	 "`\\[ellama-kill-current-buffer]' to quit")))
 
 (defcustom ellama-preview-context-element-display-action-function nil
   "Display action function for `ellama-preview-context-element'."
@@ -1842,7 +1864,9 @@ the context."
 (defun ellama--translate-string (s)
   "Translate string S to `ellama-language' syncronously."
   (llm-chat
-   (or ellama-translation-provider ellama-provider)
+   (or ellama-translation-provider
+       ellama-provider
+       (ellama-get-first-ollama-chat-model))
    (llm-make-simple-chat-prompt
     (format ellama-translation-template
 	    ellama-language
@@ -2020,9 +2044,7 @@ failure (with BUFFER current).
 			(fill-region start (point)))
 		      (setq new-pt (point)))
 		    (if (and ellama-auto-scroll (not stop-scroll))
-			(progn
-			  (goto-char new-pt)
-			  (ellama--scroll buffer))
+			(ellama--scroll buffer new-pt)
 		      (goto-char pt)))
 		  (undo-amalgamate-change-group ellama--change-group)))))
 	(setq ellama--change-group (prepare-change-group))
@@ -2104,7 +2126,9 @@ last step only.
 :show BOOL - if BOOL show buffer for this step."
   (let* ((hd (car forms))
 	 (tl (cdr forms))
-	 (provider (or (plist-get hd :provider) ellama-provider))
+	 (provider (or (plist-get hd :provider)
+		       ellama-provider
+		       (ellama-get-first-ollama-chat-model)))
 	 (transform (plist-get hd :transform))
 	 (prompt (if transform
 		     (apply transform (list initial-prompt acc))
@@ -2229,17 +2253,18 @@ Extract profession from this message. Be short and concise."
 	     (search-forward (concat (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n") nil t)
 	     (buffer-substring-no-properties (point) (point-max)))))))
 
-(defun ellama--scroll (&optional buffer)
+(defun ellama--scroll (&optional buffer point)
   "Scroll within BUFFER.
-A function for programmatically scrolling the buffer during text generation."
+Go to POINT before start scrolling if provided.  A function for
+programmatically scrolling the buffer during text generation."
   (when-let ((ellama-auto-scroll)
 	     (buf (or buffer (current-buffer)))
 	     (window (get-buffer-window buf)))
     (with-selected-window window
       (when (ellama-chat-buffer-p buf)
 	(goto-char (point-max)))
-      (recenter -1)
-      (redisplay))))
+      (when point (goto-char point))
+      (recenter -1))))
 
 (defun ellama-chat-done (text &optional on-done)
   "Chat done.
@@ -2269,7 +2294,9 @@ Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
 		 ellama-language
 		 generated
 		 ellama-language)
-	 :provider (or ellama-translation-provider ellama-provider)
+	 :provider (or ellama-translation-provider
+		       ellama-provider
+		       (ellama-get-first-ollama-chat-model))
 	 :on-done #'ellama-chat-done
 	 :filter (when (derived-mode-p 'org-mode)
 		   #'ellama--translate-markdown-to-org-filter))))))
@@ -2311,7 +2338,9 @@ Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
 	       "english"
 	       prompt
 	       "english")
-       :provider (or ellama-translation-provider ellama-provider)
+       :provider (or ellama-translation-provider
+		     ellama-provider
+		     (ellama-get-first-ollama-chat-model))
        :filter (when (derived-mode-p 'org-mode)
 		 #'ellama--translate-markdown-to-org-filter)
        :on-done
@@ -2540,7 +2569,8 @@ ARGS contains keys for fine control.
 :on-done ON-DONE -- ON-DONE a function or list of functions that's called with
  the full response text when the request completes (with BUFFER current)."
   (let* ((provider (or (plist-get args :provider)
-		       ellama-provider))
+		       ellama-provider
+		       (ellama-get-first-ollama-chat-model)))
 	 (buffer-name (ellama-generate-name provider real-this-command prompt))
 	 (buffer (get-buffer-create (if (get-buffer buffer-name)
 					(make-temp-name (concat buffer-name " "))
@@ -2598,7 +2628,9 @@ ARGS contains keys for fine control.
 		  (buffer-substring-no-properties (region-beginning) (region-end))
 		(buffer-substring-no-properties (point-min) (point-max)))))
     (ellama-instant (format ellama-summarize-prompt-template text)
-		    :provider (or ellama-summarization-provider ellama-provider))))
+		    :provider (or ellama-summarization-provider
+				  ellama-provider
+				  (ellama-get-first-ollama-chat-model)))))
 
 ;;;###autoload
 (defun ellama-summarize-killring ()
@@ -2608,7 +2640,9 @@ ARGS contains keys for fine control.
     (if (string-empty-p text)
         (message "No text in the kill ring to summarize.")
       (ellama-instant (format ellama-summarize-prompt-template text)
-		      :provider (or ellama-summarization-provider ellama-provider)))))
+		      :provider (or ellama-summarization-provider
+				    ellama-provider
+				    (ellama-get-first-ollama-chat-model))))))
 
 ;;;###autoload
 (defun ellama-code-review ()
@@ -2825,7 +2859,9 @@ otherwise prompt user for URL to summarize."
     (plist-get
      (json-parse-string
       (llm-chat
-       (or ellama-extraction-provider ellama-provider)
+       (or ellama-extraction-provider
+	   ellama-provider
+	   (ellama-get-first-ollama-chat-model))
        (llm-make-chat-prompt
 	(format ellama-semantic-identity-reasoning-template context text1 text2)
 	:response-format '(:type object :properties
@@ -2841,7 +2877,9 @@ otherwise prompt user for URL to summarize."
   (plist-get
    (json-parse-string
     (llm-chat
-     (or ellama-extraction-provider ellama-provider)
+     (or ellama-extraction-provider
+	 ellama-provider
+	 (ellama-get-first-ollama-chat-model))
      (llm-make-chat-prompt
       (format ellama-semantic-identity-template text1 text2)
       :response-format '(:type object :properties
@@ -2868,7 +2906,8 @@ Return list of strings.  ARGS contains keys for fine control.
 :provider PROVIDER -- PROVIDER is an llm provider for generation."
   (let ((provider (or (plist-get args :provider)
 		      ellama-extraction-provider
-		      ellama-provider)))
+		      ellama-provider
+		      (ellama-get-first-ollama-chat-model))))
     (plist-get (json-parse-string
 		(llm-chat
 		 provider
@@ -2884,7 +2923,8 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 :provider PROVIDER -- PROVIDER is an llm provider for generation."
   (let ((provider (or (plist-get args :provider)
 		      ellama-extraction-provider
-		      ellama-provider)))
+		      ellama-provider
+		      (ellama-get-first-ollama-chat-model))))
     (llm-chat-async
      provider
      (ellama--make-extract-string-list-prompt elements input)
@@ -2949,6 +2989,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 		(llm-ollama-host ellama-provider)))
 	(port (when (llm-ollama-p ellama-provider)
 		(llm-ollama-port ellama-provider))))
+    (require 'llm-ollama)
     (if host
 	(make-llm-ollama
 	 :chat-model model-name :embedding-model model-name :host host :port port)
@@ -3077,6 +3118,8 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 
 (defun ellama-construct-ollama-provider-from-transient ()
   "Make provider with ollama mode in transient menu."
+  (declare-function make-llm-ollama "ext:llm-ollama")
+  (require 'llm-ollama)
   (make-llm-ollama
    :chat-model ellama-transient-ollama-model-name
    :default-chat-temperature ellama-transient-temperature
