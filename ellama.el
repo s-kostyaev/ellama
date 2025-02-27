@@ -1287,13 +1287,24 @@ Then kill current buffer."
   "C-c C-k" #'ellama-kill-current-buffer
   "C-c c" #'ellama-create-blueprint)
 
+(defvar ellama-blueprint-font-lock-keywords
+  '(("{\\([^}]+\\)}" 1 'font-lock-keyword-face))
+  "Highlight variables in curly braces for Ellama Blueprint Mode.")
+
 ;;;###autoload
 (define-derived-mode ellama-blueprint-mode
-  fundamental-mode
+  nil
   "ellama-blueprint"
   "Toggle Ellama Blueprint mode."
   :keymap ellama-blueprint-mode-map
   :group 'ellama
+  ;; FIXME: works only on manual call `M-x' `font-lock-fontify-buffer'
+  ;; `font-lock-mode' breaks
+  (setq font-lock-defaults '((("{\\([^}]+\\)}" 1 font-lock-keyword-face t))))
+  ;; (font-lock-mode +1)
+  ;; (when-let ((window (get-buffer-window (current-buffer))))
+  ;;   (with-selected-window window
+  ;;     (font-lock-fontify-buffer t)))
   (setq header-line-format
 	(substitute-command-keys
 	 "`\\[ellama-send-buffer-to-new-chat-then-kill]' to send `\\[ellama-kill-current-buffer]' to cancel `\\[ellama-create-blueprint]' to create new blueprint")))
@@ -1315,9 +1326,9 @@ Then kill current buffer."
   (interactive)
   (let* ((name (concat (make-temp-name "*ellama-blueprint-") "*"))
 	 (buf (get-buffer-create name)))
-    ;; TODO: add major mode with keybindings.
-    ;; Variables can be highlighted.
-    (switch-to-buffer buf t t)))
+    (switch-to-buffer buf t t)
+    (with-current-buffer buf
+      (ellama-blueprint-mode))))
 
 (defun ellama-update-context-buffer ()
   "Update ellama context buffer."
