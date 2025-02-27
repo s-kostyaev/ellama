@@ -135,7 +135,7 @@ Returns the collection of community prompts."
 			     (point-min) (point-max)))))))))
   ellama-community-prompts-collection)
 
-(defvar ellama-community-prompts-blurpint-buffer " *ellama-community-prompts-blueprint-buffer*"
+(defvar ellama-community-prompts-blurpint-buffer "*ellama-community-prompts-blueprint-buffer*"
   "Buffer for community prompt blueprint.")
 
 ;;;###autoload
