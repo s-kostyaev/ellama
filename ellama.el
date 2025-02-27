@@ -486,6 +486,11 @@ It should be a function with single argument generated text string."
   :group 'ellama
   :type 'function)
 
+(defcustom ellama-blueprints nil
+  "User defined blueprints."
+  :group 'ellama
+  :type 'plist)
+
 (define-minor-mode ellama-session-mode
   "Minor mode for ellama session buffers."
   :interactive nil
@@ -1291,6 +1296,27 @@ Then kill current buffer."
   (setq header-line-format
 	(substitute-command-keys
 	 "`\\[ellama-send-buffer-to-new-chat-then-kill]' to send `\\[ellama-kill-current-buffer]' to cancel")))
+
+;;;###autoload
+(defun ellama-create-blueprint ()
+  "Create blueprint from current buffer."
+  (interactive)
+  (let* ((name (read-string "Name: "))
+	 (for-devs (y-or-n-p "For developers? "))
+	 (content (buffer-substring-no-properties (point-min) (point-max)))
+	 (blueprint `(:act ,name :prompt ,content :for-devs ,for-devs)))
+    (add-to-list 'ellama-blueprints blueprint t)
+    (customize-save-variable 'ellama-blueprints ellama-blueprints)))
+
+;;;###autoload
+(defun ellama-new-blueprint ()
+  "Create new blueprint."
+  (interactive)
+  (let* ((name (concat (make-temp-name "*ellama-blueprint-") "*"))
+	 (buf (get-buffer-create name)))
+    ;; TODO: add major mode with keybindings.
+    ;; Variables can be highlighted.
+    (switch-to-buffer buf t t)))
 
 (defun ellama-update-context-buffer ()
   "Update ellama context buffer."
