@@ -1293,7 +1293,7 @@ Then kill current buffer."
 
 ;;;###autoload
 (define-derived-mode ellama-blueprint-mode
-  nil
+  text-mode
   "ellama-blueprint"
   "Toggle Ellama Blueprint mode."
   :keymap ellama-blueprint-mode-map
