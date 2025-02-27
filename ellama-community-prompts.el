@@ -169,32 +169,7 @@ Optional argument FOR-DEVS filters prompts for developers."
         (fill-region (point-min) (point-max))
         (ellama-blueprint-mode))
       (switch-to-buffer (current-buffer))
-      (ellama-community-prompts-update-variables))))
-
-(defun ellama-community-prompts-get-variable-list ()
-  "Return a deduplicated list of variables found in the current buffer."
-  (save-excursion
-    (let ((vars '()))
-      (goto-char (point-min))
-      (while (re-search-forward "\{\\([^}]+\\)}" nil t)
-	(push (match-string 1) vars))
-      (seq-uniq vars))))
-
-(defun ellama-community-prompts-set-variable (var value)
-  "Replace VAR with VALUE in blueprint buffer."
-  (save-excursion
-    (goto-char (point-min))
-    (while (search-forward (format "{%s}" var) nil t)
-      (replace-match value))))
-
-;;;###autoload
-(defun ellama-community-prompts-update-variables ()
-  "Prompt user for values of variables found in current buffer and update them."
-  (interactive)
-  (let ((vars (ellama-community-prompts-get-variable-list)))
-    (dolist (var vars)
-      (let ((value (read-string (format "Enter value for {%s}: " var))))
-        (ellama-community-prompts-set-variable var value)))))
+      (ellama-blueprint-fill-variables))))
 
 (provide 'ellama-community-prompts)
 ;;; ellama-community-prompts.el ends here.

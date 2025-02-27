@@ -1285,7 +1285,8 @@ Then kill current buffer."
   :parent global-map
   "C-c C-c" #'ellama-send-buffer-to-new-chat-then-kill
   "C-c C-k" #'ellama-kill-current-buffer
-  "C-c c" #'ellama-create-blueprint)
+  "C-c c" #'ellama-create-blueprint
+  "C-c v" #'ellama-blueprint-fill-variables)
 
 (defvar ellama-blueprint-font-lock-keywords
   '(("{\\([^}]+\\)}" 1 'font-lock-keyword-face))
@@ -1301,7 +1302,7 @@ Then kill current buffer."
   (setq font-lock-defaults '((("{\\([^}]+\\)}" 1 font-lock-keyword-face t))))
   (setq header-line-format
 	(substitute-command-keys
-	 "`\\[ellama-send-buffer-to-new-chat-then-kill]' to send `\\[ellama-kill-current-buffer]' to cancel `\\[ellama-create-blueprint]' to create new blueprint")))
+	 "`\\[ellama-send-buffer-to-new-chat-then-kill]' to send `\\[ellama-kill-current-buffer]' to cancel `\\[ellama-create-blueprint]' to create new blueprint `\\[ellama-blueprint-fill-variables]' to fill variables")))
 
 ;;;###autoload
 (defun ellama-create-blueprint ()
@@ -1337,6 +1338,32 @@ Then kill current buffer."
         (put-text-property (pos-bol) (pos-eol) 'context-element el)
         (insert "\n"))
       (goto-char (point-min)))))
+
+(defun ellama-blueprint-get-variable-list ()
+  "Return a deduplicated list of variables found in the current buffer."
+  (save-excursion
+    (let ((vars '()))
+      (goto-char (point-min))
+      (while (re-search-forward "\{\\([^}]+\\)}" nil t)
+	(push (match-string 1) vars))
+      (seq-uniq vars))))
+
+(defun ellama-blueprint-set-variable (var value)
+  "Replace VAR with VALUE in blueprint buffer."
+  (save-excursion
+    (goto-char (point-min))
+    (while (search-forward (format "{%s}" var) nil t)
+      (replace-match value))))
+
+;;;###autoload
+(defun ellama-blueprint-fill-variables ()
+  "Prompt user for values of variables found in current buffer and fill them."
+  (interactive)
+  (let ((vars (ellama-blueprint-get-variable-list)))
+    (dolist (var vars)
+      (let ((value (read-string (format "Enter value for {%s}: " var))))
+	(ellama-blueprint-set-variable var value)))))
+
 
 ;;;###autoload
 (defun ellama-manage-context ()
