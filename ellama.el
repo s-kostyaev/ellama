@@ -1298,13 +1298,7 @@ Then kill current buffer."
   "Toggle Ellama Blueprint mode."
   :keymap ellama-blueprint-mode-map
   :group 'ellama
-  ;; FIXME: works only on manual call `M-x' `font-lock-fontify-buffer'
-  ;; `font-lock-mode' breaks
   (setq font-lock-defaults '((("{\\([^}]+\\)}" 1 font-lock-keyword-face t))))
-  ;; (font-lock-mode +1)
-  ;; (when-let ((window (get-buffer-window (current-buffer))))
-  ;;   (with-selected-window window
-  ;;     (font-lock-fontify-buffer t)))
   (setq header-line-format
 	(substitute-command-keys
 	 "`\\[ellama-send-buffer-to-new-chat-then-kill]' to send `\\[ellama-kill-current-buffer]' to cancel `\\[ellama-create-blueprint]' to create new blueprint")))
