@@ -135,7 +135,7 @@ Returns the collection of community prompts."
 			     (point-min) (point-max)))))))))
   ellama-community-prompts-collection)
 
-(defvar ellama-community-prompts-blurpint-buffer "*ellama-community-prompts-blueprint-buffer*"
+(defvar ellama-community-prompts-blueprint-buffer "*ellama-community-prompts-blueprint-buffer*"
   "Buffer for community prompt blueprint.")
 
 ;;;###autoload
@@ -162,7 +162,7 @@ Optional argument FOR-DEVS filters prompts for developers."
           (setq selected-prompt (plist-get prompt :prompt))
           (throw 'found-prompt nil))))
     ;; Create a new buffer and insert the selected prompt
-    (with-current-buffer (get-buffer-create ellama-community-prompts-blurpint-buffer)
+    (with-current-buffer (get-buffer-create ellama-community-prompts-blueprint-buffer)
       (erase-buffer)
       (let ((hard-newline t))
         (insert selected-prompt)
