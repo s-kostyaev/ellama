@@ -1284,7 +1284,8 @@ Then kill current buffer."
   :doc "Local keymap for Ellama blueprint mode buffers."
   :parent global-map
   "C-c C-c" #'ellama-send-buffer-to-new-chat-then-kill
-  "C-c C-k" #'ellama-kill-current-buffer)
+  "C-c C-k" #'ellama-kill-current-buffer
+  "C-c c" #'ellama-create-blueprint)
 
 ;;;###autoload
 (define-derived-mode ellama-blueprint-mode
@@ -1295,7 +1296,7 @@ Then kill current buffer."
   :group 'ellama
   (setq header-line-format
 	(substitute-command-keys
-	 "`\\[ellama-send-buffer-to-new-chat-then-kill]' to send `\\[ellama-kill-current-buffer]' to cancel")))
+	 "`\\[ellama-send-buffer-to-new-chat-then-kill]' to send `\\[ellama-kill-current-buffer]' to cancel `\\[ellama-create-blueprint]' to create new blueprint")))
 
 ;;;###autoload
 (defun ellama-create-blueprint ()
