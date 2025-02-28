@@ -1321,6 +1321,7 @@ ARGS contains keys for fine control.
 - 'community will show blueprints from community;
 - otherwise all blueprints will be shown."
   (interactive)
+  (declare-function ellama-community-prompts-ensure "ellama-community-prompts")
   (let* ((for-devs (plist-get args :for-devs))
 	 (source (plist-get args :source))
 	 (acts '())
