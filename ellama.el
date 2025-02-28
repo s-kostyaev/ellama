@@ -1285,7 +1285,7 @@ Then kill current buffer."
   :parent global-map
   "C-c C-c" #'ellama-send-buffer-to-new-chat-then-kill
   "C-c C-k" #'ellama-kill-current-buffer
-  "C-c c" #'ellama-create-blueprint
+  "C-c c" #'ellama-blueprint-create
   "C-c v" #'ellama-blueprint-fill-variables)
 
 (defvar ellama-blueprint-font-lock-keywords
@@ -1302,7 +1302,7 @@ Then kill current buffer."
   (setq font-lock-defaults '((("{\\([^}]+\\)}" 1 font-lock-keyword-face t))))
   (setq header-line-format
 	(substitute-command-keys
-	 "`\\[ellama-send-buffer-to-new-chat-then-kill]' to send `\\[ellama-kill-current-buffer]' to cancel `\\[ellama-create-blueprint]' to create new blueprint `\\[ellama-blueprint-fill-variables]' to fill variables")))
+	 "`\\[ellama-send-buffer-to-new-chat-then-kill]' to send `\\[ellama-kill-current-buffer]' to cancel `\\[ellama-blueprint-create]' to create new blueprint `\\[ellama-blueprint-fill-variables]' to fill variables")))
 
 (defvar ellama-blueprint-buffer "*ellama-blueprint-buffer*"
   "Buffer for prompt blueprint.")
@@ -1362,7 +1362,7 @@ ARGS contains keys for fine control.
       (ellama-blueprint-fill-variables))))
 
 ;;;###autoload
-(defun ellama-create-blueprint ()
+(defun ellama-blueprint-create ()
   "Create blueprint from current buffer."
   (interactive)
   (let* ((name (read-string "Name: "))
@@ -1373,13 +1373,16 @@ ARGS contains keys for fine control.
     (customize-save-variable 'ellama-blueprints ellama-blueprints)))
 
 ;;;###autoload
-(defun ellama-new-blueprint ()
+(defun ellama-blueprint-new ()
   "Create new blueprint."
   (interactive)
-  (let* ((name (concat (make-temp-name "*ellama-blueprint-") "*"))
+  (let* ((content (when (region-active-p)
+		    (buffer-substring-no-properties (region-beginning) (region-end))))
+	 (name (concat (make-temp-name "*ellama-blueprint-") "*"))
 	 (buf (get-buffer-create name)))
     (switch-to-buffer buf t t)
     (with-current-buffer buf
+      (when content (insert content))
       (ellama-blueprint-mode))))
 
 (defun ellama-update-context-buffer ()
@@ -3328,12 +3331,23 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
     ("r" "Context reset" ellama-context-reset)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
+(transient-define-prefix ellama-transient-blueprint-menu ()
+  "Blueprint Menu."
+  ["Blueprint Commands"
+   ["Chat"
+    ("b" "Chat with blueprint" ellama-blueprint-select)
+    ("B" "Chat with community blueprint" ellama-community-prompts-select-blueprint)]
+   ["Create"
+    ("c" "Create from buffer" ellama-blueprint-create)
+    ("n" "New blueprint" ellama-blueprint-new)]
+   ["Quit" ("q" "Quit" transient-quit-one)]])
+
 (transient-define-prefix ellama-transient-main-menu ()
   "Main Menu."
   ["Main"
    [("c" "Chat" ellama-chat)
     ("b" "Chat with blueprint" ellama-blueprint-select)
-    ("B" "Chat with community blueprint" ellama-community-prompts-select-blueprint)]
+    ("B" "Blueprint Commands" ellama-transient-blueprint-menu)]
    [("a" "Ask Commands" ellama-transient-ask-menu)
     ("C" "Code Commands" ellama-transient-code-menu)]]
   ["Text"
