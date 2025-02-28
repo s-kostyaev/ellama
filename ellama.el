@@ -1308,6 +1308,31 @@ Then kill current buffer."
   "Buffer for prompt blueprint.")
 
 ;;;###autoload
+(defun ellama-blueprint-run (blueprint &optional args)
+  "Run chat with llm starting with BLUEPRINT with prefilled variables.
+
+ARGS contains plist with variables to prefill."
+  (let* ((collection (seq-union
+		      ellama-blueprints
+		      (ellama-community-prompts-ensure)
+		      (lambda (blueprint1 blueprint2)
+			(string=
+			 (plist-get blueprint1 :act)
+			 (plist-get blueprint2 :act)))))
+	 (prompt (cl-find-if (lambda (el)
+			       (string= blueprint (plist-get el :act)))
+			     collection))
+	 (content (plist-get prompt :prompt)))
+    (with-temp-buffer
+      (insert content)
+      (when args
+	(dolist (var (ellama-blueprint-get-variable-list))
+	  (ellama-blueprint-set-variable
+	   var
+	   (plist-get args (intern (concat ":" var))))))
+      (ellama-send-buffer-to-new-chat))))
+
+;;;###autoload
 (defun ellama-blueprint-select (&optional args)
   "Select a prompt from the prompt collection.
 The user is prompted to choose a role, and then a
