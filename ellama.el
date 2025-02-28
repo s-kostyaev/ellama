@@ -1304,6 +1304,63 @@ Then kill current buffer."
 	(substitute-command-keys
 	 "`\\[ellama-send-buffer-to-new-chat-then-kill]' to send `\\[ellama-kill-current-buffer]' to cancel `\\[ellama-create-blueprint]' to create new blueprint `\\[ellama-blueprint-fill-variables]' to fill variables")))
 
+(defvar ellama-blueprint-buffer "*ellama-blueprint-buffer*"
+  "Buffer for prompt blueprint.")
+
+;;;###autoload
+(defun ellama-blueprint-select (&optional args)
+  "Select a prompt from the prompt collection.
+The user is prompted to choose a role, and then a
+corresponding prompt is inserted into a blueprint buffer.
+ARGS contains keys for fine control.
+
+:for-devs filters prompts for developers.
+
+:source filters prompts for source:
+- 'user will show user defined blueprints only;
+- 'community will show blueprints from community;
+- otherwise all blueprints will be shown."
+  (interactive)
+  (message "args: %s" args)
+  (let* ((for-devs (plist-get args :for-devs))
+	 (source (plist-get args :source))
+	 (_ (message "source: %s" source))
+	 (acts '())
+	 (collection (pcase source
+		       ('user ellama-blueprints)
+		       ('community (ellama-community-prompts-ensure))
+		       (t (seq-union
+			   ellama-blueprints
+			   (ellama-community-prompts-ensure)
+			   (lambda (blueprint1 blueprint2)
+			     (string=
+			      (plist-get blueprint1 :act)
+			      (plist-get blueprint2 :act)))))))
+	 selected-act
+	 selected-prompt)
+    ;; Collect unique acts from the filtered collection
+    (dolist (prompt collection)
+      (when (or (not for-devs) (eq for-devs (plist-get prompt :for-devs)))
+	(cl-pushnew (plist-get prompt :act) acts)))
+    ;; Prompt user to select an act
+    (setq selected-act (completing-read "Select Act: " acts))
+    ;; Find the corresponding prompt
+    (catch 'found-prompt
+      (dolist (prompt collection)
+	(when (and (string= selected-act (plist-get prompt :act))
+		   (or (not for-devs) (eq for-devs (plist-get prompt :for-devs))))
+	  (setq selected-prompt (plist-get prompt :prompt))
+	  (throw 'found-prompt nil))))
+    ;; Create a new buffer and insert the selected prompt
+    (with-current-buffer (get-buffer-create ellama-blueprint-buffer)
+      (erase-buffer)
+      (let ((hard-newline t))
+	(insert selected-prompt)
+	(fill-region (point-min) (point-max))
+	(ellama-blueprint-mode))
+      (switch-to-buffer (current-buffer))
+      (ellama-blueprint-fill-variables))))
+
 ;;;###autoload
 (defun ellama-create-blueprint ()
   "Create blueprint from current buffer."
@@ -3275,6 +3332,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
   "Main Menu."
   ["Main"
    [("c" "Chat" ellama-chat)
+    ("b" "Chat with blueprint" ellama-blueprint-select)
     ("B" "Chat with community blueprint" ellama-community-prompts-select-blueprint)]
    [("a" "Ask Commands" ellama-transient-ask-menu)
     ("C" "Code Commands" ellama-transient-code-menu)]]

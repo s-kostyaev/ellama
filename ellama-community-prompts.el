@@ -135,9 +135,6 @@ Returns the collection of community prompts."
 			     (point-min) (point-max)))))))))
   ellama-community-prompts-collection)
 
-(defvar ellama-community-prompts-blueprint-buffer "*ellama-community-prompts-blueprint-buffer*"
-  "Buffer for community prompt blueprint.")
-
 ;;;###autoload
 (defun ellama-community-prompts-select-blueprint (&optional for-devs)
   "Select a prompt from the community prompt collection.
@@ -145,31 +142,10 @@ The user is prompted to choose a role, and then a
 corresponding prompt is inserted into a blueprint buffer.
 
 Optional argument FOR-DEVS filters prompts for developers."
-  (interactive "P")
-  (let ((acts '())
-        selected-act selected-prompt)
-    ;; Collect unique acts from the filtered collection
-    (dolist (prompt (ellama-community-prompts-ensure))
-      (when (or (not for-devs) (eq for-devs (plist-get prompt :for-devs)))
-        (cl-pushnew (plist-get prompt :act) acts)))
-    ;; Prompt user to select an act
-    (setq selected-act (completing-read "Select Act: " acts))
-    ;; Find the corresponding prompt
-    (catch 'found-prompt
-      (dolist (prompt ellama-community-prompts-collection)
-        (when (and (string= selected-act (plist-get prompt :act))
-                   (or (not for-devs) (eq for-devs (plist-get prompt :for-devs))))
-          (setq selected-prompt (plist-get prompt :prompt))
-          (throw 'found-prompt nil))))
-    ;; Create a new buffer and insert the selected prompt
-    (with-current-buffer (get-buffer-create ellama-community-prompts-blueprint-buffer)
-      (erase-buffer)
-      (let ((hard-newline t))
-        (insert selected-prompt)
-        (fill-region (point-min) (point-max))
-        (ellama-blueprint-mode))
-      (switch-to-buffer (current-buffer))
-      (ellama-blueprint-fill-variables))))
+  (interactive "p")
+  (ellama-blueprint-select (if for-devs
+			       '(:source community :for-devs t)
+			     '(:source community))))
 
 (provide 'ellama-community-prompts)
 ;;; ellama-community-prompts.el ends here.
