@@ -1386,6 +1386,14 @@ ARGS contains keys for fine control.
       (ellama-blueprint-fill-variables))))
 
 ;;;###autoload
+(defun ellama-blueprint-select-user-defined-blueprint ()
+  "Select a prompt from the user defined prompt collection.
+The user is prompted to choose a role, and then a
+corresponding prompt is inserted into a blueprint buffer."
+  (interactive)
+  (ellama-blueprint-select '(:source user)))
+
+;;;###autoload
 (defun ellama-blueprint-create ()
   "Create blueprint from current buffer."
   (interactive)
@@ -3360,6 +3368,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
   ["Blueprint Commands"
    ["Chat"
     ("b" "Chat with blueprint" ellama-blueprint-select)
+    ("U" "Chat with user defined blueprint" ellama-blueprint-select-user-defined-blueprint)
     ("B" "Chat with community blueprint" ellama-community-prompts-select-blueprint)]
    ["Create"
     ("c" "Create from buffer" ellama-blueprint-create)

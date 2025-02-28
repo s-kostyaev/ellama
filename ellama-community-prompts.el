@@ -136,16 +136,12 @@ Returns the collection of community prompts."
   ellama-community-prompts-collection)
 
 ;;;###autoload
-(defun ellama-community-prompts-select-blueprint (&optional for-devs)
+(defun ellama-community-prompts-select-blueprint ()
   "Select a prompt from the community prompt collection.
 The user is prompted to choose a role, and then a
-corresponding prompt is inserted into a blueprint buffer.
-
-Optional argument FOR-DEVS filters prompts for developers."
-  (interactive "p")
-  (ellama-blueprint-select (if for-devs
-			       '(:source community :for-devs t)
-			     '(:source community))))
+corresponding prompt is inserted into a blueprint buffer."
+  (interactive)
+  (ellama-blueprint-select '(:source community)))
 
 (provide 'ellama-community-prompts)
 ;;; ellama-community-prompts.el ends here.
