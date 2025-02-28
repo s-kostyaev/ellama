@@ -1327,7 +1327,7 @@ ARGS contains keys for fine control.
 	 (collection (pcase source
 		       ('user ellama-blueprints)
 		       ('community (ellama-community-prompts-ensure))
-		       (t (seq-union
+		       (_ (seq-union
 			   ellama-blueprints
 			   (ellama-community-prompts-ensure)
 			   (lambda (blueprint1 blueprint2)
