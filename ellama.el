@@ -1321,10 +1321,8 @@ ARGS contains keys for fine control.
 - 'community will show blueprints from community;
 - otherwise all blueprints will be shown."
   (interactive)
-  (message "args: %s" args)
   (let* ((for-devs (plist-get args :for-devs))
 	 (source (plist-get args :source))
-	 (_ (message "source: %s" source))
 	 (acts '())
 	 (collection (pcase source
 		       ('user ellama-blueprints)
