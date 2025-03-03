@@ -2162,7 +2162,7 @@ failure (with BUFFER current).
 			       (ellama-session-prompt session))
 			   (setf (ellama-session-prompt session)
 				 (llm-make-chat-prompt prompt-with-ctx :context system)))
-		       (llm-make-simple-chat-prompt prompt-with-ctx)))
+		       (llm-make-chat-prompt prompt-with-ctx :context system)))
 	 (stop-scroll))
     (with-current-buffer buffer
       (ellama-request-mode +1)
@@ -2624,6 +2624,11 @@ the full response text when the request completes (with BUFFER current)."
 		(buffer-substring-no-properties (point-min) (point-max)))))
     (ellama-chat text)))
 
+(defcustom ellama-complete-prompt-template "You're providing text completion. Complete the text. Do not aknowledge, reply with completion only."
+  "System prompt template for `ellama-complete'."
+  :group 'ellama
+  :type 'string)
+
 ;;;###autoload
 (defun ellama-complete ()
   "Complete text in current buffer."
@@ -2635,7 +2640,9 @@ the full response text when the request completes (with BUFFER current)."
 		  (region-end)
 		(point)))
 	 (text (buffer-substring-no-properties beg end)))
-    (ellama-stream text)))
+    (ellama-stream text
+		   :system ellama-complete-prompt-template
+		   :filter (lambda (s) (string-trim-left s (rx (literal text)))))))
 
 (defvar vc-git-diff-switches)
 (declare-function vc-diff-internal "vc")
