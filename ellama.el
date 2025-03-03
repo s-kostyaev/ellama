@@ -2639,10 +2639,14 @@ the full response text when the request completes (with BUFFER current)."
 	 (end (if (region-active-p)
 		  (region-end)
 		(point)))
-	 (text (buffer-substring-no-properties beg end)))
+	 (text (buffer-substring-no-properties beg end))
+	 (line (car (reverse (string-lines text))))
+	 (word (car (reverse (string-split line " ")))))
     (ellama-stream text
 		   :system ellama-complete-prompt-template
-		   :filter (lambda (s) (string-trim-left s (rx (literal text)))))))
+		   :filter (lambda (s) (string-trim-left s (rx (or (literal text)
+								   (literal line)
+								   (literal word))))))))
 
 (defvar vc-git-diff-switches)
 (declare-function vc-diff-internal "vc")
