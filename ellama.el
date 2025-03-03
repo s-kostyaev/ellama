@@ -2646,7 +2646,8 @@ the full response text when the request completes (with BUFFER current)."
 		   :system ellama-complete-prompt-template
 		   :filter (lambda (s) (string-trim-left s (rx (or (literal text)
 								   (literal line)
-								   (literal word))))))))
+								   (literal word)))))
+		   :on-done #'ellama-fix-parens)))
 
 (defvar vc-git-diff-switches)
 (declare-function vc-diff-internal "vc")
@@ -2955,7 +2956,17 @@ prefix (\\[universal-argument]), prompt the user to amend the template."
 		  (or (literal text)
 		      (literal line)
 		      (literal word))))))
+     :on-done #'ellama-fix-parens
      :point end)))
+
+(defun ellama-fix-parens (&optional _)
+  "Remove unnessessary parens if needed."
+  (interactive)
+  (while (condition-case nil
+	     (check-parens)
+	   (error (progn
+		    (delete-char -1)
+		    t)))))
 
 ;;;###autoload
 (defun ellama-code-add (description)
