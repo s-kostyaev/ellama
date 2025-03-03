@@ -2932,13 +2932,29 @@ prefix (\\[universal-argument]), prompt the user to amend the template."
 	 (end (if (region-active-p)
 		  (region-end)
 		(point)))
-	 (text (buffer-substring-no-properties beg end)))
+	 (text (buffer-substring-no-properties beg end))
+	 (line (car (reverse (cl-remove-if (lambda (s)
+					     (string-match-p (rx
+							      line-start
+							      (* (any space))
+							      line-end)
+							     s))
+					   (string-lines text)))))
+	 (word (car (reverse (string-split line " ")))))
     (ellama-stream
      (format
       ellama-code-complete-prompt-template
       text)
      :provider ellama-coding-provider
-     :filter #'ellama--code-filter
+     :filter (lambda (s)
+	       (string-trim
+		(string-trim-left
+		 (ellama--code-filter s)
+		 (rx
+		  (* (any space))
+		  (or (literal text)
+		      (literal line)
+		      (literal word))))))
      :point end)))
 
 ;;;###autoload
