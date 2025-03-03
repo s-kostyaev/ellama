@@ -1342,8 +1342,8 @@ ARGS contains keys for fine control.
 :for-devs filters prompts for developers.
 
 :source filters prompts for source:
-- 'user will show user defined blueprints only;
-- 'community will show blueprints from community;
+- `user' will show user defined blueprints only;
+- `community' will show blueprints from community;
 - otherwise all blueprints will be shown."
   (interactive)
   (declare-function ellama-community-prompts-ensure "ellama-community-prompts")
