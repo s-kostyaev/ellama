@@ -117,7 +117,7 @@ PARSED-LINE is expected to be a list with three elements: :act,
   "Ensure that the community prompt collection are loaded and available.
 This function ensures that the file specified by `ellama-community-prompts-file'
 is read and parsed, and the resulting collection of prompts is stored in
-`ellama-community-prompts-collection'. If the collection is already populated,
+`ellama-community-prompts-collection'.  If the collection is already populated,
 this function does nothing.
 
 Returns the collection of community prompts."
