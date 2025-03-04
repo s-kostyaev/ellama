@@ -136,7 +136,6 @@ ARGS contains keys for fine control.
       (erase-buffer)
       (let ((hard-newline t))
 	(insert selected-prompt)
-	(fill-region (point-min) (point-max))
 	(ellama-blueprint-mode))
       (switch-to-buffer (current-buffer))
       (ellama-blueprint-fill-variables))))
