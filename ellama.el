@@ -3405,9 +3405,9 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
   "Blueprint Menu."
   ["Blueprint Commands"
    ["Chat"
-    ("b" "Chat with blueprint" ellama-blueprint-select)
-    ("U" "Chat with user defined blueprint" ellama-blueprint-select-user-defined-blueprint)
-    ("B" "Chat with community blueprint" ellama-community-prompts-select-blueprint)]
+    ("b" "Blueprint" ellama-blueprint-select)
+    ("U" "User defined blueprint" ellama-blueprint-select-user-defined-blueprint)
+    ("C" "Community blueprint" ellama-community-prompts-select-blueprint)]
    ["Create"
     ("c" "Create from buffer" ellama-blueprint-create)
     ("n" "New blueprint" ellama-blueprint-new)]
