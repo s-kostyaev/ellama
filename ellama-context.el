@@ -118,6 +118,8 @@ the context."
       (posframe-hide ellama--context-buffer)))
   (ellama-context-update-header-line))
 
+(declare-function ellama-transient-context-menu "ellama-transient")
+
 (defun ellama-context-line ()
   "Return current global context line."
   (propertize (with-current-buffer ellama--context-buffer
