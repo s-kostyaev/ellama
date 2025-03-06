@@ -30,17 +30,26 @@
 
 ;;; Code:
 (require 'ellama)
+(require 'ellama-transient)
 
 (defcustom ellama-blueprints nil
   "User defined blueprints."
   :group 'ellama
   :type '(repeat plist))
 
+;;;###autoload
+(defun ellama-blueprint-set-system-kill-buffer ()
+  "Set system message from current buffer and kill it."
+  (interactive)
+  (ellama-transient-set-system-from-buffer)
+  (kill-buffer (current-buffer)))
+
 (defvar-keymap ellama-blueprint-mode-map
   :doc "Local keymap for Ellama blueprint mode buffers."
   :parent global-map
   "C-c C-c" #'ellama-send-buffer-to-new-chat-then-kill
   "C-c C-k" #'ellama-kill-current-buffer
+  "C-c y" #'ellama-blueprint-set-system-kill-buffer
   "C-c c" #'ellama-blueprint-create
   "C-c v" #'ellama-blueprint-fill-variables)
 
@@ -58,7 +67,7 @@
   (setq font-lock-defaults '((("{\\([^}]+\\)}" 1 font-lock-keyword-face t))))
   (setq header-line-format
 	(substitute-command-keys
-	 "`\\[ellama-send-buffer-to-new-chat-then-kill]' to send `\\[ellama-kill-current-buffer]' to cancel `\\[ellama-blueprint-create]' to create new blueprint `\\[ellama-blueprint-fill-variables]' to fill variables")))
+	 "`\\[ellama-send-buffer-to-new-chat-then-kill]' to send `\\[ellama-kill-current-buffer]' to cancel `\\[ellama-blueprint-set-system-kill-buffer]' to set system `\\[ellama-blueprint-create]' to create new blueprint `\\[ellama-blueprint-fill-variables]' to fill variables")))
 
 (defvar ellama-blueprint-buffer "*ellama-blueprint-buffer*"
   "Buffer for prompt blueprint.")

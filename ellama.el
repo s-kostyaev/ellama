@@ -1145,6 +1145,8 @@ Otherwire return current active session."
     (with-current-buffer buf
       (ellama-collapse-org-quotes))))
 
+(defvar ellama-transient-system)
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
@@ -1198,7 +1200,8 @@ failure (with BUFFER current).
 		      (error "Error calling the LLM: %s" msg))))
 	 (donecb (or (plist-get args :on-done) #'ignore))
 	 (prompt-with-ctx (ellama-context-prompt-with-context prompt))
-	 (system (plist-get args :system))
+	 (system (or (plist-get args :system)
+		     ellama-transient-system))
 	 (llm-prompt (if session
 			 (if (llm-chat-prompt-p (ellama-session-prompt session))
 			     (progn

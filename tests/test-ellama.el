@@ -27,6 +27,7 @@
 (require 'cl-lib)
 (require 'ellama)
 (require 'ellama-context)
+(require 'ellama-transient)
 (require 'ert)
 
 (ert-deftest test-ellama--code-filter ()

@@ -32,11 +32,39 @@
 (require 'ellama)
 (require 'transient)
 
+(defcustom ellama-transient-system-show-limit 45
+  "Maximum length of system message to show."
+  :type 'ingeger
+  :group 'ellama)
+
 (defvar ellama-transient-ollama-model-name "")
 (defvar ellama-transient-temperature 0.7)
 (defvar ellama-transient-context-length 4096)
 (defvar ellama-transient-host "localhost")
 (defvar ellama-transient-port 11434)
+(defvar ellama-transient-system nil)
+
+(defun ellama-transient-system-show ()
+  "Show transient system message."
+  (format "System message (%s)"
+          (string-limit (car (string-lines ellama-transient-system))
+                        ellama-transient-system-show-limit)))
+
+(transient-define-suffix ellama-transient-set-system ()
+  "Set system message."
+  (interactive)
+  (if (region-active-p)
+      (setq ellama-transient-system (buffer-substring-no-properties
+                                     (region-beginning) (region-end)))
+    (let* ((msg-string (read-string "Set system mesage: "))
+           (msg (when (not (string-empty-p msg-string)) msg-string)))
+      (setq ellama-transient-system msg))))
+
+(defun ellama-transient-set-system-from-buffer ()
+  "Set system message from current buffer."
+  (interactive)
+  (setq ellama-transient-system (buffer-substring-no-properties
+			         (point-min) (point-max))))
 
 (transient-define-suffix ellama-transient-set-ollama-model ()
   "Set ollama model name."
@@ -269,6 +297,12 @@
    ["Create"
     ("c" "Create from buffer" ellama-blueprint-create)
     ("n" "New blueprint" ellama-blueprint-new)]
+   ["System"
+    ("y" "Set system message" ellama-transient-set-system
+     :transient t
+     :description ellama-transient-system-show)
+    ("Y" "Set system message from current buffer" ellama-transient-set-system-from-buffer
+     :transient t)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 ;;;###autoload
@@ -292,7 +326,10 @@
     ("m" "Make Commands" ellama-transient-make-menu)]]
   ["System"
    [("o" "Ollama model" ellama-select-ollama-model)
-    ("p" "Provider selection" ellama-provider-select)]
+    ("p" "Provider selection" ellama-provider-select)
+    ("y" "Set system message" ellama-transient-set-system
+     :transient t
+     :description ellama-transient-system-show)]
    [("S" "Session Commands" ellama-transient-session-menu)
     ("x" "Context Commands" ellama-transient-context-menu)]]
   [["Problem solving"
