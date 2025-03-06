@@ -51,7 +51,9 @@
                         ellama-transient-system-show-limit)))
 
 (transient-define-suffix ellama-transient-set-system ()
-  "Set system message."
+  "Set system message.
+If a region is active, use the text within the region as the system message.
+Otherwise, prompt the user to enter a system message."
   (interactive)
   (if (region-active-p)
       (setq ellama-transient-system (buffer-substring-no-properties
