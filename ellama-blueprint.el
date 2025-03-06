@@ -34,7 +34,7 @@
 (defcustom ellama-blueprints nil
   "User defined blueprints."
   :group 'ellama
-  :type 'plist)
+  :type '(repeat plist))
 
 (defvar-keymap ellama-blueprint-mode-map
   :doc "Local keymap for Ellama blueprint mode buffers."
