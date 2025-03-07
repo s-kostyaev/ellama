@@ -299,12 +299,6 @@ Otherwise, prompt the user to enter a system message."
    ["Create"
     ("c" "Create from buffer" ellama-blueprint-create)
     ("n" "New blueprint" ellama-blueprint-new)]
-   ["System"
-    ("y" "Set system message" ellama-transient-set-system
-     :transient t
-     :description ellama-transient-system-show)
-    ("Y" "Set system message from current buffer" ellama-transient-set-system-from-buffer
-     :transient t)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 ;;;###autoload
@@ -331,7 +325,8 @@ Otherwise, prompt the user to enter a system message."
     ("p" "Provider selection" ellama-provider-select)
     ("y" "Set system message" ellama-transient-set-system
      :transient t
-     :description ellama-transient-system-show)]
+     :description ellama-transient-system-show)
+    ("Y" "Edit system message" ellama-blueprint-edit-system-message)]
    [("S" "Session Commands" ellama-transient-session-menu)
     ("x" "Context Commands" ellama-transient-context-menu)]]
   [["Problem solving"

@@ -150,6 +150,19 @@ ARGS contains keys for fine control.
       (ellama-blueprint-fill-variables))))
 
 ;;;###autoload
+(defun ellama-blueprint-edit-system-message ()
+  "Edit system message as blueprint."
+  (interactive)
+  (when ellama-transient-system
+    (with-current-buffer (get-buffer-create ellama-blueprint-buffer)
+      (erase-buffer)
+      (let ((hard-newline t))
+	(insert ellama-transient-system)
+	(ellama-blueprint-mode))
+      (switch-to-buffer (current-buffer))
+      (ellama-blueprint-fill-variables))))
+
+;;;###autoload
 (defun ellama-blueprint-select-user-defined-blueprint ()
   "Select a prompt from the user defined prompt collection.
 The user is prompted to choose a role, and then a
