@@ -2350,12 +2350,13 @@ otherwise prompt user for URL to summarize."
 (defun ellama-complete-at-point (&rest _)
   "Complete at point using ellama."
   (interactive)
-  (let ((bounds (bounds-of-thing-at-point 'word)))
-    (when bounds
-      (list (car bounds)
-	    (cdr bounds)
-	    (ellama-generate-completion-list)
-	    :exclusive 'no))))
+  (while-no-input
+    (let ((bounds (bounds-of-thing-at-point 'word)))
+      (when bounds
+	(list (car bounds)
+	      (cdr bounds)
+	      (ellama-generate-completion-list)
+	      :exclusive 'no)))))
 
 (defun ellama-semantic-similar-p (text1 text2)
   "Check if TEXT1 means the same as TEXT2."
