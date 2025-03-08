@@ -1636,6 +1636,20 @@ the full response text when the request completes (with BUFFER current)."
 			 :filter (when (derived-mode-p 'org-mode)
 				   #'ellama--translate-markdown-to-org-filter)))))))
 
+;;;###autoload
+(defun ellama-chat-with-system-from-buffer ()
+  "Start a new chat session with a system message created from the current buffer."
+  (interactive)
+  (let* ((prompt (read-string "Prompt: "))
+	 (content (buffer-substring-no-properties (point-min) (point-max)))
+	 (system (if (derived-mode-p 'org-mode)
+		     (ellama-convert-org-to-md content)
+		   content)))
+    (ellama-chat
+     prompt
+     t
+     :system system)))
+
 (defvar ellama-context-global)
 
 ;;;###autoload

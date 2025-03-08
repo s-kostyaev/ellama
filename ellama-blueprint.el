@@ -44,14 +44,19 @@
   (ellama-transient-set-system-from-buffer)
   (kill-buffer (current-buffer)))
 
+;;;###autoload
+(defun ellama-blueprint-chat-with-system-kill-buffer ()
+  "Chat with the system message from the current blueprint and kill the buffer."
+  (interactive)
+  (let ((buf (current-buffer)))
+    (ellama-chat-with-system-from-buffer)
+    (kill-buffer buf)))
+
 (defvar-keymap ellama-blueprint-mode-map
   :doc "Local keymap for Ellama blueprint mode buffers."
   :parent global-map
-  "C-c C-c" #'ellama-send-buffer-to-new-chat-then-kill
-  "C-c C-k" #'ellama-kill-current-buffer
-  "C-c y" #'ellama-blueprint-set-system-kill-buffer
-  "C-c c" #'ellama-blueprint-create
-  "C-c v" #'ellama-blueprint-fill-variables)
+  "C-c C-c" #'ellama-transient-blueprint-mode-menu
+  "C-c C-k" #'ellama-kill-current-buffer)
 
 (defvar ellama-blueprint-font-lock-keywords
   '(("{\\([^}]+\\)}" 1 'font-lock-keyword-face))
@@ -66,8 +71,28 @@
   :group 'ellama
   (setq font-lock-defaults '((("{\\([^}]+\\)}" 1 font-lock-keyword-face t))))
   (setq header-line-format
-	(substitute-command-keys
-	 "`\\[ellama-send-buffer-to-new-chat-then-kill]' to send `\\[ellama-kill-current-buffer]' to cancel `\\[ellama-blueprint-set-system-kill-buffer]' to set system `\\[ellama-blueprint-create]' to create new blueprint `\\[ellama-blueprint-fill-variables]' to fill variables")))
+	(concat
+	 (propertize
+	  (substitute-command-keys
+	   "`\\[ellama-transient-blueprint-mode-menu]' to continue")
+	  'help-echo "mouse-1: show menu"
+	  'mouse-face 'header-line-format
+	  'face 'ellama-context-line-face
+	  'keymap (let ((m (make-sparse-keymap)))
+		    (define-key m [header-line mouse-1] #'ellama-transient-blueprint-mode-menu)
+		    (define-key m [mode-line mouse-1] #'ellama-transient-blueprint-mode-menu)
+		    m))
+	 " "
+	 (propertize
+	  (substitute-command-keys
+	   "`\\[ellama-kill-current-buffer]' to cancel")
+	  'help-echo "mouse-1: kill buffer"
+	  'mouse-face 'header-line-format
+	  'face 'ellama-context-line-face
+	  'keymap (let ((m (make-sparse-keymap)))
+		    (define-key m [header-line mouse-1] #'ellama-kill-current-buffer)
+		    (define-key m [mode-line mouse-1] #'ellama-kill-current-buffer)
+		    m)))))
 
 (defvar ellama-blueprint-buffer "*ellama-blueprint-buffer*"
   "Buffer for prompt blueprint.")

@@ -302,6 +302,22 @@ Otherwise, prompt the user to enter a system message."
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 ;;;###autoload
+(transient-define-prefix ellama-transient-blueprint-mode-menu ()
+  ["Blueprint Commands"
+   ["Chat"
+    ("c" "Send to chat" ellama-send-buffer-to-new-chat-then-kill)]
+   ["System Message"
+    ("s" "Set system and chat" ellama-blueprint-chat-with-system-kill-buffer)
+    ("S" "Set system and quit" ellama-blueprint-set-system-kill-buffer)]
+   ["Create"
+    ("C" "Create new blueprint from buffer" ellama-blueprint-create)]
+   ["Variables"
+    ("v" "Fill variables" ellama-blueprint-fill-variables)]
+   ["Quit"
+    ("k" "Kill" ellama-kill-current-buffer)
+    ("q" "Quit" transient-quit-one)]])
+
+;;;###autoload
 (transient-define-prefix ellama-transient-main-menu ()
   "Main Menu."
   ["Main"
