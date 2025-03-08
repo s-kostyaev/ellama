@@ -1,3 +1,41 @@
+* Version 1.5.0
+**** Code Refactoring and Modularity
+- Moved transient menu-related functions and variables from ~ellama.el~ to
+  ~ellama-transient.el~.
+- Created ~ellama-context.el~ for context-related functions, variables, and
+  classes.
+- Moved blueprint-related code from ~ellama.el~ to ~ellama-blueprint.el~.
+
+**** System Message Support
+- Added system message support with new functions and variables in
+  ~ellama-blueprint.el~ and ~ellama-transient.el~.
+- Updated keybindings and transient menus to include system message options.
+- Modified ~ellama-stream~ to use the transient system message if not provided
+  explicitly.
+
+**** Functionality Enhancements
+- Updated ~ellama-summarize-prompt-template~ with new summarization
+  instructions.
+- Modified ~ellama-instant~ calls in ~ellama-summarize~ and
+  ~ellama-summarize-kill-ring~.
+- Updated translation template for better structure and added Org-mode to
+  Markdown conversion.
+- Added ~ellama-fix-parens~ function to remove unnecessary parentheses after
+  template insertion.
+- Refined ~ellama-complete~ function for more accurate response trimming.
+
+**** Blueprints Support Enhancements
+- Added ~ellama-blueprint-run~ function to run a chat with an LLM using a
+  specified blueprint and optional pre-filled variables.
+- Added documentation for blueprints in the README file.
+- Added a new transient prefix command ~ellama-transient-blueprint-menu~ for
+  managing blueprint-related commands, including creating blueprints from buffer
+  or as new ones, and chatting with selected blueprints.
+- Added a main menu option for chatting with blueprints.
+- Added custom variable ~ellama-blueprints~ to store user-defined blueprints.
+- Created commands ~ellama-create-blueprint~ and ~ellama-new-blueprint~ for
+  creating new blueprints from an existing one and from scratch.
+
 * Version 1.4.5
 - Fix compat dependency version.
 * Version 1.4.4
