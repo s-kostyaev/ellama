@@ -1860,6 +1860,16 @@ the full response text when the request completes (with BUFFER current)."
   :group 'ellama
   :type 'string)
 
+(defcustom ellama-completion-list-prompt-template "You're providing text completion. Complete the text. You need to generate different possible ONE WORD completions to provided text as json object. Do not aknowledge, reply with completions only. Every completion should start from last word or part of the last word of provided text in the same case.
+
+<EXAMPLE>
+Text: Hel
+completions: \"Hello\", \"Help\", \"Hell\", \"Helping\", \"Helicopter\", \"Helix\"
+</EXAMPLE>"
+  "System prompt template for `ellama-generate-completion-list'."
+  :group 'ellama
+  :type 'string)
+
 ;;;###autoload
 (defun ellama-complete ()
   "Complete text in current buffer."
@@ -2312,6 +2322,40 @@ otherwise prompt user for URL to summarize."
       :object-type 'plist
       :false-object nil)
      :same)))
+
+(defun ellama-generate-completion-list ()
+  "Generate completion list from context at point."
+  (mapcar (lambda (s)
+	    (car (reverse (string-split s))))
+	  (plist-get
+	   (json-parse-string
+	    (llm-chat
+	     (or ellama-completion-provider
+		 ellama-provider
+		 (ellama-get-first-ollama-chat-model))
+	     (llm-make-chat-prompt
+	      (if (region-active-p)
+		  (buffer-substring-no-properties (region-beginning) (region-end))
+		(buffer-substring-no-properties (point-min) (point)))
+	      :context ellama-completion-list-prompt-template
+	      :response-format '(:type object :properties
+				       (:completions (:type array :items (:type string)))
+				       :required (completions))))
+
+	    :object-type 'plist
+	    :false-object nil
+	    :array-type 'list)
+	   :completions)))
+
+(defun ellama-complete-at-point (&rest _)
+  "Complete at point using ellama."
+  (interactive)
+  (let ((bounds (bounds-of-thing-at-point 'word)))
+    (when bounds
+      (list (car bounds)
+	    (cdr bounds)
+	    (ellama-generate-completion-list)
+	    :exclusive 'no))))
 
 (defun ellama-semantic-similar-p (text1 text2)
   "Check if TEXT1 means the same as TEXT2."
