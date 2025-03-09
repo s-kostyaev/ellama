@@ -1145,7 +1145,7 @@ Otherwire return current active session."
     (with-current-buffer buf
       (ellama-collapse-org-quotes))))
 
-(defvar ellama-transient-system)
+(defvar ellama-global-system nil)
 
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
@@ -1201,7 +1201,7 @@ failure (with BUFFER current).
 	 (donecb (or (plist-get args :on-done) #'ignore))
 	 (prompt-with-ctx (ellama-context-prompt-with-context prompt))
 	 (system (or (plist-get args :system)
-		     ellama-transient-system))
+		     ellama-global-system))
 	 (llm-prompt (if session
 			 (if (llm-chat-prompt-p (ellama-session-prompt session))
 			     (progn
