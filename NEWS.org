@@ -1,3 +1,8 @@
+* Version 1.5.1
+- Renamed the variable ~ellama-transient-system~ to ~ellama-global-system~ to
+  reflect its broader scope and updated all references in ~ellama.el~,
+  ~ellama-transient.el~ and ~ellama-blueprint.el~. Moved it from
+  ellama-transient to ellama. Fix symbol’s value as variable is void bug.
 * Version 1.5.0
 **** Code Refactoring and Modularity
 - Moved transient menu-related functions and variables from ~ellama.el~ to

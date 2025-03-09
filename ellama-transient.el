@@ -42,12 +42,11 @@
 (defvar ellama-transient-context-length 4096)
 (defvar ellama-transient-host "localhost")
 (defvar ellama-transient-port 11434)
-(defvar ellama-transient-system nil)
 
 (defun ellama-transient-system-show ()
   "Show transient system message."
   (format "System message (%s)"
-          (string-limit (car (string-lines ellama-transient-system))
+          (string-limit (car (string-lines ellama-global-system))
                         ellama-transient-system-show-limit)))
 
 (transient-define-suffix ellama-transient-set-system ()
@@ -56,17 +55,17 @@ If a region is active, use the text within the region as the system message.
 Otherwise, prompt the user to enter a system message."
   (interactive)
   (if (region-active-p)
-      (setq ellama-transient-system (buffer-substring-no-properties
-                                     (region-beginning) (region-end)))
+      (setq ellama-global-system (buffer-substring-no-properties
+                                  (region-beginning) (region-end)))
     (let* ((msg-string (read-string "Set system mesage: "))
            (msg (when (not (string-empty-p msg-string)) msg-string)))
-      (setq ellama-transient-system msg))))
+      (setq ellama-global-system msg))))
 
 (defun ellama-transient-set-system-from-buffer ()
   "Set system message from current buffer."
   (interactive)
-  (setq ellama-transient-system (buffer-substring-no-properties
-			         (point-min) (point-max))))
+  (setq ellama-global-system (buffer-substring-no-properties
+			      (point-min) (point-max))))
 
 (transient-define-suffix ellama-transient-set-ollama-model ()
   "Set ollama model name."

@@ -178,11 +178,11 @@ ARGS contains keys for fine control.
 (defun ellama-blueprint-edit-system-message ()
   "Edit system message as blueprint."
   (interactive)
-  (when ellama-transient-system
+  (when ellama-global-system
     (with-current-buffer (get-buffer-create ellama-blueprint-buffer)
       (erase-buffer)
       (let ((hard-newline t))
-	(insert ellama-transient-system)
+	(insert ellama-global-system)
 	(ellama-blueprint-mode))
       (switch-to-buffer (current-buffer))
       (ellama-blueprint-fill-variables))))
