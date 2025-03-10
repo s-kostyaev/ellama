@@ -980,10 +980,10 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	      "Select session to remove: "
 	      (hash-table-keys ellama--active-sessions)))
 	 (buffer (ellama-get-session-buffer id))
-	 (file (buffer-file-name buffer))
+	 (file (when buffer (buffer-file-name buffer)))
 	 (session-file (when file (ellama--get-session-file-name file)))
 	 (translation-file (when file (ellama--get-translation-file-name file))))
-    (kill-buffer buffer)
+    (when buffer (kill-buffer buffer))
     (when file (delete-file file t))
     (when session-file (delete-file session-file t))
     (mapc
@@ -1022,7 +1022,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	      "Select session to kill: "
 	      (hash-table-keys ellama--active-sessions)))
 	 (buffer (ellama-get-session-buffer id)))
-    (kill-buffer buffer)))
+    (when buffer (kill-buffer buffer))))
 
 ;;;###autoload
 (defun ellama-session-rename ()
