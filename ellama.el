@@ -1860,11 +1860,10 @@ the full response text when the request completes (with BUFFER current)."
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-completion-list-prompt-template "You're providing text completion. Complete the text. You need to generate different possible ONE WORD completions to provided text as json object. Do not aknowledge, reply with completions only. Every completion should start from last word or part of the last word of provided text in the same case.
-
+(defcustom ellama-completion-list-prompt-template "You're completing unfinished text. Complete text with 3 possible completions. Write full sentence including all words from the beginnig of sentence.
 <EXAMPLE>
-Text: Hel
-completions: \"Hello\", \"Help\", \"Hell\", \"Helping\", \"Helicopter\", \"Helix\"
+What a good day! Hello wor
+{\"completions\":[\"Hello world\",\"Hello World!\"]}
 </EXAMPLE>"
   "System prompt template for `ellama-generate-completion-list'."
   :group 'ellama
@@ -2325,38 +2324,61 @@ otherwise prompt user for URL to summarize."
 
 (defun ellama-generate-completion-list ()
   "Generate completion list from context at point."
-  (mapcar (lambda (s)
-	    (car (reverse (string-split s))))
-	  (plist-get
-	   (json-parse-string
-	    (llm-chat
-	     (or ellama-completion-provider
-		 ellama-provider
-		 (ellama-get-first-ollama-chat-model))
-	     (llm-make-chat-prompt
-	      (if (region-active-p)
-		  (buffer-substring-no-properties (region-beginning) (region-end))
-		(buffer-substring-no-properties (point-min) (point)))
-	      :context ellama-completion-list-prompt-template
-	      :response-format '(:type object :properties
-				       (:completions (:type array :items (:type string)))
-				       :required (completions))))
+  (let* ((text (if (region-active-p)
+		   (buffer-substring-no-properties (region-beginning) (region-end))
+		 (buffer-substring-no-properties (point-min) (point))))
+	 (last-sentence (buffer-substring-no-properties
+			 (save-excursion (backward-sentence) (point))
+			 (point)))
+	 (last-word (buffer-substring-no-properties
+		     (save-excursion (backward-word) (point))
+		     (point)))
+	 (last-sentence-without-last-word (string-trim-right
+					   last-sentence
+					   (rx (literal last-word)))))
+    (mapcar (lambda (s)
+	      (let ((new-sentence (with-temp-buffer
+				    (insert s)
+				    (goto-char (point-max))
+				    (buffer-substring-no-properties
+				     (save-excursion (backward-sentence) (point))
+				     (point-max)))))
+		(if (string-prefix-p last-sentence new-sentence)
+		    new-sentence
+		  (if (string-prefix-p last-word new-sentence)
+		      (concat (string-trim-right last-sentence-without-last-word) " " (string-trim new-sentence))
+		    (concat (string-trim-right last-sentence) " " (string-trim new-sentence))))))
+	    (plist-get
+	     (json-parse-string
+	      (llm-chat
+	       (or ellama-completion-provider
+		   ellama-provider
+		   (ellama-get-first-ollama-chat-model))
+	       (llm-make-chat-prompt
+		text
+		:context ellama-completion-list-prompt-template
+		:response-format '(:type object :properties
+					 (:completions (:type array :items (:type string)))
+					 :required (completions))))
 
-	    :object-type 'plist
-	    :false-object nil
-	    :array-type 'list)
-	   :completions)))
+	      :object-type 'plist
+	      :false-object nil
+	      :array-type 'list)
+	     :completions))))
 
 (defun ellama-complete-at-point (&rest _)
   "Complete at point using ellama."
   (interactive)
-  (while-no-input
-    (let ((bounds (bounds-of-thing-at-point 'word)))
-      (when bounds
-	(list (car bounds)
-	      (cdr bounds)
-	      (ellama-generate-completion-list)
-	      :exclusive 'no)))))
+  (when-let* ((cur-point (point))
+	      (collection (while-no-input (ellama-generate-completion-list))))
+    (when (listp collection)
+      (list
+       (save-excursion
+	 (backward-sentence)
+	 (point))
+       (point)
+       collection
+       :exclusive 'no))))
 
 (defun ellama-semantic-similar-p (text1 text2)
   "Check if TEXT1 means the same as TEXT2."
