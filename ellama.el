@@ -107,6 +107,11 @@ Make reasoning models more useful for many cases."
   :group 'ellama
   :type '(sexp :validate llm-standard-provider-p))
 
+(defcustom ellama-completion-provider nil
+  "LLM provider for completions."
+  :group 'ellama
+  :type '(sexp :validate llm-standard-provider-p))
+
 (defcustom ellama-providers nil
   "LLM provider list for fast switching."
   :group 'ellama
@@ -1699,6 +1704,15 @@ the full response text when the request completes (with BUFFER current)."
   :group 'ellama
   :type 'string)
 
+(defcustom ellama-completion-list-prompt-template "You're completing unfinished text. Complete text with 3 possible completions. Write full sentence including all words from the beginnig of sentence.
+<EXAMPLE>
+What a good day! Hello wor
+{\"completions\":[\"Hello world\",\"Hello World!\"]}
+</EXAMPLE>"
+  "System prompt template for `ellama-generate-completion-list'."
+  :group 'ellama
+  :type 'string)
+
 ;;;###autoload
 (defun ellama-complete ()
   "Complete text in current buffer."
@@ -1714,9 +1728,14 @@ the full response text when the request completes (with BUFFER current)."
 	 (word (car (reverse (string-split line " ")))))
     (ellama-stream text
 		   :system ellama-complete-prompt-template
-		   :filter (lambda (s) (string-trim-left s (rx (or (literal text)
-								   (literal line)
-								   (literal word)))))
+		   :provider ellama-completion-provider
+		   :filter (lambda (s)
+			     (let ((noprefix (string-trim-left s (rx (or (literal text)
+									 (literal line)
+									 (literal word))))))
+			       (if (string= s noprefix)
+				   (concat " " s)
+				 noprefix)))
 		   :on-done #'ellama-fix-parens)))
 
 (defvar vc-git-diff-switches)
@@ -2146,6 +2165,64 @@ otherwise prompt user for URL to summarize."
       :object-type 'plist
       :false-object nil)
      :same)))
+
+(defun ellama-generate-completion-list ()
+  "Generate completion list from context at point."
+  (let* ((text (if (region-active-p)
+		   (buffer-substring-no-properties (region-beginning) (region-end))
+		 (buffer-substring-no-properties (point-min) (point))))
+	 (last-sentence (buffer-substring-no-properties
+			 (save-excursion (backward-sentence) (point))
+			 (point)))
+	 (last-word (buffer-substring-no-properties
+		     (save-excursion (backward-word) (point))
+		     (point)))
+	 (last-sentence-without-last-word (string-trim-right
+					   last-sentence
+					   (rx (literal last-word)))))
+    (mapcar (lambda (s)
+	      (let ((new-sentence (with-temp-buffer
+				    (insert s)
+				    (goto-char (point-max))
+				    (buffer-substring-no-properties
+				     (save-excursion (backward-sentence) (point))
+				     (point-max)))))
+		(if (string-prefix-p last-sentence new-sentence)
+		    new-sentence
+		  (if (string-prefix-p last-word new-sentence)
+		      (concat (string-trim-right last-sentence-without-last-word) " " (string-trim new-sentence))
+		    (concat (string-trim-right last-sentence) " " (string-trim new-sentence))))))
+	    (plist-get
+	     (json-parse-string
+	      (llm-chat
+	       (or ellama-completion-provider
+		   ellama-provider
+		   (ellama-get-first-ollama-chat-model))
+	       (llm-make-chat-prompt
+		text
+		:context ellama-completion-list-prompt-template
+		:response-format '(:type object :properties
+					 (:completions (:type array :items (:type string)))
+					 :required (completions))))
+
+	      :object-type 'plist
+	      :false-object nil
+	      :array-type 'list)
+	     :completions))))
+
+(defun ellama-complete-at-point (&rest _)
+  "Complete at point using ellama."
+  (interactive)
+  (when-let* ((cur-point (point))
+	      (collection (while-no-input (ellama-generate-completion-list))))
+    (when (listp collection)
+      (list
+       (save-excursion
+	 (backward-sentence)
+	 (point))
+       (point)
+       collection
+       :exclusive 'no))))
 
 (defun ellama-semantic-similar-p (text1 text2)
   "Check if TEXT1 means the same as TEXT2."
