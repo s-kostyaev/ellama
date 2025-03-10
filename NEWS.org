@@ -1,3 +1,6 @@
+* Version 1.5.2
+- Fixed a bug in session delete or kill that deletes or kills the current file
+  or buffer when no session is selected.
 * Version 1.5.1
 - Renamed the variable ~ellama-transient-system~ to ~ellama-global-system~ to
   reflect its broader scope and updated all references in ~ellama.el~,
