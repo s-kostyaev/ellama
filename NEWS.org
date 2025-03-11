@@ -1,3 +1,7 @@
+* Version 1.5.3
+- Added ~ellama-completion-provider~ custom variable to specify the LLM provider
+  for completions. Updated ~ellama-stream~ call in ~ellama-complete~ to use this new
+  provider and modified the filter function to handle prefix trimming correctly.
 * Version 1.5.2
 - Fixed a bug in session delete or kill that deletes or kills the current file
   or buffer when no session is selected.

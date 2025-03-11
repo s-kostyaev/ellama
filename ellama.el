@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (plz "0.8") (transient "0.7") (compat "29.1"))
-;; Version: 1.5.2
+;; Version: 1.5.3
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -104,6 +104,11 @@ Make reasoning models more useful for many cases."
 
 (defcustom ellama-coding-provider nil
   "LLM provider for coding tasks."
+  :group 'ellama
+  :type '(sexp :validate llm-standard-provider-p))
+
+(defcustom ellama-completion-provider nil
+  "LLM provider for completions."
   :group 'ellama
   :type '(sexp :validate llm-standard-provider-p))
 
@@ -1714,9 +1719,14 @@ the full response text when the request completes (with BUFFER current)."
 	 (word (car (reverse (string-split line " ")))))
     (ellama-stream text
 		   :system ellama-complete-prompt-template
-		   :filter (lambda (s) (string-trim-left s (rx (or (literal text)
-								   (literal line)
-								   (literal word)))))
+		   :provider ellama-completion-provider
+		   :filter (lambda (s)
+			     (let ((noprefix (string-trim-left s (rx (or (literal text)
+									 (literal line)
+									 (literal word))))))
+			       (if (string= s noprefix)
+				   (concat " " s)
+				 noprefix)))
 		   :on-done #'ellama-fix-parens)))
 
 (defvar vc-git-diff-switches)
