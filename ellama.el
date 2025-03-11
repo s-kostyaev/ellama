@@ -1860,7 +1860,7 @@ the full response text when the request completes (with BUFFER current)."
   :group 'ellama
   :type 'string)
 
-(defcustom ellama-completion-list-prompt-template "You're completing unfinished text. Complete text with 3 possible completions. Write full sentence including all words from the beginnig of sentence.
+(defcustom ellama-completion-list-prompt-template "You're completing unfinished text. Complete text with 2-3 possible completions. Write full sentence including all words from the beginnig of sentence.
 <EXAMPLE>
 What a good day! Hello wor
 {\"completions\":[\"Hello world\",\"Hello World!\"]}
