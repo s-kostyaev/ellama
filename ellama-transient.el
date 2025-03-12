@@ -349,5 +349,8 @@ Otherwise, prompt the user to enter a system message."
     ("D" "Solve domain specific problem" ellama-solve-domain-specific-problem)]]
   [["Quit" ("q" "Quit" transient-quit-one)]])
 
+;;;###autoload
+(defalias 'ellama 'ellama-transient-main-menu)
+
 (provide 'ellama-transient)
 ;;; ellama-transient.el ends here.

@@ -1,3 +1,7 @@
+* Version 1.5.4
+- Added an autoloadable alias ~ellama~ that points to the main menu function
+  ~ellama-transient-main-menu~, providing a convenient way to access the
+  feature.
 * Version 1.5.3
 - Added ~ellama-completion-provider~ custom variable to specify the LLM provider
   for completions. Updated ~ellama-stream~ call in ~ellama-complete~ to use this new
