@@ -652,19 +652,20 @@ Skip code blocks and math environments."
 (defun ellama--translate-markdown-to-org-filter (text)
   "Filter to translate code blocks from markdown syntax to org syntax in TEXT.
 This filter contains only subset of markdown syntax to be good enough."
-  (thread-last
-    text
-    ;; code blocks
-    (replace-regexp-in-string "^[[:space:]]*```\\(.+\\)$" "#+BEGIN_SRC \\1")
-    (ellama--replace-first-begin-src)
-    (replace-regexp-in-string "^<!-- language: \\(.+\\) -->\n```" "#+BEGIN_SRC \\1")
-    (replace-regexp-in-string "^[[:space:]]*```$" "#+END_SRC")
-    (replace-regexp-in-string "^[[:space:]]*```" "#+END_SRC\n")
-    (replace-regexp-in-string "```" "\n#+END_SRC\n")
-    (replace-regexp-in-string "<think>[\n]?" "#+BEGIN_QUOTE\n")
-    (replace-regexp-in-string "[\n]?</think>[\n]?" "\n#+END_QUOTE\n")
-    (ellama--replace-bad-code-blocks)
-    (ellama--replace-outside-of-code-blocks)))
+  (when text
+    (thread-last
+      text
+      ;; code blocks
+      (replace-regexp-in-string "^[[:space:]]*```\\(.+\\)$" "#+BEGIN_SRC \\1")
+      (ellama--replace-first-begin-src)
+      (replace-regexp-in-string "^<!-- language: \\(.+\\) -->\n```" "#+BEGIN_SRC \\1")
+      (replace-regexp-in-string "^[[:space:]]*```$" "#+END_SRC")
+      (replace-regexp-in-string "^[[:space:]]*```" "#+END_SRC\n")
+      (replace-regexp-in-string "```" "\n#+END_SRC\n")
+      (replace-regexp-in-string "<think>[\n]?" "#+BEGIN_QUOTE\n")
+      (replace-regexp-in-string "[\n]?</think>[\n]?" "\n#+END_QUOTE\n")
+      (ellama--replace-bad-code-blocks)
+      (ellama--replace-outside-of-code-blocks))))
 
 (defcustom ellama-enable-keymap t
   "Enable or disable Ellama keymap."
@@ -1244,7 +1245,7 @@ failure (with BUFFER current).
 			(setq stop-scroll nil))
 		      (goto-char start)
 		      (delete-region start end)
-		      (insert (funcall filter text))
+		      (insert (or (funcall filter text) ""))
                       (when (and ellama-fill-paragraphs
 				 (pcase ellama-fill-paragraphs
 				   ((cl-type function) (funcall ellama-fill-paragraphs))
