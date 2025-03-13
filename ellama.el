@@ -588,14 +588,14 @@ It should be a function with single argument generated text string."
   (ellama--replace "__\\(.+?\\)__" "*\\1*" beg end)
   (ellama--replace "\\*\\*\\(.+?\\)\\*\\*" "*\\1*" beg end)
   (ellama--replace "<b>\\(.+?\\)</b>" "*\\1*" beg end)
-  ;; italic
-  (when ellama-translate-italic
-    (ellama--replace "_\\(.+?\\)_" "/\\1/" beg end))
   (ellama--replace "<i>\\(.+?\\)</i>" "/\\1/" beg end)
   ;; underlined
   (ellama--replace "<u>\\(.+?\\)</u>" "_\\1_" beg end)
   ;; inline code
   (ellama--replace "`\\(.+?\\)`" "~\\1~" beg end)
+  ;; italic
+  (when ellama-translate-italic
+    (ellama--replace "_\\(.+?\\)_" "/\\1/" beg end))
   ;; lists
   (ellama--replace "^\\* " "+ " beg end)
   ;; strikethrough
@@ -622,12 +622,13 @@ Skip code blocks and math environments."
 	  block-end
 	  (prev-point (point-min)))
       ;; Process regions outside of blocks
-      (while (re-search-forward "\\(#\\+BEGIN_SRC\\|\\$\\$\\|\\$\\)" nil t)
+      (while (re-search-forward "\\(#\\+BEGIN_SRC\\|\\$\\$\\|\\$\\|`\\)" nil t)
         (setq block-start (match-beginning 0))
 	(goto-char block-start)
         (let ((block-type (cond ((looking-at "#\\+BEGIN_SRC") 'src)
                                 ((looking-at "\\$\\$") 'math-display)
-                                ((looking-at "\\$") 'math-inline))))
+                                ((looking-at "\\$") 'math-inline)
+				((looking-at "`") 'code-inline))))
           ;; Apply transformations to text before the block
           (ellama--apply-transformations prev-point block-start)
           ;; Skip over the block content
@@ -637,9 +638,15 @@ Skip code blocks and math environments."
 		 ((eq block-type 'src)
                   (if (re-search-forward "#\\+END_SRC" nil t) (point) (point-max)))
 		 ((eq block-type 'math-display)
-                  (if (re-search-forward "\\$\\$.+\\$\\$" nil t) (point) (point-max)))
+                  (if (re-search-forward "\\$\\$.+?\\$\\$" nil t) (point) (point-max)))
 		 ((eq block-type 'math-inline)
-                  (if (re-search-forward "\\$.+\\$" nil t) (point) (point-max)))))
+                  (if (re-search-forward "\\$.+?\\$" nil t) (point) (point-max)))
+		 ((eq block-type 'code-inline)
+		  (if (re-search-forward "`\\(.+?\\)`" nil t)
+		      (progn
+			(replace-match "~\\1~")
+			(point))
+		    (point-max)))))
           (when block-end
 	    (goto-char block-end))
 	  (setq prev-point (point))))
