@@ -128,7 +128,7 @@ Otherwise, prompt the user to enter a system message."
     (when (equal provider 'ellama-provider)
       (setq ellama--current-session-id nil))))
 
-;;;###autoload
+;;;###autoload (autoload 'ellama-select-ollama-model "ellama-transient" nil t)
 (transient-define-prefix ellama-select-ollama-model ()
   "Select ollama model."
   [["Model"
@@ -194,7 +194,7 @@ Otherwise, prompt the user to enter a system message."
    :default-chat-non-standard-params
    `[("num_ctx" . ,ellama-transient-context-length)]))
 
-;;;###autoload
+;;;###autoload (autoload 'ellama-transient-code-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-code-menu ()
   "Code Commands."
   [["Code Commands"
@@ -206,7 +206,7 @@ Otherwise, prompt the user to enter a system message."
     ("m" "Generate Commit Message" ellama-generate-commit-message)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
-;;;###autoload
+;;;###autoload (autoload 'ellama-transient-summarize-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-summarize-menu ()
   "Summarize Commands."
   [["Summarize Commands"
@@ -215,7 +215,7 @@ Otherwise, prompt the user to enter a system message."
     ("k" "Summarize Killring" ellama-summarize-killring)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
-;;;###autoload
+;;;###autoload (autoload 'ellama-transient-session-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-session-menu ()
   "Session Commands."
   [["Session Commands"
@@ -226,7 +226,7 @@ Otherwise, prompt the user to enter a system message."
     ("k" "Kill Session" ellama-session-kill)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
-;;;###autoload
+;;;###autoload (autoload 'ellama-transient-improve-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-improve-menu ()
   "Improve Commands."
   [["Improve Commands"
@@ -235,7 +235,7 @@ Otherwise, prompt the user to enter a system message."
     ("c" "Improve Conciseness" ellama-improve-conciseness)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
-;;;###autoload
+;;;###autoload (autoload 'ellama-transient-make-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-make-menu ()
   "Make Commands."
   [["Make Commands"
@@ -244,7 +244,7 @@ Otherwise, prompt the user to enter a system message."
     ("f" "Make Format" ellama-make-format)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
-;;;###autoload
+;;;###autoload (autoload 'ellama-transient-ask-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-ask-menu ()
   "Ask Commands."
   [["Ask Commands"
@@ -253,7 +253,7 @@ Otherwise, prompt the user to enter a system message."
     ("a" "Ask About" ellama-ask-about)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
-;;;###autoload
+;;;###autoload (autoload 'ellama-transient-translate-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-translate-menu ()
   "Translate Commands."
   [["Translate Commands"
@@ -266,7 +266,7 @@ Otherwise, prompt the user to enter a system message."
 (declare-function ellama-context-update-buffer "ellama-context")
 (defvar ellama-context-buffer)
 
-;;;###autoload
+;;;###autoload (autoload 'ellama-transient-context-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-context-menu ()
   "Context Commands."
   ["Context Commands"
@@ -287,7 +287,7 @@ Otherwise, prompt the user to enter a system message."
     ("r" "Context reset" ellama-context-reset)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
-;;;###autoload
+;;;###autoload (autoload 'ellama-transient-blueprint-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-blueprint-menu ()
   "Blueprint Menu."
   ["Blueprint Commands"
@@ -300,7 +300,7 @@ Otherwise, prompt the user to enter a system message."
     ("n" "New blueprint" ellama-blueprint-new)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
-;;;###autoload
+;;;###autoload (autoload 'ellama-transient-blueprint-mode-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-blueprint-mode-menu ()
   ["Blueprint Commands"
    ["Chat"
@@ -316,7 +316,7 @@ Otherwise, prompt the user to enter a system message."
     ("k" "Kill" ellama-kill-current-buffer)
     ("q" "Quit" transient-quit-one)]])
 
-;;;###autoload
+;;;###autoload (autoload 'ellama-transient-main-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-main-menu ()
   "Main Menu."
   ["Main"
@@ -349,7 +349,7 @@ Otherwise, prompt the user to enter a system message."
     ("D" "Solve domain specific problem" ellama-solve-domain-specific-problem)]]
   [["Quit" ("q" "Quit" transient-quit-one)]])
 
-;;;###autoload
+;;;###autoload (autoload 'ellama "ellama-transient" nil t)
 (defalias 'ellama 'ellama-transient-main-menu)
 
 (provide 'ellama-transient)
