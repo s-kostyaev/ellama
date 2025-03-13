@@ -659,19 +659,20 @@ Skip code blocks and math environments."
 (defun ellama--translate-markdown-to-org-filter (text)
   "Filter to translate code blocks from markdown syntax to org syntax in TEXT.
 This filter contains only subset of markdown syntax to be good enough."
-  (thread-last
-    text
-    ;; code blocks
-    (replace-regexp-in-string "^[[:space:]]*```\\(.+\\)$" "#+BEGIN_SRC \\1")
-    (ellama--replace-first-begin-src)
-    (replace-regexp-in-string "^<!-- language: \\(.+\\) -->\n```" "#+BEGIN_SRC \\1")
-    (replace-regexp-in-string "^[[:space:]]*```$" "#+END_SRC")
-    (replace-regexp-in-string "^[[:space:]]*```" "#+END_SRC\n")
-    (replace-regexp-in-string "```" "\n#+END_SRC\n")
-    (replace-regexp-in-string "<think>[\n]?" "#+BEGIN_QUOTE\n")
-    (replace-regexp-in-string "[\n]?</think>[\n]?" "\n#+END_QUOTE\n")
-    (ellama--replace-bad-code-blocks)
-    (ellama--replace-outside-of-code-blocks)))
+  (when text
+    (thread-last
+      text
+      ;; code blocks
+      (replace-regexp-in-string "^[[:space:]]*```\\(.+\\)$" "#+BEGIN_SRC \\1")
+      (ellama--replace-first-begin-src)
+      (replace-regexp-in-string "^<!-- language: \\(.+\\) -->\n```" "#+BEGIN_SRC \\1")
+      (replace-regexp-in-string "^[[:space:]]*```$" "#+END_SRC")
+      (replace-regexp-in-string "^[[:space:]]*```" "#+END_SRC\n")
+      (replace-regexp-in-string "```" "\n#+END_SRC\n")
+      (replace-regexp-in-string "<think>[\n]?" "#+BEGIN_QUOTE\n")
+      (replace-regexp-in-string "[\n]?</think>[\n]?" "\n#+END_QUOTE\n")
+      (ellama--replace-bad-code-blocks)
+      (ellama--replace-outside-of-code-blocks))))
 
 (defcustom ellama-enable-keymap t
   "Enable or disable Ellama keymap."
@@ -1251,7 +1252,7 @@ failure (with BUFFER current).
 			(setq stop-scroll nil))
 		      (goto-char start)
 		      (delete-region start end)
-		      (insert (funcall filter text))
+		      (insert (or (funcall filter text) ""))
                       (when (and ellama-fill-paragraphs
 				 (pcase ellama-fill-paragraphs
 				   ((cl-type function) (funcall ellama-fill-paragraphs))
@@ -1711,6 +1712,15 @@ the full response text when the request completes (with BUFFER current)."
   :group 'ellama
   :type 'string)
 
+(defcustom ellama-completion-list-prompt-template "You're completing unfinished text. Complete text with 2-3 possible completions. Write full sentence including all words from the beginnig of sentence.
+<EXAMPLE>
+What a good day! Hello wor
+{\"completions\":[\"Hello world\",\"Hello World!\"]}
+</EXAMPLE>"
+  "System prompt template for `ellama-generate-completion-list'."
+  :group 'ellama
+  :type 'string)
+
 ;;;###autoload
 (defun ellama-complete ()
   "Complete text in current buffer."
@@ -2163,6 +2173,64 @@ otherwise prompt user for URL to summarize."
       :object-type 'plist
       :false-object nil)
      :same)))
+
+(defun ellama-generate-completion-list ()
+  "Generate completion list from context at point."
+  (let* ((text (if (region-active-p)
+		   (buffer-substring-no-properties (region-beginning) (region-end))
+		 (buffer-substring-no-properties (point-min) (point))))
+	 (last-sentence (buffer-substring-no-properties
+			 (save-excursion (backward-sentence) (point))
+			 (point)))
+	 (last-word (buffer-substring-no-properties
+		     (save-excursion (backward-word) (point))
+		     (point)))
+	 (last-sentence-without-last-word (string-trim-right
+					   last-sentence
+					   (rx (literal last-word)))))
+    (mapcar (lambda (s)
+	      (let ((new-sentence (with-temp-buffer
+				    (insert s)
+				    (goto-char (point-max))
+				    (buffer-substring-no-properties
+				     (save-excursion (backward-sentence) (point))
+				     (point-max)))))
+		(if (string-prefix-p last-sentence new-sentence)
+		    new-sentence
+		  (if (string-prefix-p last-word new-sentence)
+		      (concat (string-trim-right last-sentence-without-last-word) " " (string-trim new-sentence))
+		    (concat (string-trim-right last-sentence) " " (string-trim new-sentence))))))
+	    (plist-get
+	     (json-parse-string
+	      (llm-chat
+	       (or ellama-completion-provider
+		   ellama-provider
+		   (ellama-get-first-ollama-chat-model))
+	       (llm-make-chat-prompt
+		text
+		:context ellama-completion-list-prompt-template
+		:response-format '(:type object :properties
+					 (:completions (:type array :items (:type string)))
+					 :required (completions))))
+
+	      :object-type 'plist
+	      :false-object nil
+	      :array-type 'list)
+	     :completions))))
+
+(defun ellama-complete-at-point (&rest _)
+  "Complete at point using ellama."
+  (interactive)
+  (when-let* ((cur-point (point))
+	      (collection (while-no-input (ellama-generate-completion-list))))
+    (when (listp collection)
+      (list
+       (save-excursion
+	 (backward-sentence)
+	 (point))
+       (point)
+       collection
+       :exclusive 'no))))
 
 (defun ellama-semantic-similar-p (text1 text2)
   "Check if TEXT1 means the same as TEXT2."
