@@ -1,3 +1,7 @@
+* Version 1.5.6
+- Fix support for translating inline code from markdown to org format by
+  handling backticks.
+- Updated tests to include cases with inline code.
 * Version 1.5.5
 - Added an explicit autoload form to fix non package.el installations for Emacs
   28 and 29.
