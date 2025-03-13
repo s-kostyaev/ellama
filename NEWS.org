@@ -1,3 +1,6 @@
+* Version 1.5.5
+- Added an explicit autoload form to fix non package.el installations for Emacs
+  28 and 29.
 * Version 1.5.4
 - Added an autoloadable alias ~ellama~ that points to the main menu function
   ~ellama-transient-main-menu~, providing a convenient way to access the
