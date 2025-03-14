@@ -1171,6 +1171,22 @@ Otherwire return current active session."
 
 (defvar-local ellama--stop-scroll nil)
 
+;;;###autoload
+(defun ellama-disable-scroll (&rest event)
+  "Disable auto scroll.
+EVENT is an argument for mweel scroll."
+  (declare-function mwheel-event-window "mwheel")
+  (with-current-buffer
+      (window-buffer
+       (or (caadar event)
+	   (mwheel-event-window event)))
+    (setq ellama--stop-scroll t)))
+
+;;;###autoload
+(defun ellama-enable-scroll (&rest _)
+  "Enable auto scroll."
+  (setq ellama--stop-scroll nil))
+
 (defun ellama--insert (buffer point filter)
   "Insert text during streaming.
 
@@ -1191,11 +1207,10 @@ FILTER is a function for text transformation."
 		 (new-distance-to-end (- (point-max) (point)))
 		 (new-pt))
 	    (save-excursion
-	      (if (and (eq (window-buffer (selected-window))
-			   buffer)
-		       (not (equal distance-to-end new-distance-to-end)))
-		  (setq ellama--stop-scroll t)
-		(setq ellama--stop-scroll nil))
+	      (when (and (eq (window-buffer (selected-window))
+			     buffer)
+			 (not (equal distance-to-end new-distance-to-end)))
+		(setq ellama--stop-scroll t))
 	      (goto-char start)
 	      (delete-region start end)
 	      (insert (funcall filter text))
