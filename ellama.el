@@ -502,6 +502,16 @@ It should be a function with single argument generated text string."
   :group 'ellama
   :type 'function)
 
+(defcustom ellama-reasoning-display-action-function nil
+  "Display action function for reasoning."
+  :group 'ellama
+  :type 'function)
+
+(defcustom ellama-show-reasoning t
+  "Show reasoning in separate buffer if enabled."
+  :group 'ellama
+  :type 'boolean)
+
 (define-minor-mode ellama-session-mode
   "Minor mode for ellama session buffers."
   :interactive nil
@@ -1222,7 +1232,11 @@ REASONING-BUFFER is a buffer for reasoning."
 	    (progn
 	      (with-current-buffer reasoning-buffer
 		(funcall insert-reasoning reasoning)
-		(display-buffer reasoning-buffer))
+		(when ellama-show-reasoning
+		  (display-buffer
+		   reasoning-buffer
+		   (when ellama-reasoning-display-action-function
+		     `((ignore . (,ellama-reasoning-display-action-function)))))))
 	      nil)))
 	(when text
 	  (string-trim text)))))))
