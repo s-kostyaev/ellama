@@ -5,7 +5,7 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (plz "0.8") (transient "0.7") (compat "29.1"))
+;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1"))
 ;; Version: 1.5.6
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
@@ -1159,6 +1159,74 @@ Otherwire return current active session."
 
 (defvar ellama-global-system nil)
 
+(defvar-local ellama--stop-scroll nil)
+
+(defun ellama--insert (buffer point filter)
+  "Insert text during streaming.
+
+Works inside BUFFER starting at POINT.
+If POINT is nil, current point will be used.
+FILTER is a function for text transformation."
+  (with-current-buffer buffer
+    (let ((start (make-marker))
+	  (end (make-marker))
+	  (distance-to-end (- (point-max) (point))))
+      (ellama-set-markers start end (or point (point)))
+      (lambda (text)
+	;; Erase and insert the new text between the marker cons.
+	(with-current-buffer buffer
+	  ;; Manually save/restore point as save-excursion doesn't
+	  ;; restore the point into the middle of replaced text.
+	  (let* ((pt (point))
+		 (new-distance-to-end (- (point-max) (point)))
+		 (new-pt))
+	    (save-excursion
+	      (if (and (eq (window-buffer (selected-window))
+			   buffer)
+		       (not (equal distance-to-end new-distance-to-end)))
+		  (setq ellama--stop-scroll t)
+		(setq ellama--stop-scroll nil))
+	      (goto-char start)
+	      (delete-region start end)
+	      (insert (funcall filter text))
+	      (when (and ellama-fill-paragraphs
+			 (pcase ellama-fill-paragraphs
+			   ((cl-type function) (funcall ellama-fill-paragraphs))
+			   ((cl-type boolean) ellama-fill-paragraphs)
+			   ((cl-type list) (and (apply #'derived-mode-p
+						       ellama-fill-paragraphs)
+						(not (equal major-mode 'org-mode))))))
+		(fill-region start (point)))
+	      (setq new-pt (point)))
+	    (if (and ellama-auto-scroll (not ellama--stop-scroll))
+		(ellama--scroll buffer new-pt)
+	      (goto-char pt)))
+	  (undo-amalgamate-change-group ellama--change-group))))))
+
+(defun ellama--handle-partial (insert-text insert-reasoning reasoning-buffer)
+  "Handle partial llm callback.
+INSERT-TEXT is a function for text insertion.
+INSERT-REASONING is a function for reasoning insertion.
+REASONING-BUFFER is a buffer for reasoning."
+  (lambda (response)
+    (let ((text (plist-get response :text))
+	  (reasoning (plist-get response :reasoning)))
+      (funcall
+       insert-text
+       (concat
+	(when reasoning
+	  (if
+	      (or (not ellama-output-remove-reasoning)
+		  ellama--current-session)
+	      (format "<think>%s</think>" reasoning)
+	    (progn
+	      (with-current-buffer reasoning-buffer
+		(funcall insert-reasoning reasoning)
+		(display-buffer reasoning-buffer))
+	      nil)))
+	(when text
+	  (string-trim text)))))))
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
@@ -1204,6 +1272,8 @@ failure (with BUFFER current).
 		     (when (ellama-session-p session)
 		       (ellama-get-session-buffer (ellama-session-id session)))
 		     (current-buffer)))
+	 (reasoning-buffer (get-buffer-create
+			    (concat (make-temp-name "*ellama-reasoning-") "*")))
 	 (point (or (plist-get args :point)
 		    (with-current-buffer buffer (point))))
 	 (filter (or (plist-get args :filter) #'identity))
@@ -1227,93 +1297,54 @@ failure (with BUFFER current).
 			       (ellama-session-prompt session))
 			   (setf (ellama-session-prompt session)
 				 (llm-make-chat-prompt prompt-with-ctx :context system)))
-		       (llm-make-chat-prompt prompt-with-ctx :context system)))
-	 (stop-scroll))
+		       (llm-make-chat-prompt prompt-with-ctx :context system))))
+    (with-current-buffer reasoning-buffer
+      (org-mode))
     (with-current-buffer buffer
       (ellama-request-mode +1)
-      (let* ((start (make-marker))
-	     (end (make-marker))
-	     (distance-to-end (- (point-max) (point)))
-	     (new-pt)
-	     (insert-text
-	      (lambda (text)
-		;; Erase and insert the new text between the marker cons.
-		(with-current-buffer buffer
-		  ;; Manually save/restore point as save-excursion doesn't
-		  ;; restore the point into the middle of replaced text.
-		  (let* ((pt (point))
-			 (new-distance-to-end (- (point-max) (point))))
-		    (save-excursion
-		      (if (and (eq (window-buffer (selected-window))
-				   buffer)
-			       (not (equal distance-to-end new-distance-to-end)))
-			  (setq stop-scroll t)
-			(setq stop-scroll nil))
-		      (goto-char start)
-		      (delete-region start end)
-		      (insert (funcall filter text))
-                      (when (and ellama-fill-paragraphs
-				 (pcase ellama-fill-paragraphs
-				   ((cl-type function) (funcall ellama-fill-paragraphs))
-				   ((cl-type boolean) ellama-fill-paragraphs)
-				   ((cl-type list) (and (apply #'derived-mode-p
-							       ellama-fill-paragraphs)
-							(not (equal major-mode 'org-mode))))))
-			(fill-region start (point)))
-		      (setq new-pt (point)))
-		    (if (and ellama-auto-scroll (not stop-scroll))
-			(ellama--scroll buffer new-pt)
-		      (goto-char pt)))
-		  (undo-amalgamate-change-group ellama--change-group)))))
+      (let* ((insert-text
+	      (ellama--insert buffer point filter))
+	     (insert-reasoning
+	      (ellama--insert reasoning-buffer nil #'ellama--translate-markdown-to-org-filter)))
 	(setq ellama--change-group (prepare-change-group))
 	(activate-change-group ellama--change-group)
-	(ellama-set-markers start end point)
 	(when ellama-spinner-enabled
 	  (require 'spinner)
 	  (spinner-start ellama-spinner-type))
-	(let ((request (llm-chat-streaming
-			provider
-			llm-prompt
-			insert-text
-			(lambda (text)
-			  (funcall insert-text
-				   (string-trim
-				    (if (and ellama-output-remove-reasoning
-					     (not session))
-					(ellama-remove-reasoning text)
-				      text)))
-			  (with-current-buffer buffer
-			    (accept-change-group ellama--change-group)
-			    (when ellama-spinner-enabled
-			      (spinner-stop))
-			    (if (and (listp donecb)
-				     (functionp (car donecb)))
-				(mapc (lambda (fn) (funcall fn text))
-				      donecb)
-			      (funcall donecb text))
-			    (when ellama-session-hide-org-quotes
-			      (ellama-collapse-org-quotes))
-			    (when (and ellama--current-session
-				       ellama-session-remove-reasoning)
-			      (mapc (lambda (interaction)
-				      (setf (llm-chat-prompt-interaction-content
-					     interaction)
-					    (ellama-remove-reasoning
-					     (llm-chat-prompt-interaction-content
-					      interaction))))
-				    (llm-chat-prompt-interactions
-				     (ellama-session-prompt
-				      ellama--current-session))))
-			    (setq ellama--current-request nil)
-			    (ellama-request-mode -1)))
-			(lambda (_ msg)
-			  (with-current-buffer buffer
-			    (cancel-change-group ellama--change-group)
-			    (when ellama-spinner-enabled
-			      (spinner-stop))
-			    (funcall errcb msg)
-			    (setq ellama--current-request nil)
-			    (ellama-request-mode -1))))))
+	(let* ((handler (ellama--handle-partial insert-text insert-reasoning reasoning-buffer))
+	       (request (llm-chat-streaming
+			 provider
+			 llm-prompt
+			 handler
+			 (lambda (response)
+			   (let ((text (plist-get response :text))
+				 (reasoning (plist-get response :reasoning)))
+			     (funcall handler response)
+			     (when (or ellama--current-session
+				       (not reasoning))
+			       (kill-buffer reasoning-buffer))
+			     (with-current-buffer buffer
+			       (accept-change-group ellama--change-group)
+			       (when ellama-spinner-enabled
+				 (spinner-stop))
+			       (if (and (listp donecb)
+					(functionp (car donecb)))
+				   (mapc (lambda (fn) (funcall fn text))
+					 donecb)
+				 (funcall donecb text))
+			       (when ellama-session-hide-org-quotes
+				 (ellama-collapse-org-quotes))
+			       (setq ellama--current-request nil)
+			       (ellama-request-mode -1))))
+			 (lambda (_ msg)
+			   (with-current-buffer buffer
+			     (cancel-change-group ellama--change-group)
+			     (when ellama-spinner-enabled
+			       (spinner-stop))
+			     (funcall errcb msg)
+			     (setq ellama--current-request nil)
+			     (ellama-request-mode -1)))
+			 t)))
 	  (with-current-buffer buffer
 	    (setq ellama--current-request request)))))))
 
