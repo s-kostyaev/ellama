@@ -477,6 +477,8 @@ argument generated text string.
 - ~ellama-community-prompts-file~: Path to the CSV file containing community prompts.
   This file is expected to be located inside an ~ellama~ subdirectory
   within your ~user-emacs-directory~.
+- ~ellama-show-reasoning~: Show reasoning in separate buffer if enabled. Enabled by default.
+- ~ellama-reasoning-display-action-function~: Display action function for reasoning.
 
 ** Minor modes
 
