@@ -1193,40 +1193,34 @@ EVENT is an argument for mweel scroll."
 Works inside BUFFER starting at POINT.
 If POINT is nil, current point will be used.
 FILTER is a function for text transformation."
-  (with-current-buffer buffer
-    (let ((start (make-marker))
-	  (end (make-marker))
-	  (distance-to-end (- (point-max) (point))))
-      (ellama-set-markers start end (or point (point)))
-      (lambda (text)
-	;; Erase and insert the new text between the marker cons.
+  (with-current-buffer
+      buffer
+    (let* ((end-marker (make-marker))
+	   (previous-filtered-text-length 0))
+      (set-marker end-marker (or point (point)))
+      (set-marker-insertion-type end-marker t)
+      (lambda
+	(text)
 	(with-current-buffer buffer
-	  ;; Manually save/restore point as save-excursion doesn't
-	  ;; restore the point into the middle of replaced text.
-	  (let* ((pt (point))
-		 (new-distance-to-end (- (point-max) (point)))
-		 (new-pt))
-	    (save-excursion
-	      (when (and (eq (window-buffer (selected-window))
-			     buffer)
-			 (not (equal distance-to-end new-distance-to-end)))
-		(setq ellama--stop-scroll t))
-	      (goto-char start)
-	      (delete-region start end)
-	      (insert (funcall filter text))
+	  (save-excursion
+	    (goto-char end-marker)
+	    (let* ((filtered-text
+		    (funcall filter text))
+		   (delta (substring filtered-text
+				     previous-filtered-text-length
+				     (length filtered-text))))
+	      (insert delta)
 	      (when (and ellama-fill-paragraphs
 			 (pcase ellama-fill-paragraphs
 			   ((cl-type function) (funcall ellama-fill-paragraphs))
 			   ((cl-type boolean) ellama-fill-paragraphs)
 			   ((cl-type list) (and (apply #'derived-mode-p
-						       ellama-fill-paragraphs)
-						(not (equal major-mode 'org-mode))))))
-		(fill-region start (point)))
-	      (setq new-pt (point)))
-	    (if (and ellama-auto-scroll (not ellama--stop-scroll))
-		(ellama--scroll buffer new-pt)
-	      (goto-char pt)))
-	  (undo-amalgamate-change-group ellama--change-group))))))
+						       ellama-fill-paragraphs)))))
+		(fill-paragraph))
+	      (set-marker end-marker (point))
+	      (when (and ellama-auto-scroll (not ellama--stop-scroll))
+		(ellama--scroll buffer end-marker))
+	      (setq previous-filtered-text-length (length filtered-text)))))))))
 
 (defun ellama--handle-partial (insert-text insert-reasoning reasoning-buffer)
   "Handle partial llm callback.
@@ -1243,7 +1237,7 @@ REASONING-BUFFER is a buffer for reasoning."
 	  (if
 	      (or (not ellama-output-remove-reasoning)
 		  ellama--current-session)
-	      (format "<think>%s</think>" reasoning)
+	      (concat "<think>\n" reasoning)
 	    (progn
 	      (with-current-buffer reasoning-buffer
 		(funcall insert-reasoning reasoning)
@@ -1254,7 +1248,9 @@ REASONING-BUFFER is a buffer for reasoning."
 		     `((ignore . (,ellama-reasoning-display-action-function)))))))
 	      nil)))
 	(when text
-	  (string-trim text)))))))
+	  (if reasoning
+	      (concat "</think>\n" (string-trim text))
+	    (string-trim text))))))))
 
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
