@@ -1178,8 +1178,9 @@ EVENT is an argument for mweel scroll."
   (declare-function mwheel-event-window "mwheel")
   (with-current-buffer
       (window-buffer
-       (or (caadar event)
-	   (mwheel-event-window event)))
+       (if (windowp (caadar event))
+	   (caadar event)
+	 (mwheel-event-window event)))
     (setq ellama--stop-scroll t)))
 
 ;;;###autoload
