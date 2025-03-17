@@ -1249,7 +1249,7 @@ REASONING-BUFFER is a buffer for reasoning."
 		     `((ignore . (,ellama-reasoning-display-action-function)))))))
 	      nil)))
 	(when text
-	  (if reasoning
+	  (if (and reasoning ellama--current-session)
 	      (concat "</think>\n" (string-trim text))
 	    (string-trim text))))))))
 
