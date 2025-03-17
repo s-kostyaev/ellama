@@ -1374,13 +1374,6 @@ failure (with BUFFER current).
 	  (with-current-buffer buffer
 	    (setq ellama--current-request request)))))))
 
-(defun ellama-set-markers (start end point)
-  "Set markers for START and END positions at POINT."
-  (set-marker start point)
-  (set-marker end point)
-  (set-marker-insertion-type start nil)
-  (set-marker-insertion-type end t))
-
 (defun ellama-chain (initial-prompt forms &optional acc)
   "Call chain of FORMS on INITIAL-PROMPT.
 ACC will collect responses in reverse order (previous answer will be on top).
