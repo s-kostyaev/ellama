@@ -1188,6 +1188,22 @@ EVENT is an argument for mweel scroll."
   "Enable auto scroll."
   (setq ellama--stop-scroll nil))
 
+(defun ellama-max-common-prefix (s1 s2)
+  "Return the maximum common prefix of strings S1 and S2."
+  (let ((i 0)
+        (min-length (min (length s1) (length s2))))
+    (while (and (< i min-length)
+                (eq (aref s1 i) (aref s2 i)))
+      (setq i (1+ i)))
+    (substring s1 0 i)))
+
+(defun ellama--string-without-last-line (s)
+  "Remove last line from string S."
+  (string-join
+   (reverse (cdr (reverse (string-lines
+			   s))))
+   "\n"))
+
 (defun ellama--insert (buffer point filter)
   "Insert text during streaming.
 
@@ -1197,7 +1213,8 @@ FILTER is a function for text transformation."
   (with-current-buffer
       buffer
     (let* ((end-marker (make-marker))
-	   (previous-filtered-text-length 0))
+	   (previous-filtered-text "")
+	   (safe-common-prefix ""))
       (set-marker end-marker (or point (point)))
       (set-marker-insertion-type end-marker t)
       (lambda
@@ -1207,21 +1224,34 @@ FILTER is a function for text transformation."
 	    (goto-char end-marker)
 	    (let* ((filtered-text
 		    (funcall filter text))
-		   (delta (substring filtered-text
-				     previous-filtered-text-length
-				     (length filtered-text))))
+		   (common-prefix (concat
+				   safe-common-prefix
+				   (ellama-max-common-prefix
+				    (string-remove-prefix
+				     safe-common-prefix
+				     filtered-text)
+				    (string-remove-prefix
+				     safe-common-prefix
+				     previous-filtered-text))))
+		   (wrong-chars-cnt (- (length previous-filtered-text)
+				       (length common-prefix)))
+		   (delta (string-remove-prefix common-prefix filtered-text)))
+	      (delete-char (- wrong-chars-cnt))
 	      (insert delta)
-	      (when (and ellama-fill-paragraphs
-			 (pcase ellama-fill-paragraphs
-			   ((cl-type function) (funcall ellama-fill-paragraphs))
-			   ((cl-type boolean) ellama-fill-paragraphs)
-			   ((cl-type list) (and (apply #'derived-mode-p
-						       ellama-fill-paragraphs)))))
+	      (when (and
+		     (not (eq major-mode 'org-mode))
+		     ellama-fill-paragraphs
+		     (pcase ellama-fill-paragraphs
+		       ((cl-type function) (funcall ellama-fill-paragraphs))
+		       ((cl-type boolean) ellama-fill-paragraphs)
+		       ((cl-type list) (and (apply #'derived-mode-p
+						   ellama-fill-paragraphs)))))
 		(fill-paragraph))
 	      (set-marker end-marker (point))
 	      (when (and ellama-auto-scroll (not ellama--stop-scroll))
 		(ellama--scroll buffer end-marker))
-	      (setq previous-filtered-text-length (length filtered-text)))))))))
+	      (setq safe-common-prefix (ellama--string-without-last-line common-prefix))
+	      (setq previous-filtered-text filtered-text))))))))
 
 (defun ellama--handle-partial (insert-text insert-reasoning reasoning-buffer)
   "Handle partial llm callback.

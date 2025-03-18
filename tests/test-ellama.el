@@ -437,6 +437,31 @@ _more italic_")))
 $P_\\theta$
 /more italic/"))))
 
+(defun ellama-test-max-common-prefix ()
+  "Test the `ellama-max-common-prefix` function."
+  (should (equal (ellama-max-common-prefix "" "") ""))
+  (should (equal (ellama-max-common-prefix "abc" "abcd") "abc"))
+  (should (equal (ellama-max-common-prefix "abcd" "abc") "abc"))
+  (should (equal (ellama-max-common-prefix "abcdef" "abcefg") "abc"))
+  (should (equal (ellama-max-common-prefix "a" "b") ""))
+  (should (equal (ellama-max-common-prefix "a" "") ""))
+  (should (equal (ellama-max-common-prefix "" "b") "")))
+
+(ert-deftest ellama-test-max-common-prefix ()
+  "Run the tests for `ellama-max-common-prefix`."
+  (ellama-test-max-common-prefix))
+
+(ert-deftest ellama--string-without-last-line-test ()
+  "Test `ellama--string-without-last-line` function."
+  (should (equal (ellama--string-without-last-line "Line1\nLine2\nLine3")
+                 "Line1\nLine2"))
+  (should (equal (ellama--string-without-last-line "SingleLine")
+                 ""))
+  (should (equal (ellama--string-without-last-line "")
+                 ""))
+  (should (equal (ellama--string-without-last-line "Line1\nLine2")
+                 "Line1")))
+
 (provide 'test-ellama)
 
 ;;; test-ellama.el ends here
