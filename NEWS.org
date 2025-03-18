@@ -1,3 +1,14 @@
+* Version 1.6.0
+- Refactored the text insertion and handling logic in ~ellama.el~.
+- Added new customization variables ~ellama-show-reasoning~ and
+  ~ellama-reasoning-display-action-function~ to control the display of
+  reasoning. Updated ~ellama.el~ to use these new variables when displaying
+  reasoning buffers.
+- Added ~ellama-disable-scroll~ and ~ellama-enable-scroll~ functions to control
+  auto-scroll behavior.
+- Added a new face ~ellama-key-face~ to style the context line keys in both
+  ~ellama-blueprint.el~ and ~ellama-context.el~. Updated header line formats to
+  use this new face for better visual distinction.
 * Version 1.5.6
 - Fix support for translating inline code from markdown to org format by
   handling backticks.

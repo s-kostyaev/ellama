@@ -73,22 +73,26 @@
   (setq header-line-format
 	(concat
 	 (propertize
-	  (substitute-command-keys
-	   "`\\[ellama-transient-blueprint-mode-menu]' to continue")
+	  (concat (propertize
+		   (substitute-command-keys
+		    "`\\[ellama-transient-blueprint-mode-menu]'")
+		   'face 'ellama-key-face)
+		  " to continue")
 	  'help-echo "mouse-1: show menu"
 	  'mouse-face 'header-line-format
-	  'face 'ellama-context-line-face
 	  'keymap (let ((m (make-sparse-keymap)))
 		    (define-key m [header-line mouse-1] #'ellama-transient-blueprint-mode-menu)
 		    (define-key m [mode-line mouse-1] #'ellama-transient-blueprint-mode-menu)
 		    m))
 	 " "
 	 (propertize
-	  (substitute-command-keys
-	   "`\\[ellama-kill-current-buffer]' to cancel")
+	  (concat (propertize
+		   (substitute-command-keys
+		    "`\\[ellama-kill-current-buffer]'")
+		   'face 'ellama-key-face)
+		  " to cancel")
 	  'help-echo "mouse-1: kill buffer"
 	  'mouse-face 'header-line-format
-	  'face 'ellama-context-line-face
 	  'keymap (let ((m (make-sparse-keymap)))
 		    (define-key m [header-line mouse-1] #'ellama-kill-current-buffer)
 		    (define-key m [mode-line mouse-1] #'ellama-kill-current-buffer)

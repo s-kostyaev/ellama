@@ -37,15 +37,17 @@
 
 (ert-deftest test-ellama-code-improve ()
   (let ((original "(hello)\n")
-        (improved "```lisp\n(hello)\n```"))
+        (improved "```lisp\n(hello)\n```")
+        prev-lines)
     (with-temp-buffer
       (insert original)
       (cl-letf (((symbol-function 'llm-chat-streaming)
-                 (lambda (_provider prompt partial-callback response-callback _error-callback)
+                 (lambda (_provider prompt partial-callback response-callback _error-callback _multi-output)
                    (should (string-match original (llm-chat-prompt-to-text prompt)))
-                   (cl-loop for i from 0 to (- (length improved) 1)
-                            do (funcall partial-callback (substring improved 0 i)))
-                   (funcall response-callback improved))))
+                   (dolist (s (string-lines improved))
+                     (funcall partial-callback `(:text ,(concat prev-lines s)))
+                     (setq prev-lines (concat prev-lines s)))
+                   (funcall response-callback `(:text ,improved)))))
         (ellama-code-improve)
         (should (equal original (buffer-string)))))))
 
@@ -434,6 +436,31 @@ _more italic_")))
 #+END_SRC
 $P_\\theta$
 /more italic/"))))
+
+(defun ellama-test-max-common-prefix ()
+  "Test the `ellama-max-common-prefix` function."
+  (should (equal (ellama-max-common-prefix "" "") ""))
+  (should (equal (ellama-max-common-prefix "abc" "abcd") "abc"))
+  (should (equal (ellama-max-common-prefix "abcd" "abc") "abc"))
+  (should (equal (ellama-max-common-prefix "abcdef" "abcefg") "abc"))
+  (should (equal (ellama-max-common-prefix "a" "b") ""))
+  (should (equal (ellama-max-common-prefix "a" "") ""))
+  (should (equal (ellama-max-common-prefix "" "b") "")))
+
+(ert-deftest ellama-test-max-common-prefix ()
+  "Run the tests for `ellama-max-common-prefix`."
+  (ellama-test-max-common-prefix))
+
+(ert-deftest ellama--string-without-last-line-test ()
+  "Test `ellama--string-without-last-line` function."
+  (should (equal (ellama--string-without-last-line "Line1\nLine2\nLine3")
+                 "Line1\nLine2"))
+  (should (equal (ellama--string-without-last-line "SingleLine")
+                 ""))
+  (should (equal (ellama--string-without-last-line "")
+                 ""))
+  (should (equal (ellama--string-without-last-line "Line1\nLine2")
+                 "Line1")))
 
 (provide 'test-ellama)
 

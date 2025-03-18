@@ -55,6 +55,10 @@
   "Face for ellama context line."
   :group 'ellama)
 
+(defface ellama-key-face '((t (:inherit help-key-binding)))
+  "Face for ellama context line."
+  :group 'ellama)
+
 (defvar ellama-context-global nil
   "Global context.")
 
@@ -242,8 +246,10 @@ the context."
   :keymap ellama-context-preview-mode-map
   :group 'ellama
   (setq header-line-format
-	(substitute-command-keys
-	 "`\\[ellama-kill-current-buffer]' to quit")))
+	(concat (propertize (substitute-command-keys
+			     "`\\[ellama-kill-current-buffer]'")
+			    'face 'ellama-key-face)
+		" to quit")))
 
 (defcustom ellama-context-preview-element-display-action-function nil
   "Display action function for `ellama-context-preview-element'."

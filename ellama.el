@@ -5,8 +5,8 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (llm "0.22.0") (plz "0.8") (transient "0.7") (compat "29.1"))
-;; Version: 1.5.6
+;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1"))
+;; Version: 1.6.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -501,6 +501,16 @@ It should be a function with single argument generated text string."
   "Display action function for `ellama-instant'."
   :group 'ellama
   :type 'function)
+
+(defcustom ellama-reasoning-display-action-function nil
+  "Display action function for reasoning."
+  :group 'ellama
+  :type 'function)
+
+(defcustom ellama-show-reasoning t
+  "Show reasoning in separate buffer if enabled."
+  :group 'ellama
+  :type 'boolean)
 
 (define-minor-mode ellama-session-mode
   "Minor mode for ellama session buffers."
@@ -1159,6 +1169,120 @@ Otherwire return current active session."
 
 (defvar ellama-global-system nil)
 
+(defvar-local ellama--stop-scroll nil)
+
+;;;###autoload
+(defun ellama-disable-scroll (&rest event)
+  "Disable auto scroll.
+EVENT is an argument for mweel scroll."
+  (declare-function mwheel-event-window "mwheel")
+  (with-current-buffer
+      (window-buffer
+       (if (windowp (caadar event))
+	   (caadar event)
+	 (mwheel-event-window event)))
+    (setq ellama--stop-scroll t)))
+
+;;;###autoload
+(defun ellama-enable-scroll (&rest _)
+  "Enable auto scroll."
+  (setq ellama--stop-scroll nil))
+
+(defun ellama-max-common-prefix (s1 s2)
+  "Return the maximum common prefix of strings S1 and S2."
+  (let ((i 0)
+        (min-length (min (length s1) (length s2))))
+    (while (and (< i min-length)
+                (eq (aref s1 i) (aref s2 i)))
+      (setq i (1+ i)))
+    (substring s1 0 i)))
+
+(defun ellama--string-without-last-line (s)
+  "Remove last line from string S."
+  (string-join
+   (reverse (cdr (reverse (string-lines
+			   s))))
+   "\n"))
+
+(defun ellama--insert (buffer point filter)
+  "Insert text during streaming.
+
+Works inside BUFFER starting at POINT.
+If POINT is nil, current point will be used.
+FILTER is a function for text transformation."
+  (with-current-buffer
+      buffer
+    (let* ((end-marker (make-marker))
+	   (previous-filtered-text "")
+	   (safe-common-prefix ""))
+      (set-marker end-marker (or point (point)))
+      (set-marker-insertion-type end-marker t)
+      (lambda
+	(text)
+	(with-current-buffer buffer
+	  (save-excursion
+	    (goto-char end-marker)
+	    (let* ((filtered-text
+		    (funcall filter text))
+		   (common-prefix (concat
+				   safe-common-prefix
+				   (ellama-max-common-prefix
+				    (string-remove-prefix
+				     safe-common-prefix
+				     filtered-text)
+				    (string-remove-prefix
+				     safe-common-prefix
+				     previous-filtered-text))))
+		   (wrong-chars-cnt (- (length previous-filtered-text)
+				       (length common-prefix)))
+		   (delta (string-remove-prefix common-prefix filtered-text)))
+	      (delete-char (- wrong-chars-cnt))
+	      (insert delta)
+	      (when (and
+		     (not (eq major-mode 'org-mode))
+		     ellama-fill-paragraphs
+		     (pcase ellama-fill-paragraphs
+		       ((cl-type function) (funcall ellama-fill-paragraphs))
+		       ((cl-type boolean) ellama-fill-paragraphs)
+		       ((cl-type list) (and (apply #'derived-mode-p
+						   ellama-fill-paragraphs)))))
+		(fill-paragraph))
+	      (set-marker end-marker (point))
+	      (when (and ellama-auto-scroll (not ellama--stop-scroll))
+		(ellama--scroll buffer end-marker))
+	      (setq safe-common-prefix (ellama--string-without-last-line common-prefix))
+	      (setq previous-filtered-text filtered-text))))))))
+
+(defun ellama--handle-partial (insert-text insert-reasoning reasoning-buffer)
+  "Handle partial llm callback.
+INSERT-TEXT is a function for text insertion.
+INSERT-REASONING is a function for reasoning insertion.
+REASONING-BUFFER is a buffer for reasoning."
+  (lambda (response)
+    (let ((text (plist-get response :text))
+	  (reasoning (plist-get response :reasoning)))
+      (funcall
+       insert-text
+       (concat
+	(when reasoning
+	  (if
+	      (or (not ellama-output-remove-reasoning)
+		  ellama--current-session)
+	      (concat "<think>\n" reasoning)
+	    (progn
+	      (with-current-buffer reasoning-buffer
+		(funcall insert-reasoning reasoning)
+		(when ellama-show-reasoning
+		  (display-buffer
+		   reasoning-buffer
+		   (when ellama-reasoning-display-action-function
+		     `((ignore . (,ellama-reasoning-display-action-function)))))))
+	      nil)))
+	(when text
+	  (if (and reasoning ellama--current-session)
+	      (concat "</think>\n" (string-trim text))
+	    (string-trim text))))))))
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
@@ -1204,6 +1328,8 @@ failure (with BUFFER current).
 		     (when (ellama-session-p session)
 		       (ellama-get-session-buffer (ellama-session-id session)))
 		     (current-buffer)))
+	 (reasoning-buffer (get-buffer-create
+			    (concat (make-temp-name "*ellama-reasoning-") "*")))
 	 (point (or (plist-get args :point)
 		    (with-current-buffer buffer (point))))
 	 (filter (or (plist-get args :filter) #'identity))
@@ -1227,102 +1353,56 @@ failure (with BUFFER current).
 			       (ellama-session-prompt session))
 			   (setf (ellama-session-prompt session)
 				 (llm-make-chat-prompt prompt-with-ctx :context system)))
-		       (llm-make-chat-prompt prompt-with-ctx :context system)))
-	 (stop-scroll))
+		       (llm-make-chat-prompt prompt-with-ctx :context system))))
+    (with-current-buffer reasoning-buffer
+      (org-mode))
     (with-current-buffer buffer
       (ellama-request-mode +1)
-      (let* ((start (make-marker))
-	     (end (make-marker))
-	     (distance-to-end (- (point-max) (point)))
-	     (new-pt)
-	     (insert-text
-	      (lambda (text)
-		;; Erase and insert the new text between the marker cons.
-		(with-current-buffer buffer
-		  ;; Manually save/restore point as save-excursion doesn't
-		  ;; restore the point into the middle of replaced text.
-		  (let* ((pt (point))
-			 (new-distance-to-end (- (point-max) (point))))
-		    (save-excursion
-		      (if (and (eq (window-buffer (selected-window))
-				   buffer)
-			       (not (equal distance-to-end new-distance-to-end)))
-			  (setq stop-scroll t)
-			(setq stop-scroll nil))
-		      (goto-char start)
-		      (delete-region start end)
-		      (insert (funcall filter text))
-                      (when (and ellama-fill-paragraphs
-				 (pcase ellama-fill-paragraphs
-				   ((cl-type function) (funcall ellama-fill-paragraphs))
-				   ((cl-type boolean) ellama-fill-paragraphs)
-				   ((cl-type list) (and (apply #'derived-mode-p
-							       ellama-fill-paragraphs)
-							(not (equal major-mode 'org-mode))))))
-			(fill-region start (point)))
-		      (setq new-pt (point)))
-		    (if (and ellama-auto-scroll (not stop-scroll))
-			(ellama--scroll buffer new-pt)
-		      (goto-char pt)))
-		  (undo-amalgamate-change-group ellama--change-group)))))
+      (let* ((insert-text
+	      (ellama--insert buffer point filter))
+	     (insert-reasoning
+	      (ellama--insert reasoning-buffer nil #'ellama--translate-markdown-to-org-filter)))
 	(setq ellama--change-group (prepare-change-group))
 	(activate-change-group ellama--change-group)
-	(ellama-set-markers start end point)
 	(when ellama-spinner-enabled
 	  (require 'spinner)
 	  (spinner-start ellama-spinner-type))
-	(let ((request (llm-chat-streaming
-			provider
-			llm-prompt
-			insert-text
-			(lambda (text)
-			  (funcall insert-text
-				   (string-trim
-				    (if (and ellama-output-remove-reasoning
-					     (not session))
-					(ellama-remove-reasoning text)
-				      text)))
-			  (with-current-buffer buffer
-			    (accept-change-group ellama--change-group)
-			    (when ellama-spinner-enabled
-			      (spinner-stop))
-			    (if (and (listp donecb)
-				     (functionp (car donecb)))
-				(mapc (lambda (fn) (funcall fn text))
-				      donecb)
-			      (funcall donecb text))
-			    (when ellama-session-hide-org-quotes
-			      (ellama-collapse-org-quotes))
-			    (when (and ellama--current-session
-				       ellama-session-remove-reasoning)
-			      (mapc (lambda (interaction)
-				      (setf (llm-chat-prompt-interaction-content
-					     interaction)
-					    (ellama-remove-reasoning
-					     (llm-chat-prompt-interaction-content
-					      interaction))))
-				    (llm-chat-prompt-interactions
-				     (ellama-session-prompt
-				      ellama--current-session))))
-			    (setq ellama--current-request nil)
-			    (ellama-request-mode -1)))
-			(lambda (_ msg)
-			  (with-current-buffer buffer
-			    (cancel-change-group ellama--change-group)
-			    (when ellama-spinner-enabled
-			      (spinner-stop))
-			    (funcall errcb msg)
-			    (setq ellama--current-request nil)
-			    (ellama-request-mode -1))))))
+	(let* ((handler (ellama--handle-partial insert-text insert-reasoning reasoning-buffer))
+	       (request (llm-chat-streaming
+			 provider
+			 llm-prompt
+			 handler
+			 (lambda (response)
+			   (let ((text (plist-get response :text))
+				 (reasoning (plist-get response :reasoning)))
+			     (funcall handler response)
+			     (when (or ellama--current-session
+				       (not reasoning))
+			       (kill-buffer reasoning-buffer))
+			     (with-current-buffer buffer
+			       (accept-change-group ellama--change-group)
+			       (when ellama-spinner-enabled
+				 (spinner-stop))
+			       (if (and (listp donecb)
+					(functionp (car donecb)))
+				   (mapc (lambda (fn) (funcall fn text))
+					 donecb)
+				 (funcall donecb text))
+			       (when ellama-session-hide-org-quotes
+				 (ellama-collapse-org-quotes))
+			       (setq ellama--current-request nil)
+			       (ellama-request-mode -1))))
+			 (lambda (_ msg)
+			   (with-current-buffer buffer
+			     (cancel-change-group ellama--change-group)
+			     (when ellama-spinner-enabled
+			       (spinner-stop))
+			     (funcall errcb msg)
+			     (setq ellama--current-request nil)
+			     (ellama-request-mode -1)))
+			 t)))
 	  (with-current-buffer buffer
 	    (setq ellama--current-request request)))))))
-
-(defun ellama-set-markers (start end point)
-  "Set markers for START and END positions at POINT."
-  (set-marker start point)
-  (set-marker end point)
-  (set-marker-insertion-type start nil)
-  (set-marker-insertion-type end t))
 
 (defun ellama-chain (initial-prompt forms &optional acc)
   "Call chain of FORMS on INITIAL-PROMPT.
