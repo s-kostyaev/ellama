@@ -2322,63 +2322,105 @@ otherwise prompt user for URL to summarize."
       :false-object nil)
      :same)))
 
-(defun ellama-generate-completion-list ()
-  "Generate completion list from context at point."
-  (let* ((text (if (region-active-p)
+(defvar-local ellama-current-completions (make-hash-table :test 'equal)
+  "Stores completions lists for sentence starts.")
+
+;;;###autoload
+(defun ellama-completion-cache-reset ()
+  "Reset completion cache in current buffer."
+  (interactive)
+  (setq ellama-current-completions (make-hash-table :test 'equal)))
+
+;;;###autoload
+(defvar ellama-async-request-active nil
+  "Non-nil if an async request is active.")
+
+;;;###autoload
+(defun ellama-complete-at-point (&rest _)
+  "Completion function for Ellama."
+  (interactive)
+  (let* ((buf (current-buffer))
+	 (text (if (region-active-p)
 		   (buffer-substring-no-properties (region-beginning) (region-end))
 		 (buffer-substring-no-properties (point-min) (point))))
-	 (last-sentence (buffer-substring-no-properties
-			 (save-excursion (backward-sentence) (point))
-			 (point)))
+	 (start-point (save-excursion (backward-sentence) (point)))
+	 (last-sentence (buffer-substring-no-properties start-point (point)))
 	 (last-word (buffer-substring-no-properties
-		     (save-excursion (backward-word) (point))
+		     (save-excursion
+		       (progn (backward-word)
+			      (point)))
 		     (point)))
-	 (last-sentence-without-last-word (string-trim-right
-					   last-sentence
-					   (rx (literal last-word)))))
-    (mapcar (lambda (s)
-	      (let ((new-sentence (with-temp-buffer
-				    (insert s)
-				    (goto-char (point-max))
-				    (buffer-substring-no-properties
-				     (save-excursion (backward-sentence) (point))
-				     (point-max)))))
-		(if (string-prefix-p last-sentence new-sentence)
-		    new-sentence
-		  (if (string-prefix-p last-word new-sentence)
-		      (concat (string-trim-right last-sentence-without-last-word) " " (string-trim new-sentence))
-		    (concat (string-trim-right last-sentence) " " (string-trim new-sentence))))))
-	    (plist-get
-	     (json-parse-string
-	      (llm-chat
-	       (or ellama-completion-provider
-		   ellama-provider
-		   (ellama-get-first-ollama-chat-model))
-	       (llm-make-chat-prompt
-		text
-		:context ellama-completion-list-prompt-template
-		:response-format '(:type object :properties
-					 (:completions (:type array :items (:type string)))
-					 :required (completions))))
-
-	      :object-type 'plist
-	      :false-object nil
-	      :array-type 'list)
-	     :completions))))
-
-(defun ellama-complete-at-point (&rest _)
-  "Complete at point using ellama."
-  (interactive)
-  (when-let* ((cur-point (point))
-	      (collection (while-no-input (ellama-generate-completion-list))))
-    (when (listp collection)
-      (list
-       (save-excursion
-	 (backward-sentence)
-	 (point))
-       (point)
-       collection
-       :exclusive 'no))))
+	 (last-sentence-without-last-word
+	  (string-trim-right last-sentence (rx (literal last-word))))
+	 (provider (or ellama-completion-provider
+		       ellama-provider
+		       (ellama-get-first-ollama-chat-model)))
+	 (completions (gethash start-point ellama-current-completions)))
+    (if completions
+	(list start-point
+	      (point)
+	      completions :exclusive 'no)
+      (unless ellama-async-request-active
+	(setq ellama-async-request-active t)
+	(let* ((prompt (llm-make-chat-prompt
+			text
+			:context ellama-completion-list-prompt-template
+			:response-format
+			'(:type object
+				:properties (:completions
+					     (:type array :items (:type string)))
+				:required (completions))))
+	       (success-cb
+		(lambda (raw-response)
+		  (with-current-buffer buf
+		    (condition-case error
+			(progn
+			  (let* ((json (json-parse-string
+					raw-response
+					:object-type 'plist
+					:array-type 'list
+					:false-object nil))
+				 (completions-array (plist-get json :completions)))
+			    (when
+				completions-array
+			      (let ((processed-completions
+				     (mapcar
+				      (lambda (s)
+					(let ((new-sentence
+					       (with-temp-buffer
+						 (insert s)
+						 (goto-char (point-max))
+						 (buffer-substring-no-properties
+						  (save-excursion (backward-sentence) (point))
+						  (point)))))
+					  (if (string-prefix-p last-sentence new-sentence)
+					      new-sentence
+					    (let* ((trimmed-new (string-trim new-sentence))
+						   (starts-with-last-word
+						    (string-prefix-p last-word trimmed-new)))
+					      (if starts-with-last-word
+						  (concat (string-trim-right
+							   last-sentence-without-last-word)
+							  " "
+							  trimmed-new)
+						(concat (string-trim-right last-sentence)
+							" "
+							trimmed-new))))))
+				      completions-array)))
+				(puthash start-point
+					 processed-completions
+					 ellama-current-completions))))
+			  (setq ellama-async-request-active nil))
+		      (error
+		       (setq ellama-async-request-active nil)
+		       (message "Error parsing completion response: %S" error))))))
+	       (error-cb
+		(lambda (error)
+		  (with-current-buffer (current-buffer)
+		    (message "LLM Error: %s" error)
+		    (setq ellama-async-request-active nil)))))
+	  (llm-chat-async provider prompt success-cb error-cb)))
+      nil)))
 
 (defun ellama-semantic-similar-p (text1 text2)
   "Check if TEXT1 means the same as TEXT2."
