@@ -2359,7 +2359,12 @@ otherwise prompt user for URL to summarize."
     (if completions
 	(list start-point
 	      (point)
-	      completions :exclusive 'no)
+	      completions
+	      :exclusive 'no
+	      :exit-function
+	      (lambda (_ status)
+		(when (eq status 'finished)
+		  (remhash start-point ellama-current-completions))))
       (unless ellama-async-request-active
 	(setq ellama-async-request-active t)
 	(let* ((prompt (llm-make-chat-prompt
