@@ -718,7 +718,10 @@ This filter contains only subset of markdown syntax to be good enough."
 
 (defun ellama-session-line ()
   "Return current session id line."
-  (propertize (format " ellama session: %s" ellama--current-session-id)
+  (propertize (format " ellama session: %s"
+		      (if ellama--current-session
+			  (ellama-session-id ellama--current-session)
+			ellama--current-session-id))
 	      'face 'ellama-face))
 
 (defun ellama-session-show-header-line ()
