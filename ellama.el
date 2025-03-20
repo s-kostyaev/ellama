@@ -718,12 +718,13 @@ This filter contains only subset of markdown syntax to be good enough."
 
 (defun ellama-session-line ()
   "Return current session id line."
-  (propertize (format "ellama session: %s" ellama--current-session-id)
+  (propertize (format " ellama session: %s" ellama--current-session-id)
 	      'face 'ellama-face))
 
 (defun ellama-session-show-header-line ()
   "Display session id in the header line."
-  (add-to-list 'header-line-format '(:eval (ellama-session-line)) t))
+  (when (listp header-line-format)
+    (add-to-list 'header-line-format '(:eval (ellama-session-line)) t)))
 
 (defun ellama-session-hide-header-line ()
   "Hide session id from header line."
@@ -750,7 +751,8 @@ This filter contains only subset of markdown syntax to be good enough."
 
 (defun ellama-session-show-mode-line ()
   "Display session id in the mode line."
-  (add-to-list 'mode-line-format '(:eval (ellama-session-line)) t))
+  (when (listp mode-line-format)
+    (add-to-list 'mode-line-format '(:eval (ellama-session-line)) t)))
 
 (defun ellama-session-hide-mode-line ()
   "Hide session id from mode line."
