@@ -406,9 +406,11 @@ Topic:
 ✅ PRESERVE INPUT FORMAT EXACTLY
 
 **EXAMPLE INPUT:**
-`# User: Act as Morpheus...`
+# User: Act as Morpheus...
+**GOOD OUTPUT for Russian:**
+# Пользователь: Действуй как Морфеус...
 **GOOD OUTPUT for German:**
-`# Benutzer: Als Morpheus handeln...`
+# Benutzer: Als Morpheus handeln...
 
 **EVERY LINE MUST MATCH:**
 Input ends with `# User:` → Output ends with translated `# User:`"
