@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1"))
-;; Version: 1.6.0
+;; Version: 1.6.1
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -715,6 +715,75 @@ This filter contains only subset of markdown syntax to be good enough."
 (defvar-local ellama--current-session nil)
 
 (defvar ellama--current-session-id nil)
+
+(defcustom ellama-session-line-template " ellama session: %s"
+  "Template for formatting the current session line."
+  :type 'string
+  :group 'ellama)
+
+(defun ellama-session-line ()
+  "Return current session id line."
+  (propertize (format ellama-session-line-template
+		      (if ellama--current-session
+			  (ellama-session-id ellama--current-session)
+			ellama--current-session-id))
+	      'face 'ellama-face))
+
+(defun ellama-session-show-header-line ()
+  "Display session id in the header line."
+  (when (listp header-line-format)
+    (add-to-list 'header-line-format '(:eval (ellama-session-line)) t)))
+
+(defun ellama-session-hide-header-line ()
+  "Hide session id from header line."
+  (setq header-line-format (delete '(:eval (ellama-session-line)) header-line-format)))
+
+(defun ellama-session-update-header-line ()
+  "Update header line for ellama session header line mode."
+  (if ellama-session-header-line-mode
+      (ellama-session-show-header-line)
+    (ellama-session-hide-header-line)))
+
+;;;###autoload
+(define-minor-mode ellama-session-header-line-mode
+  "Toggle Ellama Session header line mode."
+  :group 'ellama
+  (add-hook 'window-state-change-hook #'ellama-session-update-header-line)
+  (ellama-session-update-header-line))
+
+;;;###autoload
+(define-globalized-minor-mode ellama-session-header-line-global-mode
+  ellama-session-header-line-mode
+  ellama-session-header-line-mode
+  :group 'ellama)
+
+(defun ellama-session-show-mode-line ()
+  "Display session id in the mode line."
+  (when (listp mode-line-format)
+    (add-to-list 'mode-line-format '(:eval (ellama-session-line)) t)))
+
+(defun ellama-session-hide-mode-line ()
+  "Hide session id from mode line."
+  (setq mode-line-format (delete '(:eval (ellama-session-line)) mode-line-format)))
+
+(defun ellama-session-update-mode-line ()
+  "Update mode line for ellama session mode line mode."
+  (if ellama-session-mode-line-mode
+      (ellama-session-show-mode-line)
+    (ellama-session-hide-mode-line)))
+
+;;;###autoload
+(define-minor-mode ellama-session-mode-line-mode
+  "Toggle Ellama Session mode line mode."
+  :group 'ellama
+  (add-hook 'window-state-change-hook #'ellama-session-update-mode-line)
+  (ellama-session-update-mode-line))
+
+;;;###autoload
+(define-globalized-minor-mode ellama-session-mode-line-global-mode
+  ellama-session-mode-line-mode
+  ellama-session-mode-line-mode
+  :group 'ellama)
 
 (defvar ellama--active-sessions (make-hash-table :test #'equal))
 

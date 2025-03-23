@@ -1,3 +1,7 @@
+* Version 1.6.1
+- Added functionality to display the current Ellama session ID in both the
+  header line and the mode line.
+- Added globalized minor modes for enabling this feature across all buffers.
 * Version 1.6.0
 - Refactored the text insertion and handling logic in ~ellama.el~.
 - Added new customization variables ~ellama-show-reasoning~ and

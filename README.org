@@ -40,7 +40,9 @@ You can customize ellama configuration like this:
     :init (setopt ellama-auto-scroll t)
     :config
     ;; show ellama context in header line in all buffers
-    (ellama-context-header-line-global-mode +1))
+    (ellama-context-header-line-global-mode +1)
+    ;; show ellama session id in header line in all buffers
+    (ellama-session-header-line-global-mode +1))
 #+END_SRC
 
 More sofisticated configuration example:
@@ -114,6 +116,8 @@ More sofisticated configuration example:
     :config
     ;; show ellama context in header line in all buffers
     (ellama-context-header-line-global-mode +1)
+    ;; show ellama session id in header line in all buffers
+    (ellama-session-header-line-global-mode +1)
     ;; handle scrolling events
     (advice-add 'pixel-scroll-precision :before #'ellama-disable-scroll)
     (advice-add 'end-of-buffer :after #'ellama-enable-scroll))
@@ -482,6 +486,7 @@ argument generated text string.
   within your ~user-emacs-directory~.
 - ~ellama-show-reasoning~: Show reasoning in separate buffer if enabled. Enabled by default.
 - ~ellama-reasoning-display-action-function~: Display action function for reasoning.
+- ~ellama-session-line-template~: Template for formatting the current session line.
 
 ** Minor modes
 
@@ -550,6 +555,56 @@ To enable or disable ~ellama-context-mode-line-global-mode~, use the command:
 This globalized minor mode provides a convenient way to ensure that
 context-specific mode line information is always available, regardless of the
 buffer being edited.
+
+*** Ellama Session Header Line Mode
+
+The ~ellama-session-header-line-mode~ is a minor mode that allows you to display
+the current Ellama session ID in the header line of your Emacs buffers. This
+feature helps keep track of which session you are working with, especially
+useful when managing multiple sessions.
+
+**** Enabling and Disabling
+
+To enable this mode, use the following command:
+#+BEGIN_SRC emacs-lisp
+M-x ellama-session-header-line-mode
+#+END_SRC
+
+This will toggle the display of the session ID in the header line. You can also
+enable or disable it globally across all buffers using:
+#+BEGIN_SRC emacs-lisp
+M-x ellama-session-header-line-global-mode
+#+END_SRC
+
+**** Customization
+
+The session ID is displayed with a customizable face called ~ellama-face~. You
+can customize this face to change its appearance.
+
+*** Ellama Session Mode Line Mode
+
+The ~ellama-session-mode-line-mode~ is a minor mode that allows you to display
+the current Ellama session ID in the mode line of your Emacs buffers. This
+feature provides an additional way to keep track of which session you are
+working with, especially useful when managing multiple sessions.
+
+**** Enabling and Disabling
+
+To enable this mode, use the following command:
+#+BEGIN_SRC emacs-lisp
+M-x ellama-session-mode-line-mode
+#+END_SRC
+
+This will toggle the display of the session ID in the mode line. You can also
+enable or disable it globally across all buffers using:
+#+BEGIN_SRC emacs-lisp
+M-x ellama-session-mode-line-global-mode
+#+END_SRC
+
+**** Customization
+
+The session ID is displayed with a customizable face called ~ellama-face~. You
+can customize this face to change its appearance.
 
 ** Using Blueprints
 
