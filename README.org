@@ -482,6 +482,7 @@ argument generated text string.
   within your ~user-emacs-directory~.
 - ~ellama-show-reasoning~: Show reasoning in separate buffer if enabled. Enabled by default.
 - ~ellama-reasoning-display-action-function~: Display action function for reasoning.
+- ~ellama-session-line-template~: Template for formatting the current session line.
 
 ** Minor modes
 

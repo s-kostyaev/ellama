@@ -716,9 +716,14 @@ This filter contains only subset of markdown syntax to be good enough."
 
 (defvar ellama--current-session-id nil)
 
+(defcustom ellama-session-line-template " ellama session: %s"
+  "Template for formatting the current session line."
+  :type 'string
+  :group 'ellama)
+
 (defun ellama-session-line ()
   "Return current session id line."
-  (propertize (format " ellama session: %s"
+  (propertize (format ellama-session-line-template
 		      (if ellama--current-session
 			  (ellama-session-id ellama--current-session)
 			ellama--current-session-id))
