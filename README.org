@@ -34,7 +34,7 @@ You can customize ellama configuration like this:
 #+BEGIN_SRC  emacs-lisp
   (use-package ellama
     :ensure t
-    :bind ("C-c e" . ellama-transient-main-menu)
+    :bind ("C-c e" . ellama)
     ;; send last message in chat buffer with C-c C-c
     :hook (org-ctrl-c-ctrl-c-final . ellama-chat-send-last-message)
     :init (setopt ellama-auto-scroll t)
@@ -50,7 +50,7 @@ More sofisticated configuration example:
 #+BEGIN_SRC  emacs-lisp
   (use-package ellama
     :ensure t
-    :bind ("C-c e" . ellama-transient-main-menu)
+    :bind ("C-c e" . ellama)
     ;; send last message in chat buffer with C-c C-c
     :hook (org-ctrl-c-ctrl-c-final . ellama-chat-send-last-message)
     :init
