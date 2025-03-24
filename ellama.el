@@ -682,7 +682,7 @@ This filter contains only subset of markdown syntax to be good enough."
 ;;;###autoload
 (define-minor-mode ellama-session-header-line-mode
   "Toggle Ellama Session header line mode."
-  (add-hook 'window-state-change-hook #'ellama-session-update-header-line)
+  :lighter ""
   (ellama-session-update-header-line))
 
 ;;;###autoload
@@ -701,7 +701,7 @@ This filter contains only subset of markdown syntax to be good enough."
 ;;;###autoload
 (define-minor-mode ellama-session-mode-line-mode
   "Toggle Ellama Session mode line mode."
-  (add-hook 'window-state-change-hook #'ellama-session-update-mode-line)
+  :lighter ""
   (ellama-session-update-mode-line))
 
 ;;;###autoload
