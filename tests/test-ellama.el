@@ -438,7 +438,8 @@ $P_\\theta$
 /more italic/"))))
 
 (ert-deftest test-ellama-md-to-org-inline-code ()
-  (let ((result (ellama--translate-markdown-to-org-filter "```go
+  (let* ((fill-column 80)
+         (result (ellama--translate-markdown-to-org-filter "```go
 package main
 ```
 ### Explanation:
