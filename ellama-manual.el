@@ -30,6 +30,8 @@
 
 ;;; Code:
 
+(defvar org-export-with-broken-links)
+
 ;;;###autoload
 (defun ellama-manual-export ()
   "Create info manual from readme."
@@ -48,4 +50,6 @@
 	  'texinfo "ellama.texi"
 	nil nil nil nil nil
 	#'org-texinfo-compile))))
+
+(provide 'ellama-manual)
 ;;; ellama-manual.el ends here.
