@@ -1283,11 +1283,14 @@ If POINT is nil, current point will be used.
 FILTER is a function for text transformation."
   (with-current-buffer
       buffer
-    (let* ((end-marker (make-marker))
+    (let* ((beg-marker (make-marker))
+	   (end-marker (make-marker))
 	   (previous-filtered-text "")
 	   (safe-common-prefix ""))
       (set-marker end-marker (or point (point)))
+      (set-marker beg-marker end-marker)
       (set-marker-insertion-type end-marker t)
+      (set-marker-insertion-type beg-marker nil)
       (lambda
 	(text)
 	(with-current-buffer buffer
@@ -1310,14 +1313,19 @@ FILTER is a function for text transformation."
 	      (delete-char (- wrong-chars-cnt))
 	      (insert delta)
 	      (when (and
-		     (not (eq major-mode 'org-mode))
 		     ellama-fill-paragraphs
 		     (pcase ellama-fill-paragraphs
 		       ((cl-type function) (funcall ellama-fill-paragraphs))
 		       ((cl-type boolean) ellama-fill-paragraphs)
 		       ((cl-type list) (and (apply #'derived-mode-p
 						   ellama-fill-paragraphs)))))
-		(fill-paragraph))
+		(if (not (eq major-mode 'org-mode))
+		    (fill-paragraph)
+		  (when (not (save-excursion
+			       (re-search-backward
+				"#\\+BEGIN_SRC"
+				beg-marker t)))
+		    (org-fill-paragraph))))
 	      (set-marker end-marker (point))
 	      (when (and ellama-auto-scroll (not ellama--stop-scroll))
 		(ellama--scroll buffer end-marker))
