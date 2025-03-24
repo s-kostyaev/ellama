@@ -498,6 +498,34 @@ argument generated text string.
 
 ** Minor modes
 
+The Ellama package for Emacs offers a suite of minor modes designed to enhance
+the user experience by providing context-specific information directly within
+the editor's interface. These minor modes focus on updating both the header line
+and mode line with relevant details, making it easier to manage and navigate
+multiple sessions and buffers.
+
+Key features include:
+
+- *Context Header Line Modes*: ~ellama-context-header-line-mode~ and its global
+  counterpart, ~ellama-context-header-line-global-mode~, update the header line
+  to display what elements are added to the global Ellama context. This is
+  particularly useful for keeping track of what information is currently in
+  context.
+- *Context Mode Line Modes*: Similarly, ~ellama-context-mode-line-mode~ and
+  ~ellama-context-mode-line-global-mode~ provide information about the
+  current global context directly within the mode line, ensuring that users
+  always have relevant information at a glance.
+- *Session Header Line Mode*: ~ellama-session-header-line-mode~ and its global
+  version display the current Ellama session ID in the header line, helping
+  users manage multiple sessions efficiently.
+- *Session Mode Line Mode*: ~ellama-session-mode-line-mode~ and its global
+  counterpart offer an additional way to track session IDs by displaying them
+  in the mode line.
+
+These minor modes are easily toggled on or off using specific commands,
+providing flexibility for users who may want to enable these features globally
+across all buffers or selectively within individual buffers.
+
 *** ellama-context-header-line-mode
 
 *Description:*
