@@ -125,6 +125,11 @@ More sofisticated configuration example:
 
 ** Commands
 
+*** ellama
+
+This is the entry point for Ellama. It displays the main transient menu,
+allowing you to access all other Ellama commands from here.
+
 *** ellama-chat
 
 Ask Ellama about something by entering a prompt in an interactive
