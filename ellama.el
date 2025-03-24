@@ -671,20 +671,13 @@ This filter contains only subset of markdown syntax to be good enough."
 			ellama--current-session-id))
 	      'face 'ellama-face))
 
-(defun ellama-session-show-header-line ()
-  "Display session id in the header line."
-  (when (listp header-line-format)
-    (add-to-list 'header-line-format '(:eval (ellama-session-line)) t)))
-
-(defun ellama-session-hide-header-line ()
-  "Hide session id from header line."
-  (setq header-line-format (delete '(:eval (ellama-session-line)) header-line-format)))
-
 (defun ellama-session-update-header-line ()
   "Update header line for ellama session header line mode."
-  (if ellama-session-header-line-mode
-      (ellama-session-show-header-line)
-    (ellama-session-hide-header-line)))
+  (when (listp header-line-format)
+    (let ((element '(:eval (ellama-session-line))))
+      (if ellama-session-header-line-mode
+          (add-to-list 'header-line-format element t)
+	(setq header-line-format (delete element header-line-format))))))
 
 ;;;###autoload
 (define-minor-mode ellama-session-header-line-mode
@@ -697,20 +690,13 @@ This filter contains only subset of markdown syntax to be good enough."
   ellama-session-header-line-mode
   ellama-session-header-line-mode)
 
-(defun ellama-session-show-mode-line ()
-  "Display session id in the mode line."
-  (when (listp mode-line-format)
-    (add-to-list 'mode-line-format '(:eval (ellama-session-line)) t)))
-
-(defun ellama-session-hide-mode-line ()
-  "Hide session id from mode line."
-  (setq mode-line-format (delete '(:eval (ellama-session-line)) mode-line-format)))
-
 (defun ellama-session-update-mode-line ()
   "Update mode line for ellama session mode line mode."
-  (if ellama-session-mode-line-mode
-      (ellama-session-show-mode-line)
-    (ellama-session-hide-mode-line)))
+  (when (listp mode-line-format)
+    (let ((element '(:eval (ellama-session-line))))
+      (if ellama-session-mode-line-mode
+	  (add-to-list 'mode-line-format element t)
+	(setq mode-line-format (delete element mode-line-format))))))
 
 ;;;###autoload
 (define-minor-mode ellama-session-mode-line-mode
