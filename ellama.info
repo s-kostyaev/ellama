@@ -25,58 +25,6 @@ Ellama
 * Using Blueprints::
 * Acknowledgments::
 
-Commands
-
-* ellama::
-* ellama-chat::
-* ellama-write::
-* ellama-chat-send-last-message::
-* ellama-ask-about::
-* ellama-ask-selection::
-* ellama-ask-line::
-* ellama-complete::
-* ellama-translate::
-* ellama-translate-buffer::
-* ellama-define-word::
-* ellama-summarize::
-* ellama-summarize-killring::
-* ellama-code-review::
-* ellama-change::
-* ellama-make-list::
-* ellama-make-table::
-* ellama-summarize-webpage::
-* ellama-provider-select::
-* ellama-code-complete::
-* ellama-code-add::
-* ellama-code-edit::
-* ellama-code-improve::
-* ellama-generate-commit-message::
-* ellama-proofread::
-* ellama-improve-wording::
-* ellama-improve-grammar::
-* ellama-improve-conciseness::
-* ellama-make-format::
-* ellama-load-session::
-* ellama-session-delete::
-* ellama-session-switch::
-* ellama-session-kill::
-* ellama-session-rename::
-* ellama-context-add-file::
-* ellama-context-add-directory::
-* ellama-context-add-buffer::
-* ellama-context-add-selection::
-* ellama-context-add-info-node::
-* ellama-context-reset::
-* ellama-manage-context::
-* ellama-preview-context-element-at-point::
-* ellama-remove-context-element-at-point::
-* ellama-chat-translation-enable::
-* ellama-chat-translation-disable::
-* ellama-solve-reasoning-problem::
-* ellama-solve-domain-specific-problem::
-* ellama-community-prompts-select-blueprint::
-* ellama-community-prompts-update-variables::
-
 Minor modes
 
 * ellama-context-header-line-mode::
@@ -233,487 +181,109 @@ File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Ell
 1.2 Commands
 ============
 
-* Menu:
-
-* ellama::
-* ellama-chat::
-* ellama-write::
-* ellama-chat-send-last-message::
-* ellama-ask-about::
-* ellama-ask-selection::
-* ellama-ask-line::
-* ellama-complete::
-* ellama-translate::
-* ellama-translate-buffer::
-* ellama-define-word::
-* ellama-summarize::
-* ellama-summarize-killring::
-* ellama-code-review::
-* ellama-change::
-* ellama-make-list::
-* ellama-make-table::
-* ellama-summarize-webpage::
-* ellama-provider-select::
-* ellama-code-complete::
-* ellama-code-add::
-* ellama-code-edit::
-* ellama-code-improve::
-* ellama-generate-commit-message::
-* ellama-proofread::
-* ellama-improve-wording::
-* ellama-improve-grammar::
-* ellama-improve-conciseness::
-* ellama-make-format::
-* ellama-load-session::
-* ellama-session-delete::
-* ellama-session-switch::
-* ellama-session-kill::
-* ellama-session-rename::
-* ellama-context-add-file::
-* ellama-context-add-directory::
-* ellama-context-add-buffer::
-* ellama-context-add-selection::
-* ellama-context-add-info-node::
-* ellama-context-reset::
-* ellama-manage-context::
-* ellama-preview-context-element-at-point::
-* ellama-remove-context-element-at-point::
-* ellama-chat-translation-enable::
-* ellama-chat-translation-disable::
-* ellama-solve-reasoning-problem::
-* ellama-solve-domain-specific-problem::
-* ellama-community-prompts-select-blueprint::
-* ellama-community-prompts-update-variables::
-
-
-File: ellama.info,  Node: ellama,  Next: ellama-chat,  Up: Commands
-
-1.2.1 ellama
-------------
-
-This is the entry point for Ellama.  It displays the main transient
-menu, allowing you to access all other Ellama commands from here.
-
-
-File: ellama.info,  Node: ellama-chat,  Next: ellama-write,  Prev: ellama,  Up: Commands
-
-1.2.2 ellama-chat
------------------
-
-Ask Ellama about something by entering a prompt in an interactive buffer
-and continue conversation.  If called with universal argument (‘C-u’)
-will start new session with llm model interactive selection.
-
-
-File: ellama.info,  Node: ellama-write,  Next: ellama-chat-send-last-message,  Prev: ellama-chat,  Up: Commands
-
-1.2.3 ellama-write
-------------------
-
-This command allows you to generate text using an LLM.  When called
-interactively, it prompts for an instruction that is then used to
-generate text based on the context.  If a region is active, the selected
-text is added to the context before generating the response.
-
-
-File: ellama.info,  Node: ellama-chat-send-last-message,  Next: ellama-ask-about,  Prev: ellama-write,  Up: Commands
-
-1.2.4 ellama-chat-send-last-message
------------------------------------
-
-Send last user message extracted from current ellama chat buffer.
-
-
-File: ellama.info,  Node: ellama-ask-about,  Next: ellama-ask-selection,  Prev: ellama-chat-send-last-message,  Up: Commands
-
-1.2.5 ellama-ask-about
-----------------------
-
-Ask Ellama about a selected region or the current buffer.
-
-
-File: ellama.info,  Node: ellama-ask-selection,  Next: ellama-ask-line,  Prev: ellama-ask-about,  Up: Commands
-
-1.2.6 ellama-ask-selection
---------------------------
-
-Send selected region or current buffer to ellama chat.
-
-
-File: ellama.info,  Node: ellama-ask-line,  Next: ellama-complete,  Prev: ellama-ask-selection,  Up: Commands
-
-1.2.7 ellama-ask-line
----------------------
-
-Send current line to ellama chat.
-
-
-File: ellama.info,  Node: ellama-complete,  Next: ellama-translate,  Prev: ellama-ask-line,  Up: Commands
-
-1.2.8 ellama-complete
----------------------
-
-Complete text in current buffer with ellama.
-
-
-File: ellama.info,  Node: ellama-translate,  Next: ellama-translate-buffer,  Prev: ellama-complete,  Up: Commands
-
-1.2.9 ellama-translate
-----------------------
-
-Ask Ellama to translate a selected region or word at the point.
-
-
-File: ellama.info,  Node: ellama-translate-buffer,  Next: ellama-define-word,  Prev: ellama-translate,  Up: Commands
-
-1.2.10 ellama-translate-buffer
-------------------------------
-
-Translate current buffer.
-
-
-File: ellama.info,  Node: ellama-define-word,  Next: ellama-summarize,  Prev: ellama-translate-buffer,  Up: Commands
-
-1.2.11 ellama-define-word
--------------------------
-
-Find the definition of the current word using Ellama.
-
-
-File: ellama.info,  Node: ellama-summarize,  Next: ellama-summarize-killring,  Prev: ellama-define-word,  Up: Commands
-
-1.2.12 ellama-summarize
------------------------
-
-Summarize a selected region or the current buffer using Ellama.
-
-
-File: ellama.info,  Node: ellama-summarize-killring,  Next: ellama-code-review,  Prev: ellama-summarize,  Up: Commands
-
-1.2.13 ellama-summarize-killring
---------------------------------
-
-Summarize text from the kill ring.
-
-
-File: ellama.info,  Node: ellama-code-review,  Next: ellama-change,  Prev: ellama-summarize-killring,  Up: Commands
-
-1.2.14 ellama-code-review
--------------------------
-
-Review code in a selected region or the current buffer using Ellama.
-
-
-File: ellama.info,  Node: ellama-change,  Next: ellama-make-list,  Prev: ellama-code-review,  Up: Commands
-
-1.2.15 ellama-change
---------------------
-
-Change text in a selected region or the current buffer according to a
-provided change.
-
-
-File: ellama.info,  Node: ellama-make-list,  Next: ellama-make-table,  Prev: ellama-change,  Up: Commands
-
-1.2.16 ellama-make-list
------------------------
-
-Create a markdown list from the active region or the current buffer
-using Ellama.
-
-
-File: ellama.info,  Node: ellama-make-table,  Next: ellama-summarize-webpage,  Prev: ellama-make-list,  Up: Commands
-
-1.2.17 ellama-make-table
-------------------------
-
-Create a markdown table from the active region or the current buffer
-using Ellama.
-
-
-File: ellama.info,  Node: ellama-summarize-webpage,  Next: ellama-provider-select,  Prev: ellama-make-table,  Up: Commands
-
-1.2.18 ellama-summarize-webpage
--------------------------------
-
-Summarize a webpage fetched from a URL using Ellama.
-
-
-File: ellama.info,  Node: ellama-provider-select,  Next: ellama-code-complete,  Prev: ellama-summarize-webpage,  Up: Commands
-
-1.2.19 ellama-provider-select
------------------------------
-
-Select ellama provider.
-
-
-File: ellama.info,  Node: ellama-code-complete,  Next: ellama-code-add,  Prev: ellama-provider-select,  Up: Commands
-
-1.2.20 ellama-code-complete
----------------------------
-
-Complete selected code or code in the current buffer according to a
-provided change using Ellama.
-
-
-File: ellama.info,  Node: ellama-code-add,  Next: ellama-code-edit,  Prev: ellama-code-complete,  Up: Commands
-
-1.2.21 ellama-code-add
-----------------------
-
-Generate and insert new code based on description.  This function
-prompts the user to describe the code they want to generate.  If a
-region is active, it includes the selected text as context for code
-generation.
-
-
-File: ellama.info,  Node: ellama-code-edit,  Next: ellama-code-improve,  Prev: ellama-code-add,  Up: Commands
-
-1.2.22 ellama-code-edit
------------------------
-
-Change selected code or code in the current buffer according to a
-provided change using Ellama.
-
-
-File: ellama.info,  Node: ellama-code-improve,  Next: ellama-generate-commit-message,  Prev: ellama-code-edit,  Up: Commands
-
-1.2.23 ellama-code-improve
---------------------------
-
-Change selected code or code in the current buffer according to a
-provided change using Ellama.
-
-
-File: ellama.info,  Node: ellama-generate-commit-message,  Next: ellama-proofread,  Prev: ellama-code-improve,  Up: Commands
-
-1.2.24 ellama-generate-commit-message
--------------------------------------
-
-Generate commit message based on diff.
-
-
-File: ellama.info,  Node: ellama-proofread,  Next: ellama-improve-wording,  Prev: ellama-generate-commit-message,  Up: Commands
-
-1.2.25 ellama-proofread
------------------------
-
-Proofread selected text.
-
-
-File: ellama.info,  Node: ellama-improve-wording,  Next: ellama-improve-grammar,  Prev: ellama-proofread,  Up: Commands
-
-1.2.26 ellama-improve-wording
------------------------------
-
-Enhance the wording in the currently selected region or buffer using
-Ellama.
-
-
-File: ellama.info,  Node: ellama-improve-grammar,  Next: ellama-improve-conciseness,  Prev: ellama-improve-wording,  Up: Commands
-
-1.2.27 ellama-improve-grammar
------------------------------
-
-Enhance the grammar and spelling in the currently selected region or
-buffer using Ellama.
-
-
-File: ellama.info,  Node: ellama-improve-conciseness,  Next: ellama-make-format,  Prev: ellama-improve-grammar,  Up: Commands
-
-1.2.28 ellama-improve-conciseness
----------------------------------
-
-Make the text of the currently selected region or buffer concise and
-simple using Ellama.
-
-
-File: ellama.info,  Node: ellama-make-format,  Next: ellama-load-session,  Prev: ellama-improve-conciseness,  Up: Commands
-
-1.2.29 ellama-make-format
--------------------------
-
-Render the currently selected text or the text in the current buffer as
-a specified format using Ellama.
-
-
-File: ellama.info,  Node: ellama-load-session,  Next: ellama-session-delete,  Prev: ellama-make-format,  Up: Commands
-
-1.2.30 ellama-load-session
---------------------------
-
-Load ellama session from file.
-
-
-File: ellama.info,  Node: ellama-session-delete,  Next: ellama-session-switch,  Prev: ellama-load-session,  Up: Commands
-
-1.2.31 ellama-session-delete
-----------------------------
-
-Delete ellama session.
-
-
-File: ellama.info,  Node: ellama-session-switch,  Next: ellama-session-kill,  Prev: ellama-session-delete,  Up: Commands
-
-1.2.32 ellama-session-switch
-----------------------------
-
-Change current active session.
-
-
-File: ellama.info,  Node: ellama-session-kill,  Next: ellama-session-rename,  Prev: ellama-session-switch,  Up: Commands
-
-1.2.33 ellama-session-kill
---------------------------
-
-Select and kill one of active sessions.
-
-
-File: ellama.info,  Node: ellama-session-rename,  Next: ellama-context-add-file,  Prev: ellama-session-kill,  Up: Commands
-
-1.2.34 ellama-session-rename
-----------------------------
-
-Rename current ellama session.
-
-
-File: ellama.info,  Node: ellama-context-add-file,  Next: ellama-context-add-directory,  Prev: ellama-session-rename,  Up: Commands
-
-1.2.35 ellama-context-add-file
-------------------------------
-
-Add file to context.
-
-
-File: ellama.info,  Node: ellama-context-add-directory,  Next: ellama-context-add-buffer,  Prev: ellama-context-add-file,  Up: Commands
-
-1.2.36 ellama-context-add-directory
------------------------------------
-
-Add all files in directory to the context.
-
-
-File: ellama.info,  Node: ellama-context-add-buffer,  Next: ellama-context-add-selection,  Prev: ellama-context-add-directory,  Up: Commands
-
-1.2.37 ellama-context-add-buffer
---------------------------------
-
-Add buffer to context.
-
-
-File: ellama.info,  Node: ellama-context-add-selection,  Next: ellama-context-add-info-node,  Prev: ellama-context-add-buffer,  Up: Commands
-
-1.2.38 ellama-context-add-selection
------------------------------------
-
-Add selected region to context.
-
-
-File: ellama.info,  Node: ellama-context-add-info-node,  Next: ellama-context-reset,  Prev: ellama-context-add-selection,  Up: Commands
-
-1.2.39 ellama-context-add-info-node
------------------------------------
-
-Add info node to context.
-
-
-File: ellama.info,  Node: ellama-context-reset,  Next: ellama-manage-context,  Prev: ellama-context-add-info-node,  Up: Commands
-
-1.2.40 ellama-context-reset
----------------------------
-
-Clear global context.
-
-
-File: ellama.info,  Node: ellama-manage-context,  Next: ellama-preview-context-element-at-point,  Prev: ellama-context-reset,  Up: Commands
-
-1.2.41 ellama-manage-context
-----------------------------
-
-Manage the global context.  Inside context management buffer you can see
-ellama context elements.  Availible actions with key bindings:
-   • *‘n’*: Move to the next line.
-   • *‘p’*: Move to the previous line.
-   • *‘q’*: Quit the window.
-   • *‘g’*: Update context management buffer.
-   • *‘a’*: Open the transient context menu for adding new elements.
-   • *‘d’*: Remove the context element at the current point.
-   • *‘RET’*: Preview the context element at the current point.
-
-
-File: ellama.info,  Node: ellama-preview-context-element-at-point,  Next: ellama-remove-context-element-at-point,  Prev: ellama-manage-context,  Up: Commands
-
-1.2.42 ellama-preview-context-element-at-point
-----------------------------------------------
-
-Preview ellama context element at point.  Works inside ellama context
-management buffer.
-
-
-File: ellama.info,  Node: ellama-remove-context-element-at-point,  Next: ellama-chat-translation-enable,  Prev: ellama-preview-context-element-at-point,  Up: Commands
-
-1.2.43 ellama-remove-context-element-at-point
----------------------------------------------
-
-Remove ellama context element at point from global context.  Works
-inside ellama context management buffer.
-
-
-File: ellama.info,  Node: ellama-chat-translation-enable,  Next: ellama-chat-translation-disable,  Prev: ellama-remove-context-element-at-point,  Up: Commands
-
-1.2.44 ellama-chat-translation-enable
--------------------------------------
-
-Chat translation enable.
-
-
-File: ellama.info,  Node: ellama-chat-translation-disable,  Next: ellama-solve-reasoning-problem,  Prev: ellama-chat-translation-enable,  Up: Commands
-
-1.2.45 ellama-chat-translation-disable
---------------------------------------
-
-Chat translation disable.
-
-
-File: ellama.info,  Node: ellama-solve-reasoning-problem,  Next: ellama-solve-domain-specific-problem,  Prev: ellama-chat-translation-disable,  Up: Commands
-
-1.2.46 ellama-solve-reasoning-problem
--------------------------------------
-
-Solve reasoning problem with Abstraction of Thought
-(https://arxiv.org/pdf/2406.12442) technique.  It uses a chain of
-multiple messages to LLM and help it to provide much better answers on
-reasoning problems.  Even small LLMs like phi3-mini
-(https://ollama.com/library/phi3) provides much better results on
-reasoning tasks using AoT.
-
-
-File: ellama.info,  Node: ellama-solve-domain-specific-problem,  Next: ellama-community-prompts-select-blueprint,  Prev: ellama-solve-reasoning-problem,  Up: Commands
-
-1.2.47 ellama-solve-domain-specific-problem
--------------------------------------------
-
-Solve domain specific problem with simple chain.  It makes LLMs act like
-a professional and adds a planning step.
-
-
-File: ellama.info,  Node: ellama-community-prompts-select-blueprint,  Next: ellama-community-prompts-update-variables,  Prev: ellama-solve-domain-specific-problem,  Up: Commands
-
-1.2.48 ellama-community-prompts-select-blueprint
-------------------------------------------------
-
-Select a prompt from the community prompt collection.  The user is
-prompted to choose a role, and then a corresponding prompt is inserted
-into a blueprint buffer.
-
-
-File: ellama.info,  Node: ellama-community-prompts-update-variables,  Prev: ellama-community-prompts-select-blueprint,  Up: Commands
-
-1.2.49 ellama-community-prompts-update-variables
-------------------------------------------------
-
-Prompt user for values of variables found in current buffer and update
-them.
+   • ‘ellama’: This is the entry point for Ellama.  It displays the main
+     transient menu, allowing you to access all other Ellama commands
+     from here.
+   • ‘ellama-chat’: Ask Ellama about something by entering a prompt in
+     an interactive buffer and continue conversation.  If called with
+     universal argument (‘C-u’) will start new session with llm model
+     interactive selection.
+   • ‘ellama-write’: This command allows you to generate text using an
+     LLM.  When called interactively, it prompts for an instruction that
+     is then used to generate text based on the context.  If a region is
+     active, the selected text is added to the context before generating
+     the response.
+   • ‘ellama-chat-send-last-message’: Send last user message extracted
+     from current ellama chat buffer.
+   • ‘ellama-ask-about’: Ask Ellama about a selected region or the
+     current buffer.
+   • ‘ellama-ask-selection’: Send selected region or current buffer to
+     ellama chat.
+   • ‘ellama-ask-line’: Send current line to ellama chat.
+   • ‘ellama-complete’: Complete text in current buffer with ellama.
+   • ‘ellama-translate’: Ask Ellama to translate a selected region or
+     word at the point.
+   • ‘ellama-translate-buffer’: Translate current buffer.
+   • ‘ellama-define-word’: Find the definition of the current word using
+     Ellama.
+   • ‘ellama-summarize’: Summarize a selected region or the current
+     buffer using Ellama.
+   • ‘ellama-summarize-killring’: Summarize text from the kill ring.
+   • ‘ellama-code-review’: Review code in a selected region or the
+     current buffer using Ellama.
+   • ‘ellama-change’: Change text in a selected region or the current
+     buffer according to a provided change.
+   • ‘ellama-make-list’: Create a markdown list from the active region
+     or the current buffer using Ellama.
+   • ‘ellama-make-table’: Create a markdown table from the active region
+     or the current buffer using Ellama.
+   • ‘ellama-summarize-webpage’: Summarize a webpage fetched from a URL
+     using Ellama.
+   • ‘ellama-provider-select’: Select ellama provider.
+   • ‘ellama-code-complete’: Complete selected code or code in the
+     current buffer according to a provided change using Ellama.
+   • ‘ellama-code-add’: Generate and insert new code based on
+     description.  This function prompts the user to describe the code
+     they want to generate.  If a region is active, it includes the
+     selected text as context for code generation.
+   • ‘ellama-code-edit’: Change selected code or code in the current
+     buffer according to a provided change using Ellama.
+   • ‘ellama-code-improve’: Change selected code or code in the current
+     buffer according to a provided change using Ellama.
+   • ‘ellama-generate-commit-message’: Generate commit message based on
+     diff.
+   • ‘ellama-proofread’: Proofread selected text.
+   • ‘ellama-improve-wording’: Enhance the wording in the currently
+     selected region or buffer using Ellama.
+   • ‘ellama-improve-grammar’: Enhance the grammar and spelling in the
+     currently selected region or buffer using Ellama.
+   • ‘ellama-improve-conciseness’: Make the text of the currently
+     selected region or buffer concise and simple using Ellama.
+   • ‘ellama-make-format’: Render the currently selected text or the
+     text in the current buffer as a specified format using Ellama.
+   • ‘ellama-load-session’: Load ellama session from file.
+   • ‘ellama-session-delete’: Delete ellama session.
+   • ‘ellama-session-switch’: Change current active session.
+   • ‘ellama-session-kill’: Select and kill one of active sessions.
+   • ‘ellama-session-rename’: Rename current ellama session.
+   • ‘ellama-context-add-file’: Add file to context.
+   • ‘ellama-context-add-directory’: Add all files in directory to the
+     context.
+   • ‘ellama-context-add-buffer’: Add buffer to context.
+   • ‘ellama-context-add-selection’: Add selected region to context.
+   • ‘ellama-context-add-info-node’: Add info node to context.
+   • ‘ellama-context-reset’: Clear global context.
+   • ‘ellama-manage-context’: Manage the global context.  Inside context
+     management buffer you can see ellama context elements.  Available
+     actions with key bindings:
+        • ‘n’: Move to the next line.
+        • ‘p’: Move to the previous line.
+        • ‘q’: Quit the window.
+        • ‘g’: Update context management buffer.
+        • ‘a’: Open the transient context menu for adding new elements.
+        • ‘d’: Remove the context element at the current point.
+        • ‘RET’: Preview the context element at the current point.
+   • ‘ellama-preview-context-element-at-point’: Preview ellama context
+     element at point.  Works inside ellama context management buffer.
+   • ‘ellama-remove-context-element-at-point’: Remove ellama context
+     element at point from global context.  Works inside ellama context
+     management buffer.
+   • ‘ellama-chat-translation-enable’: Chat translation enable.
+   • ‘ellama-chat-translation-disable’: Chat translation disable.
+   • ‘ellama-solve-reasoning-problem’: Solve reasoning problem with
+     Abstraction of Thought technique.  It uses a chain of multiple
+     messages to LLM and help it to provide much better answers on
+     reasoning problems.  Even small LLMs like phi3-mini provides much
+     better results on reasoning tasks using AoT.
+   • ‘ellama-solve-domain-specific-problem’: Solve domain specific
+     problem with simple chain.  It makes LLMs act like a professional
+     and adds a planning step.
+   • ‘ellama-community-prompts-select-blueprint’: Select a prompt from
+     the community prompt collection.  The user is prompted to choose a
+     role, and then a corresponding prompt is inserted into a blueprint
+     buffer.
+   • ‘ellama-community-prompts-update-variables’: Prompt user for values
+     of variables found in current buffer and update them.
 
 
 File: ellama.info,  Node: Keymap,  Next: Configuration,  Prev: Commands,  Up: Ellama
@@ -1214,80 +784,31 @@ different archive like MELPA.
 
 Tag Table:
 Node: Top162
-Node: Ellama2210
-Node: Installation2966
-Node: Commands7975
-Node: ellama9440
-Node: ellama-chat9673
-Node: ellama-write10011
-Node: ellama-chat-send-last-message10434
-Node: ellama-ask-about10694
-Node: ellama-ask-selection10928
-Node: ellama-ask-line11153
-Node: ellama-complete11346
-Node: ellama-translate11546
-Node: ellama-translate-buffer11775
-Node: ellama-define-word11985
-Node: ellama-summarize12213
-Node: ellama-summarize-killring12449
-Node: ellama-code-review12674
-Node: ellama-change12916
-Node: ellama-make-list13157
-Node: ellama-make-table13398
-Node: ellama-summarize-webpage13653
-Node: ellama-provider-select13898
-Node: ellama-code-complete14113
-Node: ellama-code-add14389
-Node: ellama-code-edit14764
-Node: ellama-code-improve15023
-Node: ellama-generate-commit-message15303
-Node: ellama-proofread15548
-Node: ellama-improve-wording15754
-Node: ellama-improve-grammar16016
-Node: ellama-improve-conciseness16301
-Node: ellama-make-format16590
-Node: ellama-load-session16875
-Node: ellama-session-delete17083
-Node: ellama-session-switch17290
-Node: ellama-session-kill17505
-Node: ellama-session-rename17725
-Node: ellama-context-add-file17942
-Node: ellama-context-add-directory18162
-Node: ellama-context-add-buffer18418
-Node: ellama-context-add-selection18653
-Node: ellama-context-add-info-node18903
-Node: ellama-context-reset19142
-Node: ellama-manage-context19354
-Node: ellama-preview-context-element-at-point20078
-Node: ellama-remove-context-element-at-point20424
-Node: ellama-chat-translation-enable20796
-Node: ellama-chat-translation-disable21061
-Node: ellama-solve-reasoning-problem21321
-Node: ellama-solve-domain-specific-problem21893
-Node: ellama-community-prompts-select-blueprint22267
-Node: ellama-community-prompts-update-variables22711
-Node: Keymap23024
-Node: Configuration25870
-Node: Minor modes31223
-Node: ellama-context-header-line-mode33232
-Node: ellama-context-header-line-global-mode34077
-Node: ellama-context-mode-line-mode34814
-Node: ellama-context-mode-line-global-mode35682
-Node: Ellama Session Header Line Mode36403
-Ref: Enabling and Disabling36926
-Ref: Customization37260
-Node: Ellama Session Mode Line Mode37425
-Ref: Enabling and Disabling (1)37919
-Ref: Customization (1)38247
-Node: Using Blueprints38412
-Node: Key Components of Ellama Blueprints39038
-Node: Creating and Managing Blueprints39665
-Node: Variable Management40656
-Node: Keymap and Mode41131
-Node: Transient Menus42077
-Node: Running Blueprints programmatically42630
-Node: Acknowledgments43221
-Node: Contributions43928
+Node: Ellama858
+Node: Installation1614
+Node: Commands6623
+Node: Keymap12974
+Node: Configuration15820
+Node: Minor modes21173
+Node: ellama-context-header-line-mode23182
+Node: ellama-context-header-line-global-mode24027
+Node: ellama-context-mode-line-mode24764
+Node: ellama-context-mode-line-global-mode25632
+Node: Ellama Session Header Line Mode26353
+Ref: Enabling and Disabling26876
+Ref: Customization27210
+Node: Ellama Session Mode Line Mode27375
+Ref: Enabling and Disabling (1)27869
+Ref: Customization (1)28197
+Node: Using Blueprints28362
+Node: Key Components of Ellama Blueprints28988
+Node: Creating and Managing Blueprints29615
+Node: Variable Management30606
+Node: Keymap and Mode31081
+Node: Transient Menus32027
+Node: Running Blueprints programmatically32580
+Node: Acknowledgments33171
+Node: Contributions33878
 
 End Tag Table
 
