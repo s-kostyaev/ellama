@@ -357,6 +357,9 @@ Prompt user for values of variables found in current buffer and update them.
 
 ** Keymap
 
+It's better to use a transient menu (~M-x ellama~) instead of a keymap. It
+offers a better user experience.
+
 In any buffer where there is active ellama streaming, you can press
 ~C-g~ and it will cancel current stream.
 
