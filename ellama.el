@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1"))
-;; Version: 1.6.1
+;; Version: 1.6.2
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -47,74 +47,60 @@
 
 (defcustom ellama-user-nick "User"
   "User nick in logs."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-assistant-nick "Ellama"
   "Assistant nick in logs."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-nick-prefix-depth 2
   "Prefix depth."
-  :group 'ellama
   :type 'integer)
 
 (defcustom ellama-language "English"
   "Language for ellama translation."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-provider nil
   "Backend LLM provider."
-  :group 'ellama
   :type '(sexp :validate llm-standard-provider-p))
 
 (defcustom ellama-session-remove-reasoning t
   "Remove internal reasoning from the session after ellama provide an answer.
 This can improve long-term communication with reasoning models."
-  :group 'ellama
   :type 'boolean)
 
 (defcustom ellama-output-remove-reasoning t
   "Remove internal reasoning from ellama output.
 Make reasoning models more useful for many cases."
-  :group 'ellama
   :type 'boolean)
 
 (defcustom ellama-session-hide-org-quotes t
   "Hide org quotes in ellama session buffer."
-  :group 'ellama
   :type 'boolean)
 
 (defcustom ellama-chat-translation-enabled nil
   "Enable chat translations."
-  :group 'ellama
   :type 'boolean)
 
 (defcustom ellama-translation-provider nil
   "LLM provider for chat translation."
-  :group 'ellama
   :type '(sexp :validate llm-standard-provider-p))
 
 (defcustom ellama-summarization-provider nil
   "LLM provider for summarization."
-  :group 'ellama
   :type '(sexp :validate llm-standard-provider-p))
 
 (defcustom ellama-coding-provider nil
   "LLM provider for coding tasks."
-  :group 'ellama
   :type '(sexp :validate llm-standard-provider-p))
 
 (defcustom ellama-completion-provider nil
   "LLM provider for completions."
-  :group 'ellama
   :type '(sexp :validate llm-standard-provider-p))
 
 (defcustom ellama-providers nil
   "LLM provider list for fast switching."
-  :group 'ellama
   :type '(alist :key-type string
 		:value-type (sexp :validate llm-standard-provider-p)))
 
@@ -122,7 +108,6 @@ Make reasoning models more useful for many cases."
 
 (defcustom ellama-spinner-type 'progress-bar
   "Spinner type for ellama."
-  :group 'ellama
   :type `(choice ,@(if (boundp 'spinner-types)
 		       (mapcar
 			(lambda (type)
@@ -132,7 +117,6 @@ Make reasoning models more useful for many cases."
 
 (defcustom ellama-spinner-enabled nil
   "Enable spinner during text generation."
-  :group 'ellama
   :type 'boolean)
 
 (defcustom ellama-command-map
@@ -188,7 +172,6 @@ Make reasoning models more useful for many cases."
     (define-key map (kbd "p s") 'ellama-provider-select)
     map)
   "Keymap for ellama commands."
-  :group 'ellama
   :type 'keymap)
 
 (defun ellama-setup-keymap ()
@@ -207,22 +190,18 @@ Make reasoning models more useful for many cases."
   :set (lambda (symbol value)
 	 (custom-set-default symbol value)
 	 (when value
-	   (ellama-setup-keymap)))
-  :group 'ellama)
+	   (ellama-setup-keymap))))
 
 (defcustom ellama-ollama-binary "ollama"
   "Path to ollama binary."
-  :type 'string
-  :group 'ellama)
+  :type 'string)
 
 (defcustom ellama-auto-scroll nil
   "If enabled ellama buffer will scroll automatically during generation."
-  :type 'boolean
-  :group 'ellama)
+  :type 'boolean)
 
 (defcustom ellama-fill-paragraphs '(text-mode)
   "When to wrap paragraphs."
-  :group 'ellama
   :type `(choice
           (const :tag "Never fill paragraphs" nil)
           (const :tag "Always fill paragraphs" t)
@@ -231,7 +210,6 @@ Make reasoning models more useful for many cases."
 
 (defcustom ellama-name-prompt-words-count 5
   "Count of words in prompt to generate name."
-  :group 'ellama
   :type 'integer)
 
 (defcustom ellama-naming-scheme 'ellama-generate-name-by-words
@@ -244,7 +222,6 @@ PROVIDER is an llm provider.
 ACTION is a symbol, current command.
 
 PROMPT is a prompt string."
-  :group 'ellama
   :type `(choice
           (const :tag "By first N words of prompt" ellama-generate-name-by-words)
           (const :tag "By current time" ellama-generate-name-by-time)
@@ -254,7 +231,6 @@ PROMPT is a prompt string."
 
 (defcustom ellama-define-word-prompt-template "Define %s"
   "Prompt template for `ellama-define-word'."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-summarize-prompt-template "# GOAL
@@ -275,17 +251,14 @@ says. Focus on clarity and maintain a straightforward presentation.
 3. NO NEW IDEAS
    Only use words from input text"
   "Prompt template for `ellama-summarize'."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-code-review-prompt-template "You are professional software engineer. Review provided code and make concise suggestions."
   "Prompt template for `ellama-code-review'."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-change-prompt-template "Change the following text, %s, just output the final text without additional quotes around it:\n%s"
   "Prompt template for `ellama-change'."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-write-prompt-template "<SYSTEM>
@@ -295,47 +268,38 @@ Write text, based on provided context and instruction. Do not add any explanatio
 %s
 </INSTRUCTION>"
   "Prompt template for `ellama-write'."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-improve-grammar-prompt-template "improve grammar and spelling"
   "Prompt template for `ellama-improve-grammar'."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-improve-wording-prompt-template "use better wording"
   "Prompt template for `ellama-improve-wording'."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-proofread-prompt-template "proofread"
   "Prompt template for `ellama-proofread'."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-improve-conciseness-prompt-template "make it as simple and concise as possible"
   "Prompt template for `ellama-improve-conciseness'."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-code-edit-prompt-template "Regarding the following code, %s, only output the result code in format ```language\n...\n```:\n```\n%s\n```\nWrite all the code in single code block."
   "Prompt template for `ellama-code-edit'."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-code-improve-prompt-template "Enhance the following code, only output the result code in format ```language\n...\n```:\n```\n%s\n```\nWrite all the code in single code block."
   "Prompt template for `ellama-code-improve'."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-code-complete-prompt-template "Continue the following code, only write new code in format ```language\n...\n```:\n```\n%s\n```\nWrite all the code in single code block."
   "Prompt template for `ellama-code-complete'."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-code-add-prompt-template "Based on context, %s, only output the result in format ```\n...\n```\nWrite all the code in single code block."
   "Prompt template for `ellama-code-add'."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-generate-commit-message-template "<INSTRUCTIONS>
@@ -359,22 +323,18 @@ Improved abc feature by adding new xyz module.
 %s
 </DIFF>"
   "Prompt template for `ellama-generate-commit-message'."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-make-format-prompt-template "Render the following text as a %s:\n%s"
   "Prompt template for `ellama-make-format'."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-make-list-prompt-template "markdown list"
   "Prompt template for `ellama-make-list'."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-make-table-prompt-template "markdown table"
   "Prompt template for `ellama-make-table'."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-get-name-template "I will get you user query, you should return short topic only, what this conversation about. NEVER respond to query itself. Topic must be short and concise. Do not add additional words like 'the topic is', respond with topic only.
@@ -388,7 +348,6 @@ Topic: Blue sky
 Topic:
 "
   "Prompt template for `ellama-get-name'."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-translation-template "# GOAL
@@ -413,7 +372,6 @@ Topic:
 **EVERY LINE MUST MATCH:**
 Input ends with `# User:` → Output ends with translated `# User:`"
   "Translation template."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-extract-string-list-template "You are professional data extractor. Extract %s as json array of strings
@@ -421,7 +379,6 @@ Input ends with `# User:` → Output ends with translated `# User:`"
 {\"data\":[\"First element\", \"Second element\"]}
 </EXAMPLE>"
   "Extract string list template."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-semantic-identity-template "Determine if two texts have the same meaning. If they are similar but differ in key aspects, they are not the same. Return the answer as a JSON object.
@@ -438,7 +395,6 @@ Input ends with `# User:` → Output ends with translated `# User:`"
 }
 </EXAMPLE>"
   "Extract string list template."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-semantic-identity-reasoning-template "Determine if two texts have the same meaning. If they are similar but differ in key aspects, they are not the same. Return the answer as a JSON object.
@@ -458,58 +414,47 @@ Input ends with `# User:` → Output ends with translated `# User:`"
 }
 </EXAMPLE>"
   "Extract string list template with context and reasoning."
-  :group 'ellama
   :type 'string)
 
 (defcustom ellama-extraction-provider nil
   "LLM provider for data extraction."
-  :group 'ellama
   :type '(sexp :validate llm-standard-provider-p))
 
 (defcustom ellama-chat-done-callback nil
   "Callback that will be called on ellama chat response generation done.
 It should be a function with single argument generated text string."
-  :group 'ellama
   :type 'function)
 
 (defcustom ellama-major-mode 'org-mode
   "Major mode for ellama commands."
-  :group 'ellama
   :type 'symbol)
 
 (defcustom ellama-translate-italic t
   "Translate italic during markdown to org transformations."
-  :group 'ellama
   :type 'boolean)
 
 (defcustom ellama-session-auto-save t
   "Automatically save ellama sessions if set."
-  :group 'ellama
   :type 'boolean)
 
 (defcustom ellama-show-quotes nil
   "Show quotes in chat context."
-  :group 'ellama
   :type 'boolean)
 
 (defcustom ellama-chat-display-action-function nil
   "Display action function for `ellama-chat'."
-  :group 'ellama
   :type 'function)
 
 (defcustom ellama-instant-display-action-function nil
   "Display action function for `ellama-instant'."
-  :group 'ellama
   :type 'function)
 
 (defcustom ellama-reasoning-display-action-function nil
   "Display action function for reasoning."
-  :group 'ellama
   :type 'function)
 
 (defcustom ellama-show-reasoning t
   "Show reasoning in separate buffer if enabled."
-  :group 'ellama
   :type 'boolean)
 
 (define-minor-mode ellama-session-mode
@@ -628,12 +573,14 @@ Skip code blocks and math environments."
   (with-temp-buffer
     (insert (propertize text 'hard t))
     (goto-char (point-min))
-    (let (block-start
-	  block-end
+    (let ((block-start (make-marker))
+	  (block-end (make-marker))
 	  (prev-point (point-min)))
+      (set-marker-insertion-type block-start t)
+      (set-marker-insertion-type block-end t)
       ;; Process regions outside of blocks
       (while (re-search-forward "\\(#\\+BEGIN_SRC\\|\\$\\$\\|\\$\\|`\\)" nil t)
-        (setq block-start (match-beginning 0))
+        (set-marker block-start (match-beginning 0))
 	(goto-char block-start)
         (let ((block-type (cond ((looking-at "#\\+BEGIN_SRC") 'src)
                                 ((looking-at "\\$\\$") 'math-display)
@@ -643,20 +590,20 @@ Skip code blocks and math environments."
           (ellama--apply-transformations prev-point block-start)
           ;; Skip over the block content
           (goto-char block-start)
-          (setq block-end
-		(cond
-		 ((eq block-type 'src)
-                  (if (re-search-forward "#\\+END_SRC" nil t) (point) (point-max)))
-		 ((eq block-type 'math-display)
-                  (if (re-search-forward "\\$\\$.+?\\$\\$" nil t) (point) (point-max)))
-		 ((eq block-type 'math-inline)
-                  (if (re-search-forward "\\$.+?\\$" nil t) (point) (point-max)))
-		 ((eq block-type 'code-inline)
-		  (if (re-search-forward "`\\(.+?\\)`" nil t)
-		      (progn
-			(replace-match "~\\1~")
-			(point))
-		    (point-max)))))
+          (set-marker block-end
+		      (cond
+		       ((eq block-type 'src)
+			(if (re-search-forward "#\\+END_SRC" nil t) (point) (point-max)))
+		       ((eq block-type 'math-display)
+			(if (re-search-forward "\\$\\$.+?\\$\\$" nil t) (point) (point-max)))
+		       ((eq block-type 'math-inline)
+			(if (re-search-forward "\\$.+?\\$" nil t) (point) (point-max)))
+		       ((eq block-type 'code-inline)
+			(if (re-search-forward "`\\([^`]+\\)`" nil t)
+			    (progn
+			      (replace-match "~\\1~")
+			      (point))
+			  (point-max)))))
           (when block-end
 	    (goto-char block-end))
 	  (setq prev-point (point))))
@@ -686,7 +633,6 @@ This filter contains only subset of markdown syntax to be good enough."
 (defcustom ellama-enable-keymap t
   "Enable or disable Ellama keymap."
   :type 'boolean
-  :group 'ellama
   :set (lambda (symbol value)
 	 (custom-set-default symbol value)
 	 (if value
@@ -699,18 +645,15 @@ This filter contains only subset of markdown syntax to be good enough."
 				       user-emacs-directory
 				       "ellama-sessions"))
   "Directory for saved ellama sessions."
-  :type 'string
-  :group 'ellama)
+  :type 'string)
 
 (defcustom ellama-naming-provider nil
   "LLM provider for generating names."
-  :group 'ellama
   :type '(sexp :validate llm-standard-provider-p))
 
 (defcustom ellama-always-show-chain-steps nil
   "Always show ellama chain buffers."
-  :type 'boolean
-  :group 'ellama)
+  :type 'boolean)
 
 (defvar-local ellama--current-session nil)
 
@@ -718,8 +661,7 @@ This filter contains only subset of markdown syntax to be good enough."
 
 (defcustom ellama-session-line-template " ellama session: %s"
   "Template for formatting the current session line."
-  :type 'string
-  :group 'ellama)
+  :type 'string)
 
 (defun ellama-session-line ()
   "Return current session id line."
@@ -729,61 +671,43 @@ This filter contains only subset of markdown syntax to be good enough."
 			ellama--current-session-id))
 	      'face 'ellama-face))
 
-(defun ellama-session-show-header-line ()
-  "Display session id in the header line."
-  (when (listp header-line-format)
-    (add-to-list 'header-line-format '(:eval (ellama-session-line)) t)))
-
-(defun ellama-session-hide-header-line ()
-  "Hide session id from header line."
-  (setq header-line-format (delete '(:eval (ellama-session-line)) header-line-format)))
-
 (defun ellama-session-update-header-line ()
   "Update header line for ellama session header line mode."
-  (if ellama-session-header-line-mode
-      (ellama-session-show-header-line)
-    (ellama-session-hide-header-line)))
+  (when (listp header-line-format)
+    (let ((element '(:eval (ellama-session-line))))
+      (if ellama-session-header-line-mode
+          (add-to-list 'header-line-format element t)
+	(setq header-line-format (delete element header-line-format))))))
 
 ;;;###autoload
 (define-minor-mode ellama-session-header-line-mode
   "Toggle Ellama Session header line mode."
-  :group 'ellama
-  (add-hook 'window-state-change-hook #'ellama-session-update-header-line)
+  :lighter ""
   (ellama-session-update-header-line))
 
 ;;;###autoload
 (define-globalized-minor-mode ellama-session-header-line-global-mode
   ellama-session-header-line-mode
-  ellama-session-header-line-mode
-  :group 'ellama)
-
-(defun ellama-session-show-mode-line ()
-  "Display session id in the mode line."
-  (when (listp mode-line-format)
-    (add-to-list 'mode-line-format '(:eval (ellama-session-line)) t)))
-
-(defun ellama-session-hide-mode-line ()
-  "Hide session id from mode line."
-  (setq mode-line-format (delete '(:eval (ellama-session-line)) mode-line-format)))
+  ellama-session-header-line-mode)
 
 (defun ellama-session-update-mode-line ()
   "Update mode line for ellama session mode line mode."
-  (if ellama-session-mode-line-mode
-      (ellama-session-show-mode-line)
-    (ellama-session-hide-mode-line)))
+  (when (listp mode-line-format)
+    (let ((element '(:eval (ellama-session-line))))
+      (if ellama-session-mode-line-mode
+	  (add-to-list 'mode-line-format element t)
+	(setq mode-line-format (delete element mode-line-format))))))
 
 ;;;###autoload
 (define-minor-mode ellama-session-mode-line-mode
   "Toggle Ellama Session mode line mode."
-  :group 'ellama
-  (add-hook 'window-state-change-hook #'ellama-session-update-mode-line)
+  :lighter ""
   (ellama-session-update-mode-line))
 
 ;;;###autoload
 (define-globalized-minor-mode ellama-session-mode-line-global-mode
   ellama-session-mode-line-mode
-  ellama-session-mode-line-mode
-  :group 'ellama)
+  ellama-session-mode-line-mode)
 
 (defvar ellama--active-sessions (make-hash-table :test #'equal))
 
@@ -1279,13 +1203,17 @@ EVENT is an argument for mweel scroll."
 Works inside BUFFER starting at POINT.
 If POINT is nil, current point will be used.
 FILTER is a function for text transformation."
+  (declare-function org-fill-paragraph "org")
   (with-current-buffer
       buffer
-    (let* ((end-marker (make-marker))
+    (let* ((beg-marker (make-marker))
+	   (end-marker (make-marker))
 	   (previous-filtered-text "")
 	   (safe-common-prefix ""))
       (set-marker end-marker (or point (point)))
+      (set-marker beg-marker end-marker)
       (set-marker-insertion-type end-marker t)
+      (set-marker-insertion-type beg-marker nil)
       (lambda
 	(text)
 	(with-current-buffer buffer
@@ -1308,14 +1236,19 @@ FILTER is a function for text transformation."
 	      (delete-char (- wrong-chars-cnt))
 	      (insert delta)
 	      (when (and
-		     (not (eq major-mode 'org-mode))
 		     ellama-fill-paragraphs
 		     (pcase ellama-fill-paragraphs
 		       ((cl-type function) (funcall ellama-fill-paragraphs))
 		       ((cl-type boolean) ellama-fill-paragraphs)
 		       ((cl-type list) (and (apply #'derived-mode-p
 						   ellama-fill-paragraphs)))))
-		(fill-paragraph))
+		(if (not (eq major-mode 'org-mode))
+		    (fill-paragraph)
+		  (when (not (save-excursion
+			       (re-search-backward
+				"#\\+BEGIN_SRC"
+				beg-marker t)))
+		    (org-fill-paragraph))))
 	      (set-marker end-marker (point))
 	      (when (and ellama-auto-scroll (not ellama--stop-scroll))
 		(ellama--scroll buffer end-marker))
@@ -1857,7 +1790,6 @@ the full response text when the request completes (with BUFFER current)."
 
 (defcustom ellama-complete-prompt-template "You're providing text completion. Complete the text. Do not aknowledge, reply with completion only."
   "System prompt template for `ellama-complete'."
-  :group 'ellama
   :type 'string)
 
 ;;;###autoload

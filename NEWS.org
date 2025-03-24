@@ -1,3 +1,15 @@
+* Version 1.6.2
+- Fix marker handling in block processing to correctly handle block boundaries
+  during text processing and updated tests to include inline code translation
+  from Markdown to Org.
+- Improve text processing in ~ellama.el~ by adding markers for beginning and end
+  of the text range to handle text transformation more accurately. Updated
+  paragraph filling logic to avoid unwanted behavior in ~org-mode~.
+- Remove redundant group parameter from all defcustom definitions in ellama.el.
+- Refactor session line update functions by removing redundant show and hide
+  functions for header and mode lines, simplifying the update functions using a
+  let-bound element variable.
+- Removed hooks from ellama minor modes.
 * Version 1.6.1
 - Added functionality to display the current Ellama session ID in both the
   header line and the mode line.
