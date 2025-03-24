@@ -628,12 +628,14 @@ Skip code blocks and math environments."
   (with-temp-buffer
     (insert (propertize text 'hard t))
     (goto-char (point-min))
-    (let (block-start
-	  block-end
+    (let ((block-start (make-marker))
+	  (block-end (make-marker))
 	  (prev-point (point-min)))
+      (set-marker-insertion-type block-start t)
+      (set-marker-insertion-type block-end t)
       ;; Process regions outside of blocks
       (while (re-search-forward "\\(#\\+BEGIN_SRC\\|\\$\\$\\|\\$\\|`\\)" nil t)
-        (setq block-start (match-beginning 0))
+        (set-marker block-start (match-beginning 0))
 	(goto-char block-start)
         (let ((block-type (cond ((looking-at "#\\+BEGIN_SRC") 'src)
                                 ((looking-at "\\$\\$") 'math-display)
@@ -643,20 +645,20 @@ Skip code blocks and math environments."
           (ellama--apply-transformations prev-point block-start)
           ;; Skip over the block content
           (goto-char block-start)
-          (setq block-end
-		(cond
-		 ((eq block-type 'src)
-                  (if (re-search-forward "#\\+END_SRC" nil t) (point) (point-max)))
-		 ((eq block-type 'math-display)
-                  (if (re-search-forward "\\$\\$.+?\\$\\$" nil t) (point) (point-max)))
-		 ((eq block-type 'math-inline)
-                  (if (re-search-forward "\\$.+?\\$" nil t) (point) (point-max)))
-		 ((eq block-type 'code-inline)
-		  (if (re-search-forward "`\\(.+?\\)`" nil t)
-		      (progn
-			(replace-match "~\\1~")
-			(point))
-		    (point-max)))))
+          (set-marker block-end
+		      (cond
+		       ((eq block-type 'src)
+			(if (re-search-forward "#\\+END_SRC" nil t) (point) (point-max)))
+		       ((eq block-type 'math-display)
+			(if (re-search-forward "\\$\\$.+?\\$\\$" nil t) (point) (point-max)))
+		       ((eq block-type 'math-inline)
+			(if (re-search-forward "\\$.+?\\$" nil t) (point) (point-max)))
+		       ((eq block-type 'code-inline)
+			(if (re-search-forward "`\\([^`]+\\)`" nil t)
+			    (progn
+			      (replace-match "~\\1~")
+			      (point))
+			  (point-max)))))
           (when block-end
 	    (goto-char block-end))
 	  (setq prev-point (point))))

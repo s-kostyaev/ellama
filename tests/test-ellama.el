@@ -437,6 +437,20 @@ _more italic_")))
 $P_\\theta$
 /more italic/"))))
 
+(ert-deftest test-ellama-md-to-org-inline-code ()
+  (let ((result (ellama--translate-markdown-to-org-filter "```go
+package main
+```
+### Explanation:
+1. **Initialization**: We create a boolean slice `prime` of size `n+1`, where each
+index represents whether the number is prime (`true`) or not (`false`).")))
+    (should (string= result "#+BEGIN_SRC go
+package main
+#+END_SRC
+*** Explanation:
+1. *Initialization*: We create a boolean slice ~prime~ of size ~n+1~, where each
+index represents whether the number is prime (~true~) or not (~false~)."))))
+
 (defun ellama-test-max-common-prefix ()
   "Test the `ellama-max-common-prefix` function."
   (should (equal (ellama-max-common-prefix "" "") ""))
