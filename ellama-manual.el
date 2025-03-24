@@ -41,11 +41,22 @@
   (declare-function project-root "project")
   (declare-function project-current "project")
   (require 'ox-texinfo)
-  (let* ((org-export-with-broken-links t))
-    (with-current-buffer (find-file-noselect
-			  (file-name-concat
-			   (project-root (project-current))
-			   "README.org"))
+  (let* ((org-export-with-broken-links t)
+	 (content (with-current-buffer (find-file-noselect
+					(file-name-concat
+					 (project-root (project-current))
+					 "README.org"))
+		    (buffer-string))))
+    (with-temp-buffer
+      (insert content)
+      ;; remove badges
+      (goto-char (point-min))
+      (while (re-search-forward "\\[\\[.+?\\]\\[.+?\\.svg\\]\\]" nil t)
+	(replace-match ""))
+      ;; remove images
+      (goto-char (point-min))
+      (while (re-search-forward "\\[\\[.+?\\.gif\\]\\]" nil t)
+	(replace-match ""))
       (org-export-to-file
 	  'texinfo "ellama.texi"
 	nil nil nil nil nil
