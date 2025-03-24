@@ -1203,6 +1203,7 @@ EVENT is an argument for mweel scroll."
 Works inside BUFFER starting at POINT.
 If POINT is nil, current point will be used.
 FILTER is a function for text transformation."
+  (declare-function org-fill-paragraph "org")
   (with-current-buffer
       buffer
     (let* ((beg-marker (make-marker))
