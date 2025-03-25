@@ -729,8 +729,9 @@ the context."
     (defun ellama-context-add-projectile-project nil
       "Add all files in current projectile project to context."
       (interactive)
-      (dolist (file-name (projectile-current-project-files))
-	(let ((element (ellama-context-element-file :name file-name)))
+      (dolist (relative-file-name (projectile-current-project-files))
+	(let* ((file-name (projectile-expand-root relative-file-name))
+	       (element (ellama-context-element-file :name file-name)))
 	  (ellama-context-element-add element)))) ))
 
 ;;;###autoload
