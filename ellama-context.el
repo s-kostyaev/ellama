@@ -722,6 +722,18 @@ the context."
 	 (element (ellama-context-element-buffer :name buffer-name)))
     (ellama-context-element-add element)))
 
+
+(eval-when-compile
+  (unless (boundp 'projectile-current-project-files)
+;;;###autoload
+    (defun ellama-context-add-projectile-project nil
+      "Add all files in current projectile project to context."
+      (interactive)
+      (dolist (relative-file-name (projectile-current-project-files))
+	(let* ((file-name (projectile-expand-root relative-file-name))
+	       (element (ellama-context-element-file :name file-name)))
+	  (ellama-context-element-add element)))) ))
+
 ;;;###autoload
 (defun ellama-context-add-directory (dir)
   "Add all files in DIR to the context."
