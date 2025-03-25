@@ -723,6 +723,16 @@ the context."
     (ellama-context-element-add element)))
 
 ;;;###autoload
+(defun ellama-context-add-projectile-project nil
+  "Add all files in current projectile project to context."
+  (interactive)
+  (unless (boundp 'projectile-current-project-files)
+    (user-error "Projectile is not avaliable"))
+  (dolist (file-name (projectile-current-project-files))
+    (let ((element (ellama-context-element-file :name file-name)))
+      (ellama-context-element-add element))))
+
+;;;###autoload
 (defun ellama-context-add-directory (dir)
   "Add all files in DIR to the context."
   (interactive "DSelect directory: ")
