@@ -277,6 +277,7 @@ Otherwise, prompt the user to enter a system message."
       (buffer-substring (point-min) (point-max)))))
    ["Add"
     ("b" "Add Buffer" ellama-context-add-buffer)
+    ("-r" "Recursive mode for `Add Directory'" "recursive")
     ("d" "Add Directory" ellama-context-add-directory)
     ("f" "Add File" ellama-context-add-file)
     ("s" "Add Selection" ellama-context-add-selection)

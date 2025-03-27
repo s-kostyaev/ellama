@@ -727,13 +727,17 @@ the context."
   "Add all files in DIR to the context.
 Exclude dot-files.  Include subdirs if RECURSIVE is t."
   (interactive "DSelect directory: ")
-  (dolist (file-name (directory-files dir t "^[^\.].*"))
-    (cond
-     ((file-regular-p file-name)
-      (let ((element (ellama-context-element-file :name file-name)))
-	(ellama-context-element-add element)))
-     ((and (file-directory-p file-name) recursive)
-      (ellama-context-add-directory file-name 't)))))
+  (let ((rec
+	 (or recursive
+	     (transient-arg-value "recursive"
+				  (transient-args transient-current-command)))))
+    (dolist (file-name (directory-files dir t "^[^\.].*"))
+      (cond
+       ((file-regular-p file-name)
+	(let ((element (ellama-context-element-file :name file-name)))
+	  (ellama-context-element-add element)))
+       ((and (file-directory-p file-name) rec)
+	(ellama-context-add-directory file-name 't))))))
 
 ;;;###autoload
 (defun ellama-context-add-directory-recursive (dir)
