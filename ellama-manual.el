@@ -48,7 +48,7 @@
 					 "ellama.el"))
 		    (save-excursion
 		      (goto-char (point-min))
-		      (re-search-forward ";; Version: \\([1-9\\.]+\\)")
+		      (re-search-forward ";; Version: \\([0-9\\.]+\\)")
 		      (match-string 1))))
 	 (buf (find-file-noselect
 	       (file-name-concat
