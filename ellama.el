@@ -457,9 +457,20 @@ It should be a function with single argument generated text string."
   "Show reasoning in separate buffer if enabled."
   :type 'boolean)
 
+(defun ellama--set-file-name-and-save ()
+  "Set buffer file name and save buffer."
+  (interactive)
+  (setq buffer-file-name
+	(file-name-concat
+	 ellama-sessions-directory
+	 (concat ellama--current-session-id
+		 "." (ellama-get-session-file-extension))))
+  (save-buffer))
+
 (define-minor-mode ellama-session-mode
   "Minor mode for ellama session buffers."
   :interactive nil
+  :keymap '(([remap save-buffer] . ellama--set-file-name-and-save))
   (if ellama-session-mode
       (progn
         (add-hook 'after-save-hook 'ellama--save-session nil t)
