@@ -848,6 +848,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
     (setq ellama--current-session-id id)
     (puthash id buffer ellama--active-sessions)
     (with-current-buffer buffer
+      (setq default-directory ellama-sessions-directory)
       (funcall ellama-major-mode)
       (setq ellama--current-session session)
       (ellama-session-mode +1))
@@ -908,7 +909,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
   "Save current ellama session."
   (when ellama--current-session
     (let* ((session ellama--current-session)
-	   (file-name (ellama-session-file session))
+	   (file-name (or (ellama-session-file session) buffer-file-name))
 	   (session-file-name (ellama--get-session-file-name file-name)))
       (with-temp-file session-file-name
 	(insert (prin1-to-string session))))))
