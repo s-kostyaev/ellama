@@ -1,21 +1,27 @@
 This is ellama.info, produced by makeinfo version 7.1 from ellama.texi.
 
-INFO-DIR-SECTION Misc
+INFO-DIR-SECTION Emacs misc features
 START-INFO-DIR-ENTRY
-* (ellama).             .
+* Ellama: (ellama).     Tool for interaction with large language models.
 END-INFO-DIR-ENTRY
 
 
-File: ellama.info,  Node: Top,  Next: Ellama,  Up: (dir)
+File: ellama.info,  Node: Top,  Next: Installation,  Up: (dir)
+
+Ellama manual
+*************
+
+Ellama is a tool for interacting with large language models from Emacs.
+It allows you to ask questions and receive responses from the LLMs.
+Ellama can perform various tasks such as translation, code review,
+summarization, enhancing grammar/spelling or wording and more through
+the Emacs interface.  Ellama natively supports streaming output, making
+it effortless to use with your preferred text editor.
+
+The name "ellama" is derived from "Emacs Large LAnguage Model
+Assistant".  Previous sentence was written by Ellama itself.
 
 * Menu:
-
-* Ellama::
-* Contributions::
-
--- The Detailed Node Listing --
-
-Ellama
 
 * Installation::
 * Commands::
@@ -24,6 +30,9 @@ Ellama
 * Minor modes::
 * Using Blueprints::
 * Acknowledgments::
+* Contributions::
+
+-- The Detailed Node Listing --
 
 Minor modes
 
@@ -33,6 +42,16 @@ Minor modes
 * ellama-context-mode-line-global-mode::
 * Ellama Session Header Line Mode::
 * Ellama Session Mode Line Mode::
+
+Ellama Session Header Line Mode
+
+* Enabling and Disabling::
+* Customization::
+
+Ellama Session Mode Line Mode
+
+* Enabling and Disabling: Enabling and Disabling (1).
+* Customization: Customization (1).
 
 Using Blueprints
 
@@ -45,36 +64,10 @@ Using Blueprints
 
 
 
-File: ellama.info,  Node: Ellama,  Next: Contributions,  Prev: Top,  Up: Top
+File: ellama.info,  Node: Installation,  Next: Commands,  Prev: Top,  Up: Top
 
-1 Ellama
-********
-
-Ellama is a tool for interacting with large language models from Emacs.
-It allows you to ask questions and receive responses from the LLMs.
-Ellama can perform various tasks such as translation, code review,
-summarization, enhancing grammar/spelling or wording and more through
-the Emacs interface.  Ellama natively supports streaming output, making
-it effortless to use with your preferred text editor.
-
-   The name "ellama" is derived from "Emacs Large LAnguage Model
-Assistant".  Previous sentence was written by Ellama itself.
-
-* Menu:
-
-* Installation::
-* Commands::
-* Keymap::
-* Configuration::
-* Minor modes::
-* Using Blueprints::
-* Acknowledgments::
-
-
-File: ellama.info,  Node: Installation,  Next: Commands,  Up: Ellama
-
-1.1 Installation
-================
+1 Installation
+**************
 
 Just ‘M-x’ ‘package-install’ Enter ‘ellama’ Enter.  By default it uses
 ollama (https://github.com/jmorganca/ollama) provider.  If you ok with
@@ -83,7 +76,7 @@ pull any ollama model (https://ollama.com/models) like this:
 
      ollama pull qwen2.5:3b
 
-   You can use ‘ellama’ with other model or other llm provider.  Without
+You can use ‘ellama’ with other model or other llm provider.  Without
 any configuration, the first available ollama model will be used.  You
 can customize ellama configuration like this:
 
@@ -99,7 +92,7 @@ can customize ellama configuration like this:
        ;; show ellama session id in header line in all buffers
        (ellama-session-header-line-global-mode +1))
 
-   More sofisticated configuration example:
+More sofisticated configuration example:
 
      (use-package ellama
        :ensure t
@@ -176,10 +169,10 @@ can customize ellama configuration like this:
        (advice-add 'end-of-buffer :after #'ellama-enable-scroll))
 
 
-File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Ellama
+File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Top
 
-1.2 Commands
-============
+2 Commands
+**********
 
    • ‘ellama’: This is the entry point for Ellama.  It displays the main
      transient menu, allowing you to access all other Ellama commands
@@ -286,19 +279,19 @@ File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Ell
      of variables found in current buffer and update them.
 
 
-File: ellama.info,  Node: Keymap,  Next: Configuration,  Prev: Commands,  Up: Ellama
+File: ellama.info,  Node: Keymap,  Next: Configuration,  Prev: Commands,  Up: Top
 
-1.3 Keymap
-==========
+3 Keymap
+********
 
 It's better to use a transient menu (‘M-x ellama’) instead of a keymap.
 It offers a better user experience.
 
-   In any buffer where there is active ellama streaming, you can press
+In any buffer where there is active ellama streaming, you can press
 ‘C-g’ and it will cancel current stream.
 
-   Here is a table of keybindings and their associated functions in
-Ellama, using the ‘ellama-keymap-prefix’ prefix (not set by default):
+Here is a table of keybindings and their associated functions in Ellama,
+using the ‘ellama-keymap-prefix’ prefix (not set by default):
 
 Keymap   Function                          Description
 --------------------------------------------------------------------------
@@ -342,10 +335,10 @@ Keymap   Function                          Description
 "p s"    ellama-provider-select            Provider select
 
 
-File: ellama.info,  Node: Configuration,  Next: Minor modes,  Prev: Keymap,  Up: Ellama
+File: ellama.info,  Node: Configuration,  Next: Minor modes,  Prev: Keymap,  Up: Top
 
-1.4 Configuration
-=================
+4 Configuration
+***************
 
 The following variables can be customized for the Ellama client:
 
@@ -354,16 +347,16 @@ The following variables can be customized for the Ellama client:
    • ‘ellama-user-nick’: The user nick in logs.
    • ‘ellama-assistant-nick’: The assistant nick in logs.
    • ‘ellama-language’: The language for Ollama translation.  Default
-   language is english.
+language is english.
    • ‘ellama-provider’: llm provider for ellama.
-   There are many supported providers: ‘ollama’, ‘open ai’, ‘vertex’,
+There are many supported providers: ‘ollama’, ‘open ai’, ‘vertex’,
 ‘GPT4All’.  For more information see llm documentation
 (https://elpa.gnu.org/packages/llm.html).
    • ‘ellama-providers’: association list of model llm providers with
      name as key.
    • ‘ellama-spinner-enabled’: Enable spinner during text generation.
    • ‘ellama-spinner-type’: Spinner type for ellama.  Default type is
-   ‘progress-bar’.
+‘progress-bar’.
    • ‘ellama-ollama-binary’: Path to ollama binary.
    • ‘ellama-auto-scroll’: If enabled ellama buffer will scroll
      automatically during generation.  Disabled by default.
@@ -373,7 +366,7 @@ The following variables can be customized for the Ellama client:
      generate name.
    • Prompt templates for every command.
    • ‘ellama-chat-done-callback’: Callback that will be called on ellama
-   chat response generation done.  It should be a function with single
+chat response generation done.  It should be a function with single
 argument generated text string.
    • ‘ellama-nick-prefix-depth’: User and assistant nick prefix depth.
      Default value is 2.
@@ -440,10 +433,10 @@ argument generated text string.
      session line.
 
 
-File: ellama.info,  Node: Minor modes,  Next: Using Blueprints,  Prev: Configuration,  Up: Ellama
+File: ellama.info,  Node: Minor modes,  Next: Using Blueprints,  Prev: Configuration,  Up: Top
 
-1.5 Minor modes
-===============
+5 Minor modes
+*************
 
 The Ellama package for Emacs offers a suite of minor modes designed to
 enhance the user experience by providing context-specific information
@@ -451,7 +444,7 @@ directly within the editor's interface.  These minor modes focus on
 updating both the header line and mode line with relevant details,
 making it easier to manage and navigate multiple sessions and buffers.
 
-   Key features include:
+Key features include:
 
    • *Context Header Line Modes*: ‘ellama-context-header-line-mode’ and
      its global counterpart, ‘ellama-context-header-line-global-mode’,
@@ -470,10 +463,9 @@ making it easier to manage and navigate multiple sessions and buffers.
      global counterpart offer an additional way to track session IDs by
      displaying them in the mode line.
 
-   These minor modes are easily toggled on or off using specific
-commands, providing flexibility for users who may want to enable these
-features globally across all buffers or selectively within individual
-buffers.
+These minor modes are easily toggled on or off using specific commands,
+providing flexibility for users who may want to enable these features
+globally across all buffers or selectively within individual buffers.
 
 * Menu:
 
@@ -487,117 +479,128 @@ buffers.
 
 File: ellama.info,  Node: ellama-context-header-line-mode,  Next: ellama-context-header-line-global-mode,  Up: Minor modes
 
-1.5.1 ellama-context-header-line-mode
--------------------------------------
+5.1 ellama-context-header-line-mode
+===================================
 
 *Description:* Toggle the Ellama Context header line mode.  This minor
 mode updates the header line to display context-specific information.
 
-   *Usage:* To enable or disable ‘ellama-context-header-line-mode’, use
-the command:
+*Usage:* To enable or disable ‘ellama-context-header-line-mode’, use the
+command:
 
-   M-x ellama-context-header-line-mode
+M-x ellama-context-header-line-mode
 
-   When enabled, this mode adds a hook to ‘window-state-change-hook’ to
+When enabled, this mode adds a hook to ‘window-state-change-hook’ to
 update the header line whenever the window state changes.  It also calls
 ‘ellama-context-update-header-line’ to initialize the header line with
 context-specific information.
 
-   When disabled, it removes the evaluation of ‘(:eval
+When disabled, it removes the evaluation of ‘(:eval
 (ellama-context-line))’ from ‘header-line-format’.
 
 
 File: ellama.info,  Node: ellama-context-header-line-global-mode,  Next: ellama-context-mode-line-mode,  Prev: ellama-context-header-line-mode,  Up: Minor modes
 
-1.5.2 ellama-context-header-line-global-mode
---------------------------------------------
+5.2 ellama-context-header-line-global-mode
+==========================================
 
 *Description:* Globalized version of ‘ellama-context-header-line-mode’.
 This mode ensures that ‘ellama-context-header-line-mode’ is enabled in
 all buffers.
 
-   *Usage:* To enable or disable
-‘ellama-context-header-line-global-mode’, use the command:
+*Usage:* To enable or disable ‘ellama-context-header-line-global-mode’,
+use the command:
 
-   M-x ellama-context-header-line-global-mode
+M-x ellama-context-header-line-global-mode
 
-   This globalized minor mode provides a convenient way to ensure that
+This globalized minor mode provides a convenient way to ensure that
 context-specific header line information is always available, regardless
 of the buffer being edited.
 
 
 File: ellama.info,  Node: ellama-context-mode-line-mode,  Next: ellama-context-mode-line-global-mode,  Prev: ellama-context-header-line-global-mode,  Up: Minor modes
 
-1.5.3 ellama-context-mode-line-mode
------------------------------------
+5.3 ellama-context-mode-line-mode
+=================================
 
 *Description:* Toggle the Ellama Context mode line mode.  This minor
 mode updates the mode line to display context-specific information.
 
-   *Usage:* To enable or disable ‘ellama-context-mode-line-mode’, use
-the command:
+*Usage:* To enable or disable ‘ellama-context-mode-line-mode’, use the
+command:
 
-   M-x ellama-context-mode-line-mode
+M-x ellama-context-mode-line-mode
 
-   When enabled, this mode adds a hook to ‘window-state-change-hook’ to
+When enabled, this mode adds a hook to ‘window-state-change-hook’ to
 update the mode line whenever the window state changes.  It also calls
 ‘ellama-context-update-mode-line’ to initialize the mode line with
 context-specific information.
 
-   When disabled, it removes the evaluation of ‘(:eval
+When disabled, it removes the evaluation of ‘(:eval
 (ellama-context-line))’ from ‘mode-line-format’.
 
 
 File: ellama.info,  Node: ellama-context-mode-line-global-mode,  Next: Ellama Session Header Line Mode,  Prev: ellama-context-mode-line-mode,  Up: Minor modes
 
-1.5.4 ellama-context-mode-line-global-mode
-------------------------------------------
+5.4 ellama-context-mode-line-global-mode
+========================================
 
 *Description:* Globalized version of ‘ellama-context-mode-line-mode’.
 This mode ensures that ‘ellama-context-mode-line-mode’ is enabled in all
 buffers.
 
-   *Usage:* To enable or disable ‘ellama-context-mode-line-global-mode’,
+*Usage:* To enable or disable ‘ellama-context-mode-line-global-mode’,
 use the command:
 
-   M-x ellama-context-mode-line-global-mode
+M-x ellama-context-mode-line-global-mode
 
-   This globalized minor mode provides a convenient way to ensure that
+This globalized minor mode provides a convenient way to ensure that
 context-specific mode line information is always available, regardless
 of the buffer being edited.
 
 
 File: ellama.info,  Node: Ellama Session Header Line Mode,  Next: Ellama Session Mode Line Mode,  Prev: ellama-context-mode-line-global-mode,  Up: Minor modes
 
-1.5.5 Ellama Session Header Line Mode
--------------------------------------
+5.5 Ellama Session Header Line Mode
+===================================
 
 The ‘ellama-session-header-line-mode’ is a minor mode that allows you to
 display the current Ellama session ID in the header line of your Emacs
 buffers.  This feature helps keep track of which session you are working
 with, especially useful when managing multiple sessions.
 
-  1. Enabling and Disabling
+* Menu:
 
-     To enable this mode, use the following command:
-          M-x ellama-session-header-line-mode
+* Enabling and Disabling::
+* Customization::
 
-     This will toggle the display of the session ID in the header line.
-     You can also enable or disable it globally across all buffers
-     using:
-          M-x ellama-session-header-line-global-mode
+
+File: ellama.info,  Node: Enabling and Disabling,  Next: Customization,  Up: Ellama Session Header Line Mode
 
-  2. Customization
+5.5.1 Enabling and Disabling
+----------------------------
 
-     The session ID is displayed with a customizable face called
-     ‘ellama-face’.  You can customize this face to change its
-     appearance.
+To enable this mode, use the following command:
+     M-x ellama-session-header-line-mode
+
+This will toggle the display of the session ID in the header line.  You
+can also enable or disable it globally across all buffers using:
+     M-x ellama-session-header-line-global-mode
+
+
+File: ellama.info,  Node: Customization,  Prev: Enabling and Disabling,  Up: Ellama Session Header Line Mode
+
+5.5.2 Customization
+-------------------
+
+The session ID is displayed with a customizable face called
+‘ellama-face’.  You can customize this face to change its appearance.
 
 
 File: ellama.info,  Node: Ellama Session Mode Line Mode,  Prev: Ellama Session Header Line Mode,  Up: Minor modes
 
-1.5.6 Ellama Session Mode Line Mode
------------------------------------
+5.6 Ellama Session Mode Line Mode
+=================================
 
 The ‘ellama-session-mode-line-mode’ is a minor mode that allows you to
 display the current Ellama session ID in the mode line of your Emacs
@@ -605,27 +608,38 @@ buffers.  This feature provides an additional way to keep track of which
 session you are working with, especially useful when managing multiple
 sessions.
 
-  1. Enabling and Disabling
+* Menu:
 
-     To enable this mode, use the following command:
-          M-x ellama-session-mode-line-mode
-
-     This will toggle the display of the session ID in the mode line.
-     You can also enable or disable it globally across all buffers
-     using:
-          M-x ellama-session-mode-line-global-mode
-
-  2. Customization
-
-     The session ID is displayed with a customizable face called
-     ‘ellama-face’.  You can customize this face to change its
-     appearance.
+* Enabling and Disabling: Enabling and Disabling (1).
+* Customization: Customization (1).
 
 
-File: ellama.info,  Node: Using Blueprints,  Next: Acknowledgments,  Prev: Minor modes,  Up: Ellama
+File: ellama.info,  Node: Enabling and Disabling (1),  Next: Customization (1),  Up: Ellama Session Mode Line Mode
 
-1.6 Using Blueprints
-====================
+5.6.1 Enabling and Disabling
+----------------------------
+
+To enable this mode, use the following command:
+     M-x ellama-session-mode-line-mode
+
+This will toggle the display of the session ID in the mode line.  You
+can also enable or disable it globally across all buffers using:
+     M-x ellama-session-mode-line-global-mode
+
+
+File: ellama.info,  Node: Customization (1),  Prev: Enabling and Disabling (1),  Up: Ellama Session Mode Line Mode
+
+5.6.2 Customization
+-------------------
+
+The session ID is displayed with a customizable face called
+‘ellama-face’.  You can customize this face to change its appearance.
+
+
+File: ellama.info,  Node: Using Blueprints,  Next: Acknowledgments,  Prev: Minor modes,  Up: Top
+
+6 Using Blueprints
+******************
 
 Blueprints in Ellama refer to predefined templates or structures that
 facilitate the creation and management of chat sessions.  These
@@ -645,25 +659,25 @@ for interactions.
 
 File: ellama.info,  Node: Key Components of Ellama Blueprints,  Next: Creating and Managing Blueprints,  Up: Using Blueprints
 
-1.6.1 Key Components of Ellama Blueprints
------------------------------------------
+6.1 Key Components of Ellama Blueprints
+=======================================
 
   1. *Act*: This is the primary identifier for a blueprint, representing
      the
-   action or purpose of the blueprint.
+action or purpose of the blueprint.
   1. *Prompt*: The content that will be used to initiate the chat
      session.  This
-   can include instructions, context, or any other relevant information
+can include instructions, context, or any other relevant information
 needed to guide the conversation.
   1. *For Developers*: A flag indicating whether the blueprint is
      intended for
-   developers.
+developers.
 
 
 File: ellama.info,  Node: Creating and Managing Blueprints,  Next: Variable Management,  Prev: Key Components of Ellama Blueprints,  Up: Using Blueprints
 
-1.6.2 Creating and Managing Blueprints
---------------------------------------
+6.2 Creating and Managing Blueprints
+====================================
 
 Ellama provides several functions to create, select, and manage
 blueprints:
@@ -685,8 +699,8 @@ blueprints:
 
 File: ellama.info,  Node: Variable Management,  Next: Keymap and Mode,  Prev: Creating and Managing Blueprints,  Up: Using Blueprints
 
-1.6.3 Variable Management
--------------------------
+6.3 Variable Management
+=======================
 
 Blueprints can include variables that need to be filled before running
 the chat session.  Ellama provides command to fill these variables:
@@ -697,19 +711,19 @@ the chat session.  Ellama provides command to fill these variables:
 
 File: ellama.info,  Node: Keymap and Mode,  Next: Transient Menus,  Prev: Variable Management,  Up: Using Blueprints
 
-1.6.4 Keymap and Mode
----------------------
+6.4 Keymap and Mode
+===================
 
 Ellama provides a local keymap ‘ellama-blueprint-mode-map’ for managing
 blueprints within buffers.  The mode includes key bindings for sending
 the buffer to a new chat session, killing the current buffer, creating a
 new blueprint, and filling variables.
 
-   The ‘ellama-blueprint-mode’ is a derived mode from ‘text-mode’,
+The ‘ellama-blueprint-mode’ is a derived mode from ‘text-mode’,
 providing syntax highlighting for variables in curly braces and setting
 up the local keymap.
 
-   When in ‘ellama-blueprint-mode’, the following keybindings are
+When in ‘ellama-blueprint-mode’, the following keybindings are
 available:
 
    • ‘C-c C-c’: Send current buffer to a new chat session and kill the
@@ -721,22 +735,21 @@ available:
 
 File: ellama.info,  Node: Transient Menus,  Next: Running Blueprints programmatically,  Prev: Keymap and Mode,  Up: Using Blueprints
 
-1.6.5 Transient Menus
----------------------
+6.5 Transient Menus
+===================
 
 Ellama includes transient menus for easy access to blueprint commands.
 The ‘ellama-transient-blueprint-menu’ provides options for chatting with
 a selected blueprint, creating a new blueprint, and quitting the menu.
 
-   The ‘ellama-transient-main-menu’ integrates the blueprint menu into
-the main menu, providing a comprehensive interface for all Ellama
-commands.
+The ‘ellama-transient-main-menu’ integrates the blueprint menu into the
+main menu, providing a comprehensive interface for all Ellama commands.
 
 
 File: ellama.info,  Node: Running Blueprints programmatically,  Prev: Transient Menus,  Up: Using Blueprints
 
-1.6.6 Running Blueprints programmatically
------------------------------------------
+6.6 Running Blueprints programmatically
+=======================================
 
 The ‘ellama-blueprint-run’ function initiates a chat session using a
 specified blueprint.  It pre-fills variables based on the provided
@@ -750,29 +763,29 @@ arguments.
      (global-set-key (kbd "C-c e M") #'my-chat-with-morpheus)
 
 
-File: ellama.info,  Node: Acknowledgments,  Prev: Using Blueprints,  Up: Ellama
+File: ellama.info,  Node: Acknowledgments,  Next: Contributions,  Prev: Using Blueprints,  Up: Top
 
-1.7 Acknowledgments
-===================
+7 Acknowledgments
+*****************
 
 Thanks Jeffrey Morgan (https://github.com/jmorganca) for excellent
 project ollama (https://github.com/jmorganca/ollama).  This project
 cannot exist without it.
 
-   Thanks zweifisch (https://github.com/zweifisch) - I got some ideas
-from ollama.el (https://github.com/zweifisch/ollama) what ollama client
-in Emacs can do.
+Thanks zweifisch (https://github.com/zweifisch) - I got some ideas from
+ollama.el (https://github.com/zweifisch/ollama) what ollama client in
+Emacs can do.
 
-   Thanks Dr.  David A.  Kunz (https://github.com/David-Kunz) - I got
-more ideas from gen.nvim (https://github.com/David-Kunz/gen.nvim).
+Thanks Dr.  David A.  Kunz (https://github.com/David-Kunz) - I got more
+ideas from gen.nvim (https://github.com/David-Kunz/gen.nvim).
 
-   Thanks Andrew Hyatt (https://github.com/ahyatt) for ‘llm’ library.
+Thanks Andrew Hyatt (https://github.com/ahyatt) for ‘llm’ library.
 Without it only ‘ollama’ would be supported.
 
 
-File: ellama.info,  Node: Contributions,  Prev: Ellama,  Up: Top
+File: ellama.info,  Node: Contributions,  Prev: Acknowledgments,  Up: Top
 
-2 Contributions
+8 Contributions
 ***************
 
 To contribute, submit a pull request or report a bug.  This library is
@@ -783,32 +796,31 @@ different archive like MELPA.
 
 
 Tag Table:
-Node: Top162
-Node: Ellama858
-Node: Installation1614
-Node: Commands6623
-Node: Keymap12974
-Node: Configuration15820
-Node: Minor modes21173
-Node: ellama-context-header-line-mode23182
-Node: ellama-context-header-line-global-mode24027
-Node: ellama-context-mode-line-mode24764
-Node: ellama-context-mode-line-global-mode25632
-Node: Ellama Session Header Line Mode26353
-Ref: Enabling and Disabling26876
-Ref: Customization27210
-Node: Ellama Session Mode Line Mode27375
-Ref: Enabling and Disabling (1)27869
-Ref: Customization (1)28197
-Node: Using Blueprints28362
-Node: Key Components of Ellama Blueprints28988
-Node: Creating and Managing Blueprints29615
-Node: Variable Management30606
-Node: Keymap and Mode31081
-Node: Transient Menus32027
-Node: Running Blueprints programmatically32580
-Node: Acknowledgments33171
-Node: Contributions33878
+Node: Top224
+Node: Installation1664
+Node: Commands6672
+Node: Keymap13016
+Node: Configuration15849
+Node: Minor modes21183
+Node: ellama-context-header-line-mode23179
+Node: ellama-context-header-line-global-mode24008
+Node: ellama-context-mode-line-mode24732
+Node: ellama-context-mode-line-global-mode25584
+Node: Ellama Session Header Line Mode26292
+Node: Enabling and Disabling26861
+Node: Customization27308
+Node: Ellama Session Mode Line Mode27596
+Node: Enabling and Disabling (1)28181
+Node: Customization (1)28628
+Node: Using Blueprints28922
+Node: Key Components of Ellama Blueprints29541
+Node: Creating and Managing Blueprints30155
+Node: Variable Management31142
+Node: Keymap and Mode31613
+Node: Transient Menus32549
+Node: Running Blueprints programmatically33095
+Node: Acknowledgments33682
+Node: Contributions34395
 
 End Tag Table
 

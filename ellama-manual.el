@@ -42,20 +42,62 @@
   (declare-function project-current "project")
   (require 'ox-texinfo)
   (let* ((org-export-with-broken-links t)
-	 (content (with-current-buffer (find-file-noselect
+	 (version (with-current-buffer (find-file-noselect
 					(file-name-concat
 					 (project-root (project-current))
-					 "README.org"))
+					 "ellama.el"))
+		    (save-excursion
+		      (goto-char (point-min))
+		      (re-search-forward ";; Version: \\([1-9\\.]+\\)")
+		      (match-string 1))))
+	 (buf (find-file-noselect
+	       (file-name-concat
+		(project-root (project-current))
+		"README.org")))
+	 (content (with-current-buffer buf
 		    (buffer-string))))
     (with-temp-buffer
       (insert content)
+      (org-mode)
+      ;; remove ellama heading
+      (goto-char (point-min))
+      (ignore-errors
+	(if (= (org-current-level) 1)
+	    (progn
+	      (org-mark-subtree)
+	      (org-next-visible-heading 1)
+	      (org-do-promote)
+	      (org-previous-visible-heading 1)
+	      (org-mark-subtree)
+	      (org-toggle-heading))
+	  (org-promote-subtree)))
+      (goto-char (point-min))
+      (insert
+       (format "#+TITLE: Ellama manual
+#+SUBTITLE: for version {{{version}}}
+#+AUTHOR: Sergey Kostyaev
+
+#+OPTIONS: ':t toc:t author:t compact-itemx:t nodetailmenu:t
+#+LANGUAGE: en
+
+#+MACRO: version %s
+
+#+TEXINFO_FILENAME: ellama.info
+#+TEXINFO_HEADER: @paragraphindent none
+
+#+TEXINFO_DIR_CATEGORY: Emacs misc features
+#+TEXINFO_DIR_TITLE: Ellama: (ellama)
+#+TEXINFO_DIR_NAME: Ellama
+#+TEXINFO_DIR_DESC: Tool for interaction with large language models.
+#+TEXINFO_PRINTED_TITLE: Ellama manual\n\n"
+	       version))
       ;; remove badges
       (goto-char (point-min))
-      (while (re-search-forward "\\[\\[.+?\\]\\[.+?\\.svg\\]\\]" nil t)
+      (while (re-search-forward "\\[\\[.+?\\]\\[.+?\\.svg\\]\\]\\n?" nil t)
 	(replace-match ""))
       ;; remove images
       (goto-char (point-min))
-      (while (re-search-forward "\\[\\[.+?\\.gif\\]\\]" nil t)
+      (while (re-search-forward "\\[\\[.+?\\.gif\\]\\]\\n?" nil t)
 	(replace-match ""))
       (org-export-to-file
 	  'texinfo "ellama.texi"

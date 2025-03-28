@@ -1,5 +1,3 @@
-* Ellama
-
 [[http://www.gnu.org/licenses/gpl-3.0.txt][file:https://img.shields.io/badge/license-GPL_3-green.svg]]
 [[https://melpa.org/#/ellama][file:https://melpa.org/packages/ellama-badge.svg]]
 [[https://stable.melpa.org/#/ellama][file:https://stable.melpa.org/packages/ellama-badge.svg]]
@@ -16,7 +14,7 @@ The name "ellama" is derived from "Emacs Large LAnguage Model
 Assistant". Previous sentence was written by Ellama itself.
 [[file:imgs/reasoning-models.gif]]
 
-** Installation
+* Installation
 
 Just ~M-x~ ~package-install~ @@html:<kbd>@@Enter@@html:</kbd>@@
 ~ellama~ @@html:<kbd>@@Enter@@html:</kbd>@@. By default it uses [[https://github.com/jmorganca/ollama][ollama]]
@@ -123,7 +121,7 @@ More sofisticated configuration example:
     (advice-add 'end-of-buffer :after #'ellama-enable-scroll))
 #+END_SRC
 
-** Commands
+* Commands
 
 - ~ellama~: This is the entry point for Ellama. It displays the main transient
     menu, allowing you to access all other Ellama commands from here.
@@ -221,7 +219,7 @@ More sofisticated configuration example:
 - ~ellama-community-prompts-update-variables~: Prompt user for values of
     variables found in current buffer and update them.
 
-** Keymap
+* Keymap
 
 It's better to use a transient menu (~M-x ellama~) instead of a keymap. It
 offers a better user experience.
@@ -273,7 +271,7 @@ Ellama, using the ~ellama-keymap-prefix~ prefix (not set by default):
 | "x r"  | ellama-context-reset            | Context reset                |
 | "p s"  | ellama-provider-select          | Provider select              |
 
-** Configuration
+* Configuration
 
 The following variables can be customized for the Ellama client:
 
@@ -357,7 +355,7 @@ argument generated text string.
 - ~ellama-reasoning-display-action-function~: Display action function for reasoning.
 - ~ellama-session-line-template~: Template for formatting the current session line.
 
-** Minor modes
+* Minor modes
 
 The Ellama package for Emacs offers a suite of minor modes designed to enhance
 the user experience by providing context-specific information directly within
@@ -387,7 +385,7 @@ These minor modes are easily toggled on or off using specific commands,
 providing flexibility for users who may want to enable these features globally
 across all buffers or selectively within individual buffers.
 
-*** ellama-context-header-line-mode
+** ellama-context-header-line-mode
 
 *Description:*
 Toggle the Ellama Context header line mode. This minor mode updates the header line to display
@@ -405,7 +403,7 @@ line with context-specific information.
 When disabled, it removes the evaluation of ~(:eval (ellama-context-line))~ from
 ~header-line-format~.
 
-*** ellama-context-header-line-global-mode
+** ellama-context-header-line-global-mode
 
 *Description:*
 Globalized version of ~ellama-context-header-line-mode~. This mode ensures that
@@ -419,7 +417,7 @@ To enable or disable ~ellama-context-header-line-global-mode~, use the command:
 This globalized minor mode provides a convenient way to ensure that context-specific header line
 information is always available, regardless of the buffer being edited.
 
-*** ellama-context-mode-line-mode
+** ellama-context-mode-line-mode
 
 *Description:*
 Toggle the Ellama Context mode line mode. This minor mode updates the mode line
@@ -438,7 +436,7 @@ context-specific information.
 When disabled, it removes the evaluation of ~(:eval (ellama-context-line))~ from
 ~mode-line-format~.
 
-*** ellama-context-mode-line-global-mode
+** ellama-context-mode-line-global-mode
 
 *Description:*
 Globalized version of ~ellama-context-mode-line-mode~. This mode ensures that
@@ -453,14 +451,14 @@ This globalized minor mode provides a convenient way to ensure that
 context-specific mode line information is always available, regardless of the
 buffer being edited.
 
-*** Ellama Session Header Line Mode
+** Ellama Session Header Line Mode
 
 The ~ellama-session-header-line-mode~ is a minor mode that allows you to display
 the current Ellama session ID in the header line of your Emacs buffers. This
 feature helps keep track of which session you are working with, especially
 useful when managing multiple sessions.
 
-**** Enabling and Disabling
+*** Enabling and Disabling
 
 To enable this mode, use the following command:
 #+BEGIN_SRC emacs-lisp
@@ -473,19 +471,19 @@ enable or disable it globally across all buffers using:
 M-x ellama-session-header-line-global-mode
 #+END_SRC
 
-**** Customization
+*** Customization
 
 The session ID is displayed with a customizable face called ~ellama-face~. You
 can customize this face to change its appearance.
 
-*** Ellama Session Mode Line Mode
+** Ellama Session Mode Line Mode
 
 The ~ellama-session-mode-line-mode~ is a minor mode that allows you to display
 the current Ellama session ID in the mode line of your Emacs buffers. This
 feature provides an additional way to keep track of which session you are
 working with, especially useful when managing multiple sessions.
 
-**** Enabling and Disabling
+*** Enabling and Disabling
 
 To enable this mode, use the following command:
 #+BEGIN_SRC emacs-lisp
@@ -498,19 +496,19 @@ enable or disable it globally across all buffers using:
 M-x ellama-session-mode-line-global-mode
 #+END_SRC
 
-**** Customization
+*** Customization
 
 The session ID is displayed with a customizable face called ~ellama-face~. You
 can customize this face to change its appearance.
 
-** Using Blueprints
+* Using Blueprints
 
 Blueprints in Ellama refer to predefined templates or structures that facilitate
 the creation and management of chat sessions. These blueprints are designed to
 streamline the process of generating consistent and high-quality outputs by
 providing a structured framework for interactions.
 
-*** Key Components of Ellama Blueprints
+** Key Components of Ellama Blueprints
 
 1. *Act*: This is the primary identifier for a blueprint, representing the
 action or purpose of the blueprint.
@@ -520,7 +518,7 @@ guide the conversation.
 3. *For Developers*: A flag indicating whether the blueprint is intended for
 developers.
 
-*** Creating and Managing Blueprints
+** Creating and Managing Blueprints
 
 Ellama provides several functions to create, select, and manage blueprints:
 
@@ -536,7 +534,7 @@ Ellama provides several functions to create, select, and manage blueprints:
    from the collection of blueprints. It filters prompts based on whether they
    are for developers and their source (user-defined, community, or all).
 
-*** Variable Management
+** Variable Management
 
 Blueprints can include variables that need to be filled before running the chat
 session. Ellama provides command to fill these variables:
@@ -544,7 +542,7 @@ session. Ellama provides command to fill these variables:
 - *~ellama-blueprint-fill-variables~*: Prompts the user to enter values for
    variables found in the current buffer and fills them.
 
-*** Keymap and Mode
+** Keymap and Mode
 
 Ellama provides a local keymap ~ellama-blueprint-mode-map~ for managing
 blueprints within buffers. The mode includes key bindings for sending the buffer
@@ -562,7 +560,7 @@ When in ~ellama-blueprint-mode~, the following keybindings are available:
 - ~C-c c~: Create a blueprint from the current buffer.
 - ~C-c v~: Fill variables in the current blueprint.
 
-*** Transient Menus
+** Transient Menus
 
 Ellama includes transient menus for easy access to blueprint commands. The
 ~ellama-transient-blueprint-menu~ provides options for chatting with a selected
@@ -571,7 +569,7 @@ blueprint, creating a new blueprint, and quitting the menu.
 The ~ellama-transient-main-menu~ integrates the blueprint menu into the main
 menu, providing a comprehensive interface for all Ellama commands.
 
-*** Running Blueprints programmatically
+** Running Blueprints programmatically
 
 The ~ellama-blueprint-run~ function initiates a chat session using a specified
 blueprint. It pre-fills variables based on the provided arguments.
@@ -585,7 +583,7 @@ blueprint. It pre-fills variables based on the provided arguments.
   (global-set-key (kbd "C-c e M") #'my-chat-with-morpheus)
 #+END_SRC
 
-** Acknowledgments
+* Acknowledgments
 
 Thanks [[https://github.com/jmorganca][Jeffrey Morgan]] for excellent project [[https://github.com/jmorganca/ollama][ollama]]. This project
 cannot exist without it.
