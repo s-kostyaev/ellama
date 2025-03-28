@@ -482,20 +482,19 @@ making it easier to manage and navigate multiple sessions and buffers.
 
 Key features include:
 
-   • *Context Header Line Modes*: ‘ellama-context-header-line-mode’ and
+   • Context Header Line Modes: ‘ellama-context-header-line-mode’ and
      its global counterpart, ‘ellama-context-header-line-global-mode’,
      update the header line to display what elements are added to the
      global Ellama context.  This is particularly useful for keeping
      track of what information is currently in context.
-   • *Context Mode Line Modes*: Similarly,
-     ‘ellama-context-mode-line-mode’ and
-     ‘ellama-context-mode-line-global-mode’ provide information about
-     the current global context directly within the mode line, ensuring
-     that users always have relevant information at a glance.
-   • *Session Header Line Mode*: ‘ellama-session-header-line-mode’ and
-     its global version display the current Ellama session ID in the
-     header line, helping users manage multiple sessions efficiently.
-   • *Session Mode Line Mode*: ‘ellama-session-mode-line-mode’ and its
+   • Context Mode Line Modes: Similarly, ‘ellama-context-mode-line-mode’
+     and ‘ellama-context-mode-line-global-mode’ provide information
+     about the current global context directly within the mode line,
+     ensuring that users always have relevant information at a glance.
+   • Session Header Line Mode: ‘ellama-session-header-line-mode’ and its
+     global version display the current Ellama session ID in the header
+     line, helping users manage multiple sessions efficiently.
+   • Session Mode Line Mode: ‘ellama-session-mode-line-mode’ and its
      global counterpart offer an additional way to track session IDs by
      displaying them in the mode line.
 
@@ -518,10 +517,10 @@ File: ellama.info,  Node: ellama-context-header-line-mode,  Next: ellama-context
 5.1 ellama-context-header-line-mode
 ===================================
 
-*Description:* Toggle the Ellama Context header line mode.  This minor
+Description: Toggle the Ellama Context header line mode.  This minor
 mode updates the header line to display context-specific information.
 
-*Usage:* To enable or disable ‘ellama-context-header-line-mode’, use the
+Usage: To enable or disable ‘ellama-context-header-line-mode’, use the
 command:
 
 M-x ellama-context-header-line-mode
@@ -540,11 +539,11 @@ File: ellama.info,  Node: ellama-context-header-line-global-mode,  Next: ellama-
 5.2 ellama-context-header-line-global-mode
 ==========================================
 
-*Description:* Globalized version of ‘ellama-context-header-line-mode’.
+Description: Globalized version of ‘ellama-context-header-line-mode’.
 This mode ensures that ‘ellama-context-header-line-mode’ is enabled in
 all buffers.
 
-*Usage:* To enable or disable ‘ellama-context-header-line-global-mode’,
+Usage: To enable or disable ‘ellama-context-header-line-global-mode’,
 use the command:
 
 M-x ellama-context-header-line-global-mode
@@ -559,10 +558,10 @@ File: ellama.info,  Node: ellama-context-mode-line-mode,  Next: ellama-context-m
 5.3 ellama-context-mode-line-mode
 =================================
 
-*Description:* Toggle the Ellama Context mode line mode.  This minor
-mode updates the mode line to display context-specific information.
+Description: Toggle the Ellama Context mode line mode.  This minor mode
+updates the mode line to display context-specific information.
 
-*Usage:* To enable or disable ‘ellama-context-mode-line-mode’, use the
+Usage: To enable or disable ‘ellama-context-mode-line-mode’, use the
 command:
 
 M-x ellama-context-mode-line-mode
@@ -581,12 +580,12 @@ File: ellama.info,  Node: ellama-context-mode-line-global-mode,  Next: Ellama Se
 5.4 ellama-context-mode-line-global-mode
 ========================================
 
-*Description:* Globalized version of ‘ellama-context-mode-line-mode’.
+Description: Globalized version of ‘ellama-context-mode-line-mode’.
 This mode ensures that ‘ellama-context-mode-line-mode’ is enabled in all
 buffers.
 
-*Usage:* To enable or disable ‘ellama-context-mode-line-global-mode’,
-use the command:
+Usage: To enable or disable ‘ellama-context-mode-line-global-mode’, use
+the command:
 
 M-x ellama-context-mode-line-global-mode
 
@@ -698,15 +697,15 @@ File: ellama.info,  Node: Key Components of Ellama Blueprints,  Next: Creating a
 6.1 Key Components of Ellama Blueprints
 =======================================
 
-  1. *Act*: This is the primary identifier for a blueprint, representing
+  1. Act: This is the primary identifier for a blueprint, representing
      the
 action or purpose of the blueprint.
-  1. *Prompt*: The content that will be used to initiate the chat
-     session.  This
+  1. Prompt: The content that will be used to initiate the chat session.
+     This
 can include instructions, context, or any other relevant information
 needed to guide the conversation.
-  1. *For Developers*: A flag indicating whether the blueprint is
-     intended for
+  1. For Developers: A flag indicating whether the blueprint is intended
+     for
 developers.
 
 
@@ -718,16 +717,16 @@ File: ellama.info,  Node: Creating and Managing Blueprints,  Next: Variable Mana
 Ellama provides several functions to create, select, and manage
 blueprints:
 
-   • *‘ellama-blueprint-create’*: This function allows users to create a
+   • ‘ellama-blueprint-create’: This function allows users to create a
      new blueprint from the current buffer.  It prompts for a name and
      whether the blueprint is for developers, then saves the content of
      the current buffer as the prompt.
 
-   • *‘ellama-blueprint-new’*: This function creates a new buffer for a
+   • ‘ellama-blueprint-new’: This function creates a new buffer for a
      blueprint, optionally inserting the content of the current region
      if active.
 
-   • *‘ellama-blueprint-select’*: This function allows users to select a
+   • ‘ellama-blueprint-select’: This function allows users to select a
      prompt from the collection of blueprints.  It filters prompts based
      on whether they are for developers and their source (user-defined,
      community, or all).
@@ -741,8 +740,8 @@ File: ellama.info,  Node: Variable Management,  Next: Keymap and Mode,  Prev: Cr
 Blueprints can include variables that need to be filled before running
 the chat session.  Ellama provides command to fill these variables:
 
-   • *‘ellama-blueprint-fill-variables’*: Prompts the user to enter
-     values for variables found in the current buffer and fills them.
+   • ‘ellama-blueprint-fill-variables’: Prompts the user to enter values
+     for variables found in the current buffer and fills them.
 
 
 File: ellama.info,  Node: Keymap and Mode,  Next: Transient Menus,  Prev: Variable Management,  Up: Using Blueprints
@@ -1320,26 +1319,26 @@ Node: Commands8490
 Node: Keymap14834
 Node: Configuration17667
 Node: Minor modes23001
-Node: ellama-context-header-line-mode24997
-Node: ellama-context-header-line-global-mode25826
-Node: ellama-context-mode-line-mode26550
-Node: ellama-context-mode-line-global-mode27402
-Node: Ellama Session Header Line Mode28110
-Node: Enabling and Disabling28679
-Node: Customization29126
-Node: Ellama Session Mode Line Mode29414
-Node: Enabling and Disabling (1)29999
-Node: Customization (1)30446
-Node: Using Blueprints30740
-Node: Key Components of Ellama Blueprints31359
-Node: Creating and Managing Blueprints31973
-Node: Variable Management32960
-Node: Keymap and Mode33431
-Node: Transient Menus34367
-Node: Running Blueprints programmatically34913
-Node: Acknowledgments35500
-Node: Contributions36213
-Node: GNU Free Documentation License36597
+Node: ellama-context-header-line-mode24984
+Node: ellama-context-header-line-global-mode25809
+Node: ellama-context-mode-line-mode26529
+Node: ellama-context-mode-line-global-mode27377
+Node: Ellama Session Header Line Mode28081
+Node: Enabling and Disabling28650
+Node: Customization29097
+Node: Ellama Session Mode Line Mode29385
+Node: Enabling and Disabling (1)29970
+Node: Customization (1)30417
+Node: Using Blueprints30711
+Node: Key Components of Ellama Blueprints31330
+Node: Creating and Managing Blueprints31937
+Node: Variable Management32918
+Node: Keymap and Mode33387
+Node: Transient Menus34323
+Node: Running Blueprints programmatically34869
+Node: Acknowledgments35456
+Node: Contributions36169
+Node: GNU Free Documentation License36553
 
 End Tag Table
 

@@ -365,19 +365,19 @@ multiple sessions and buffers.
 
 Key features include:
 
-- *Context Header Line Modes*: ~ellama-context-header-line-mode~ and its global
+- Context Header Line Modes: ~ellama-context-header-line-mode~ and its global
   counterpart, ~ellama-context-header-line-global-mode~, update the header line
   to display what elements are added to the global Ellama context. This is
   particularly useful for keeping track of what information is currently in
   context.
-- *Context Mode Line Modes*: Similarly, ~ellama-context-mode-line-mode~ and
+- Context Mode Line Modes: Similarly, ~ellama-context-mode-line-mode~ and
   ~ellama-context-mode-line-global-mode~ provide information about the
   current global context directly within the mode line, ensuring that users
   always have relevant information at a glance.
-- *Session Header Line Mode*: ~ellama-session-header-line-mode~ and its global
+- Session Header Line Mode: ~ellama-session-header-line-mode~ and its global
   version display the current Ellama session ID in the header line, helping
   users manage multiple sessions efficiently.
-- *Session Mode Line Mode*: ~ellama-session-mode-line-mode~ and its global
+- Session Mode Line Mode: ~ellama-session-mode-line-mode~ and its global
   counterpart offer an additional way to track session IDs by displaying them
   in the mode line.
 
@@ -387,11 +387,11 @@ across all buffers or selectively within individual buffers.
 
 ** ellama-context-header-line-mode
 
-*Description:*
+Description:
 Toggle the Ellama Context header line mode. This minor mode updates the header line to display
 context-specific information.
 
-*Usage:*
+Usage:
 To enable or disable ~ellama-context-header-line-mode~, use the command:
 
     M-x ellama-context-header-line-mode
@@ -405,11 +405,11 @@ When disabled, it removes the evaluation of ~(:eval (ellama-context-line))~ from
 
 ** ellama-context-header-line-global-mode
 
-*Description:*
+Description:
 Globalized version of ~ellama-context-header-line-mode~. This mode ensures that
 ~ellama-context-header-line-mode~ is enabled in all buffers.
 
-*Usage:*
+Usage:
 To enable or disable ~ellama-context-header-line-global-mode~, use the command:
 
     M-x ellama-context-header-line-global-mode
@@ -419,11 +419,11 @@ information is always available, regardless of the buffer being edited.
 
 ** ellama-context-mode-line-mode
 
-*Description:*
+Description:
 Toggle the Ellama Context mode line mode. This minor mode updates the mode line
 to display context-specific information.
 
-*Usage:*
+Usage:
 To enable or disable ~ellama-context-mode-line-mode~, use the command:
 
     M-x ellama-context-mode-line-mode
@@ -438,11 +438,11 @@ When disabled, it removes the evaluation of ~(:eval (ellama-context-line))~ from
 
 ** ellama-context-mode-line-global-mode
 
-*Description:*
+Description:
 Globalized version of ~ellama-context-mode-line-mode~. This mode ensures that
 ~ellama-context-mode-line-mode~ is enabled in all buffers.
 
-*Usage:*
+Usage:
 To enable or disable ~ellama-context-mode-line-global-mode~, use the command:
 
     M-x ellama-context-mode-line-global-mode
@@ -510,27 +510,27 @@ providing a structured framework for interactions.
 
 ** Key Components of Ellama Blueprints
 
-1. *Act*: This is the primary identifier for a blueprint, representing the
+1. Act: This is the primary identifier for a blueprint, representing the
 action or purpose of the blueprint.
-2. *Prompt*: The content that will be used to initiate the chat session. This
+2. Prompt: The content that will be used to initiate the chat session. This
 can include instructions, context, or any other relevant information needed to
 guide the conversation.
-3. *For Developers*: A flag indicating whether the blueprint is intended for
+3. For Developers: A flag indicating whether the blueprint is intended for
 developers.
 
 ** Creating and Managing Blueprints
 
 Ellama provides several functions to create, select, and manage blueprints:
 
-- *~ellama-blueprint-create~*: This function allows users to create a new
+- ~ellama-blueprint-create~: This function allows users to create a new
    blueprint from the current buffer. It prompts for a name and whether the
    blueprint is for developers, then saves the content of the current buffer as
    the prompt.
 
-- *~ellama-blueprint-new~*: This function creates a new buffer for a blueprint,
+- ~ellama-blueprint-new~: This function creates a new buffer for a blueprint,
    optionally inserting the content of the current region if active.
 
-- *~ellama-blueprint-select~*: This function allows users to select a prompt
+- ~ellama-blueprint-select~: This function allows users to select a prompt
    from the collection of blueprints. It filters prompts based on whether they
    are for developers and their source (user-defined, community, or all).
 
@@ -539,7 +539,7 @@ Ellama provides several functions to create, select, and manage blueprints:
 Blueprints can include variables that need to be filled before running the chat
 session. Ellama provides command to fill these variables:
 
-- *~ellama-blueprint-fill-variables~*: Prompts the user to enter values for
+- ~ellama-blueprint-fill-variables~: Prompts the user to enter values for
    variables found in the current buffer and fills them.
 
 ** Keymap and Mode
