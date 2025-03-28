@@ -57,21 +57,7 @@
 	 (content (with-current-buffer buf
 		    (buffer-string))))
     (with-temp-buffer
-      (insert content)
       (org-mode)
-      ;; remove ellama heading
-      (goto-char (point-min))
-      (ignore-errors
-	(if (= (org-current-level) 1)
-	    (progn
-	      (org-mark-subtree)
-	      (org-next-visible-heading 1)
-	      (org-do-promote)
-	      (org-previous-visible-heading 1)
-	      (org-mark-subtree)
-	      (org-toggle-heading))
-	  (org-promote-subtree)))
-      (goto-char (point-min))
       (insert
        (format "#+TITLE: Ellama manual
 #+SUBTITLE: for version {{{version}}}
@@ -89,8 +75,32 @@
 #+TEXINFO_DIR_TITLE: Ellama: (ellama)
 #+TEXINFO_DIR_NAME: Ellama
 #+TEXINFO_DIR_DESC: Tool for interaction with large language models.
-#+TEXINFO_PRINTED_TITLE: Ellama manual\n\n"
+#+TEXINFO_PRINTED_TITLE: Ellama manual
+
+#+texinfo: @insertcopying
+
+* COPYING
+:PROPERTIES:
+:COPYING: t
+:END:
+
+Copyright (C) 2023-2025  Free Software Foundation, Inc.
+
+#+begin_quote
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.3 or
+any later version published by the Free Software Foundation; with no
+Invariant Sections, with the Front-Cover Texts being “A GNU Manual,” and
+with the Back-Cover Texts as in (a) below.  A copy of the license is
+included in the section entitled “GNU Free Documentation License.”
+
+(a) The FSF’s Back-Cover Text is: “You have the freedom to copy and
+modify this GNU manual.”
+#+end_quote
+
+"
 	       version))
+      (insert content)
       ;; remove badges
       (goto-char (point-min))
       (while (re-search-forward "\\[\\[.+?\\]\\[.+?\\.svg\\]\\]\\n?" nil t)
