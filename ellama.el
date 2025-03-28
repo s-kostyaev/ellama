@@ -826,8 +826,8 @@ Defaults to #, but supports `org-mode'.  Depends on `ellama-major-mode'."
     (make-string ellama-nick-prefix-depth prefix-char)))
 
 (defun ellama-get-session-file-extension ()
-  "Return file extension based om the current mode.
-Defaults to md, but supports org.  Depends on \"ellama-major-mode.\""
+  "Return file extension based on the current mode.
+Defaults to md, but supports org.  Depends on `ellama-major-mode'."
   (cond ((provided-mode-derived-p ellama-major-mode 'org-mode) "org")
         (t "md")))
 
