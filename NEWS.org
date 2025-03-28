@@ -1,3 +1,5 @@
+* Version 1.7.2
+- Added detailed context management documentation.
 * Version 1.7.1
 - Set default directory for new sessions.
 - Added functionality to set the file name before saving a session.
