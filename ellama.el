@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1"))
-;; Version: 1.7.0
+;; Version: 1.7.1
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -457,9 +457,20 @@ It should be a function with single argument generated text string."
   "Show reasoning in separate buffer if enabled."
   :type 'boolean)
 
+(defun ellama--set-file-name-and-save ()
+  "Set buffer file name and save buffer."
+  (interactive)
+  (setq buffer-file-name
+	(file-name-concat
+	 ellama-sessions-directory
+	 (concat ellama--current-session-id
+		 "." (ellama-get-session-file-extension))))
+  (save-buffer))
+
 (define-minor-mode ellama-session-mode
   "Minor mode for ellama session buffers."
   :interactive nil
+  :keymap '(([remap save-buffer] . ellama--set-file-name-and-save))
   (if ellama-session-mode
       (progn
         (add-hook 'after-save-hook 'ellama--save-session nil t)
@@ -815,8 +826,8 @@ Defaults to #, but supports `org-mode'.  Depends on `ellama-major-mode'."
     (make-string ellama-nick-prefix-depth prefix-char)))
 
 (defun ellama-get-session-file-extension ()
-  "Return file extension based om the current mode.
-Defaults to md, but supports org.  Depends on \"ellama-major-mode.\""
+  "Return file extension based on the current mode.
+Defaults to md, but supports org.  Depends on `ellama-major-mode'."
   (cond ((provided-mode-derived-p ellama-major-mode 'org-mode) "org")
         (t "md")))
 
@@ -827,9 +838,15 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (let* ((name (ellama-generate-name provider 'ellama prompt))
 	 (count 1)
 	 (name-with-suffix (format "%s %d" name count))
-	 (id (if (not (ellama-get-session-buffer name))
+	 (id (if (and (not (ellama-get-session-buffer name))
+		      (not (file-exists-p (file-name-concat
+					   ellama-sessions-directory
+					   (concat name "." (ellama-get-session-file-extension))))))
 		 name
-	       (while (ellama-get-session-buffer name-with-suffix)
+	       (while (or (ellama-get-session-buffer name-with-suffix)
+			  (file-exists-p (file-name-concat
+					  ellama-sessions-directory
+					  (concat name-with-suffix "." (ellama-get-session-file-extension)))))
 		 (setq count (+ count 1))
 		 (setq name-with-suffix (format "%s %d" name count)))
 	       name-with-suffix))
@@ -848,6 +865,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
     (setq ellama--current-session-id id)
     (puthash id buffer ellama--active-sessions)
     (with-current-buffer buffer
+      (setq default-directory ellama-sessions-directory)
       (funcall ellama-major-mode)
       (setq ellama--current-session session)
       (ellama-session-mode +1))
@@ -908,7 +926,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
   "Save current ellama session."
   (when ellama--current-session
     (let* ((session ellama--current-session)
-	   (file-name (ellama-session-file session))
+	   (file-name (or (ellama-session-file session) buffer-file-name))
 	   (session-file-name (ellama--get-session-file-name file-name)))
       (with-temp-file session-file-name
 	(insert (prin1-to-string session))))))
