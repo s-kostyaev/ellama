@@ -1,3 +1,14 @@
+* Version 1.7.0
+- Added manual generation functionality for Ellama, including a new .gitignore
+  entry to exclude ellama.texi, created ellama-manual.el for exporting an info
+  manual from the README, and added the file ellama.info.
+- Added the GNU Free Documentation License (FDL) text to README.org and updated
+  ellama-manual.el to include FDL information ensuring compliance with FDL
+  requirements. Added GNU Free Documentation License document to the project,
+  ensuring that manuals remain free in terms of freedom to copy, distribute, and
+  modify.
+- Refactored the marker creation logic in ellama.el to use copy-marker for both
+  beg-marker and end-marker, reducing redundancy and improving readability.
 * Version 1.6.2
 - Fix marker handling in block processing to correctly handle block boundaries
   during text processing and updated tests to include inline code translation
