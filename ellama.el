@@ -1206,14 +1206,10 @@ FILTER is a function for text transformation."
   (declare-function org-fill-paragraph "org")
   (with-current-buffer
       buffer
-    (let* ((beg-marker (make-marker))
-	   (end-marker (make-marker))
+    (let* ((end-marker (copy-marker (or point (point)) t))
+           (beg-marker (copy-marker end-marker nil))
 	   (previous-filtered-text "")
 	   (safe-common-prefix ""))
-      (set-marker end-marker (or point (point)))
-      (set-marker beg-marker end-marker)
-      (set-marker-insertion-type end-marker t)
-      (set-marker-insertion-type beg-marker nil)
       (lambda
 	(text)
 	(with-current-buffer buffer
