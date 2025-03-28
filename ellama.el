@@ -838,9 +838,15 @@ If EPHEMERAL non nil new session will not be associated with any file."
   (let* ((name (ellama-generate-name provider 'ellama prompt))
 	 (count 1)
 	 (name-with-suffix (format "%s %d" name count))
-	 (id (if (not (ellama-get-session-buffer name))
+	 (id (if (and (not (ellama-get-session-buffer name))
+		      (not (file-exists-p (file-name-concat
+					   ellama-sessions-directory
+					   (concat name "." (ellama-get-session-file-extension))))))
 		 name
-	       (while (ellama-get-session-buffer name-with-suffix)
+	       (while (or (ellama-get-session-buffer name-with-suffix)
+			  (file-exists-p (file-name-concat
+					  ellama-sessions-directory
+					  (concat name-with-suffix "." (ellama-get-session-file-extension)))))
 		 (setq count (+ count 1))
 		 (setq name-with-suffix (format "%s %d" name count)))
 	       name-with-suffix))
