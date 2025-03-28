@@ -1,3 +1,7 @@
+* Version 1.7.1
+- Set default directory for new sessions.
+- Added functionality to set the file name before saving a session.
+- Enhanced session ID generation to prevent overwriting existing session files.
 * Version 1.7.0
 - Added manual generation functionality for Ellama, including a new .gitignore
   entry to exclude ellama.texi, created ellama-manual.el for exporting an info
