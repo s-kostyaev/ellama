@@ -1,5 +1,3 @@
-* Ellama
-
 [[http://www.gnu.org/licenses/gpl-3.0.txt][file:https://img.shields.io/badge/license-GPL_3-green.svg]]
 [[https://melpa.org/#/ellama][file:https://melpa.org/packages/ellama-badge.svg]]
 [[https://stable.melpa.org/#/ellama][file:https://stable.melpa.org/packages/ellama-badge.svg]]
@@ -16,7 +14,7 @@ The name "ellama" is derived from "Emacs Large LAnguage Model
 Assistant". Previous sentence was written by Ellama itself.
 [[file:imgs/reasoning-models.gif]]
 
-** Installation
+* Installation
 
 Just ~M-x~ ~package-install~ @@html:<kbd>@@Enter@@html:</kbd>@@
 ~ellama~ @@html:<kbd>@@Enter@@html:</kbd>@@. By default it uses [[https://github.com/jmorganca/ollama][ollama]]
@@ -34,7 +32,7 @@ You can customize ellama configuration like this:
 #+BEGIN_SRC  emacs-lisp
   (use-package ellama
     :ensure t
-    :bind ("C-c e" . ellama-transient-main-menu)
+    :bind ("C-c e" . ellama)
     ;; send last message in chat buffer with C-c C-c
     :hook (org-ctrl-c-ctrl-c-final . ellama-chat-send-last-message)
     :init (setopt ellama-auto-scroll t)
@@ -50,7 +48,7 @@ More sofisticated configuration example:
 #+BEGIN_SRC  emacs-lisp
   (use-package ellama
     :ensure t
-    :bind ("C-c e" . ellama-transient-main-menu)
+    :bind ("C-c e" . ellama)
     ;; send last message in chat buffer with C-c C-c
     :hook (org-ctrl-c-ctrl-c-final . ellama-chat-send-last-message)
     :init
@@ -123,239 +121,108 @@ More sofisticated configuration example:
     (advice-add 'end-of-buffer :after #'ellama-enable-scroll))
 #+END_SRC
 
-** Commands
-
-*** ellama-chat
-
-Ask Ellama about something by entering a prompt in an interactive
-buffer and continue conversation. If called with universal argument
-(~C-u~) will start new session with llm model interactive selection.
-[[imgs/ellama-ask.gif]]
-
-*** ellama-write
-
-This command allows you to generate text using an LLM. When called
-interactively, it prompts for an instruction that is then used to
-generate text based on the context. If a region is active, the
-selected text is added to the context before generating the response.
-
-*** ellama-chat-send-last-message
-
-Send last user message extracted from current ellama chat buffer.
-
-*** ellama-ask-about
-
-Ask Ellama about a selected region or the current buffer.
-[[imgs/ellama-ask-about.gif]]
-
-*** ellama-ask-selection
-
-Send selected region or current buffer to ellama chat.
-
-*** ellama-ask-line
-
-Send current line to ellama chat.
-
-*** ellama-complete
-
-Complete text in current buffer with ellama.
-
-*** ellama-translate
-
-Ask Ellama to translate a selected region or word at the point.
-[[imgs/ellama-translate.gif]]
-
-*** ellama-translate-buffer
-
-Translate current buffer.
-
-*** ellama-define-word
-
-Find the definition of the current word using Ellama.
-[[imgs/ellama-define-word.gif]]
-
-*** ellama-summarize
-
-Summarize a selected region or the current buffer using Ellama.
-[[imgs/ellama-summarize.gif]]
-
-*** ellama-summarize-killring
-
-Summarize text from the kill ring.
-
-*** ellama-code-review
-
-Review code in a selected region or the current buffer using Ellama.
-[[imgs/ellama-code-review.gif]]
-
-*** ellama-change
-
-Change text in a selected region or the current buffer according to a
-provided change.
-
-*** ellama-make-list
-
-Create a markdown list from the active region or the current buffer using Ellama.
-
-*** ellama-make-table
-
-Create a markdown table from the active region or the current buffer using Ellama.
-
-*** ellama-summarize-webpage
-
-Summarize a webpage fetched from a URL using Ellama.
-
-*** ellama-provider-select
-
-Select ellama provider.
-
-*** ellama-code-complete
-
-Complete selected code or code in the current buffer according to a
-provided change using Ellama.
-
-*** ellama-code-add
-
-Generate and insert new code based on description. This function
-prompts the user to describe the code they want to generate. If a
-region is active, it includes the selected text as context for code
-generation.
-[[file:imgs/writing-code.gif]]
-
-*** ellama-code-edit
-
-Change selected code or code in the current buffer according to a
-provided change using Ellama.
-
-*** ellama-code-improve
-
-Change selected code or code in the current buffer according to a
-provided change using Ellama.
-
-*** ellama-generate-commit-message
-
-Generate commit message based on diff.
-
-*** ellama-proofread
-
-Proofread selected text.
-
-*** ellama-improve-wording
-
-Enhance the wording in the currently selected region or buffer using Ellama.
-
-*** ellama-improve-grammar
-Enhance the grammar and spelling in the currently selected region or
-buffer using Ellama.
-[[imgs/ellama-enhance-grammar-spelling.gif]]
-
-*** ellama-improve-conciseness
-
-Make the text of the currently selected region or buffer concise and
-simple using Ellama.
-
-*** ellama-make-format
-
-Render the currently selected text or the text in the current buffer
-as a specified format using Ellama.
-
-*** ellama-load-session
-
-Load ellama session from file.
-
-*** ellama-session-delete
-
-Delete ellama session.
-
-*** ellama-session-switch
-
-Change current active session.
-
-*** ellama-session-kill
-
-Select and kill one of active sessions.
-
-*** ellama-session-rename
-
-Rename current ellama session.
-
-*** ellama-context-add-file
-
-Add file to context.
-
-*** ellama-context-add-directory
-
-Add all files in directory to the context.
-
-*** ellama-context-add-buffer
-
-Add buffer to context.
-
-*** ellama-context-add-selection
-
-Add selected region to context.
-
-*** ellama-context-add-info-node
-
-Add info node to context.
-
-*** ellama-context-reset
-
-Clear global context.
-
-*** ellama-manage-context
-
-Manage the global context. Inside context management buffer you can
-see ellama context elements. Availible actions with key bindings:
-- *~n~*: Move to the next line.
-- *~p~*: Move to the previous line.
-- *~q~*: Quit the window.
-- *~g~*: Update context management buffer.
-- *~a~*: Open the transient context menu for adding new elements.
-- *~d~*: Remove the context element at the current point.
-- *~RET~*: Preview the context element at the current point.
-
-*** ellama-preview-context-element-at-point
-
-Preview ellama context element at point. Works inside ellama context
-management buffer.
-
-*** ellama-remove-context-element-at-point
-
-Remove ellama context element at point from global context. Works
-inside ellama context management buffer.
-
-*** ellama-chat-translation-enable
-
-Chat translation enable.
-
-*** ellama-chat-translation-disable
-
-Chat translation disable.
-
-*** ellama-solve-reasoning-problem
-
-Solve reasoning problem with [[https://arxiv.org/pdf/2406.12442][Abstraction of Thought]] technique. It
-uses a chain of multiple messages to LLM and help it to provide much
-better answers on reasoning problems. Even small LLMs like [[https://ollama.com/library/phi3][phi3-mini]]
-provides much better results on reasoning tasks using AoT.
-
-*** ellama-solve-domain-specific-problem
-
-Solve domain specific problem with simple chain. It makes LLMs act
-like a professional and adds a planning step.
-
-*** ellama-community-prompts-select-blueprint
-
-Select a prompt from the community prompt collection.
-The user is prompted to choose a role, and then a
-corresponding prompt is inserted into a blueprint buffer.
-
-*** ellama-community-prompts-update-variables
-
-Prompt user for values of variables found in current buffer and update them.
-
-** Keymap
+* Commands
+
+- ~ellama~: This is the entry point for Ellama. It displays the main transient
+    menu, allowing you to access all other Ellama commands from here.
+- ~ellama-chat~: Ask Ellama about something by entering a prompt in an
+    interactive buffer and continue conversation. If called with universal
+    argument (~C-u~) will start new session with llm model interactive
+    selection.
+- ~ellama-write~: This command allows you to generate text using an LLM. When
+    called interactively, it prompts for an instruction that is then used to
+    generate text based on the context. If a region is active, the selected text
+    is added to the context before generating the response.
+- ~ellama-chat-send-last-message~: Send last user message extracted from
+    current ellama chat buffer.
+- ~ellama-ask-about~: Ask Ellama about a selected region or the current
+    buffer.
+- ~ellama-ask-selection~: Send selected region or current buffer to ellama
+    chat.
+- ~ellama-ask-line~: Send current line to ellama chat.
+- ~ellama-complete~: Complete text in current buffer with ellama.
+- ~ellama-translate~: Ask Ellama to translate a selected region or word at the
+    point.
+- ~ellama-translate-buffer~: Translate current buffer.
+- ~ellama-define-word~: Find the definition of the current word using Ellama.
+- ~ellama-summarize~: Summarize a selected region or the current buffer using
+    Ellama.
+- ~ellama-summarize-killring~: Summarize text from the kill ring.
+- ~ellama-code-review~: Review code in a selected region or the current buffer
+    using Ellama.
+- ~ellama-change~: Change text in a selected region or the current buffer
+    according to a provided change.
+- ~ellama-make-list~: Create a markdown list from the active region or the
+    current buffer using Ellama.
+- ~ellama-make-table~: Create a markdown table from the active region or the
+    current buffer using Ellama.
+- ~ellama-summarize-webpage~: Summarize a webpage fetched from a URL using
+    Ellama.
+- ~ellama-provider-select~: Select ellama provider.
+- ~ellama-code-complete~: Complete selected code or code in the current buffer
+    according to a provided change using Ellama.
+- ~ellama-code-add~: Generate and insert new code based on description. This
+    function prompts the user to describe the code they want to generate. If a
+    region is active, it includes the selected text as context for code
+    generation.
+- ~ellama-code-edit~: Change selected code or code in the current buffer
+    according to a provided change using Ellama.
+- ~ellama-code-improve~: Change selected code or code in the current buffer
+    according to a provided change using Ellama.
+- ~ellama-generate-commit-message~: Generate commit message based on diff.
+- ~ellama-proofread~: Proofread selected text.
+- ~ellama-improve-wording~: Enhance the wording in the currently selected
+    region or buffer using Ellama.
+- ~ellama-improve-grammar~: Enhance the grammar and spelling in the currently
+    selected region or buffer using Ellama.
+- ~ellama-improve-conciseness~: Make the text of the currently selected region
+    or buffer concise and simple using Ellama.
+- ~ellama-make-format~: Render the currently selected text or the text in the
+    current buffer as a specified format using Ellama.
+- ~ellama-load-session~: Load ellama session from file.
+- ~ellama-session-delete~: Delete ellama session.
+- ~ellama-session-switch~: Change current active session.
+- ~ellama-session-kill~: Select and kill one of active sessions.
+- ~ellama-session-rename~: Rename current ellama session.
+- ~ellama-context-add-file~: Add file to context.
+- ~ellama-context-add-directory~: Add all files in directory to the context.
+- ~ellama-context-add-buffer~: Add buffer to context.
+- ~ellama-context-add-selection~: Add selected region to context.
+- ~ellama-context-add-info-node~: Add info node to context.
+- ~ellama-context-reset~: Clear global context.
+- ~ellama-manage-context~: Manage the global context. Inside context
+    management buffer you can see ellama context elements. Available actions
+    with key bindings:
+    - ~n~: Move to the next line.
+    - ~p~: Move to the previous line.
+    - ~q~: Quit the window.
+    - ~g~: Update context management buffer.
+    - ~a~: Open the transient context menu for adding new elements.
+    - ~d~: Remove the context element at the current point.
+    - ~RET~: Preview the context element at the current point.
+- ~ellama-preview-context-element-at-point~: Preview ellama context element at
+    point. Works inside ellama context management buffer.
+- ~ellama-remove-context-element-at-point~: Remove ellama context element at
+    point from global context. Works inside ellama context management buffer.
+- ~ellama-chat-translation-enable~: Chat translation enable.
+- ~ellama-chat-translation-disable~: Chat translation disable.
+- ~ellama-solve-reasoning-problem~: Solve reasoning problem with Abstraction
+    of Thought technique. It uses a chain of multiple messages to LLM and help
+    it to provide much better answers on reasoning problems. Even small LLMs
+    like phi3-mini provides much better results on reasoning tasks using AoT.
+- ~ellama-solve-domain-specific-problem~: Solve domain specific problem with
+    simple chain. It makes LLMs act like a professional and adds a planning
+    step.
+- ~ellama-community-prompts-select-blueprint~: Select a prompt from the
+    community prompt collection. The user is prompted to choose a role, and then
+    a corresponding prompt is inserted into a blueprint buffer.
+- ~ellama-community-prompts-update-variables~: Prompt user for values of
+    variables found in current buffer and update them.
+
+* Keymap
+
+It's better to use a transient menu (~M-x ellama~) instead of a keymap. It
+offers a better user experience.
 
 In any buffer where there is active ellama streaming, you can press
 ~C-g~ and it will cancel current stream.
@@ -404,7 +271,7 @@ Ellama, using the ~ellama-keymap-prefix~ prefix (not set by default):
 | "x r"  | ellama-context-reset            | Context reset                |
 | "p s"  | ellama-provider-select          | Provider select              |
 
-** Configuration
+* Configuration
 
 The following variables can be customized for the Ellama client:
 
@@ -488,15 +355,43 @@ argument generated text string.
 - ~ellama-reasoning-display-action-function~: Display action function for reasoning.
 - ~ellama-session-line-template~: Template for formatting the current session line.
 
-** Minor modes
+* Minor modes
 
-*** ellama-context-header-line-mode
+The Ellama package for Emacs offers a suite of minor modes designed to enhance
+the user experience by providing context-specific information directly within
+the editor's interface. These minor modes focus on updating both the header line
+and mode line with relevant details, making it easier to manage and navigate
+multiple sessions and buffers.
 
-*Description:*
+Key features include:
+
+- Context Header Line Modes: ~ellama-context-header-line-mode~ and its global
+  counterpart, ~ellama-context-header-line-global-mode~, update the header line
+  to display what elements are added to the global Ellama context. This is
+  particularly useful for keeping track of what information is currently in
+  context.
+- Context Mode Line Modes: Similarly, ~ellama-context-mode-line-mode~ and
+  ~ellama-context-mode-line-global-mode~ provide information about the
+  current global context directly within the mode line, ensuring that users
+  always have relevant information at a glance.
+- Session Header Line Mode: ~ellama-session-header-line-mode~ and its global
+  version display the current Ellama session ID in the header line, helping
+  users manage multiple sessions efficiently.
+- Session Mode Line Mode: ~ellama-session-mode-line-mode~ and its global
+  counterpart offer an additional way to track session IDs by displaying them
+  in the mode line.
+
+These minor modes are easily toggled on or off using specific commands,
+providing flexibility for users who may want to enable these features globally
+across all buffers or selectively within individual buffers.
+
+** ellama-context-header-line-mode
+
+Description:
 Toggle the Ellama Context header line mode. This minor mode updates the header line to display
 context-specific information.
 
-*Usage:*
+Usage:
 To enable or disable ~ellama-context-header-line-mode~, use the command:
 
     M-x ellama-context-header-line-mode
@@ -508,13 +403,13 @@ line with context-specific information.
 When disabled, it removes the evaluation of ~(:eval (ellama-context-line))~ from
 ~header-line-format~.
 
-*** ellama-context-header-line-global-mode
+** ellama-context-header-line-global-mode
 
-*Description:*
+Description:
 Globalized version of ~ellama-context-header-line-mode~. This mode ensures that
 ~ellama-context-header-line-mode~ is enabled in all buffers.
 
-*Usage:*
+Usage:
 To enable or disable ~ellama-context-header-line-global-mode~, use the command:
 
     M-x ellama-context-header-line-global-mode
@@ -522,13 +417,13 @@ To enable or disable ~ellama-context-header-line-global-mode~, use the command:
 This globalized minor mode provides a convenient way to ensure that context-specific header line
 information is always available, regardless of the buffer being edited.
 
-*** ellama-context-mode-line-mode
+** ellama-context-mode-line-mode
 
-*Description:*
+Description:
 Toggle the Ellama Context mode line mode. This minor mode updates the mode line
 to display context-specific information.
 
-*Usage:*
+Usage:
 To enable or disable ~ellama-context-mode-line-mode~, use the command:
 
     M-x ellama-context-mode-line-mode
@@ -541,13 +436,13 @@ context-specific information.
 When disabled, it removes the evaluation of ~(:eval (ellama-context-line))~ from
 ~mode-line-format~.
 
-*** ellama-context-mode-line-global-mode
+** ellama-context-mode-line-global-mode
 
-*Description:*
+Description:
 Globalized version of ~ellama-context-mode-line-mode~. This mode ensures that
 ~ellama-context-mode-line-mode~ is enabled in all buffers.
 
-*Usage:*
+Usage:
 To enable or disable ~ellama-context-mode-line-global-mode~, use the command:
 
     M-x ellama-context-mode-line-global-mode
@@ -556,14 +451,14 @@ This globalized minor mode provides a convenient way to ensure that
 context-specific mode line information is always available, regardless of the
 buffer being edited.
 
-*** Ellama Session Header Line Mode
+** Ellama Session Header Line Mode
 
 The ~ellama-session-header-line-mode~ is a minor mode that allows you to display
 the current Ellama session ID in the header line of your Emacs buffers. This
 feature helps keep track of which session you are working with, especially
 useful when managing multiple sessions.
 
-**** Enabling and Disabling
+*** Enabling and Disabling
 
 To enable this mode, use the following command:
 #+BEGIN_SRC emacs-lisp
@@ -576,19 +471,19 @@ enable or disable it globally across all buffers using:
 M-x ellama-session-header-line-global-mode
 #+END_SRC
 
-**** Customization
+*** Customization
 
 The session ID is displayed with a customizable face called ~ellama-face~. You
 can customize this face to change its appearance.
 
-*** Ellama Session Mode Line Mode
+** Ellama Session Mode Line Mode
 
 The ~ellama-session-mode-line-mode~ is a minor mode that allows you to display
 the current Ellama session ID in the mode line of your Emacs buffers. This
 feature provides an additional way to keep track of which session you are
 working with, especially useful when managing multiple sessions.
 
-**** Enabling and Disabling
+*** Enabling and Disabling
 
 To enable this mode, use the following command:
 #+BEGIN_SRC emacs-lisp
@@ -601,53 +496,53 @@ enable or disable it globally across all buffers using:
 M-x ellama-session-mode-line-global-mode
 #+END_SRC
 
-**** Customization
+*** Customization
 
 The session ID is displayed with a customizable face called ~ellama-face~. You
 can customize this face to change its appearance.
 
-** Using Blueprints
+* Using Blueprints
 
 Blueprints in Ellama refer to predefined templates or structures that facilitate
 the creation and management of chat sessions. These blueprints are designed to
 streamline the process of generating consistent and high-quality outputs by
 providing a structured framework for interactions.
 
-*** Key Components of Ellama Blueprints
+** Key Components of Ellama Blueprints
 
-1. *Act*: This is the primary identifier for a blueprint, representing the
+1. Act: This is the primary identifier for a blueprint, representing the
 action or purpose of the blueprint.
-2. *Prompt*: The content that will be used to initiate the chat session. This
+2. Prompt: The content that will be used to initiate the chat session. This
 can include instructions, context, or any other relevant information needed to
 guide the conversation.
-3. *For Developers*: A flag indicating whether the blueprint is intended for
+3. For Developers: A flag indicating whether the blueprint is intended for
 developers.
 
-*** Creating and Managing Blueprints
+** Creating and Managing Blueprints
 
 Ellama provides several functions to create, select, and manage blueprints:
 
-- *~ellama-blueprint-create~*: This function allows users to create a new
+- ~ellama-blueprint-create~: This function allows users to create a new
    blueprint from the current buffer. It prompts for a name and whether the
    blueprint is for developers, then saves the content of the current buffer as
    the prompt.
 
-- *~ellama-blueprint-new~*: This function creates a new buffer for a blueprint,
+- ~ellama-blueprint-new~: This function creates a new buffer for a blueprint,
    optionally inserting the content of the current region if active.
 
-- *~ellama-blueprint-select~*: This function allows users to select a prompt
+- ~ellama-blueprint-select~: This function allows users to select a prompt
    from the collection of blueprints. It filters prompts based on whether they
    are for developers and their source (user-defined, community, or all).
 
-*** Variable Management
+** Variable Management
 
 Blueprints can include variables that need to be filled before running the chat
 session. Ellama provides command to fill these variables:
 
-- *~ellama-blueprint-fill-variables~*: Prompts the user to enter values for
+- ~ellama-blueprint-fill-variables~: Prompts the user to enter values for
    variables found in the current buffer and fills them.
 
-*** Keymap and Mode
+** Keymap and Mode
 
 Ellama provides a local keymap ~ellama-blueprint-mode-map~ for managing
 blueprints within buffers. The mode includes key bindings for sending the buffer
@@ -665,7 +560,7 @@ When in ~ellama-blueprint-mode~, the following keybindings are available:
 - ~C-c c~: Create a blueprint from the current buffer.
 - ~C-c v~: Fill variables in the current blueprint.
 
-*** Transient Menus
+** Transient Menus
 
 Ellama includes transient menus for easy access to blueprint commands. The
 ~ellama-transient-blueprint-menu~ provides options for chatting with a selected
@@ -674,7 +569,7 @@ blueprint, creating a new blueprint, and quitting the menu.
 The ~ellama-transient-main-menu~ integrates the blueprint menu into the main
 menu, providing a comprehensive interface for all Ellama commands.
 
-*** Running Blueprints programmatically
+** Running Blueprints programmatically
 
 The ~ellama-blueprint-run~ function initiates a chat session using a specified
 blueprint. It pre-fills variables based on the provided arguments.
@@ -688,7 +583,7 @@ blueprint. It pre-fills variables based on the provided arguments.
   (global-set-key (kbd "C-c e M") #'my-chat-with-morpheus)
 #+END_SRC
 
-** Acknowledgments
+* Acknowledgments
 
 Thanks [[https://github.com/jmorganca][Jeffrey Morgan]] for excellent project [[https://github.com/jmorganca/ollama][ollama]]. This project
 cannot exist without it.
@@ -707,3 +602,466 @@ To contribute, submit a pull request or report a bug. This library is
 part of GNU ELPA; major contributions must be from someone with FSF
 papers. Alternatively, you can write a module and share it on a
 different archive like MELPA.
+
+* GNU Free Documentation License
+:PROPERTIES:
+:APPENDIX: t
+:END:
+
+#+texinfo: @include doclicense.texi
+
+#+begin_export html
+<pre>
+
+                GNU Free Documentation License
+                 Version 1.3, 3 November 2008
+
+
+ Copyright (C) 2000, 2001, 2002, 2007, 2008 Free Software Foundation, Inc.
+     <https://fsf.org/>
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+0. PREAMBLE
+
+The purpose of this License is to make a manual, textbook, or other
+functional and useful document "free" in the sense of freedom: to
+assure everyone the effective freedom to copy and redistribute it,
+with or without modifying it, either commercially or noncommercially.
+Secondarily, this License preserves for the author and publisher a way
+to get credit for their work, while not being considered responsible
+for modifications made by others.
+
+This License is a kind of "copyleft", which means that derivative
+works of the document must themselves be free in the same sense.  It
+complements the GNU General Public License, which is a copyleft
+license designed for free software.
+
+We have designed this License in order to use it for manuals for free
+software, because free software needs free documentation: a free
+program should come with manuals providing the same freedoms that the
+software does.  But this License is not limited to software manuals;
+it can be used for any textual work, regardless of subject matter or
+whether it is published as a printed book.  We recommend this License
+principally for works whose purpose is instruction or reference.
+
+
+1. APPLICABILITY AND DEFINITIONS
+
+This License applies to any manual or other work, in any medium, that
+contains a notice placed by the copyright holder saying it can be
+distributed under the terms of this License.  Such a notice grants a
+world-wide, royalty-free license, unlimited in duration, to use that
+work under the conditions stated herein.  The "Document", below,
+refers to any such manual or work.  Any member of the public is a
+licensee, and is addressed as "you".  You accept the license if you
+copy, modify or distribute the work in a way requiring permission
+under copyright law.
+
+A "Modified Version" of the Document means any work containing the
+Document or a portion of it, either copied verbatim, or with
+modifications and/or translated into another language.
+
+A "Secondary Section" is a named appendix or a front-matter section of
+the Document that deals exclusively with the relationship of the
+publishers or authors of the Document to the Document's overall
+subject (or to related matters) and contains nothing that could fall
+directly within that overall subject.  (Thus, if the Document is in
+part a textbook of mathematics, a Secondary Section may not explain
+any mathematics.)  The relationship could be a matter of historical
+connection with the subject or with related matters, or of legal,
+commercial, philosophical, ethical or political position regarding
+them.
+
+The "Invariant Sections" are certain Secondary Sections whose titles
+are designated, as being those of Invariant Sections, in the notice
+that says that the Document is released under this License.  If a
+section does not fit the above definition of Secondary then it is not
+allowed to be designated as Invariant.  The Document may contain zero
+Invariant Sections.  If the Document does not identify any Invariant
+Sections then there are none.
+
+The "Cover Texts" are certain short passages of text that are listed,
+as Front-Cover Texts or Back-Cover Texts, in the notice that says that
+the Document is released under this License.  A Front-Cover Text may
+be at most 5 words, and a Back-Cover Text may be at most 25 words.
+
+A "Transparent" copy of the Document means a machine-readable copy,
+represented in a format whose specification is available to the
+general public, that is suitable for revising the document
+straightforwardly with generic text editors or (for images composed of
+pixels) generic paint programs or (for drawings) some widely available
+drawing editor, and that is suitable for input to text formatters or
+for automatic translation to a variety of formats suitable for input
+to text formatters.  A copy made in an otherwise Transparent file
+format whose markup, or absence of markup, has been arranged to thwart
+or discourage subsequent modification by readers is not Transparent.
+An image format is not Transparent if used for any substantial amount
+of text.  A copy that is not "Transparent" is called "Opaque".
+
+Examples of suitable formats for Transparent copies include plain
+ASCII without markup, Texinfo input format, LaTeX input format, SGML
+or XML using a publicly available DTD, and standard-conforming simple
+HTML, PostScript or PDF designed for human modification.  Examples of
+transparent image formats include PNG, XCF and JPG.  Opaque formats
+include proprietary formats that can be read and edited only by
+proprietary word processors, SGML or XML for which the DTD and/or
+processing tools are not generally available, and the
+machine-generated HTML, PostScript or PDF produced by some word
+processors for output purposes only.
+
+The "Title Page" means, for a printed book, the title page itself,
+plus such following pages as are needed to hold, legibly, the material
+this License requires to appear in the title page.  For works in
+formats which do not have any title page as such, "Title Page" means
+the text near the most prominent appearance of the work's title,
+preceding the beginning of the body of the text.
+
+The "publisher" means any person or entity that distributes copies of
+the Document to the public.
+
+A section "Entitled XYZ" means a named subunit of the Document whose
+title either is precisely XYZ or contains XYZ in parentheses following
+text that translates XYZ in another language.  (Here XYZ stands for a
+specific section name mentioned below, such as "Acknowledgements",
+"Dedications", "Endorsements", or "History".)  To "Preserve the Title"
+of such a section when you modify the Document means that it remains a
+section "Entitled XYZ" according to this definition.
+
+The Document may include Warranty Disclaimers next to the notice which
+states that this License applies to the Document.  These Warranty
+Disclaimers are considered to be included by reference in this
+License, but only as regards disclaiming warranties: any other
+implication that these Warranty Disclaimers may have is void and has
+no effect on the meaning of this License.
+
+2. VERBATIM COPYING
+
+You may copy and distribute the Document in any medium, either
+commercially or noncommercially, provided that this License, the
+copyright notices, and the license notice saying this License applies
+to the Document are reproduced in all copies, and that you add no
+other conditions whatsoever to those of this License.  You may not use
+technical measures to obstruct or control the reading or further
+copying of the copies you make or distribute.  However, you may accept
+compensation in exchange for copies.  If you distribute a large enough
+number of copies you must also follow the conditions in section 3.
+
+You may also lend copies, under the same conditions stated above, and
+you may publicly display copies.
+
+
+3. COPYING IN QUANTITY
+
+If you publish printed copies (or copies in media that commonly have
+printed covers) of the Document, numbering more than 100, and the
+Document's license notice requires Cover Texts, you must enclose the
+copies in covers that carry, clearly and legibly, all these Cover
+Texts: Front-Cover Texts on the front cover, and Back-Cover Texts on
+the back cover.  Both covers must also clearly and legibly identify
+you as the publisher of these copies.  The front cover must present
+the full title with all words of the title equally prominent and
+visible.  You may add other material on the covers in addition.
+Copying with changes limited to the covers, as long as they preserve
+the title of the Document and satisfy these conditions, can be treated
+as verbatim copying in other respects.
+
+If the required texts for either cover are too voluminous to fit
+legibly, you should put the first ones listed (as many as fit
+reasonably) on the actual cover, and continue the rest onto adjacent
+pages.
+
+If you publish or distribute Opaque copies of the Document numbering
+more than 100, you must either include a machine-readable Transparent
+copy along with each Opaque copy, or state in or with each Opaque copy
+a computer-network location from which the general network-using
+public has access to download using public-standard network protocols
+a complete Transparent copy of the Document, free of added material.
+If you use the latter option, you must take reasonably prudent steps,
+when you begin distribution of Opaque copies in quantity, to ensure
+that this Transparent copy will remain thus accessible at the stated
+location until at least one year after the last time you distribute an
+Opaque copy (directly or through your agents or retailers) of that
+edition to the public.
+
+It is requested, but not required, that you contact the authors of the
+Document well before redistributing any large number of copies, to
+give them a chance to provide you with an updated version of the
+Document.
+
+
+4. MODIFICATIONS
+
+You may copy and distribute a Modified Version of the Document under
+the conditions of sections 2 and 3 above, provided that you release
+the Modified Version under precisely this License, with the Modified
+Version filling the role of the Document, thus licensing distribution
+and modification of the Modified Version to whoever possesses a copy
+of it.  In addition, you must do these things in the Modified Version:
+
+A. Use in the Title Page (and on the covers, if any) a title distinct
+   from that of the Document, and from those of previous versions
+   (which should, if there were any, be listed in the History section
+   of the Document).  You may use the same title as a previous version
+   if the original publisher of that version gives permission.
+B. List on the Title Page, as authors, one or more persons or entities
+   responsible for authorship of the modifications in the Modified
+   Version, together with at least five of the principal authors of the
+   Document (all of its principal authors, if it has fewer than five),
+   unless they release you from this requirement.
+C. State on the Title page the name of the publisher of the
+   Modified Version, as the publisher.
+D. Preserve all the copyright notices of the Document.
+E. Add an appropriate copyright notice for your modifications
+   adjacent to the other copyright notices.
+F. Include, immediately after the copyright notices, a license notice
+   giving the public permission to use the Modified Version under the
+   terms of this License, in the form shown in the Addendum below.
+G. Preserve in that license notice the full lists of Invariant Sections
+   and required Cover Texts given in the Document's license notice.
+H. Include an unaltered copy of this License.
+I. Preserve the section Entitled "History", Preserve its Title, and add
+   to it an item stating at least the title, year, new authors, and
+   publisher of the Modified Version as given on the Title Page.  If
+   there is no section Entitled "History" in the Document, create one
+   stating the title, year, authors, and publisher of the Document as
+   given on its Title Page, then add an item describing the Modified
+   Version as stated in the previous sentence.
+J. Preserve the network location, if any, given in the Document for
+   public access to a Transparent copy of the Document, and likewise
+   the network locations given in the Document for previous versions
+   it was based on.  These may be placed in the "History" section.
+   You may omit a network location for a work that was published at
+   least four years before the Document itself, or if the original
+   publisher of the version it refers to gives permission.
+K. For any section Entitled "Acknowledgements" or "Dedications",
+   Preserve the Title of the section, and preserve in the section all
+   the substance and tone of each of the contributor acknowledgements
+   and/or dedications given therein.
+L. Preserve all the Invariant Sections of the Document,
+   unaltered in their text and in their titles.  Section numbers
+   or the equivalent are not considered part of the section titles.
+M. Delete any section Entitled "Endorsements".  Such a section
+   may not be included in the Modified Version.
+N. Do not retitle any existing section to be Entitled "Endorsements"
+   or to conflict in title with any Invariant Section.
+O. Preserve any Warranty Disclaimers.
+
+If the Modified Version includes new front-matter sections or
+appendices that qualify as Secondary Sections and contain no material
+copied from the Document, you may at your option designate some or all
+of these sections as invariant.  To do this, add their titles to the
+list of Invariant Sections in the Modified Version's license notice.
+These titles must be distinct from any other section titles.
+
+You may add a section Entitled "Endorsements", provided it contains
+nothing but endorsements of your Modified Version by various
+parties--for example, statements of peer review or that the text has
+been approved by an organization as the authoritative definition of a
+standard.
+
+You may add a passage of up to five words as a Front-Cover Text, and a
+passage of up to 25 words as a Back-Cover Text, to the end of the list
+of Cover Texts in the Modified Version.  Only one passage of
+Front-Cover Text and one of Back-Cover Text may be added by (or
+through arrangements made by) any one entity.  If the Document already
+includes a cover text for the same cover, previously added by you or
+by arrangement made by the same entity you are acting on behalf of,
+you may not add another; but you may replace the old one, on explicit
+permission from the previous publisher that added the old one.
+
+The author(s) and publisher(s) of the Document do not by this License
+give permission to use their names for publicity for or to assert or
+imply endorsement of any Modified Version.
+
+
+5. COMBINING DOCUMENTS
+
+You may combine the Document with other documents released under this
+License, under the terms defined in section 4 above for modified
+versions, provided that you include in the combination all of the
+Invariant Sections of all of the original documents, unmodified, and
+list them all as Invariant Sections of your combined work in its
+license notice, and that you preserve all their Warranty Disclaimers.
+
+The combined work need only contain one copy of this License, and
+multiple identical Invariant Sections may be replaced with a single
+copy.  If there are multiple Invariant Sections with the same name but
+different contents, make the title of each such section unique by
+adding at the end of it, in parentheses, the name of the original
+author or publisher of that section if known, or else a unique number.
+Make the same adjustment to the section titles in the list of
+Invariant Sections in the license notice of the combined work.
+
+In the combination, you must combine any sections Entitled "History"
+in the various original documents, forming one section Entitled
+"History"; likewise combine any sections Entitled "Acknowledgements",
+and any sections Entitled "Dedications".  You must delete all sections
+Entitled "Endorsements".
+
+
+6. COLLECTIONS OF DOCUMENTS
+
+You may make a collection consisting of the Document and other
+documents released under this License, and replace the individual
+copies of this License in the various documents with a single copy
+that is included in the collection, provided that you follow the rules
+of this License for verbatim copying of each of the documents in all
+other respects.
+
+You may extract a single document from such a collection, and
+distribute it individually under this License, provided you insert a
+copy of this License into the extracted document, and follow this
+License in all other respects regarding verbatim copying of that
+document.
+
+
+7. AGGREGATION WITH INDEPENDENT WORKS
+
+A compilation of the Document or its derivatives with other separate
+and independent documents or works, in or on a volume of a storage or
+distribution medium, is called an "aggregate" if the copyright
+resulting from the compilation is not used to limit the legal rights
+of the compilation's users beyond what the individual works permit.
+When the Document is included in an aggregate, this License does not
+apply to the other works in the aggregate which are not themselves
+derivative works of the Document.
+
+If the Cover Text requirement of section 3 is applicable to these
+copies of the Document, then if the Document is less than one half of
+the entire aggregate, the Document's Cover Texts may be placed on
+covers that bracket the Document within the aggregate, or the
+electronic equivalent of covers if the Document is in electronic form.
+Otherwise they must appear on printed covers that bracket the whole
+aggregate.
+
+
+8. TRANSLATION
+
+Translation is considered a kind of modification, so you may
+distribute translations of the Document under the terms of section 4.
+Replacing Invariant Sections with translations requires special
+permission from their copyright holders, but you may include
+translations of some or all Invariant Sections in addition to the
+original versions of these Invariant Sections.  You may include a
+translation of this License, and all the license notices in the
+Document, and any Warranty Disclaimers, provided that you also include
+the original English version of this License and the original versions
+of those notices and disclaimers.  In case of a disagreement between
+the translation and the original version of this License or a notice
+or disclaimer, the original version will prevail.
+
+If a section in the Document is Entitled "Acknowledgements",
+"Dedications", or "History", the requirement (section 4) to Preserve
+its Title (section 1) will typically require changing the actual
+title.
+
+
+9. TERMINATION
+
+You may not copy, modify, sublicense, or distribute the Document
+except as expressly provided under this License.  Any attempt
+otherwise to copy, modify, sublicense, or distribute it is void, and
+will automatically terminate your rights under this License.
+
+However, if you cease all violation of this License, then your license
+from a particular copyright holder is reinstated (a) provisionally,
+unless and until the copyright holder explicitly and finally
+terminates your license, and (b) permanently, if the copyright holder
+fails to notify you of the violation by some reasonable means prior to
+60 days after the cessation.
+
+Moreover, your license from a particular copyright holder is
+reinstated permanently if the copyright holder notifies you of the
+violation by some reasonable means, this is the first time you have
+received notice of violation of this License (for any work) from that
+copyright holder, and you cure the violation prior to 30 days after
+your receipt of the notice.
+
+Termination of your rights under this section does not terminate the
+licenses of parties who have received copies or rights from you under
+this License.  If your rights have been terminated and not permanently
+reinstated, receipt of a copy of some or all of the same material does
+not give you any rights to use it.
+
+
+10. FUTURE REVISIONS OF THIS LICENSE
+
+The Free Software Foundation may publish new, revised versions of the
+GNU Free Documentation License from time to time.  Such new versions
+will be similar in spirit to the present version, but may differ in
+detail to address new problems or concerns.  See
+https://www.gnu.org/licenses/.
+
+Each version of the License is given a distinguishing version number.
+If the Document specifies that a particular numbered version of this
+License "or any later version" applies to it, you have the option of
+following the terms and conditions either of that specified version or
+of any later version that has been published (not as a draft) by the
+Free Software Foundation.  If the Document does not specify a version
+number of this License, you may choose any version ever published (not
+as a draft) by the Free Software Foundation.  If the Document
+specifies that a proxy can decide which future versions of this
+License can be used, that proxy's public statement of acceptance of a
+version permanently authorizes you to choose that version for the
+Document.
+
+11. RELICENSING
+
+"Massive Multiauthor Collaboration Site" (or "MMC Site") means any
+World Wide Web server that publishes copyrightable works and also
+provides prominent facilities for anybody to edit those works.  A
+public wiki that anybody can edit is an example of such a server.  A
+"Massive Multiauthor Collaboration" (or "MMC") contained in the site
+means any set of copyrightable works thus published on the MMC site.
+
+"CC-BY-SA" means the Creative Commons Attribution-Share Alike 3.0
+license published by Creative Commons Corporation, a not-for-profit
+corporation with a principal place of business in San Francisco,
+California, as well as future copyleft versions of that license
+published by that same organization.
+
+"Incorporate" means to publish or republish a Document, in whole or in
+part, as part of another Document.
+
+An MMC is "eligible for relicensing" if it is licensed under this
+License, and if all works that were first published under this License
+somewhere other than this MMC, and subsequently incorporated in whole or
+in part into the MMC, (1) had no cover texts or invariant sections, and
+(2) were thus incorporated prior to November 1, 2008.
+
+The operator of an MMC Site may republish an MMC contained in the site
+under CC-BY-SA on the same site at any time before August 1, 2009,
+provided the MMC is eligible for relicensing.
+
+
+ADDENDUM: How to use this License for your documents
+
+To use this License in a document you have written, include a copy of
+the License in the document and put the following copyright and
+license notices just after the title page:
+
+    Copyright (c)  YEAR  YOUR NAME.
+    Permission is granted to copy, distribute and/or modify this document
+    under the terms of the GNU Free Documentation License, Version 1.3
+    or any later version published by the Free Software Foundation;
+    with no Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
+    A copy of the license is included in the section entitled "GNU
+    Free Documentation License".
+
+If you have Invariant Sections, Front-Cover Texts and Back-Cover Texts,
+replace the "with...Texts." line with this:
+
+    with the Invariant Sections being LIST THEIR TITLES, with the
+    Front-Cover Texts being LIST, and with the Back-Cover Texts being LIST.
+
+If you have Invariant Sections without Cover Texts, or some other
+combination of the three, merge those two alternatives to suit the
+situation.
+
+If your document contains nontrivial examples of program code, we
+recommend releasing these examples in parallel under your choice of
+free software license, such as the GNU General Public License,
+to permit their use in free software.
+</pre>
+#+end_export

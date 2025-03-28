@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1"))
-;; Version: 1.6.2
+;; Version: 1.7.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -1206,14 +1206,10 @@ FILTER is a function for text transformation."
   (declare-function org-fill-paragraph "org")
   (with-current-buffer
       buffer
-    (let* ((beg-marker (make-marker))
-	   (end-marker (make-marker))
+    (let* ((end-marker (copy-marker (or point (point)) t))
+           (beg-marker (copy-marker end-marker nil))
 	   (previous-filtered-text "")
 	   (safe-common-prefix ""))
-      (set-marker end-marker (or point (point)))
-      (set-marker beg-marker end-marker)
-      (set-marker-insertion-type end-marker t)
-      (set-marker-insertion-type beg-marker nil)
       (lambda
 	(text)
 	(with-current-buffer buffer
