@@ -244,13 +244,30 @@ Otherwise, prompt the user to enter a system message."
     ("f" "Make Format" ellama-make-format)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
+(transient-define-suffix ellama-transient-ask-line (&optional args)
+  "Ask line.  ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-ask-line (transient-arg-value "--new-session" args)))
+
+(transient-define-suffix ellama-transient-ask-selection (&optional args)
+  "Ask selection.  ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-ask-selection (transient-arg-value "--new-session" args)))
+
+(transient-define-suffix ellama-transient-ask-about (&optional args)
+  "Ask about current buffer or region.  ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-ask-about (transient-arg-value "--new-session" args)))
+
 ;;;###autoload (autoload 'ellama-transient-ask-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-ask-menu ()
   "Ask Commands."
   [["Ask Commands"
-    ("l" "Ask Line" ellama-ask-line)
-    ("s" "Ask Selection" ellama-ask-selection)
-    ("a" "Ask About" ellama-ask-about)]
+    ("l" "Ask Line" ellama-transient-ask-line)
+    ("s" "Ask Selection" ellama-transient-ask-selection)
+    ("a" "Ask About" ellama-transient-ask-about)]
+   ["Session Options"
+    ("-n" "Create New Session" "--new-session")]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 ;;;###autoload (autoload 'ellama-transient-translate-menu "ellama-transient" nil t)
