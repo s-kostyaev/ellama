@@ -1782,8 +1782,10 @@ the full response text when the request completes (with BUFFER current)."
 			     #'ellama--translate-markdown-to-org-filter))))
 
 ;;;###autoload
-(defun ellama-ask-about ()
-  "Ask ellama about selected region or current buffer."
+(defun ellama-ask-about (&optional create-session)
+  "Ask ellama about selected region or current buffer.
+
+If CREATE-SESSION set, creates new session even if there is an active session."
   (interactive)
   (declare-function ellama-context-add-selection "ellama-context")
   (declare-function ellama-context-add-buffer "ellama-context")
@@ -1791,16 +1793,18 @@ the full response text when the request completes (with BUFFER current)."
     (if (region-active-p)
 	(ellama-context-add-selection)
       (ellama-context-add-buffer (buffer-name (current-buffer))))
-    (ellama-chat input)))
+    (ellama-chat input create-session)))
 
 ;;;###autoload
-(defun ellama-ask-selection ()
-  "Send selected region or current buffer to ellama chat."
+(defun ellama-ask-selection (&optional create-session)
+  "Send selected region or current buffer to ellama chat.
+
+If CREATE-SESSION set, creates new session even if there is an active session."
   (interactive)
   (let ((text (if (region-active-p)
 		  (buffer-substring-no-properties (region-beginning) (region-end))
 		(buffer-substring-no-properties (point-min) (point-max)))))
-    (ellama-chat text)))
+    (ellama-chat text create-session)))
 
 (defcustom ellama-complete-prompt-template "You're providing text completion. Complete the text. Do not aknowledge, reply with completion only."
   "System prompt template for `ellama-complete'."
@@ -1898,11 +1902,13 @@ the full response text when the request completes (with BUFFER current)."
        :provider ellama-coding-provider))))
 
 ;;;###autoload
-(defun ellama-ask-line ()
-  "Send current line to ellama chat."
+(defun ellama-ask-line (&optional create-session)
+  "Send current line to ellama chat.
+
+If CREATE-SESSION set, creates new session even if there is an active session."
   (interactive)
   (let ((text (thing-at-point 'line)))
-    (ellama-chat text)))
+    (ellama-chat text create-session)))
 
 (defun ellama-instant (prompt &rest args)
   "Prompt ellama for PROMPT to reply instantly.
@@ -2006,13 +2012,15 @@ ARGS contains keys for fine control.
 				    (ellama-get-first-ollama-chat-model))))))
 
 ;;;###autoload
-(defun ellama-code-review ()
-  "Review code in selected region or current buffer."
+(defun ellama-code-review (&optional create-session)
+  "Review code in selected region or current buffer.
+
+If CREATE-SESSION set, creates new session even if there is an active session."
   (interactive)
   (if (region-active-p)
       (ellama-context-add-selection)
     (ellama-context-add-buffer (current-buffer)))
-  (ellama-chat ellama-code-review-prompt-template nil :provider ellama-coding-provider))
+  (ellama-chat ellama-code-review-prompt-template create-session :provider ellama-coding-provider))
 
 ;;;###autoload
 (defun ellama-write (instruction)
