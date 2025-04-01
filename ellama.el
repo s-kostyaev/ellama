@@ -1675,6 +1675,8 @@ ARGS contains keys for fine control.
 
 :system STR -- send STR to model as system message.
 
+:ephemeral BOOL -- create an ephemeral session if set.
+
 :on-done ON-DONE -- ON-DONE a function that's called with
 the full response text when the request completes (with BUFFER current)."
   (interactive "sAsk ellama: ")
@@ -1695,6 +1697,7 @@ the full response text when the request completes (with BUFFER current)."
 		     (or (plist-get args :provider)
 			 ellama-provider
 			 (ellama-get-first-ollama-chat-model))))
+	 (ephemeral (plist-get args :ephemeral))
 	 (session (or (plist-get args :session)
 		      (if (or create-session
 			      current-prefix-arg
@@ -1709,7 +1712,7 @@ the full response text when the request completes (with BUFFER current)."
 					   (ellama-session-provider ellama--current-session)))))
 			      (and (not ellama--current-session)
 				   (not ellama--current-session-id)))
-			  (ellama-new-session provider prompt)
+			  (ellama-new-session provider prompt ephemeral)
 			(or ellama--current-session
 			    (with-current-buffer (ellama-get-session-buffer
 						  (or (plist-get args :session-id)
@@ -1783,29 +1786,39 @@ the full response text when the request completes (with BUFFER current)."
 			     #'ellama--translate-markdown-to-org-filter))))
 
 ;;;###autoload
-(defun ellama-ask-about (&optional create-session)
+(defun ellama-ask-about (&optional create-session &rest args)
   "Ask ellama about selected region or current buffer.
 
-If CREATE-SESSION set, creates new session even if there is an active session."
+If CREATE-SESSION set, creates new session even if there is an active session.
+
+ARGS contains keys for fine control.
+
+:ephemeral BOOL -- create an ephemeral session if set."
   (interactive)
   (declare-function ellama-context-add-selection "ellama-context")
   (declare-function ellama-context-add-buffer "ellama-context")
-  (let ((input (read-string "Ask ellama about this text: ")))
+  (let ((input (read-string "Ask ellama about this text: "))
+	(ephemeral (plist-get args :ephemeral)))
     (if (region-active-p)
 	(ellama-context-add-selection)
       (ellama-context-add-buffer (buffer-name (current-buffer))))
-    (ellama-chat input create-session)))
+    (ellama-chat input create-session :ephemeral ephemeral)))
 
 ;;;###autoload
-(defun ellama-ask-selection (&optional create-session)
+(defun ellama-ask-selection (&optional create-session &rest args)
   "Send selected region or current buffer to ellama chat.
 
-If CREATE-SESSION set, creates new session even if there is an active session."
+If CREATE-SESSION set, creates new session even if there is an active session.
+
+ARGS contains keys for fine control.
+
+:ephemeral BOOL -- create an ephemeral session if set."
   (interactive)
   (let ((text (if (region-active-p)
 		  (buffer-substring-no-properties (region-beginning) (region-end))
-		(buffer-substring-no-properties (point-min) (point-max)))))
-    (ellama-chat text create-session)))
+		(buffer-substring-no-properties (point-min) (point-max))))
+	(ephemeral (plist-get args :ephemeral)))
+    (ellama-chat text create-session :ephemeral ephemeral)))
 
 (defcustom ellama-complete-prompt-template "You're providing text completion. Complete the text. Do not aknowledge, reply with completion only."
   "System prompt template for `ellama-complete'."
@@ -1903,13 +1916,18 @@ If CREATE-SESSION set, creates new session even if there is an active session."
        :provider ellama-coding-provider))))
 
 ;;;###autoload
-(defun ellama-ask-line (&optional create-session)
+(defun ellama-ask-line (&optional create-session &rest args)
   "Send current line to ellama chat.
 
-If CREATE-SESSION set, creates new session even if there is an active session."
+If CREATE-SESSION set, creates new session even if there is an active session.
+
+ARGS contains keys for fine control.
+
+:ephemeral BOOL -- create an ephemeral session if set."
   (interactive)
-  (let ((text (thing-at-point 'line)))
-    (ellama-chat text create-session)))
+  (let* ((text (thing-at-point 'line))
+	 (ephemeral (plist-get args :ephemeral)))
+    (ellama-chat text create-session :ephemeral ephemeral)))
 
 (defun ellama-instant (prompt &rest args)
   "Prompt ellama for PROMPT to reply instantly.
@@ -2013,15 +2031,23 @@ ARGS contains keys for fine control.
 				    (ellama-get-first-ollama-chat-model))))))
 
 ;;;###autoload
-(defun ellama-code-review (&optional create-session)
+(defun ellama-code-review (&optional create-session &rest args)
   "Review code in selected region or current buffer.
 
-If CREATE-SESSION set, creates new session even if there is an active session."
+If CREATE-SESSION set, creates new session even if there is an active session.
+ARGS contains keys for fine control.
+
+:ephemeral BOOL -- create an ephemeral session if set."
   (interactive)
-  (if (region-active-p)
-      (ellama-context-add-selection)
-    (ellama-context-add-buffer (current-buffer)))
-  (ellama-chat ellama-code-review-prompt-template create-session :provider ellama-coding-provider))
+  (let ((ephemeral (plist-get args :ephemeral)))
+    (if (region-active-p)
+        (ellama-context-add-selection)
+      (ellama-context-add-buffer (current-buffer)))
+    (ellama-chat
+     ellama-code-review-prompt-template
+     create-session
+     :provider ellama-coding-provider
+     :ephemeral ephemeral)))
 
 ;;;###autoload
 (defun ellama-write (instruction)
