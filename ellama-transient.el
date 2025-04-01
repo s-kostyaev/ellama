@@ -31,6 +31,7 @@
 ;;; Code:
 (require 'ellama)
 (require 'transient)
+(require 'ellama-context)
 
 (defcustom ellama-transient-system-show-limit 45
   "Maximum length of system message to show."
@@ -302,6 +303,45 @@ Otherwise, prompt the user to enter a system message."
 (declare-function ellama-context-update-buffer "ellama-context")
 (defvar ellama-context-buffer)
 
+(transient-define-suffix ellama-transient-add-buffer (&optional args)
+  "Add current buffer to context.
+ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-context-add-buffer
+   (read-buffer "Buffer: ")
+   (transient-arg-value "--ephemeral" args)))
+
+(transient-define-suffix ellama-transient-add-directory (&optional args)
+  "Add directory to context.
+ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (let ((directory (read-directory-name "Directory: ")))
+    (ellama-context-add-directory
+     directory
+     (transient-arg-value "--ephemeral" args))))
+
+(transient-define-suffix ellama-transient-add-file (&optional args)
+  "Add file to context.
+ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-context-add-file (transient-arg-value "--ephemeral" args)))
+
+(transient-define-suffix ellama-transient-add-selection (&optional args)
+  "Add current selection to context.
+ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (when (region-active-p)
+    (ellama-context-add-selection (transient-arg-value "--ephemeral" args))))
+
+(transient-define-suffix ellama-transient-add-info-node (&optional args)
+  "Add Info Node to context.
+ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (let ((info-node (Info-copy-current-node-name)))
+    (ellama-context-add-info-node
+     info-node
+     (transient-arg-value "--ephemeral" args))))
+
 ;;;###autoload (autoload 'ellama-transient-context-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-context-menu ()
   "Context Commands."
@@ -312,11 +352,13 @@ Otherwise, prompt the user to enter a system message."
 %s" (with-current-buffer ellama-context-buffer
       (buffer-substring (point-min) (point-max)))))
    ["Add"
-    ("b" "Add Buffer" ellama-context-add-buffer)
-    ("d" "Add Directory" ellama-context-add-directory)
-    ("f" "Add File" ellama-context-add-file)
-    ("s" "Add Selection" ellama-context-add-selection)
-    ("i" "Add Info Node" ellama-context-add-info-node)]
+    ("b" "Add Buffer" ellama-transient-add-buffer)
+    ("d" "Add Directory" ellama-transient-add-directory)
+    ("f" "Add File" ellama-transient-add-file)
+    ("s" "Add Selection" ellama-transient-add-selection)
+    ("i" "Add Info Node" ellama-transient-add-info-node)]
+   ["Options"
+    ("-e" "Use Ephemeral Context" "--ephemeral")]
    ["Manage"
     ("m" "Manage context" ellama-context-manage)
     ("D" "Delete element" ellama-context-element-remove-by-name)
