@@ -345,7 +345,9 @@ Otherwise, prompt the user to enter a system message."
 (transient-define-suffix ellama-transient-chat (&optional args)
   "Chat with Ellama.  ARGS used for transient arguments."
   (interactive (list (transient-args transient-current-command)))
-  (ellama-chat (transient-arg-value "--new-session" args)))
+  (ellama-chat
+   (read-string "Ask Ellama: ")
+   (transient-arg-value "--new-session" args)))
 
 ;;;###autoload (autoload 'ellama-transient-main-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-main-menu ()
