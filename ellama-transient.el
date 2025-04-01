@@ -209,6 +209,9 @@ Otherwise, prompt the user to enter a system message."
     ("i" "Improve" ellama-code-improve)
     ("r" "Review" ellama-transient-code-review)
     ("m" "Generate Commit Message" ellama-generate-commit-message)]
+   ["Session Options"
+    :description (lambda () (ellama-session-line))
+    ("-n" "Create New Session" "--new-session")]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 ;;;###autoload (autoload 'ellama-transient-summarize-menu "ellama-transient" nil t)
@@ -272,6 +275,7 @@ Otherwise, prompt the user to enter a system message."
     ("s" "Ask Selection" ellama-transient-ask-selection)
     ("a" "Ask About" ellama-transient-ask-about)]
    ["Session Options"
+    :description (lambda () (ellama-session-line))
     ("-n" "Create New Session" "--new-session")]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
@@ -350,6 +354,9 @@ Otherwise, prompt the user to enter a system message."
    [("c" "Chat" ellama-transient-chat)
     ("b" "Chat with blueprint" ellama-blueprint-select)
     ("B" "Blueprint Commands" ellama-transient-blueprint-menu)]
+   ["Session Options"
+    :description (lambda () (ellama-session-line))
+    ("-n" "Create New Session" "--new-session")]
    [("a" "Ask Commands" ellama-transient-ask-menu)
     ("C" "Code Commands" ellama-transient-code-menu)]]
   ["Text"
