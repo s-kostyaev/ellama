@@ -197,7 +197,9 @@ Otherwise, prompt the user to enter a system message."
 (transient-define-suffix ellama-transient-code-review (&optional args)
   "Review the code.  ARGS used for transient arguments."
   (interactive (list (transient-args transient-current-command)))
-  (ellama-code-review (transient-arg-value "--new-session" args)))
+  (ellama-code-review
+   (transient-arg-value "--new-session" args)
+   :ephemeral (transient-arg-value "--ephemeral" args)))
 
 ;;;###autoload (autoload 'ellama-transient-code-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-code-menu ()
@@ -211,7 +213,8 @@ Otherwise, prompt the user to enter a system message."
     ("m" "Generate Commit Message" ellama-generate-commit-message)]
    ["Session Options"
     :description (lambda () (ellama-session-line))
-    ("-n" "Create New Session" "--new-session")]
+    ("-n" "Create New Session" "--new-session")
+    ("-e" "Create Ephemeral Session" "--ephemeral")]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 ;;;###autoload (autoload 'ellama-transient-summarize-menu "ellama-transient" nil t)
@@ -255,17 +258,23 @@ Otherwise, prompt the user to enter a system message."
 (transient-define-suffix ellama-transient-ask-line (&optional args)
   "Ask line.  ARGS used for transient arguments."
   (interactive (list (transient-args transient-current-command)))
-  (ellama-ask-line (transient-arg-value "--new-session" args)))
+  (ellama-ask-line
+   (transient-arg-value "--new-session" args)
+   :ephemeral (transient-arg-value "--ephemeral" args)))
 
 (transient-define-suffix ellama-transient-ask-selection (&optional args)
   "Ask selection.  ARGS used for transient arguments."
   (interactive (list (transient-args transient-current-command)))
-  (ellama-ask-selection (transient-arg-value "--new-session" args)))
+  (ellama-ask-selection
+   (transient-arg-value "--new-session" args)
+   :ephemeral (transient-arg-value "--ephemeral" args)))
 
 (transient-define-suffix ellama-transient-ask-about (&optional args)
   "Ask about current buffer or region.  ARGS used for transient arguments."
   (interactive (list (transient-args transient-current-command)))
-  (ellama-ask-about (transient-arg-value "--new-session" args)))
+  (ellama-ask-about
+   (transient-arg-value "--new-session" args)
+   :ephemeral (transient-arg-value "--ephemeral" args)))
 
 ;;;###autoload (autoload 'ellama-transient-ask-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-ask-menu ()
@@ -276,7 +285,8 @@ Otherwise, prompt the user to enter a system message."
     ("a" "Ask About" ellama-transient-ask-about)]
    ["Session Options"
     :description (lambda () (ellama-session-line))
-    ("-n" "Create New Session" "--new-session")]
+    ("-n" "Create New Session" "--new-session")
+    ("-e" "Create Ephemeral Session" "--ephemeral")]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 ;;;###autoload (autoload 'ellama-transient-translate-menu "ellama-transient" nil t)
@@ -347,7 +357,8 @@ Otherwise, prompt the user to enter a system message."
   (interactive (list (transient-args transient-current-command)))
   (ellama-chat
    (read-string "Ask Ellama: ")
-   (transient-arg-value "--new-session" args)))
+   (transient-arg-value "--new-session" args)
+   :ephemeral (transient-arg-value "--ephemeral" args)))
 
 ;;;###autoload (autoload 'ellama-transient-main-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-main-menu ()
@@ -358,7 +369,8 @@ Otherwise, prompt the user to enter a system message."
     ("B" "Blueprint Commands" ellama-transient-blueprint-menu)]
    ["Session Options"
     :description (lambda () (ellama-session-line))
-    ("-n" "Create New Session" "--new-session")]
+    ("-n" "Create New Session" "--new-session")
+    ("-e" "Create Ephemeral Session" "--ephemeral")]
    [("a" "Ask Commands" ellama-transient-ask-menu)
     ("C" "Code Commands" ellama-transient-code-menu)]]
   ["Text"

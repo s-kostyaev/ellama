@@ -1587,7 +1587,8 @@ Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
   (save-excursion
     (goto-char (point-max))
     (insert "\n\n" (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n")
-    (when ellama-session-auto-save
+    (when (and ellama-session-auto-save
+	       buffer-file-name)
       (save-buffer)))
   (ellama--scroll)
   (when ellama-chat-done-callback
