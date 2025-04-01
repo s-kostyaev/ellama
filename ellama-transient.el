@@ -194,6 +194,11 @@ Otherwise, prompt the user to enter a system message."
    :default-chat-non-standard-params
    `[("num_ctx" . ,ellama-transient-context-length)]))
 
+(transient-define-suffix ellama-transient-code-review (&optional args)
+  "Review the code.  ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-code-review (transient-arg-value "--new-session" args)))
+
 ;;;###autoload (autoload 'ellama-transient-code-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-code-menu ()
   "Code Commands."
@@ -202,7 +207,7 @@ Otherwise, prompt the user to enter a system message."
     ("a" "Add" ellama-code-add)
     ("e" "Edit" ellama-code-edit)
     ("i" "Improve" ellama-code-improve)
-    ("r" "Review" ellama-code-review)
+    ("r" "Review" ellama-transient-code-review)
     ("m" "Generate Commit Message" ellama-generate-commit-message)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
@@ -333,11 +338,16 @@ Otherwise, prompt the user to enter a system message."
     ("k" "Kill" ellama-kill-current-buffer)
     ("q" "Quit" transient-quit-one)]])
 
+(transient-define-suffix ellama-transient-chat (&optional args)
+  "Chat with Ellama.  ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-chat (transient-arg-value "--new-session" args)))
+
 ;;;###autoload (autoload 'ellama-transient-main-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-main-menu ()
   "Main Menu."
   ["Main"
-   [("c" "Chat" ellama-chat)
+   [("c" "Chat" ellama-transient-chat)
     ("b" "Chat with blueprint" ellama-blueprint-select)
     ("B" "Blueprint Commands" ellama-transient-blueprint-menu)]
    [("a" "Ask Commands" ellama-transient-ask-menu)
