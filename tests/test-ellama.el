@@ -29,6 +29,7 @@
 (require 'ellama-context)
 (require 'ellama-transient)
 (require 'ert)
+(require 'llm-fake)
 
 (ert-deftest test-ellama--code-filter ()
   (should (equal "" (ellama--code-filter "")))
@@ -38,6 +39,7 @@
 (ert-deftest test-ellama-code-improve ()
   (let ((original "(hello)\n")
         (improved "```lisp\n(hello)\n```")
+        (ellama-provider (make-llm-fake))
         prev-lines)
     (with-temp-buffer
       (insert original)
