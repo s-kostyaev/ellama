@@ -443,7 +443,11 @@ ARGS used for transient arguments."
   [["Problem solving"
     ("R" "Solve reasoning problem" ellama-solve-reasoning-problem)
     ("D" "Solve domain specific problem" ellama-solve-domain-specific-problem)]]
-  [["Quit" ("q" "Quit" transient-quit-one)]])
+  [["Quit" ("q" "Quit" transient-quit-one)]]
+  (interactive)
+  (transient-setup 'ellama-transient-main-menu)
+  (when (string-empty-p ellama-transient-ollama-model-name)
+    (ellama-fill-transient-ollama-model ellama-provider)))
 
 ;;;###autoload (autoload 'ellama "ellama-transient" nil t)
 (defalias 'ellama 'ellama-transient-main-menu)
