@@ -1,3 +1,5 @@
+* Version 1.8.1
+- Use direct interfacing with Ollama's API instead of local installation.
 * Version 1.8.0
 - Added ~create-session~ optional parameter to ~ellama-ask-about~,
   ~ellama-ask-selection~, ~ellama-ask-line~, and ~ellama-code-review~ commands,
