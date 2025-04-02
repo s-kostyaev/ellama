@@ -349,6 +349,8 @@ ARGS used for transient arguments."
 ;;;###autoload (autoload 'ellama-transient-context-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-context-menu ()
   "Context Commands."
+  ["Options"
+   ("-e" "Use Ephemeral Context" "--ephemeral")]
   ["Context Commands"
    :description (lambda ()
 		  (ellama-context-update-buffer)
@@ -361,8 +363,6 @@ ARGS used for transient arguments."
     ("f" "Add File" ellama-transient-add-file)
     ("s" "Add Selection" ellama-transient-add-selection)
     ("i" "Add Info Node" ellama-transient-add-info-node)]
-   ["Options"
-    ("-e" "Use Ephemeral Context" "--ephemeral")]
    ["Manage"
     ("m" "Manage context" ellama-context-manage)
     ("D" "Delete element" ellama-context-element-remove-by-name)
