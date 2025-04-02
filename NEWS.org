@@ -1,3 +1,19 @@
+* Version 1.8.0
+- Added ~create-session~ optional parameter to ~ellama-ask-about~,
+  ~ellama-ask-selection~, ~ellama-ask-line~, and ~ellama-code-review~ commands,
+  and added ~--new-session~ option to transient commands. These changes allow
+  creating a new session even if one is already active.
+- Added the ability to create an ephemeral session by adding a new ~:ephemeral~
+  argument to various functions and added the ~--ephemeral~ option to several
+  transient commands in ~ellama-transient.el~.
+- Implemented ephemeral context elements that are cleared after a single LLM
+  request. Added corresponding functions and transient suffixes to manage
+  ephemeral context elements, updating existing functions to handle both global
+  and ephemeral contexts.
+- Set up the transient menu to ensure the Ollama model is filled if it's empty.
+- Added ~use-hard-newlines~ variable and updated text insertion to use hard
+  newlines. Ensured that text is inserted only if there is a delta, and improved
+  the conditional logic for filling paragraphs.
 * Version 1.7.2
 - Added detailed context management documentation.
 * Version 1.7.1
