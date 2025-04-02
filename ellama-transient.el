@@ -205,6 +205,12 @@ Otherwise, prompt the user to enter a system message."
 ;;;###autoload (autoload 'ellama-transient-code-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-code-menu ()
   "Code Commands."
+  ["Session Options"
+   :description (lambda () (ellama-session-line))
+   ("-n" "Create New Session" "--new-session")]
+  ["Ephemeral sessions"
+   :if (lambda () ellama-session-auto-save)
+   ("-e" "Create Ephemeral Session" "--ephemeral")]
   [["Code Commands"
     ("c" "Complete" ellama-code-complete)
     ("a" "Add" ellama-code-add)
@@ -212,10 +218,6 @@ Otherwise, prompt the user to enter a system message."
     ("i" "Improve" ellama-code-improve)
     ("r" "Review" ellama-transient-code-review)
     ("m" "Generate Commit Message" ellama-generate-commit-message)]
-   ["Session Options"
-    :description (lambda () (ellama-session-line))
-    ("-n" "Create New Session" "--new-session")
-    ("-e" "Create Ephemeral Session" "--ephemeral")]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 ;;;###autoload (autoload 'ellama-transient-summarize-menu "ellama-transient" nil t)
@@ -280,14 +282,16 @@ Otherwise, prompt the user to enter a system message."
 ;;;###autoload (autoload 'ellama-transient-ask-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-ask-menu ()
   "Ask Commands."
+  ["Session Options"
+   :description (lambda () (ellama-session-line))
+   ("-n" "Create New Session" "--new-session")]
+  ["Ephemeral sessions"
+   :if (lambda () ellama-session-auto-save)
+   ("-e" "Create Ephemeral Session" "--ephemeral")]
   [["Ask Commands"
     ("l" "Ask Line" ellama-transient-ask-line)
     ("s" "Ask Selection" ellama-transient-ask-selection)
     ("a" "Ask About" ellama-transient-ask-about)]
-   ["Session Options"
-    :description (lambda () (ellama-session-line))
-    ("-n" "Create New Session" "--new-session")
-    ("-e" "Create Ephemeral Session" "--ephemeral")]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 ;;;###autoload (autoload 'ellama-transient-translate-menu "ellama-transient" nil t)
@@ -405,14 +409,16 @@ ARGS used for transient arguments."
 ;;;###autoload (autoload 'ellama-transient-main-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-main-menu ()
   "Main Menu."
+  ["Session Options"
+   :description (lambda () (ellama-session-line))
+   ("-n" "Create New Session" "--new-session")]
+  ["Ephemeral sessions"
+   :if (lambda () ellama-session-auto-save)
+   ("-e" "Create Ephemeral Session" "--ephemeral")]
   ["Main"
    [("c" "Chat" ellama-transient-chat)
     ("b" "Chat with blueprint" ellama-blueprint-select)
     ("B" "Blueprint Commands" ellama-transient-blueprint-menu)]
-   ["Session Options"
-    :description (lambda () (ellama-session-line))
-    ("-n" "Create New Session" "--new-session")
-    ("-e" "Create Ephemeral Session" "--ephemeral")]
    [("a" "Ask Commands" ellama-transient-ask-menu)
     ("C" "Code Commands" ellama-transient-code-menu)]]
   ["Text"
