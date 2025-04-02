@@ -113,6 +113,7 @@ PARSED-LINE is expected to be a list with three elements: :act,
 (defvar ellama-community-prompts-collection nil
   "Community prompts collection.")
 
+;;;###autoload
 (defun ellama-community-prompts-ensure ()
   "Ensure that the community prompt collection are loaded and available.
 This function ensures that the file specified by `ellama-community-prompts-file'

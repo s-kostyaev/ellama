@@ -31,6 +31,7 @@
 ;;; Code:
 (require 'ellama)
 (require 'transient)
+(require 'ellama-context)
 
 (defcustom ellama-transient-system-show-limit 45
   "Maximum length of system message to show."
@@ -194,15 +195,28 @@ Otherwise, prompt the user to enter a system message."
    :default-chat-non-standard-params
    `[("num_ctx" . ,ellama-transient-context-length)]))
 
+(transient-define-suffix ellama-transient-code-review (&optional args)
+  "Review the code.  ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-code-review
+   (transient-arg-value "--new-session" args)
+   :ephemeral (transient-arg-value "--ephemeral" args)))
+
 ;;;###autoload (autoload 'ellama-transient-code-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-code-menu ()
   "Code Commands."
+  ["Session Options"
+   :description (lambda () (ellama-session-line))
+   ("-n" "Create New Session" "--new-session")]
+  ["Ephemeral sessions"
+   :if (lambda () ellama-session-auto-save)
+   ("-e" "Create Ephemeral Session" "--ephemeral")]
   [["Code Commands"
     ("c" "Complete" ellama-code-complete)
     ("a" "Add" ellama-code-add)
     ("e" "Edit" ellama-code-edit)
     ("i" "Improve" ellama-code-improve)
-    ("r" "Review" ellama-code-review)
+    ("r" "Review" ellama-transient-code-review)
     ("m" "Generate Commit Message" ellama-generate-commit-message)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
@@ -244,13 +258,40 @@ Otherwise, prompt the user to enter a system message."
     ("f" "Make Format" ellama-make-format)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
+(transient-define-suffix ellama-transient-ask-line (&optional args)
+  "Ask line.  ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-ask-line
+   (transient-arg-value "--new-session" args)
+   :ephemeral (transient-arg-value "--ephemeral" args)))
+
+(transient-define-suffix ellama-transient-ask-selection (&optional args)
+  "Ask selection.  ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-ask-selection
+   (transient-arg-value "--new-session" args)
+   :ephemeral (transient-arg-value "--ephemeral" args)))
+
+(transient-define-suffix ellama-transient-ask-about (&optional args)
+  "Ask about current buffer or region.  ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-ask-about
+   (transient-arg-value "--new-session" args)
+   :ephemeral (transient-arg-value "--ephemeral" args)))
+
 ;;;###autoload (autoload 'ellama-transient-ask-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-ask-menu ()
   "Ask Commands."
+  ["Session Options"
+   :description (lambda () (ellama-session-line))
+   ("-n" "Create New Session" "--new-session")]
+  ["Ephemeral sessions"
+   :if (lambda () ellama-session-auto-save)
+   ("-e" "Create Ephemeral Session" "--ephemeral")]
   [["Ask Commands"
-    ("l" "Ask Line" ellama-ask-line)
-    ("s" "Ask Selection" ellama-ask-selection)
-    ("a" "Ask About" ellama-ask-about)]
+    ("l" "Ask Line" ellama-transient-ask-line)
+    ("s" "Ask Selection" ellama-transient-ask-selection)
+    ("a" "Ask About" ellama-transient-ask-about)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 ;;;###autoload (autoload 'ellama-transient-translate-menu "ellama-transient" nil t)
@@ -266,9 +307,50 @@ Otherwise, prompt the user to enter a system message."
 (declare-function ellama-context-update-buffer "ellama-context")
 (defvar ellama-context-buffer)
 
+(transient-define-suffix ellama-transient-add-buffer (&optional args)
+  "Add current buffer to context.
+ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-context-add-buffer
+   (read-buffer "Buffer: ")
+   (transient-arg-value "--ephemeral" args)))
+
+(transient-define-suffix ellama-transient-add-directory (&optional args)
+  "Add directory to context.
+ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (let ((directory (read-directory-name "Directory: ")))
+    (ellama-context-add-directory
+     directory
+     (transient-arg-value "--ephemeral" args))))
+
+(transient-define-suffix ellama-transient-add-file (&optional args)
+  "Add file to context.
+ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-context-add-file (transient-arg-value "--ephemeral" args)))
+
+(transient-define-suffix ellama-transient-add-selection (&optional args)
+  "Add current selection to context.
+ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (when (region-active-p)
+    (ellama-context-add-selection (transient-arg-value "--ephemeral" args))))
+
+(transient-define-suffix ellama-transient-add-info-node (&optional args)
+  "Add Info Node to context.
+ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (let ((info-node (Info-copy-current-node-name)))
+    (ellama-context-add-info-node
+     info-node
+     (transient-arg-value "--ephemeral" args))))
+
 ;;;###autoload (autoload 'ellama-transient-context-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-context-menu ()
   "Context Commands."
+  ["Options"
+   ("-e" "Use Ephemeral Context" "--ephemeral")]
   ["Context Commands"
    :description (lambda ()
 		  (ellama-context-update-buffer)
@@ -276,11 +358,11 @@ Otherwise, prompt the user to enter a system message."
 %s" (with-current-buffer ellama-context-buffer
       (buffer-substring (point-min) (point-max)))))
    ["Add"
-    ("b" "Add Buffer" ellama-context-add-buffer)
-    ("d" "Add Directory" ellama-context-add-directory)
-    ("f" "Add File" ellama-context-add-file)
-    ("s" "Add Selection" ellama-context-add-selection)
-    ("i" "Add Info Node" ellama-context-add-info-node)]
+    ("b" "Add Buffer" ellama-transient-add-buffer)
+    ("d" "Add Directory" ellama-transient-add-directory)
+    ("f" "Add File" ellama-transient-add-file)
+    ("s" "Add Selection" ellama-transient-add-selection)
+    ("i" "Add Info Node" ellama-transient-add-info-node)]
    ["Manage"
     ("m" "Manage context" ellama-context-manage)
     ("D" "Delete element" ellama-context-element-remove-by-name)
@@ -316,11 +398,25 @@ Otherwise, prompt the user to enter a system message."
     ("k" "Kill" ellama-kill-current-buffer)
     ("q" "Quit" transient-quit-one)]])
 
+(transient-define-suffix ellama-transient-chat (&optional args)
+  "Chat with Ellama.  ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-chat
+   (read-string "Ask Ellama: ")
+   (transient-arg-value "--new-session" args)
+   :ephemeral (transient-arg-value "--ephemeral" args)))
+
 ;;;###autoload (autoload 'ellama-transient-main-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-main-menu ()
   "Main Menu."
+  ["Session Options"
+   :description (lambda () (ellama-session-line))
+   ("-n" "Create New Session" "--new-session")]
+  ["Ephemeral sessions"
+   :if (lambda () ellama-session-auto-save)
+   ("-e" "Create Ephemeral Session" "--ephemeral")]
   ["Main"
-   [("c" "Chat" ellama-chat)
+   [("c" "Chat" ellama-transient-chat)
     ("b" "Chat with blueprint" ellama-blueprint-select)
     ("B" "Blueprint Commands" ellama-transient-blueprint-menu)]
    [("a" "Ask Commands" ellama-transient-ask-menu)
@@ -347,7 +443,11 @@ Otherwise, prompt the user to enter a system message."
   [["Problem solving"
     ("R" "Solve reasoning problem" ellama-solve-reasoning-problem)
     ("D" "Solve domain specific problem" ellama-solve-domain-specific-problem)]]
-  [["Quit" ("q" "Quit" transient-quit-one)]])
+  [["Quit" ("q" "Quit" transient-quit-one)]]
+  (interactive)
+  (transient-setup 'ellama-transient-main-menu)
+  (when (string-empty-p ellama-transient-ollama-model-name)
+    (ellama-fill-transient-ollama-model ellama-provider)))
 
 ;;;###autoload (autoload 'ellama "ellama-transient" nil t)
 (defalias 'ellama 'ellama-transient-main-menu)

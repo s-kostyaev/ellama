@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1"))
-;; Version: 1.7.2
+;; Version: 1.8.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -1235,6 +1235,7 @@ FILTER is a function for text transformation."
 	    (goto-char end-marker)
 	    (let* ((filtered-text
 		    (funcall filter text))
+		   (use-hard-newlines t)
 		   (common-prefix (concat
 				   safe-common-prefix
 				   (ellama-max-common-prefix
@@ -1248,26 +1249,26 @@ FILTER is a function for text transformation."
 				       (length common-prefix)))
 		   (delta (string-remove-prefix common-prefix filtered-text)))
 	      (delete-char (- wrong-chars-cnt))
-	      (insert delta)
-	      (when (and
-		     ellama-fill-paragraphs
-		     (pcase ellama-fill-paragraphs
-		       ((cl-type function) (funcall ellama-fill-paragraphs))
-		       ((cl-type boolean) ellama-fill-paragraphs)
-		       ((cl-type list) (and (apply #'derived-mode-p
-						   ellama-fill-paragraphs)))))
-		(if (not (eq major-mode 'org-mode))
-		    (fill-paragraph)
-		  (when (not (save-excursion
-			       (re-search-backward
-				"#\\+BEGIN_SRC"
-				beg-marker t)))
-		    (org-fill-paragraph))))
-	      (set-marker end-marker (point))
-	      (when (and ellama-auto-scroll (not ellama--stop-scroll))
-		(ellama--scroll buffer end-marker))
-	      (setq safe-common-prefix (ellama--string-without-last-line common-prefix))
-	      (setq previous-filtered-text filtered-text))))))))
+	      (when delta (insert (propertize delta 'hard t))
+		    (when (and
+			   ellama-fill-paragraphs
+			   (pcase ellama-fill-paragraphs
+			     ((cl-type function) (funcall ellama-fill-paragraphs))
+			     ((cl-type boolean) ellama-fill-paragraphs)
+			     ((cl-type list) (and (apply #'derived-mode-p
+							 ellama-fill-paragraphs)))))
+		      (if (not (eq major-mode 'org-mode))
+			  (fill-paragraph)
+			(when (not (save-excursion
+				     (re-search-backward
+				      "#\\+BEGIN_SRC"
+				      beg-marker t)))
+			  (org-fill-paragraph))))
+		    (set-marker end-marker (point))
+		    (when (and ellama-auto-scroll (not ellama--stop-scroll))
+		      (ellama--scroll buffer end-marker))
+		    (setq safe-common-prefix (ellama--string-without-last-line common-prefix))
+		    (setq previous-filtered-text filtered-text)))))))))
 
 (defun ellama--handle-partial (insert-text insert-reasoning reasoning-buffer)
   "Handle partial llm callback.
@@ -1586,7 +1587,8 @@ Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
   (save-excursion
     (goto-char (point-max))
     (insert "\n\n" (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n")
-    (when ellama-session-auto-save
+    (when (and ellama-session-auto-save
+	       buffer-file-name)
       (save-buffer)))
   (ellama--scroll)
   (when ellama-chat-done-callback
@@ -1674,6 +1676,8 @@ ARGS contains keys for fine control.
 
 :system STR -- send STR to model as system message.
 
+:ephemeral BOOL -- create an ephemeral session if set.
+
 :on-done ON-DONE -- ON-DONE a function that's called with
 the full response text when the request completes (with BUFFER current)."
   (interactive "sAsk ellama: ")
@@ -1694,6 +1698,7 @@ the full response text when the request completes (with BUFFER current)."
 		     (or (plist-get args :provider)
 			 ellama-provider
 			 (ellama-get-first-ollama-chat-model))))
+	 (ephemeral (plist-get args :ephemeral))
 	 (session (or (plist-get args :session)
 		      (if (or create-session
 			      current-prefix-arg
@@ -1708,7 +1713,7 @@ the full response text when the request completes (with BUFFER current)."
 					   (ellama-session-provider ellama--current-session)))))
 			      (and (not ellama--current-session)
 				   (not ellama--current-session-id)))
-			  (ellama-new-session provider prompt)
+			  (ellama-new-session provider prompt ephemeral)
 			(or ellama--current-session
 			    (with-current-buffer (ellama-get-session-buffer
 						  (or (plist-get args :session-id)
@@ -1782,25 +1787,39 @@ the full response text when the request completes (with BUFFER current)."
 			     #'ellama--translate-markdown-to-org-filter))))
 
 ;;;###autoload
-(defun ellama-ask-about ()
-  "Ask ellama about selected region or current buffer."
+(defun ellama-ask-about (&optional create-session &rest args)
+  "Ask ellama about selected region or current buffer.
+
+If CREATE-SESSION set, creates new session even if there is an active session.
+
+ARGS contains keys for fine control.
+
+:ephemeral BOOL -- create an ephemeral session if set."
   (interactive)
   (declare-function ellama-context-add-selection "ellama-context")
   (declare-function ellama-context-add-buffer "ellama-context")
-  (let ((input (read-string "Ask ellama about this text: ")))
+  (let ((input (read-string "Ask ellama about this text: "))
+	(ephemeral (plist-get args :ephemeral)))
     (if (region-active-p)
 	(ellama-context-add-selection)
       (ellama-context-add-buffer (buffer-name (current-buffer))))
-    (ellama-chat input)))
+    (ellama-chat input create-session :ephemeral ephemeral)))
 
 ;;;###autoload
-(defun ellama-ask-selection ()
-  "Send selected region or current buffer to ellama chat."
+(defun ellama-ask-selection (&optional create-session &rest args)
+  "Send selected region or current buffer to ellama chat.
+
+If CREATE-SESSION set, creates new session even if there is an active session.
+
+ARGS contains keys for fine control.
+
+:ephemeral BOOL -- create an ephemeral session if set."
   (interactive)
   (let ((text (if (region-active-p)
 		  (buffer-substring-no-properties (region-beginning) (region-end))
-		(buffer-substring-no-properties (point-min) (point-max)))))
-    (ellama-chat text)))
+		(buffer-substring-no-properties (point-min) (point-max))))
+	(ephemeral (plist-get args :ephemeral)))
+    (ellama-chat text create-session :ephemeral ephemeral)))
 
 (defcustom ellama-complete-prompt-template "You're providing text completion. Complete the text. Do not aknowledge, reply with completion only."
   "System prompt template for `ellama-complete'."
@@ -1898,11 +1917,18 @@ the full response text when the request completes (with BUFFER current)."
        :provider ellama-coding-provider))))
 
 ;;;###autoload
-(defun ellama-ask-line ()
-  "Send current line to ellama chat."
+(defun ellama-ask-line (&optional create-session &rest args)
+  "Send current line to ellama chat.
+
+If CREATE-SESSION set, creates new session even if there is an active session.
+
+ARGS contains keys for fine control.
+
+:ephemeral BOOL -- create an ephemeral session if set."
   (interactive)
-  (let ((text (thing-at-point 'line)))
-    (ellama-chat text)))
+  (let* ((text (thing-at-point 'line))
+	 (ephemeral (plist-get args :ephemeral)))
+    (ellama-chat text create-session :ephemeral ephemeral)))
 
 (defun ellama-instant (prompt &rest args)
   "Prompt ellama for PROMPT to reply instantly.
@@ -2006,13 +2032,23 @@ ARGS contains keys for fine control.
 				    (ellama-get-first-ollama-chat-model))))))
 
 ;;;###autoload
-(defun ellama-code-review ()
-  "Review code in selected region or current buffer."
+(defun ellama-code-review (&optional create-session &rest args)
+  "Review code in selected region or current buffer.
+
+If CREATE-SESSION set, creates new session even if there is an active session.
+ARGS contains keys for fine control.
+
+:ephemeral BOOL -- create an ephemeral session if set."
   (interactive)
-  (if (region-active-p)
-      (ellama-context-add-selection)
-    (ellama-context-add-buffer (current-buffer)))
-  (ellama-chat ellama-code-review-prompt-template nil :provider ellama-coding-provider))
+  (let ((ephemeral (plist-get args :ephemeral)))
+    (if (region-active-p)
+        (ellama-context-add-selection)
+      (ellama-context-add-buffer (current-buffer)))
+    (ellama-chat
+     ellama-code-review-prompt-template
+     create-session
+     :provider ellama-coding-provider
+     :ephemeral ephemeral)))
 
 ;;;###autoload
 (defun ellama-write (instruction)
