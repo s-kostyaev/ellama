@@ -365,7 +365,9 @@ which may not always be appropriate.
 
 A “global context” is maintained, which is a collection of text blocks
 accessible to the LLM when responding to prompts. This global context is
-prepened to your prompt before transmission to the LLM.
+prepended to your prompt before transmission to the LLM. Additionally, Ellama
+supports an "ephemeral context," which is temporary and only available for a
+single request.
 
 ** Transient Menus for Context Management
 
@@ -378,12 +380,14 @@ The Context Commands transient menu is structured as follows:
 
 Context Commands:
 
-- Add: Provides options for adding content to the global context.
-    - “b” "Add Buffer" ~ellama-context-add-buffer~
-    - “d” "Add Directory" ~ellama-context-add-directory~
-    - “f” "Add File" ~ellama-context-add-file~
-    - “s” "Add Selection" ~ellama-context-add-selection~
-    - “i” "Add Info Node" ~ellama-context-add-info-node~
+- Options: Provides options for managing ephemeral context.
+    - “-e” "Use Ephemeral Context" ~--ephemeral~
+- Add: Provides options for adding content to the global or ephemeral context.
+    - “b” "Add Buffer" ~ellama-transient-add-buffer~
+    - “d” "Add Directory" ~ellama-transient-add-directory~
+    - “f” "Add File" ~ellama-transient-add-file~
+    - “s” "Add Selection" ~ellama-transient-add-selection~
+    - “i” "Add Info Node" ~ellama-transient-add-info-node~
 - Manage: Provides options for managing the global context.
     - “m” "Manage context" ~ellama-context-manage~ - Opens the context
       management buffer.
