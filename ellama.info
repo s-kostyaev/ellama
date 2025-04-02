@@ -399,8 +399,7 @@ There are many supported providers: ‘ollama’, ‘open ai’, ‘vertex’,
      name as key.
    • ‘ellama-spinner-enabled’: Enable spinner during text generation.
    • ‘ellama-spinner-type’: Spinner type for ellama.  Default type is
-‘progress-bar’.
-   • ‘ellama-ollama-binary’: Path to ollama binary.
+     ‘progress-bar’.
    • ‘ellama-auto-scroll’: If enabled ellama buffer will scroll
      automatically during generation.  Disabled by default.
    • ‘ellama-fill-paragraphs’: Option to customize ellama paragraphs
@@ -1416,31 +1415,31 @@ Node: Installation3613
 Node: Commands8621
 Node: Keymap14965
 Node: Configuration17798
-Node: Context Management23139
-Node: Transient Menus for Context Management24047
-Node: Managing the Context25661
-Node: Considerations26436
-Node: Minor modes27029
-Node: ellama-context-header-line-mode29017
-Node: ellama-context-header-line-global-mode29842
-Node: ellama-context-mode-line-mode30562
-Node: ellama-context-mode-line-global-mode31410
-Node: Ellama Session Header Line Mode32114
-Node: Enabling and Disabling32683
-Node: Customization33130
-Node: Ellama Session Mode Line Mode33418
-Node: Enabling and Disabling (1)34003
-Node: Customization (1)34450
-Node: Using Blueprints34744
-Node: Key Components of Ellama Blueprints35363
-Node: Creating and Managing Blueprints35970
-Node: Variable Management36951
-Node: Keymap and Mode37420
-Node: Transient Menus38356
-Node: Running Blueprints programmatically38902
-Node: Acknowledgments39489
-Node: Contributions40202
-Node: GNU Free Documentation License40586
+Node: Context Management23086
+Node: Transient Menus for Context Management23994
+Node: Managing the Context25608
+Node: Considerations26383
+Node: Minor modes26976
+Node: ellama-context-header-line-mode28964
+Node: ellama-context-header-line-global-mode29789
+Node: ellama-context-mode-line-mode30509
+Node: ellama-context-mode-line-global-mode31357
+Node: Ellama Session Header Line Mode32061
+Node: Enabling and Disabling32630
+Node: Customization33077
+Node: Ellama Session Mode Line Mode33365
+Node: Enabling and Disabling (1)33950
+Node: Customization (1)34397
+Node: Using Blueprints34691
+Node: Key Components of Ellama Blueprints35310
+Node: Creating and Managing Blueprints35917
+Node: Variable Management36898
+Node: Keymap and Mode37367
+Node: Transient Menus38303
+Node: Running Blueprints programmatically38849
+Node: Acknowledgments39436
+Node: Contributions40149
+Node: GNU Free Documentation License40533
 
 End Tag Table
 

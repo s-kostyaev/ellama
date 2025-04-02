@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1"))
-;; Version: 1.8.0
+;; Version: 1.8.1
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -191,10 +191,6 @@ Make reasoning models more useful for many cases."
 	 (custom-set-default symbol value)
 	 (when value
 	   (ellama-setup-keymap))))
-
-(defcustom ellama-ollama-binary "ollama"
-  "Path to ollama binary."
-  :type 'string)
 
 (defcustom ellama-auto-scroll nil
   "If enabled ellama buffer will scroll automatically during generation."
@@ -1681,12 +1677,9 @@ ARGS contains keys for fine control.
 :on-done ON-DONE -- ON-DONE a function that's called with
 the full response text when the request completes (with BUFFER current)."
   (interactive "sAsk ellama: ")
-  (let* ((ollama-binary (executable-find ellama-ollama-binary))
-	 (providers (append
+  (let* ((providers (append
 		     `(("default model" . ellama-provider)
-		       ,(if (and ollama-binary
-				 (file-exists-p ollama-binary))
-			    '("ollama model" . (ellama-get-ollama-local-model))))
+		       ("ollama model" . (ellama-get-ollama-local-model)))
 		     ellama-providers))
 	 (variants (mapcar #'car providers))
 	 (system (plist-get args :system))
@@ -2363,14 +2356,8 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 
 (defun ellama-get-ollama-model-names ()
   "Get ollama model names."
-  (mapcar (lambda (s)
-	    (car (split-string s)))
-	  (seq-drop
-	   (process-lines
-	    (executable-find ellama-ollama-binary)
-	    "ls")
-	   ;; skip header line
-	   1)))
+  (llm-models (or ellama-provider
+		  (make-llm-ollama))))
 
 (defun ellama-embedding-model-p (name)
   "Check if NAME is an embedding model."
@@ -2388,11 +2375,10 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 (defun ellama-get-first-ollama-chat-model ()
   "Get first available ollama model."
   (declare-function make-llm-ollama "ext:llm-ollama")
-  (when (executable-find ellama-ollama-binary)
-    (require 'llm-ollama)
-    (make-llm-ollama
-     :chat-model
-     (car (ellama-get-ollama-chat-model-names)))))
+  (require 'llm-ollama)
+  (make-llm-ollama
+   :chat-model
+   (car (ellama-get-ollama-chat-model-names))))
 
 (defun ellama-get-ollama-model-name ()
   "Get ollama model name from installed locally."
@@ -2423,12 +2409,9 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 (defun ellama-provider-select ()
   "Select ellama provider."
   (interactive)
-  (let* ((ollama-binary (executable-find ellama-ollama-binary))
-	 (providers (append
+  (let* ((providers (append
                      `(("default model" . ellama-provider)
-		       ,(if (and ollama-binary
-				 (file-exists-p ollama-binary))
-			    '("ollama model" . (ellama-get-ollama-local-model))))
+		       ("ollama model" . (ellama-get-ollama-local-model)))
                      ellama-providers))
 	 (variants (mapcar #'car providers)))
     (setq ellama-provider
