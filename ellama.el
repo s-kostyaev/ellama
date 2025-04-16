@@ -213,7 +213,7 @@ Make reasoning models more useful for many cases."
 If you choose custom function, that function should accept PROVIDER, ACTION
 and PROMPT arguments.
 
-PROVIDER is an llm provider.
+PROVIDER is an LLM provider.
 
 ACTION is a symbol, current command.
 
@@ -476,7 +476,7 @@ It should be a function with single argument generated text string."
     (ellama--session-deactivate)))
 
 (define-minor-mode ellama-request-mode
-  "Minor mode for ellama buffers with active request to llm."
+  "Minor mode for `ellama' buffers with active requests to LLM."
   :interactive nil
   :lighter " ellama:generating"
   :keymap '(([remap keyboard-quit] . ellama--cancel-current-request-and-quit))
@@ -723,7 +723,7 @@ This filter contains only subset of markdown syntax to be good enough."
 
 ID is an unique identifier of session, string.
 
-PROVIDER is an llm provider of session.
+PROVIDER is an LLM provider of session.
 
 FILE is a path to file contains string representation of this session, string.
 
@@ -1267,7 +1267,7 @@ FILTER is a function for text transformation."
 		    (setq previous-filtered-text filtered-text)))))))))
 
 (defun ellama--handle-partial (insert-text insert-reasoning reasoning-buffer)
-  "Handle partial llm callback.
+  "Handle partial LLM callback.
 INSERT-TEXT is a function for text insertion.
 INSERT-REASONING is a function for reasoning insertion.
 REASONING-BUFFER is a buffer for reasoning."
@@ -1300,7 +1300,7 @@ REASONING-BUFFER is a buffer for reasoning."
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
 
-:provider PROVIDER -- PROVIDER is an llm provider for generation.
+:provider PROVIDER -- PROVIDER is an LLM provider for generation.
 
 :buffer BUFFER -- BUFFER is the buffer (or `buffer-name') to insert ellama reply
 in.  Default value is (current-buffer).
@@ -1613,7 +1613,7 @@ Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
 				 #'ellama--translate-markdown-to-org-filter))))))
 
 (defun ellama--call-llm-with-translated-prompt (buffer session translation-buffer)
-  "Call llm with translated text in BUFFER with SESSION from TRANSLATION-BUFFER."
+  "Call LLM with translated text in BUFFER with SESSION from TRANSLATION-BUFFER."
   (declare-function ellama-context-format "ellama-context")
   (lambda (result)
     (ellama-chat-done result)
@@ -1664,7 +1664,7 @@ Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
 If CREATE-SESSION set, creates new session even if there is an active session.
 ARGS contains keys for fine control.
 
-:provider PROVIDER -- PROVIDER is an llm provider for generation.
+:provider PROVIDER -- PROVIDER is an LLM provider for generation.
 
 :session SESSION -- SESSION is a ellama conversation session.
 
@@ -1928,7 +1928,7 @@ ARGS contains keys for fine control.
 
 ARGS contains keys for fine control.
 
-:provider PROVIDER -- PROVIDER is an llm provider for generation.
+:provider PROVIDER -- PROVIDER is an LLM provider for generation.
 
 :system STR -- send STR to model as system message.
 
@@ -2319,7 +2319,7 @@ otherwise prompt user for URL to summarize."
   "Extract list of ELEMENTS from INPUT syncronously.
 Return list of strings.  ARGS contains keys for fine control.
 
-:provider PROVIDER -- PROVIDER is an llm provider for generation."
+:provider PROVIDER -- PROVIDER is an LLM provider for generation."
   (let ((provider (or (plist-get args :provider)
 		      ellama-extraction-provider
 		      ellama-provider
@@ -2336,7 +2336,7 @@ Return list of strings.  ARGS contains keys for fine control.
   "Extract list of ELEMENTS from INPUT asyncronously.
 Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 
-:provider PROVIDER -- PROVIDER is an llm provider for generation."
+:provider PROVIDER -- PROVIDER is an LLM provider for generation."
   (let ((provider (or (plist-get args :provider)
 		      ellama-extraction-provider
 		      ellama-provider
@@ -2388,7 +2388,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
    (ellama-get-ollama-model-names)))
 
 (defun ellama-get-ollama-local-model ()
-  "Return llm provider for interactively selected ollama model."
+  "Return LLM provider for interactively selected ollama model."
   (interactive)
   (declare-function llm-ollama-p "ext:llm-ollama")
   (declare-function llm-ollama-host "ext:llm-ollama")
