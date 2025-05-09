@@ -1949,7 +1949,17 @@ ARGS contains keys for fine control.
 					(make-temp-name (concat buffer-name " "))
 				      buffer-name)))
 	 (system (plist-get args :system))
-	 (donecb (plist-get args :on-done))
+	 (donecb (lambda (text)
+		   (let ((callback (plist-get args :on-done)))
+		     (display-buffer buffer
+				     (when ellama-instant-display-action-function
+				       `((ignore . (,ellama-instant-display-action-function)))))
+		     (when callback
+		       (if (and (listp callback)
+				(functionp (car callback)))
+			   (mapc (lambda (fn) (funcall fn text))
+				 callback)
+			 (funcall callback text))))))
 	 filter)
     (with-current-buffer buffer
       (funcall ellama-major-mode)
