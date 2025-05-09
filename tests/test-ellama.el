@@ -454,6 +454,54 @@ package main
 1. *Initialization*: We create a boolean slice ~prime~ of size ~n+1~, where each
 index represents whether the number is prime (~true~) or not (~false~)."))))
 
+(ert-deftest test-ellama-md-to-org-lists ()
+  (let* ((fill-column 80)
+         (result (ellama--translate-markdown-to-org-filter "<think>Okay, the user asked me to create a list of fruits. Let me think about how to approach this.</think> Here’s a comprehensive list of fruits, categorized for clarity:
+
+---
+
+### **Common Fruits**
+1. **Apple**
+2. **Banana**
+3. **Orange**
+4. **Grape**
+5. **Strawberry**
+6. **Blueberry**
+
+---
+
+### **Additional Notes**
+- **Tomatoes** are technically fruits (part of the nightshade family).
+- **Coconut** is a tropical fruit, often used in cooking.
+- **Papaya** is a versatile fruit with nutritional value.
+
+Let me know if you'd like a simplified version or a specific category (e.g., by region, season, or type)! 🍎🍊")))
+    (should (string= result "#+BEGIN_QUOTE
+Okay, the user asked me to create a list of fruits. Let me think about how to
+approach this.
+#+END_QUOTE
+ Here’s a comprehensive list of fruits, categorized for clarity:
+
+---
+
+*** *Common Fruits*
+1. *Apple*
+2. *Banana*
+3. *Orange*
+4. *Grape*
+5. *Strawberry*
+6. *Blueberry*
+
+---
+
+*** *Additional Notes*
+- *Tomatoes* are technically fruits (part of the nightshade family).
+- *Coconut* is a tropical fruit, often used in cooking.
+- *Papaya* is a versatile fruit with nutritional value.
+
+Let me know if you'd like a simplified version or a specific category (e.g., by
+region, season, or type)! 🍎🍊"))))
+
 (defun ellama-test-max-common-prefix ()
   "Test the `ellama-max-common-prefix` function."
   (should (equal (ellama-max-common-prefix "" "") ""))
