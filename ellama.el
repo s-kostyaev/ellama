@@ -521,7 +521,7 @@ It should be a function with single argument generated text string."
 (defun ellama--replace-bad-code-blocks (text)
   "Replace code src blocks in TEXT."
   (with-temp-buffer
-    (insert text)
+    (insert (propertize text 'hard t))
     (goto-char (point-min))
     ;; skip good code blocks
     (while (re-search-forward "#\\+BEGIN_SRC\\(.\\|\n\\)*?#\\+END_SRC" nil t))
@@ -539,40 +539,47 @@ It should be a function with single argument generated text string."
 
 (defun ellama--apply-transformations (beg end)
   "Apply md to org transformations for region BEG END."
-  ;; headings
-  (ellama--replace "^# " "* " beg end)
-  (ellama--replace "^## " "** " beg end)
-  (ellama--replace "^### " "*** " beg end)
-  (ellama--replace "^#### " "**** " beg end)
-  (ellama--replace "^##### " "***** " beg end)
-  (ellama--replace "^###### " "****** " beg end)
-  ;; bold
-  (ellama--replace "__\\(.+?\\)__" "*\\1*" beg end)
-  (ellama--replace "\\*\\*\\(.+?\\)\\*\\*" "*\\1*" beg end)
-  (ellama--replace "<b>\\(.+?\\)</b>" "*\\1*" beg end)
-  (ellama--replace "<i>\\(.+?\\)</i>" "/\\1/" beg end)
-  ;; underlined
-  (ellama--replace "<u>\\(.+?\\)</u>" "_\\1_" beg end)
-  ;; inline code
-  (ellama--replace "`\\(.+?\\)`" "~\\1~" beg end)
-  ;; italic
-  (when ellama-translate-italic
-    (ellama--replace "_\\(.+?\\)_" "/\\1/" beg end))
-  ;; lists
-  (ellama--replace "^\\* " "+ " beg end)
-  ;; strikethrough
-  (ellama--replace "~~\\(.+?\\)~~" "+\\1+" beg end)
-  (ellama--replace "<s>\\(.+?\\)</s>" "+\\1+" beg end)
-  ;; badges
-  (ellama--replace "\\[\\!\\[.*?\\](\\(.*?\\))\\](\\(.*?\\))" "[[\\2][file:\\1]]" beg end)
-  ;;links
-  (ellama--replace "\\[\\(.*?\\)\\](\\(.*?\\))" "[[\\2][\\1]]" beg end)
+  (let ((beg-pos (make-marker))
+	(end-pos (make-marker)))
+    (set-marker-insertion-type beg-pos t)
+    (set-marker-insertion-type end-pos t)
+    (set-marker beg-pos beg)
+    (set-marker end-pos end)
+    ;; bold
+    (ellama--replace "__\\(.+?\\)__" "*\\1*" beg-pos end-pos)
+    (ellama--replace "\\*\\*\\([^\*\n]+?\\)\\*\\*" "*\\1*" beg-pos end-pos)
+    (ellama--replace "<b>\\(.+?\\)</b>" "*\\1*" beg-pos end-pos)
+    (ellama--replace "<i>\\(.+?\\)</i>" "/\\1/" beg-pos end-pos)
+    ;; headings
+    (ellama--replace "^# " "* " beg-pos end-pos)
+    (ellama--replace "^## " "** " beg-pos end-pos)
+    (ellama--replace "^### " "*** " beg-pos end-pos)
+    (ellama--replace "^#### " "**** " beg-pos end-pos)
+    (ellama--replace "^##### " "***** " beg-pos end-pos)
+    (ellama--replace "^###### " "****** " beg-pos end-pos)
+    ;; underlined
+    (ellama--replace "<u>\\(.+?\\)</u>" "_\\1_" beg-pos end-pos)
+    ;; inline code
+    (ellama--replace "`\\(.+?\\)`" "~\\1~" beg-pos end-pos)
+    ;; italic
+    (when ellama-translate-italic
+      (ellama--replace "_\\(.+?\\)_" "/\\1/" beg-pos end-pos))
+    ;; lists
+    (ellama--replace "^\\* " "+ " beg-pos end-pos)
+    ;; strikethrough
+    (ellama--replace "~~\\(.+?\\)~~" "+\\1+" beg-pos end-pos)
+    (ellama--replace "<s>\\(.+?\\)</s>" "+\\1+" beg-pos end-pos)
+    ;; badges
+    (ellama--replace "\\[\\!\\[.*?\\](\\(.*?\\))\\](\\(.*?\\))" "[[\\2][file:\\1]]" beg-pos end-pos)
+    ;;links
+    (ellama--replace "\\[\\(.*?\\)\\](\\(.*?\\))" "[[\\2][\\1]]" beg-pos end-pos)
 
-  ;; filling long lines
-  (goto-char beg)
-  (when ellama-fill-paragraphs
-    (let ((use-hard-newlines t))
-      (fill-region beg end nil t t))))
+    ;; filling long lines
+    (goto-char beg-pos)
+    (set-hard-newline-properties beg-pos end-pos)
+    (when ellama-fill-paragraphs
+      (let* ((use-hard-newlines t))
+	(fill-region beg end-pos nil t t)))))
 
 (defun ellama--replace-outside-of-code-blocks (text)
   "Replace markdown elements in TEXT with org equivalents.
