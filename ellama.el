@@ -635,6 +635,9 @@ This filter contains only subset of markdown syntax to be good enough."
     (replace-regexp-in-string "<think>[\n]?" "#+BEGIN_QUOTE\n")
     (replace-regexp-in-string "[\n]?</think>[\n]?" "\n#+END_QUOTE\n")
     (ellama--replace-bad-code-blocks)
+    ;; Making code blocks properly line-separated
+    (replace-regexp-in-string "\\([^\n]+\\)#\\+\\(BEGIN_SRC\\|END_SRC\\)" "\\1\n#+\\2")
+    ;; Outside of code blocks
     (ellama--replace-outside-of-code-blocks)))
 
 (defcustom ellama-enable-keymap t
@@ -1253,7 +1256,7 @@ FILTER is a function for text transformation."
 			     ((cl-type boolean) ellama-fill-paragraphs)
 			     ((cl-type list) (and (apply #'derived-mode-p
 							 ellama-fill-paragraphs)))))
-		      (if (not (eq major-mode 'org-mode))
+		      (if (not (derived-mode-p 'org-mode))
 			  (fill-paragraph)
 			(when (not (save-excursion
 				     (re-search-backward
