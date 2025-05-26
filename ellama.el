@@ -1721,6 +1721,14 @@ the full response text when the request completes (with BUFFER current)."
 				     (find-file-noselect
 				      (ellama--get-translation-file-name file-name)))
 				 (get-buffer-create (ellama-session-id session))))))
+    ;; Add C-c C-c shortcut when the chat buffer is in org-mode
+    (with-current-buffer buffer
+      (when (and
+             (derived-mode-p 'org-mode)
+             ;; Not already part of the hook
+             (not (and (boundp 'org-ctrl-c-ctrl-c-hook)
+                       (member #'ellama-chat-send-last-message org-ctrl-c-ctrl-c-hook))))
+        (add-hook 'org-ctrl-c-ctrl-c-hook #'ellama-chat-send-last-message 10 t)))
     (if ellama-chat-translation-enabled
 	(ellama--translate-interaction prompt translation-buffer buffer session)
       (display-buffer buffer (when ellama-chat-display-action-function
