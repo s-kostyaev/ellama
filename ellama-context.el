@@ -888,16 +888,19 @@ For one request only if EPHEMERAL."
 (defun ellama-context-prompt-with-context (prompt)
   "Add context to PROMPT for sending to llm."
   (let* ((context (append ellama-context-global
-			  ellama-context-ephemeral)))
+                          ellama-context-ephemeral)))
     (if context
-	(prog1
-	    (concat (string-join
-		     (cons "Context:"
-			   (mapcar #'ellama-context-element-extract context))
-		     "\n")
-		    "\n\n"
-		    prompt)
-	  (setq ellama-context-ephemeral nil))
+        (prog1
+            (let ((ctx (concat (string-join
+                                (cons "Context:"
+                                      (mapcar #'ellama-context-element-extract context))
+                                "\n")
+                               "\n\n")))
+              (cond
+               ((stringp prompt) (concat ctx prompt))
+               ((llm-multipart-p prompt) (apply #'llm-make-multipart ctx (llm-multipart-parts prompt)))
+               (t (error "PROMPT should be a string or `llm-multipart', but is %s" prompt))))
+          (setq ellama-context-ephemeral nil))
       prompt)))
 
 (provide 'ellama-context)
