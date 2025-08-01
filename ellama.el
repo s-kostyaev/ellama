@@ -1233,45 +1233,46 @@ FILTER is a function for text transformation."
 	   (safe-common-prefix ""))
       (lambda
 	(text)
-	(with-current-buffer buffer
-	  (save-excursion
-	    (goto-char end-marker)
-	    (let* ((filtered-text
-		    (funcall filter text))
-		   (use-hard-newlines t)
-		   (common-prefix (concat
-				   safe-common-prefix
-				   (ellama-max-common-prefix
-				    (string-remove-prefix
+	(when (not (string-empty-p text))
+	  (with-current-buffer buffer
+	    (save-excursion
+	      (goto-char end-marker)
+	      (let* ((filtered-text
+		      (funcall filter text))
+		     (use-hard-newlines t)
+		     (common-prefix (concat
 				     safe-common-prefix
-				     filtered-text)
-				    (string-remove-prefix
-				     safe-common-prefix
-				     previous-filtered-text))))
-		   (wrong-chars-cnt (- (length previous-filtered-text)
-				       (length common-prefix)))
-		   (delta (string-remove-prefix common-prefix filtered-text)))
-	      (delete-char (- wrong-chars-cnt))
-	      (when delta (insert (propertize delta 'hard t))
-		    (when (and
-			   ellama-fill-paragraphs
-			   (pcase ellama-fill-paragraphs
-			     ((cl-type function) (funcall ellama-fill-paragraphs))
-			     ((cl-type boolean) ellama-fill-paragraphs)
-			     ((cl-type list) (and (apply #'derived-mode-p
-							 ellama-fill-paragraphs)))))
-		      (if (not (eq major-mode 'org-mode))
-			  (fill-paragraph)
-			(when (not (save-excursion
-				     (re-search-backward
-				      "#\\+BEGIN_SRC"
-				      beg-marker t)))
-			  (org-fill-paragraph))))
-		    (set-marker end-marker (point))
-		    (when (and ellama-auto-scroll (not ellama--stop-scroll))
-		      (ellama--scroll buffer end-marker))
-		    (setq safe-common-prefix (ellama--string-without-last-line common-prefix))
-		    (setq previous-filtered-text filtered-text)))))))))
+				     (ellama-max-common-prefix
+				      (string-remove-prefix
+				       safe-common-prefix
+				       filtered-text)
+				      (string-remove-prefix
+				       safe-common-prefix
+				       previous-filtered-text))))
+		     (wrong-chars-cnt (- (length previous-filtered-text)
+					 (length common-prefix)))
+		     (delta (string-remove-prefix common-prefix filtered-text)))
+		(delete-char (- wrong-chars-cnt))
+		(when delta (insert (propertize delta 'hard t))
+		      (when (and
+			     ellama-fill-paragraphs
+			     (pcase ellama-fill-paragraphs
+			       ((cl-type function) (funcall ellama-fill-paragraphs))
+			       ((cl-type boolean) ellama-fill-paragraphs)
+			       ((cl-type list) (and (apply #'derived-mode-p
+							   ellama-fill-paragraphs)))))
+			(if (not (eq major-mode 'org-mode))
+			    (fill-paragraph)
+			  (when (not (save-excursion
+				       (re-search-backward
+					"#\\+BEGIN_SRC"
+					beg-marker t)))
+			    (org-fill-paragraph))))
+		      (set-marker end-marker (point))
+		      (when (and ellama-auto-scroll (not ellama--stop-scroll))
+			(ellama--scroll buffer end-marker))
+		      (setq safe-common-prefix (ellama--string-without-last-line common-prefix))
+		      (setq previous-filtered-text filtered-text))))))))))
 
 (defun ellama--handle-partial (insert-text insert-reasoning reasoning-buffer)
   "Handle partial llm callback.
