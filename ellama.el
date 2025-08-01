@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1"))
-;; Version: 1.8.1
+;; Version: 1.8.2
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -521,7 +521,7 @@ It should be a function with single argument generated text string."
 (defun ellama--replace-bad-code-blocks (text)
   "Replace code src blocks in TEXT."
   (with-temp-buffer
-    (insert text)
+    (insert (propertize text 'hard t))
     (goto-char (point-min))
     ;; skip good code blocks
     (while (re-search-forward "#\\+BEGIN_SRC\\(.\\|\n\\)*?#\\+END_SRC" nil t))
@@ -539,40 +539,47 @@ It should be a function with single argument generated text string."
 
 (defun ellama--apply-transformations (beg end)
   "Apply md to org transformations for region BEG END."
-  ;; headings
-  (ellama--replace "^# " "* " beg end)
-  (ellama--replace "^## " "** " beg end)
-  (ellama--replace "^### " "*** " beg end)
-  (ellama--replace "^#### " "**** " beg end)
-  (ellama--replace "^##### " "***** " beg end)
-  (ellama--replace "^###### " "****** " beg end)
-  ;; bold
-  (ellama--replace "__\\(.+?\\)__" "*\\1*" beg end)
-  (ellama--replace "\\*\\*\\(.+?\\)\\*\\*" "*\\1*" beg end)
-  (ellama--replace "<b>\\(.+?\\)</b>" "*\\1*" beg end)
-  (ellama--replace "<i>\\(.+?\\)</i>" "/\\1/" beg end)
-  ;; underlined
-  (ellama--replace "<u>\\(.+?\\)</u>" "_\\1_" beg end)
-  ;; inline code
-  (ellama--replace "`\\(.+?\\)`" "~\\1~" beg end)
-  ;; italic
-  (when ellama-translate-italic
-    (ellama--replace "_\\(.+?\\)_" "/\\1/" beg end))
-  ;; lists
-  (ellama--replace "^\\* " "+ " beg end)
-  ;; strikethrough
-  (ellama--replace "~~\\(.+?\\)~~" "+\\1+" beg end)
-  (ellama--replace "<s>\\(.+?\\)</s>" "+\\1+" beg end)
-  ;; badges
-  (ellama--replace "\\[\\!\\[.*?\\](\\(.*?\\))\\](\\(.*?\\))" "[[\\2][file:\\1]]" beg end)
-  ;;links
-  (ellama--replace "\\[\\(.*?\\)\\](\\(.*?\\))" "[[\\2][\\1]]" beg end)
+  (let ((beg-pos (make-marker))
+	(end-pos (make-marker)))
+    (set-marker-insertion-type beg-pos t)
+    (set-marker-insertion-type end-pos t)
+    (set-marker beg-pos beg)
+    (set-marker end-pos end)
+    ;; bold
+    (ellama--replace "__\\(.+?\\)__" "*\\1*" beg-pos end-pos)
+    (ellama--replace "\\*\\*\\([^\*\n]+?\\)\\*\\*" "*\\1*" beg-pos end-pos)
+    (ellama--replace "<b>\\(.+?\\)</b>" "*\\1*" beg-pos end-pos)
+    (ellama--replace "<i>\\(.+?\\)</i>" "/\\1/" beg-pos end-pos)
+    ;; headings
+    (ellama--replace "^# " "* " beg-pos end-pos)
+    (ellama--replace "^## " "** " beg-pos end-pos)
+    (ellama--replace "^### " "*** " beg-pos end-pos)
+    (ellama--replace "^#### " "**** " beg-pos end-pos)
+    (ellama--replace "^##### " "***** " beg-pos end-pos)
+    (ellama--replace "^###### " "****** " beg-pos end-pos)
+    ;; underlined
+    (ellama--replace "<u>\\(.+?\\)</u>" "_\\1_" beg-pos end-pos)
+    ;; inline code
+    (ellama--replace "`\\(.+?\\)`" "~\\1~" beg-pos end-pos)
+    ;; italic
+    (when ellama-translate-italic
+      (ellama--replace "_\\(.+?\\)_" "/\\1/" beg-pos end-pos))
+    ;; lists
+    (ellama--replace "^\\* " "+ " beg-pos end-pos)
+    ;; strikethrough
+    (ellama--replace "~~\\(.+?\\)~~" "+\\1+" beg-pos end-pos)
+    (ellama--replace "<s>\\(.+?\\)</s>" "+\\1+" beg-pos end-pos)
+    ;; badges
+    (ellama--replace "\\[\\!\\[.*?\\](\\(.*?\\))\\](\\(.*?\\))" "[[\\2][file:\\1]]" beg-pos end-pos)
+    ;;links
+    (ellama--replace "\\[\\(.*?\\)\\](\\(.*?\\))" "[[\\2][\\1]]" beg-pos end-pos)
 
-  ;; filling long lines
-  (goto-char beg)
-  (when ellama-fill-paragraphs
-    (let ((use-hard-newlines t))
-      (fill-region beg end nil t t))))
+    ;; filling long lines
+    (goto-char beg-pos)
+    (set-hard-newline-properties beg-pos end-pos)
+    (when ellama-fill-paragraphs
+      (let* ((use-hard-newlines t))
+	(fill-region beg end-pos nil t t)))))
 
 (defun ellama--replace-outside-of-code-blocks (text)
   "Replace markdown elements in TEXT with org equivalents.
@@ -1226,45 +1233,46 @@ FILTER is a function for text transformation."
 	   (safe-common-prefix ""))
       (lambda
 	(text)
-	(with-current-buffer buffer
-	  (save-excursion
-	    (goto-char end-marker)
-	    (let* ((filtered-text
-		    (funcall filter text))
-		   (use-hard-newlines t)
-		   (common-prefix (concat
-				   safe-common-prefix
-				   (ellama-max-common-prefix
-				    (string-remove-prefix
+	(when (not (string-empty-p text))
+	  (with-current-buffer buffer
+	    (save-excursion
+	      (goto-char end-marker)
+	      (let* ((filtered-text
+		      (funcall filter text))
+		     (use-hard-newlines t)
+		     (common-prefix (concat
 				     safe-common-prefix
-				     filtered-text)
-				    (string-remove-prefix
-				     safe-common-prefix
-				     previous-filtered-text))))
-		   (wrong-chars-cnt (- (length previous-filtered-text)
-				       (length common-prefix)))
-		   (delta (string-remove-prefix common-prefix filtered-text)))
-	      (delete-char (- wrong-chars-cnt))
-	      (when delta (insert (propertize delta 'hard t))
-		    (when (and
-			   ellama-fill-paragraphs
-			   (pcase ellama-fill-paragraphs
-			     ((cl-type function) (funcall ellama-fill-paragraphs))
-			     ((cl-type boolean) ellama-fill-paragraphs)
-			     ((cl-type list) (and (apply #'derived-mode-p
-							 ellama-fill-paragraphs)))))
-		      (if (not (eq major-mode 'org-mode))
-			  (fill-paragraph)
-			(when (not (save-excursion
-				     (re-search-backward
-				      "#\\+BEGIN_SRC"
-				      beg-marker t)))
-			  (org-fill-paragraph))))
-		    (set-marker end-marker (point))
-		    (when (and ellama-auto-scroll (not ellama--stop-scroll))
-		      (ellama--scroll buffer end-marker))
-		    (setq safe-common-prefix (ellama--string-without-last-line common-prefix))
-		    (setq previous-filtered-text filtered-text)))))))))
+				     (ellama-max-common-prefix
+				      (string-remove-prefix
+				       safe-common-prefix
+				       filtered-text)
+				      (string-remove-prefix
+				       safe-common-prefix
+				       previous-filtered-text))))
+		     (wrong-chars-cnt (- (length previous-filtered-text)
+					 (length common-prefix)))
+		     (delta (string-remove-prefix common-prefix filtered-text)))
+		(delete-char (- wrong-chars-cnt))
+		(when delta (insert (propertize delta 'hard t))
+		      (when (and
+			     ellama-fill-paragraphs
+			     (pcase ellama-fill-paragraphs
+			       ((cl-type function) (funcall ellama-fill-paragraphs))
+			       ((cl-type boolean) ellama-fill-paragraphs)
+			       ((cl-type list) (and (apply #'derived-mode-p
+							   ellama-fill-paragraphs)))))
+			(if (not (eq major-mode 'org-mode))
+			    (fill-paragraph)
+			  (when (not (save-excursion
+				       (re-search-backward
+					"#\\+BEGIN_SRC"
+					beg-marker t)))
+			    (org-fill-paragraph))))
+		      (set-marker end-marker (point))
+		      (when (and ellama-auto-scroll (not ellama--stop-scroll))
+			(ellama--scroll buffer end-marker))
+		      (setq safe-common-prefix (ellama--string-without-last-line common-prefix))
+		      (setq previous-filtered-text filtered-text))))))))))
 
 (defun ellama--handle-partial (insert-text insert-reasoning reasoning-buffer)
   "Handle partial llm callback.
@@ -1950,7 +1958,17 @@ ARGS contains keys for fine control.
 					(make-temp-name (concat buffer-name " "))
 				      buffer-name)))
 	 (system (plist-get args :system))
-	 (donecb (plist-get args :on-done))
+	 (donecb (lambda (text)
+		   (let ((callback (plist-get args :on-done)))
+		     (display-buffer buffer
+				     (when ellama-instant-display-action-function
+				       `((ignore . (,ellama-instant-display-action-function)))))
+		     (when callback
+		       (if (and (listp callback)
+				(functionp (car callback)))
+			   (mapc (lambda (fn) (funcall fn text))
+				 callback)
+			 (funcall callback text))))))
 	 filter)
     (with-current-buffer buffer
       (funcall ellama-major-mode)
@@ -2362,6 +2380,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
      (lambda (err)
        (user-error err)))))
 
+(declare-function make-llm-ollama "ext:llm-ollama")
 (defun ellama-get-ollama-model-names ()
   "Get ollama model names."
   (llm-models (or ellama-provider
@@ -2401,12 +2420,12 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
   (declare-function llm-ollama-p "ext:llm-ollama")
   (declare-function llm-ollama-host "ext:llm-ollama")
   (declare-function llm-ollama-port "ext:llm-ollama")
+  (require 'llm-ollama)
   (let ((model-name (ellama-get-ollama-model-name))
 	(host (when (llm-ollama-p ellama-provider)
 		(llm-ollama-host ellama-provider)))
 	(port (when (llm-ollama-p ellama-provider)
 		(llm-ollama-port ellama-provider))))
-    (require 'llm-ollama)
     (if host
 	(make-llm-ollama
 	 :chat-model model-name :embedding-model model-name :host host :port port)

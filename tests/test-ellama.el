@@ -53,6 +53,62 @@
         (ellama-code-improve)
         (should (equal original (buffer-string)))))))
 
+(ert-deftest test-ellama-lorem-ipsum ()
+  (let ((fill-column 70)
+        (raw "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.")
+        (expected "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do
+eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad
+minim veniam, quis nostrud exercitation ullamco laboris nisi ut
+aliquip ex ea commodo consequat. Duis aute irure dolor in
+reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
+pariatur. Excepteur sint occaecat cupidatat non proident, sunt in
+culpa qui officia deserunt mollit anim id est laborum. Sed do eiusmod
+tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
+veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex
+ea commodo consequat. Duis aute irure dolor in reprehenderit in
+voluptate velit esse cillum dolore eu fugiat nulla pariatur.")
+        (ellama-provider (make-llm-fake))
+        prev-lines)
+    (with-temp-buffer
+      (org-mode)
+      (cl-letf (((symbol-function 'llm-chat-streaming)
+	         (lambda (_provider prompt partial-callback response-callback _error-callback _multi-output)
+	           (should (string-match "test" (llm-chat-prompt-to-text prompt)))
+	           (dolist (s (string-split raw " "))
+	             (funcall partial-callback `(:text ,(concat prev-lines s)))
+	             (setq prev-lines (concat prev-lines s)))
+	           (funcall response-callback `(:text ,raw)))))
+        (ellama-write "test")
+        (should (equal expected (buffer-string)))))))
+
+(ert-deftest test-ellama-duplicate-strings ()
+  (let ((fill-column 80)
+	(raw "Great question! Whether you should start with **\"Natural Language Processing with Transformers\"** (O’Reilly) or wait for **\"Build a Large Language Model (From Scratch)\"** depends on your **goals, background, and learning style**. Here’s a detailed comparison to help
+you decide:
+
+---
+
+")
+	(expected "Great question! Whether you should start with *\"Natural Language Processing with
+Transformers\"* (O’Reilly) or wait for *\"Build a Large Language Model (From
+Scratch)\"* depends on your *goals, background, and learning style*. Here’s a
+detailed comparison to help you decide:
+
+---")
+	(ellama-provider (make-llm-fake))
+	prev-lines)
+    (with-temp-buffer
+      (org-mode)
+      (cl-letf (((symbol-function 'llm-chat-streaming)
+		 (lambda (_provider prompt partial-callback response-callback _error-callback _multi-output)
+		   (should (string-match "test" (llm-chat-prompt-to-text prompt)))
+		   (dolist (s (string-split raw " "))
+		     (funcall partial-callback `(:text ,(concat prev-lines s " ")))
+		     (setq prev-lines (concat prev-lines s " ")))
+		   (funcall response-callback `(:text ,raw)))))
+	(ellama-write "test")
+	(should (equal expected (buffer-string)))))))
+
 (ert-deftest test-ellama-context-element-format-buffer-markdown ()
   (let ((element (ellama-context-element-buffer :name "*scratch*")))
     (should (equal "```emacs-lisp\n(display-buffer \"*scratch*\")\n```\n"
@@ -453,6 +509,54 @@ package main
 *** Explanation:
 1. *Initialization*: We create a boolean slice ~prime~ of size ~n+1~, where each
 index represents whether the number is prime (~true~) or not (~false~)."))))
+
+(ert-deftest test-ellama-md-to-org-lists ()
+  (let* ((fill-column 80)
+         (result (ellama--translate-markdown-to-org-filter "<think>Okay, the user asked me to create a list of fruits. Let me think about how to approach this.</think> Here’s a comprehensive list of fruits, categorized for clarity:
+
+---
+
+### **Common Fruits**
+1. **Apple**
+2. **Banana**
+3. **Orange**
+4. **Grape**
+5. **Strawberry**
+6. **Blueberry**
+
+---
+
+### **Additional Notes**
+- **Tomatoes** are technically fruits (part of the nightshade family).
+- **Coconut** is a tropical fruit, often used in cooking.
+- **Papaya** is a versatile fruit with nutritional value.
+
+Let me know if you'd like a simplified version or a specific category (e.g., by region, season, or type)! 🍎🍊")))
+    (should (string= result "#+BEGIN_QUOTE
+Okay, the user asked me to create a list of fruits. Let me think about how to
+approach this.
+#+END_QUOTE
+ Here’s a comprehensive list of fruits, categorized for clarity:
+
+---
+
+*** *Common Fruits*
+1. *Apple*
+2. *Banana*
+3. *Orange*
+4. *Grape*
+5. *Strawberry*
+6. *Blueberry*
+
+---
+
+*** *Additional Notes*
+- *Tomatoes* are technically fruits (part of the nightshade family).
+- *Coconut* is a tropical fruit, often used in cooking.
+- *Papaya* is a versatile fruit with nutritional value.
+
+Let me know if you'd like a simplified version or a specific category (e.g., by
+region, season, or type)! 🍎🍊"))))
 
 (defun ellama-test-max-common-prefix ()
   "Test the `ellama-max-common-prefix` function."
