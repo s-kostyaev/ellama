@@ -1,3 +1,20 @@
+* Version 1.8.2
+- Refactored ~ellama--apply-transformations~ to use markers for stability during
+  replacements. Added ~set-hard-newline~ properties to handle hard newlines during
+  text filling. Updated test cases to include a new test for markdown list to
+  org list conversion.
+- Added check for function existence to avoid errors when ~llm-ollama-p~ is not
+  available.
+- Displayed ellama instant result buffer on done instead of visible reasoning
+  buffer.
+- Added two new tests for ellama functionality: ~test-ellama-lorem-ipsum~
+  verifies proper line wrapping and formatting of long text.
+  ~test-ellama-duplicate-strings~ checks handling of duplicate strings with
+  markdown formatting.
+- Added a check to skip processing when input text is empty, preventing
+  potential errors in subsequent operations.
+- Moved ~(require 'llm-ollama)~ from inside the function to top scope to ensure
+  package is loaded before use.
 * Version 1.8.1
 - Use direct interfacing with Ollama's API instead of local installation.
 * Version 1.8.0
