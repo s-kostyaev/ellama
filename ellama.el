@@ -2372,6 +2372,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
      (lambda (err)
        (user-error err)))))
 
+(declare-function make-llm-ollama "ext:llm-ollama")
 (defun ellama-get-ollama-model-names ()
   "Get ollama model names."
   (llm-models (or ellama-provider
@@ -2411,12 +2412,12 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
   (declare-function llm-ollama-p "ext:llm-ollama")
   (declare-function llm-ollama-host "ext:llm-ollama")
   (declare-function llm-ollama-port "ext:llm-ollama")
+  (require 'llm-ollama)
   (let ((model-name (ellama-get-ollama-model-name))
 	(host (when (llm-ollama-p ellama-provider)
 		(llm-ollama-host ellama-provider)))
 	(port (when (llm-ollama-p ellama-provider)
 		(llm-ollama-port ellama-provider))))
-    (require 'llm-ollama)
     (if host
 	(make-llm-ollama
 	 :chat-model model-name :embedding-model model-name :host host :port port)
