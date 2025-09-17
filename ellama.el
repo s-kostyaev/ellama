@@ -453,6 +453,10 @@ It should be a function with single argument generated text string."
   "Show reasoning in separate buffer if enabled."
   :type 'boolean)
 
+(defcustom ellama-debug nil
+  "Enable debug."
+  :type 'boolean)
+
 (defun ellama--set-file-name-and-save ()
   "Set buffer file name and save buffer."
   (interactive)
@@ -1233,6 +1237,11 @@ FILTER is a function for text transformation."
 	   (safe-common-prefix ""))
       (lambda
 	(text)
+	(when ellama-debug
+	  (with-current-buffer (get-buffer-create "*ellama-debug*")
+	    (goto-char (point-max))
+	    (insert "\n=======================================\n"
+		    text)))
 	(when (not (string-empty-p text))
 	  (with-current-buffer buffer
 	    (save-excursion
