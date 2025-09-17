@@ -530,7 +530,13 @@ It should be a function with single argument generated text string."
     ;; skip good code blocks
     (while (re-search-forward "#\\+BEGIN_SRC\\(.\\|\n\\)*?#\\+END_SRC" nil t))
     (while (re-search-forward "#\\+END_SRC\\(\\(.\\|\n\\)*?\\)#\\+END_SRC" nil t)
-      (replace-match "#+BEGIN_SRC\\1#+END_SRC"))
+      (unless (string-match-p "#\\+BEGIN_SRC" (match-string 1))
+	(replace-match "#+BEGIN_SRC\\1#+END_SRC")))
+    (goto-char (match-beginning 0))
+    (while (re-search-backward "#\\+END_SRC\\(\\(.\\|\n\\)*?\\)#\\+END_SRC" nil t)
+      (unless (string-match-p "#\\+BEGIN_SRC" (match-string 1))
+	(replace-match "#+BEGIN_SRC\\1#+END_SRC"))
+      (goto-char (match-beginning 0)))
     (buffer-substring-no-properties (point-min) (point-max))))
 
 (defun ellama--replace (from to beg end)

@@ -773,6 +773,62 @@ third block
 #+END_SRC
 That's it."))))
 
+(ert-deftest test-ellama-md-to-org-code-multiple-bad-blocks-good-before ()
+  (let ((result (ellama--translate-markdown-to-org-filter "Some text:
+```text
+First block
+```
+other text:
+```
+Second block
+```
+more text:
+```
+third block
+```
+That's it.")))
+    (should (string-equal result "Some text:
+#+BEGIN_SRC text
+First block
+#+END_SRC
+other text:
+#+BEGIN_SRC
+Second block
+#+END_SRC
+more text:
+#+BEGIN_SRC
+third block
+#+END_SRC
+That's it."))))
+
+(ert-deftest test-ellama-md-to-org-code-multiple-bad-blocks-good-after ()
+  (let ((result (ellama--translate-markdown-to-org-filter "Some text:
+```
+First block
+```
+other text:
+```
+Second block
+```
+more text:
+```text
+third block
+```
+That's it.")))
+    (should (string-equal result "Some text:
+#+BEGIN_SRC
+First block
+#+END_SRC
+other text:
+#+BEGIN_SRC
+Second block
+#+END_SRC
+more text:
+#+BEGIN_SRC text
+third block
+#+END_SRC
+That's it."))))
+
 (ert-deftest test-ellama-md-to-org-code-inline-latex ()
   (let ((result (ellama--translate-markdown-to-org-filter "_some italic_
 $$P_\\theta(Y_T, ..., Y_2|Y_1, x_1, ..., x_T)$$
