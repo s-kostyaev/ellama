@@ -281,7 +281,6 @@ Let’s say we want to find all primes up to *30*.
 
 **** Step 1: List all numbers from 2 to N
 Write down all integers from 2 to 30:
-
 #+BEGIN_SRC
 2  3  4  5  6  7  5  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27
 28 29 30
@@ -295,10 +294,9 @@ We’ll go through them one by one.
 
 - 2 is the first prime number.
 - Eliminate all multiples of 2 (except 2 itself):  
-→ 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30
+  → 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30
 
 Now our list looks like this (only numbers not crossed out):
-
 #+BEGIN_SRC
 2  3  5  7  9 11 13 15 17 19 21 23 25 27 29
 #+END_SRC
@@ -311,10 +309,9 @@ Now our list looks like this (only numbers not crossed out):
 
 - 3 is the next prime.
 - Eliminate all multiples of 3 (except 3 itself):  
-→ 9, 15, 21, 27
+  → 9, 15, 21, 27
 
 Now remove those from the list:
-
 #+BEGIN_SRC
 2  3  5  7  11 13 17 19 23 25 29
 #+END_SRC
@@ -327,10 +324,9 @@ Now remove those from the list:
 
 - 5 is next prime.
 - Eliminate multiples of 5:  
-→ 25 (since 5×5=25)
+  → 25 (since 5×5=25)
 
 Remove 25:
-
 #+BEGIN_SRC
 2  3  5  7  11 13 17 19 23 29
 #+END_SRC
@@ -389,25 +385,24 @@ number > √N).
 ---
 
 *** 💡 Example in Code (Python)
-
 #+BEGIN_SRC python
 def sieve_of_eratosthenes(n):
-  if n < 2:
-      return []
+    if n < 2:
+	return []
 
-  # Create a boolean array \"is_prime[0..n]\" and initialize all entries as True
-  is_prime = [True] * (n + 1)
-  is_prime[0] = is_prime[1] = False  # 0 and 1 are not prime
+    # Create a boolean array \"is_prime[0..n]\" and initialize all entries as True
+    is_prime = [True] * (n + 1)
+    is_prime[0] = is_prime[1] = False  # 0 and 1 are not prime
 
-  for i in range(2, int(n**0.5) + 1):
-      if is_prime[i]:
-	  # Mark all multiples of i (starting from i*i) as not prime
-	  for j in range(i * i, n + 1, i):
-	      is_prime[j] = False
+    for i in range(2, int(n**0.5) + 1):
+	if is_prime[i]:
+	    # Mark all multiples of i (starting from i*i) as not prime
+	    for j in range(i * i, n + 1, i):
+		is_prime[j] = False
 
-  # Collect all prime numbers
-  primes = [i for i in range(2, n + 1) if is_prime[i]]
-  return primes
+    # Collect all prime numbers
+    primes = [i for i in range(2, n + 1) if is_prime[i]]
+    return primes
 
 # Example: Get primes up to 30
 print(sieve_of_eratosthenes(30))
@@ -995,16 +990,16 @@ region, season, or type)! 🍎🍊"))))
   "Run the tests for `ellama-max-common-prefix`."
   (ellama-test-max-common-prefix))
 
-(ert-deftest ellama--string-without-last-line-test ()
-  "Test `ellama--string-without-last-line` function."
-  (should (equal (ellama--string-without-last-line "Line1\nLine2\nLine3")
-                 "Line1\nLine2"))
-  (should (equal (ellama--string-without-last-line "SingleLine")
+(ert-deftest ellama--string-without-last-two-lines-test ()
+  "Test `ellama--string-without-last-two-lines` function."
+  (should (equal (ellama--string-without-last-two-lines "Line1\nLine2\nLine3")
+                 "Line1"))
+  (should (equal (ellama--string-without-last-two-lines "SingleLine")
                  ""))
-  (should (equal (ellama--string-without-last-line "")
+  (should (equal (ellama--string-without-last-two-lines "")
                  ""))
-  (should (equal (ellama--string-without-last-line "Line1\nLine2")
-                 "Line1")))
+  (should (equal (ellama--string-without-last-two-lines "Line1\nLine2")
+                 "")))
 
 (provide 'test-ellama)
 

@@ -1221,11 +1221,11 @@ EVENT is an argument for mweel scroll."
       (setq i (1+ i)))
     (substring s1 0 i)))
 
-(defun ellama--string-without-last-line (s)
-  "Remove last line from string S."
+(defun ellama--string-without-last-two-lines (s)
+  "Remove last two lines from string S."
   (string-join
-   (reverse (cdr (reverse (string-lines
-			   s))))
+   (reverse (cddr (reverse (string-lines
+			    s))))
    "\n"))
 
 (defun ellama--insert (buffer point filter)
@@ -1267,37 +1267,58 @@ FILTER is a function for text transformation."
 		     (wrong-chars-cnt (- (length previous-filtered-text)
 					 (length common-prefix)))
 		     (delta (string-remove-prefix common-prefix filtered-text)))
-		(if (>= wrong-chars-cnt 0)
+		(if (> wrong-chars-cnt 0)
 		    ;; shortcut works
-		    (delete-char (- wrong-chars-cnt))
+		    (progn
+		      (delete-char (- wrong-chars-cnt))
+		      (when delta (insert (propertize delta 'hard t))
+			    (when (and
+				   ellama-fill-paragraphs
+				   (pcase ellama-fill-paragraphs
+				     ((cl-type function) (funcall ellama-fill-paragraphs))
+				     ((cl-type boolean) ellama-fill-paragraphs)
+				     ((cl-type list) (and (apply #'derived-mode-p
+								 ellama-fill-paragraphs)))))
+			      (if (not (eq major-mode 'org-mode))
+				  (fill-paragraph)
+				(when (not (save-excursion
+					     (re-search-backward
+					      "#\\+BEGIN_SRC"
+					      beg-marker t)))
+				  (org-fill-paragraph))))
+			    (set-marker end-marker (point))
+			    (when (and ellama-auto-scroll (not ellama--stop-scroll))
+			      (ellama--scroll buffer end-marker))
+			    (setq safe-common-prefix (ellama--string-without-last-two-lines common-prefix))
+			    (setq previous-filtered-text filtered-text)))
 		  ;; shortcut doesn't work -> heavy computations
 		  (let* ((common-prefix (ellama-max-common-prefix
 					 filtered-text
 					 previous-filtered-text))
 			 (wrong-chars-cnt (- (length previous-filtered-text)
-					     (length common-prefix))))
-		    (setq delta (string-remove-prefix common-prefix filtered-text))
-		    (delete-char (- wrong-chars-cnt))))
-		(when delta (insert (propertize delta 'hard t))
-		      (when (and
-			     ellama-fill-paragraphs
-			     (pcase ellama-fill-paragraphs
-			       ((cl-type function) (funcall ellama-fill-paragraphs))
-			       ((cl-type boolean) ellama-fill-paragraphs)
-			       ((cl-type list) (and (apply #'derived-mode-p
-							   ellama-fill-paragraphs)))))
-			(if (not (eq major-mode 'org-mode))
-			    (fill-paragraph)
-			  (when (not (save-excursion
-				       (re-search-backward
-					"#\\+BEGIN_SRC"
-					beg-marker t)))
-			    (org-fill-paragraph))))
-		      (set-marker end-marker (point))
-		      (when (and ellama-auto-scroll (not ellama--stop-scroll))
-			(ellama--scroll buffer end-marker))
-		      (setq safe-common-prefix (ellama--string-without-last-line common-prefix))
-		      (setq previous-filtered-text filtered-text))))))))))
+					     (length common-prefix)))
+			 (delta (string-remove-prefix common-prefix filtered-text)))
+		    (delete-char (- wrong-chars-cnt))
+		    (when delta (insert (propertize delta 'hard t))
+			  (when (and
+				 ellama-fill-paragraphs
+				 (pcase ellama-fill-paragraphs
+				   ((cl-type function) (funcall ellama-fill-paragraphs))
+				   ((cl-type boolean) ellama-fill-paragraphs)
+				   ((cl-type list) (and (apply #'derived-mode-p
+							       ellama-fill-paragraphs)))))
+			    (if (not (eq major-mode 'org-mode))
+				(fill-paragraph)
+			      (when (not (save-excursion
+					   (re-search-backward
+					    "#\\+BEGIN_SRC"
+					    beg-marker t)))
+				(org-fill-paragraph))))
+			  (set-marker end-marker (point))
+			  (when (and ellama-auto-scroll (not ellama--stop-scroll))
+			    (ellama--scroll buffer end-marker))
+			  (setq safe-common-prefix (ellama--string-without-last-two-lines common-prefix))
+			  (setq previous-filtered-text filtered-text))))))))))))
 
 (defun ellama--handle-partial (insert-text insert-reasoning reasoning-buffer)
   "Handle partial llm callback.
