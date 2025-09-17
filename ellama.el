@@ -1261,7 +1261,17 @@ FILTER is a function for text transformation."
 		     (wrong-chars-cnt (- (length previous-filtered-text)
 					 (length common-prefix)))
 		     (delta (string-remove-prefix common-prefix filtered-text)))
-		(delete-char (- wrong-chars-cnt))
+		(if (>= wrong-chars-cnt 0)
+		    ;; shortcut works
+		    (delete-char (- wrong-chars-cnt))
+		  ;; shortcut doesn't work -> heavy computations
+		  (let* ((common-prefix (ellama-max-common-prefix
+					 filtered-text
+					 previous-filtered-text))
+			 (wrong-chars-cnt (- (length previous-filtered-text)
+					     (length common-prefix))))
+		    (setq delta (string-remove-prefix common-prefix filtered-text))
+		    (delete-char (- wrong-chars-cnt))))
 		(when delta (insert (propertize delta 'hard t))
 		      (when (and
 			     ellama-fill-paragraphs
