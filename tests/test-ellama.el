@@ -824,6 +824,15 @@ third block
 #+END_SRC
 That's it."))))
 
+(ert-deftest test-ellama-md-to-org-code-skiped-line-break ()
+  (let ((result (ellama--translate-markdown-to-org-filter "Sure! ```emacs-lisp
+(message \"ok\")
+```")))
+    (should (string-equal result "Sure! 
+#+BEGIN_SRC emacs-lisp
+(message \"ok\")
+#+END_SRC"))))
+
 (ert-deftest test-ellama-md-to-org-code-inline-latex ()
   (let ((result (ellama--translate-markdown-to-org-filter "_some italic_
 $$P_\\theta(Y_T, ..., Y_2|Y_1, x_1, ..., x_T)$$

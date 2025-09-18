@@ -644,6 +644,7 @@ This filter contains only subset of markdown syntax to be good enough."
     text
     ;; code blocks
     (replace-regexp-in-string "^[[:space:]]*```\\(.+\\)$" "#+BEGIN_SRC \\1")
+    (replace-regexp-in-string "^\\(.+\\)```\\(.+\\)$" "\\1\n#+BEGIN_SRC \\2")
     (ellama--replace-first-begin-src)
     (replace-regexp-in-string "^<!-- language: \\(.+\\) -->\n```" "#+BEGIN_SRC \\1")
     (replace-regexp-in-string "^[[:space:]]*```$" "#+END_SRC")
