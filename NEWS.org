@@ -1,3 +1,8 @@
+* Version 1.8.4
+- Added ~(require 'llm-ollama)~ to ~ellama-get-ollama-model-names~ function to
+  ensure the llm-ollama module is loaded before attempting to retrieve ollama
+  model names. This fixes error when the function is called without the module
+  being previously required.
 * Version 1.8.3
 - Added ~ellama-debug~ custom variable to enable debug output. When enabled,
   generated text is now logged to a ~*ellama-debug*~ buffer with a separator for

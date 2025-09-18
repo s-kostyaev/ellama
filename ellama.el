@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1"))
-;; Version: 1.8.3
+;; Version: 1.8.4
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -2429,6 +2429,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 (declare-function make-llm-ollama "ext:llm-ollama")
 (defun ellama-get-ollama-model-names ()
   "Get ollama model names."
+  (require 'llm-ollama)
   (llm-models (or ellama-provider
 		  (make-llm-ollama))))
 
