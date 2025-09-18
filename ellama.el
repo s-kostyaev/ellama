@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1"))
-;; Version: 1.8.5
+;; Version: 1.8.6
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -644,6 +644,8 @@ This filter contains only subset of markdown syntax to be good enough."
     text
     ;; code blocks
     (replace-regexp-in-string "^[[:space:]]*```\\(.+\\)$" "#+BEGIN_SRC \\1")
+    (replace-regexp-in-string "^\\(.+\\)```\\([A-Za-z0-9\\-]+\\)$" "\\1\n#+BEGIN_SRC \\2")
+    (replace-regexp-in-string "^\\(.+\\)```\\(.+\\)$" "\\1\n#+END_SRC\n\\2")
     (ellama--replace-first-begin-src)
     (replace-regexp-in-string "^<!-- language: \\(.+\\) -->\n```" "#+BEGIN_SRC \\1")
     (replace-regexp-in-string "^[[:space:]]*```$" "#+END_SRC")
@@ -1279,7 +1281,7 @@ FILTER is a function for text transformation."
 				     ((cl-type boolean) ellama-fill-paragraphs)
 				     ((cl-type list) (and (apply #'derived-mode-p
 								 ellama-fill-paragraphs)))))
-			      (if (not (eq major-mode 'org-mode))
+			      (if (not (derived-mode-p 'org-mode))
 				  (fill-paragraph)
 				(when (not (save-excursion
 					     (re-search-backward
@@ -1307,7 +1309,7 @@ FILTER is a function for text transformation."
 				   ((cl-type boolean) ellama-fill-paragraphs)
 				   ((cl-type list) (and (apply #'derived-mode-p
 							       ellama-fill-paragraphs)))))
-			    (if (not (eq major-mode 'org-mode))
+			    (if (not (derived-mode-p 'org-mode))
 				(fill-paragraph)
 			      (when (not (save-excursion
 					   (re-search-backward
