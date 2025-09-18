@@ -2429,6 +2429,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 (declare-function make-llm-ollama "ext:llm-ollama")
 (defun ellama-get-ollama-model-names ()
   "Get ollama model names."
+  (require 'llm-ollama)
   (llm-models (or ellama-provider
 		  (make-llm-ollama))))
 
