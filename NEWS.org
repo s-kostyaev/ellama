@@ -1,3 +1,20 @@
+* Version 1.8.3
+- Added ~ellama-debug~ custom variable to enable debug output. When enabled,
+  generated text is now logged to a ~*ellama-debug*~ buffer with a separator for
+  easier tracking of debug information. The debug output includes the raw text
+  being processed and is appended to the end of the debug buffer each time.
+- Fixed issue where nested or improperly formatted code blocks were not being
+  handled correctly during markdown to org conversion. Added logic to check for
+  existing BEGIN_SRC markers before replacing blocks, and improved backward
+  search handling. Also added test cases for multiple bad code blocks with good
+  content before and after them.
+- Changed ~ellama--string-without-last-line~ function to
+  ~ellama--string-without-last-two-lines~ to remove last two lines instead of
+  one. Updated the text insertion logic in ~ellama--insert~ to use the new
+  function and handle paragraph filling more robustly. Also improved the
+  condition check for wrong character count and adjusted test cases accordingly.
+- Fixed test case.
+- Added reproduction of duplicate lines bug. Fix this bug.
 * Version 1.8.2
 - Refactored ~ellama--apply-transformations~ to use markers for stability during
   replacements. Added ~set-hard-newline~ properties to handle hard newlines during

@@ -75,11 +75,373 @@ voluptate velit esse cillum dolore eu fugiat nulla pariatur.")
 	         (lambda (_provider prompt partial-callback response-callback _error-callback _multi-output)
 	           (should (string-match "test" (llm-chat-prompt-to-text prompt)))
 	           (dolist (s (string-split raw " "))
-	             (funcall partial-callback `(:text ,(concat prev-lines s)))
-	             (setq prev-lines (concat prev-lines s)))
+	             (funcall partial-callback `(:text ,(concat prev-lines " " s)))
+	             (setq prev-lines (concat prev-lines " " s)))
 	           (funcall response-callback `(:text ,raw)))))
         (ellama-write "test")
         (should (equal expected (buffer-string)))))))
+
+(ert-deftest test-ellama-sieve-of-eratosthenes ()
+  (let* ((fill-column 80)
+	 (raw "Sure! Let's go through the **Sieve of Eratosthenes** step by step — it's an ancient and elegant algorithm used to find all **prime numbers** up to a given limit.
+
+---
+
+### 🔍 What is the Sieve of Eratosthenes?
+
+The **Sieve of Eratosthenes** is a method developed by the ancient Greek mathematician Eratosthenes (circa 240 BCE) to efficiently find all **prime numbers** less than or equal to a given number (say, N).
+
+A **prime number** is a natural number greater than 1 that has no positive divisors other than 1 and itself.
+
+---
+
+### 🎯 Goal
+
+Given a number N, list all **prime numbers** from 2 to N.
+
+---
+
+### ✅ How Does It Work? (Step-by-Step)
+
+Let’s say we want to find all primes up to **30**.
+
+#### Step 1: List all numbers from 2 to N
+Write down all integers from 2 to 30:
+
+```
+2  3  4  5  6  7  5  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30
+```
+
+We’ll go through them one by one.
+
+---
+
+#### Step 2: Start with the first prime — 2
+
+- 2 is the first prime number.
+- Eliminate all multiples of 2 (except 2 itself):  
+  → 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30
+
+Now our list looks like this (only numbers not crossed out):
+
+```
+2  3  5  7  9 11 13 15 17 19 21 23 25 27 29
+```
+
+(We removed all multiples of 2)
+
+---
+
+#### Step 3: Move to the next uneliminated number — 3
+
+- 3 is the next prime.
+- Eliminate all multiples of 3 (except 3 itself):  
+  → 9, 15, 21, 27
+
+Now remove those from the list:
+
+```
+2  3  5  7  11 13 17 19 23 25 29
+```
+
+(Now 9, 15, 21, 27 are gone)
+
+---
+
+#### Step 4: Next uneliminated number — 5
+
+- 5 is next prime.
+- Eliminate multiples of 5:  
+  → 25 (since 5×5=25)
+
+Remove 25:
+
+```
+2  3  5  7  11 13 17 19 23 29
+```
+
+---
+
+#### Step 5: Next uneliminated number — 7
+
+- Check if 7 has any multiples left that haven’t been removed.
+- Multiples of 7: 14, 21, 28
+- But 14, 21, 28 were already eliminated earlier (by 2 and 3), so no need to remove them again.
+
+So we **stop** here.
+
+Why? Because the next number after 7 is 11 — but **11 is greater than √30**.
+
+---
+
+### 🔍 Key Insight
+
+> You only need to check numbers up to √N.
+
+Why?
+- If a number greater than √N is composite (not prime), it must have a factor less than or equal to √N.
+- So if we’ve already eliminated all multiples of numbers ≤ √N, then all remaining numbers are prime.
+
+For N = 30, √30 ≈ 5.48 → we only need to check primes up to 5.
+
+So we only need to go through 2, 3, 5 — which we did.
+
+---
+
+### ✅ Final Result
+
+All the remaining numbers are **prime**:
+
+> **2, 3, 5, 7, 11, 13, 17, 19, 23, 29**
+
+✅ These are all the prime numbers ≤ 30.
+
+---
+
+### 📝 Summary of the Algorithm
+
+1. Create a list of consecutive integers from 2 to N.
+2. Start with the first number (2).
+3. Mark all multiples of that number (except the number itself) as composite (not prime).
+4. Move to the next unmarked number and repeat.
+5. Stop when the square of the current number exceeds N (i.e., when current number > √N).
+
+---
+
+### 💡 Example in Code (Python)
+
+```python
+def sieve_of_eratosthenes(n):
+    if n < 2:
+	return []
+
+    # Create a boolean array \"is_prime[0..n]\" and initialize all entries as True
+    is_prime = [True] * (n + 1)
+    is_prime[0] = is_prime[1] = False  # 0 and 1 are not prime
+
+    for i in range(2, int(n**0.5) + 1):
+	if is_prime[i]:
+	    # Mark all multiples of i (starting from i*i) as not prime
+	    for j in range(i * i, n + 1, i):
+		is_prime[j] = False
+
+    # Collect all prime numbers
+    primes = [i for i in range(2, n + 1) if is_prime[i]]
+    return primes
+
+# Example: Get primes up to 30
+print(sieve_of_eratosthenes(30))
+# Output: [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+```
+
+---
+
+### 🎉 Why Is It Important?
+
+- Very efficient for finding all primes up to a limit.
+- Used in number theory, cryptography, and computer science.
+- Simple and intuitive — great for learning algorithms.
+
+---
+
+### 🚀 Fun Fact
+
+Eratosthenes was not only a mathematician but also a geographer, astronomer, and poet. He used this sieve to find primes — and even calculated Earth’s circumference with remarkable accuracy!
+
+---
+
+Let me know if you'd like to see a visual version, or try it with a different number! 😊
+")
+	 (expected "Sure! Let's go through the *Sieve of Eratosthenes* step by step — it's an
+ancient and elegant algorithm used to find all *prime numbers* up to a given
+limit.
+
+---
+
+*** 🔍 What is the Sieve of Eratosthenes?
+
+The *Sieve of Eratosthenes* is a method developed by the ancient Greek
+mathematician Eratosthenes (circa 240 BCE) to efficiently find all *prime
+numbers* less than or equal to a given number (say, N).
+
+A *prime number* is a natural number greater than 1 that has no positive
+divisors other than 1 and itself.
+
+---
+
+*** 🎯 Goal
+
+Given a number N, list all *prime numbers* from 2 to N.
+
+---
+
+*** ✅ How Does It Work? (Step-by-Step)
+
+Let’s say we want to find all primes up to *30*.
+
+**** Step 1: List all numbers from 2 to N
+Write down all integers from 2 to 30:
+#+BEGIN_SRC
+2  3  4  5  6  7  5  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27
+28 29 30
+#+END_SRC
+
+We’ll go through them one by one.
+
+---
+
+**** Step 2: Start with the first prime — 2
+
+- 2 is the first prime number.
+- Eliminate all multiples of 2 (except 2 itself):  
+  → 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30
+
+Now our list looks like this (only numbers not crossed out):
+#+BEGIN_SRC
+2  3  5  7  9 11 13 15 17 19 21 23 25 27 29
+#+END_SRC
+
+(We removed all multiples of 2)
+
+---
+
+**** Step 3: Move to the next uneliminated number — 3
+
+- 3 is the next prime.
+- Eliminate all multiples of 3 (except 3 itself):  
+  → 9, 15, 21, 27
+
+Now remove those from the list:
+#+BEGIN_SRC
+2  3  5  7  11 13 17 19 23 25 29
+#+END_SRC
+
+(Now 9, 15, 21, 27 are gone)
+
+---
+
+**** Step 4: Next uneliminated number — 5
+
+- 5 is next prime.
+- Eliminate multiples of 5:  
+  → 25 (since 5×5=25)
+
+Remove 25:
+#+BEGIN_SRC
+2  3  5  7  11 13 17 19 23 29
+#+END_SRC
+
+---
+
+**** Step 5: Next uneliminated number — 7
+
+- Check if 7 has any multiples left that haven’t been removed.
+- Multiples of 7: 14, 21, 28
+- But 14, 21, 28 were already eliminated earlier (by 2 and 3), so no need to
+  remove them again.
+
+So we *stop* here.
+
+Why? Because the next number after 7 is 11 — but *11 is greater than √30*.
+
+---
+
+*** 🔍 Key Insight
+
+> You only need to check numbers up to √N.
+
+Why?
+- If a number greater than √N is composite (not prime), it must have a factor
+  less than or equal to √N.
+- So if we’ve already eliminated all multiples of numbers ≤ √N, then all
+  remaining numbers are prime.
+
+For N = 30, √30 ≈ 5.48 → we only need to check primes up to 5.
+
+So we only need to go through 2, 3, 5 — which we did.
+
+---
+
+*** ✅ Final Result
+
+All the remaining numbers are *prime*:
+
+> *2, 3, 5, 7, 11, 13, 17, 19, 23, 29*
+
+✅ These are all the prime numbers ≤ 30.
+
+---
+
+*** 📝 Summary of the Algorithm
+
+1. Create a list of consecutive integers from 2 to N.
+2. Start with the first number (2).
+3. Mark all multiples of that number (except the number itself) as composite
+(not prime).
+4. Move to the next unmarked number and repeat.
+5. Stop when the square of the current number exceeds N (i.e., when current
+number > √N).
+
+---
+
+*** 💡 Example in Code (Python)
+#+BEGIN_SRC python
+def sieve_of_eratosthenes(n):
+    if n < 2:
+	return []
+
+    # Create a boolean array \"is_prime[0..n]\" and initialize all entries as True
+    is_prime = [True] * (n + 1)
+    is_prime[0] = is_prime[1] = False  # 0 and 1 are not prime
+
+    for i in range(2, int(n**0.5) + 1):
+	if is_prime[i]:
+	    # Mark all multiples of i (starting from i*i) as not prime
+	    for j in range(i * i, n + 1, i):
+		is_prime[j] = False
+
+    # Collect all prime numbers
+    primes = [i for i in range(2, n + 1) if is_prime[i]]
+    return primes
+
+# Example: Get primes up to 30
+print(sieve_of_eratosthenes(30))
+# Output: [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+#+END_SRC
+
+---
+
+*** 🎉 Why Is It Important?
+
+- Very efficient for finding all primes up to a limit.
+- Used in number theory, cryptography, and computer science.
+- Simple and intuitive — great for learning algorithms.
+
+---
+
+*** 🚀 Fun Fact
+
+Eratosthenes was not only a mathematician but also a geographer, astronomer, and
+poet. He used this sieve to find primes — and even calculated Earth’s
+circumference with remarkable accuracy!
+
+---
+
+Let me know if you'd like to see a visual version, or try it with a different
+number! 😊")
+	 (ellama-provider (make-llm-fake))
+	 prev-lines)
+    (with-temp-buffer
+      (org-mode)
+      (cl-letf (((symbol-function 'llm-chat-streaming)
+		 (lambda (_provider prompt partial-callback response-callback _error-callback _multi-output)
+		   (should (string-match "test" (llm-chat-prompt-to-text prompt)))
+		   (dolist (s (string-split raw " "))
+		     (funcall partial-callback `(:text ,(concat prev-lines " " s)))
+		     (setq prev-lines (concat prev-lines " " s)))
+		   (funcall response-callback `(:text ,raw)))))
+	(ellama-write "test")
+	(should (equal expected (buffer-substring-no-properties (point-min) (point-max))))))))
 
 (ert-deftest test-ellama-duplicate-strings ()
   (let ((fill-column 80)
@@ -406,6 +768,62 @@ third block
 #+END_SRC
 That's it."))))
 
+(ert-deftest test-ellama-md-to-org-code-multiple-bad-blocks-good-before ()
+  (let ((result (ellama--translate-markdown-to-org-filter "Some text:
+```text
+First block
+```
+other text:
+```
+Second block
+```
+more text:
+```
+third block
+```
+That's it.")))
+    (should (string-equal result "Some text:
+#+BEGIN_SRC text
+First block
+#+END_SRC
+other text:
+#+BEGIN_SRC
+Second block
+#+END_SRC
+more text:
+#+BEGIN_SRC
+third block
+#+END_SRC
+That's it."))))
+
+(ert-deftest test-ellama-md-to-org-code-multiple-bad-blocks-good-after ()
+  (let ((result (ellama--translate-markdown-to-org-filter "Some text:
+```
+First block
+```
+other text:
+```
+Second block
+```
+more text:
+```text
+third block
+```
+That's it.")))
+    (should (string-equal result "Some text:
+#+BEGIN_SRC
+First block
+#+END_SRC
+other text:
+#+BEGIN_SRC
+Second block
+#+END_SRC
+more text:
+#+BEGIN_SRC text
+third block
+#+END_SRC
+That's it."))))
+
 (ert-deftest test-ellama-md-to-org-code-inline-latex ()
   (let ((result (ellama--translate-markdown-to-org-filter "_some italic_
 $$P_\\theta(Y_T, ..., Y_2|Y_1, x_1, ..., x_T)$$
@@ -572,16 +990,16 @@ region, season, or type)! 🍎🍊"))))
   "Run the tests for `ellama-max-common-prefix`."
   (ellama-test-max-common-prefix))
 
-(ert-deftest ellama--string-without-last-line-test ()
-  "Test `ellama--string-without-last-line` function."
-  (should (equal (ellama--string-without-last-line "Line1\nLine2\nLine3")
-                 "Line1\nLine2"))
-  (should (equal (ellama--string-without-last-line "SingleLine")
+(ert-deftest ellama--string-without-last-two-lines-test ()
+  "Test `ellama--string-without-last-two-lines` function."
+  (should (equal (ellama--string-without-last-two-lines "Line1\nLine2\nLine3")
+                 "Line1"))
+  (should (equal (ellama--string-without-last-two-lines "SingleLine")
                  ""))
-  (should (equal (ellama--string-without-last-line "")
+  (should (equal (ellama--string-without-last-two-lines "")
                  ""))
-  (should (equal (ellama--string-without-last-line "Line1\nLine2")
-                 "Line1")))
+  (should (equal (ellama--string-without-last-two-lines "Line1\nLine2")
+                 "")))
 
 (provide 'test-ellama)
 
