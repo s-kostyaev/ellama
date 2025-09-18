@@ -473,6 +473,11 @@ argument generated text string.
      for reasoning.
    • ‘ellama-session-line-template’: Template for formatting the current
      session line.
+   • ‘ellama-debug’: Enable debug.  When enabled, generated text is now
+     logged to a ‘*ellama-debug*’ buffer with a separator for easier
+     tracking of debug information.  The debug output includes the raw
+     text being processed and is appended to the end of the debug buffer
+     each time.
 
 
 File: ellama.info,  Node: Context Management,  Next: Minor modes,  Prev: Configuration,  Up: Top
@@ -1415,31 +1420,31 @@ Node: Installation3613
 Node: Commands8621
 Node: Keymap14965
 Node: Configuration17798
-Node: Context Management23086
-Node: Transient Menus for Context Management23994
-Node: Managing the Context25608
-Node: Considerations26383
-Node: Minor modes26976
-Node: ellama-context-header-line-mode28964
-Node: ellama-context-header-line-global-mode29789
-Node: ellama-context-mode-line-mode30509
-Node: ellama-context-mode-line-global-mode31357
-Node: Ellama Session Header Line Mode32061
-Node: Enabling and Disabling32630
-Node: Customization33077
-Node: Ellama Session Mode Line Mode33365
-Node: Enabling and Disabling (1)33950
-Node: Customization (1)34397
-Node: Using Blueprints34691
-Node: Key Components of Ellama Blueprints35310
-Node: Creating and Managing Blueprints35917
-Node: Variable Management36898
-Node: Keymap and Mode37367
-Node: Transient Menus38303
-Node: Running Blueprints programmatically38849
-Node: Acknowledgments39436
-Node: Contributions40149
-Node: GNU Free Documentation License40533
+Node: Context Management23397
+Node: Transient Menus for Context Management24305
+Node: Managing the Context25919
+Node: Considerations26694
+Node: Minor modes27287
+Node: ellama-context-header-line-mode29275
+Node: ellama-context-header-line-global-mode30100
+Node: ellama-context-mode-line-mode30820
+Node: ellama-context-mode-line-global-mode31668
+Node: Ellama Session Header Line Mode32372
+Node: Enabling and Disabling32941
+Node: Customization33388
+Node: Ellama Session Mode Line Mode33676
+Node: Enabling and Disabling (1)34261
+Node: Customization (1)34708
+Node: Using Blueprints35002
+Node: Key Components of Ellama Blueprints35621
+Node: Creating and Managing Blueprints36228
+Node: Variable Management37209
+Node: Keymap and Mode37678
+Node: Transient Menus38614
+Node: Running Blueprints programmatically39160
+Node: Acknowledgments39747
+Node: Contributions40460
+Node: GNU Free Documentation License40844
 
 End Tag Table
 
