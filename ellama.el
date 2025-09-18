@@ -1279,7 +1279,7 @@ FILTER is a function for text transformation."
 				     ((cl-type boolean) ellama-fill-paragraphs)
 				     ((cl-type list) (and (apply #'derived-mode-p
 								 ellama-fill-paragraphs)))))
-			      (if (not (eq major-mode 'org-mode))
+			      (if (not (derived-mode-p 'org-mode))
 				  (fill-paragraph)
 				(when (not (save-excursion
 					     (re-search-backward
@@ -1307,7 +1307,7 @@ FILTER is a function for text transformation."
 				   ((cl-type boolean) ellama-fill-paragraphs)
 				   ((cl-type list) (and (apply #'derived-mode-p
 							       ellama-fill-paragraphs)))))
-			    (if (not (eq major-mode 'org-mode))
+			    (if (not (derived-mode-p 'org-mode))
 				(fill-paragraph)
 			      (when (not (save-excursion
 					   (re-search-backward
