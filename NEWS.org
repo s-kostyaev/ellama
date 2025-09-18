@@ -1,3 +1,5 @@
+* Version 1.8.5
+- Added ~ellama-debug~ to documentation.
 * Version 1.8.4
 - Added ~(require 'llm-ollama)~ to ~ellama-get-ollama-model-names~ function to
   ensure the llm-ollama module is loaded before attempting to retrieve ollama
