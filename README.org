@@ -353,7 +353,10 @@ argument generated text string.
 - ~ellama-show-reasoning~: Show reasoning in separate buffer if enabled. Enabled by default.
 - ~ellama-reasoning-display-action-function~: Display action function for reasoning.
 - ~ellama-session-line-template~: Template for formatting the current session line.
-- ~ellama-debug~: Enable debug.
+- ~ellama-debug~: Enable debug. When enabled, generated text is now logged to a
+  ~*ellama-debug*~ buffer with a separator for easier tracking of debug
+  information. The debug output includes the raw text being processed and is
+  appended to the end of the debug buffer each time.
 
 * Context Management
 
