@@ -203,11 +203,42 @@ Otherwise, prompt the user to enter a system message."
    (transient-arg-value "--new-session" args)
    :ephemeral (transient-arg-value "--ephemeral" args)))
 
+(defun ellama--context-summary ()
+  "Return a summary of context elements as a string."
+  (let ((context (append
+                  ellama-context-global ellama-context-ephemeral))
+        (total-chars 0)
+        (summary))
+
+    (cl-loop for element in context do
+             (let* ((content
+                     (ellama-context-element-extract element))
+                    (chars (length content))
+                    (name (ellama-context-element-display element)))
+               (cl-incf total-chars chars)
+               (push
+                (if (ellama-context-element-quote-p element)
+                    (format "%s (%d chars region)" name chars)
+                  (format "%s" name))
+                summary)))
+    (concat "Context: " (string-join summary ", ") (format " (total %d chars)" total-chars))))
+
+
+(defun ellama--transient-context ()
+  "Summarise session and context for transient menus."
+  (format "%s %s %s %s"
+          (propertize "Session:" 'face 'ellama-key-face)
+     	  (if ellama--current-session
+	      (ellama-session-id ellama--current-session)
+	    ellama--current-session-id)
+          (propertize "Context: " 'face 'ellama-key-face)
+          (ellama--context-summary)))
+
 ;;;###autoload (autoload 'ellama-transient-code-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-code-menu ()
   "Code Commands."
   ["Session Options"
-   :description (lambda () (ellama-session-line))
+   :description (lambda () (ellama--transient-context))
    ("-n" "Create New Session" "--new-session")]
   ["Ephemeral sessions"
    :if (lambda () ellama-session-auto-save)
@@ -284,7 +315,7 @@ Otherwise, prompt the user to enter a system message."
 (transient-define-prefix ellama-transient-ask-menu ()
   "Ask Commands."
   ["Session Options"
-   :description (lambda () (ellama-session-line))
+   :description (lambda () (ellama--transient-context))
    ("-n" "Create New Session" "--new-session")]
   ["Ephemeral sessions"
    :if (lambda () ellama-session-auto-save)
@@ -411,7 +442,7 @@ ARGS used for transient arguments."
 (transient-define-prefix ellama-transient-main-menu ()
   "Main Menu."
   ["Session Options"
-   :description (lambda () (ellama-session-line))
+   :description (lambda () (ellama--transient-context))
    ("-n" "Create New Session" "--new-session")]
   ["Ephemeral sessions"
    :if (lambda () ellama-session-auto-save)
