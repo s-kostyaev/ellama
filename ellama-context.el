@@ -332,6 +332,9 @@ the context."
 (cl-defgeneric ellama-context-element-format (element mode)
   "Format the context ELEMENT for the major MODE.")
 
+(cl-defgeneric ellama-context-element-quote-p (element)
+  "Return t is ELEMENT is a quote, nil otherwise.")
+
 (cl-defmethod ellama-context-element-add ((element ellama-context-element))
   "Add the ELEMENT to the Ellama context."
   (setf ellama-context-global (nreverse ellama-context-global))
@@ -349,6 +352,10 @@ the context."
   (setf ellama-context-ephemeral (nreverse ellama-context-ephemeral))
   (get-buffer-create ellama--context-buffer t)
   (ellama-context-update-show))
+
+(cl-defmethod ellama-context-element-quote-p ((_element ellama-context-element))
+  "Return t is ELEMENT is a quote, nil otherwise."
+  nil)
 
 ;; Buffer context element
 
@@ -426,6 +433,11 @@ the context."
 		name name (ellama-context--org-quote content))
       (format "[[%s][%s]] [[elisp:(display-buffer \"%s\")][show]]"
 	      name name (ellama-context--quote-buffer content)))))
+
+(cl-defmethod ellama-context-element-quote-p
+  ((_element ellama-context-element-buffer-quote))
+  "Return t to indicate this `ELEMENT' is a quote."
+  t)
 
 ;; File context element
 
@@ -617,6 +629,11 @@ the context."
       (format "[[%s][%s]] [[elisp:(display-buffer \"%s\")][show]]"
 	      url name (ellama-context--quote-buffer content)))))
 
+(cl-defmethod ellama-context-element-quote-p
+  ((_element ellama-context-element-webpage-quote))
+  "Return t to indicate this `ELEMENT' is a quote."
+  t)
+
 ;; Info node quote context elements
 
 (defclass ellama-context-element-info-node-quote (ellama-context-element)
@@ -669,6 +686,11 @@ the context."
 		name)
 	      (ellama-context--quote-buffer content)))))
 
+(cl-defmethod ellama-context-element-quote-p
+  ((_element ellama-context-element-info-node-quote))
+  "Return t to indicate this `ELEMENT' is a quote."
+  t)
+
 ;; File quote context elements
 
 (defclass ellama-context-element-file-quote (ellama-context-element)
@@ -710,6 +732,10 @@ the context."
       (format "[[%s][%s]] [[elisp:(display-buffer \"%s\")][show]]"
 	      path path (ellama-context--quote-buffer content)))))
 
+(cl-defmethod ellama-context-element-quote-p
+  ((_element ellama-context-element-file-quote))
+  "Return t to indicate this `ELEMENT' is a quote."
+  t)
 
 ;;;###autoload
 (defun ellama-context-add-file (&optional ephemeral)
