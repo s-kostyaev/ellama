@@ -231,7 +231,8 @@ If the default streaming method is too resource-heavy, you can try other
 options."
   :type `(choice
 	  (const :tag "Streaming" streaming)
-	  (const :tag "Async" async)))
+	  (const :tag "Async" async)
+	  (integer :tag "Skip every N messages before process one")))
 
 (defcustom ellama-define-word-prompt-template "Define %s"
   "Prompt template for `ellama-define-word'."
@@ -1510,7 +1511,49 @@ failure (with BUFFER current).
 					   (funcall errcb msg)
 					   (setq ellama--current-request nil)
 					   (ellama-request-mode -1)))
-				       t)))))
+				       t))
+			  ((pred integerp)
+			   (let* ((cnt 0)
+				  (skip-handler
+				   (lambda (request)
+				     (if (= cnt ellama-response-process-method)
+					 (progn
+					   (funcall handler request)
+					   (setq cnt 0))
+				       (cl-incf cnt)))))
+			     (llm-chat-streaming
+			      provider
+			      llm-prompt
+			      skip-handler
+			      (lambda (response)
+				(let ((text (plist-get response :text))
+				      (reasoning (plist-get response :reasoning)))
+				  (funcall handler response)
+				  (when (or ellama--current-session
+					    (not reasoning))
+				    (kill-buffer reasoning-buffer))
+				  (with-current-buffer buffer
+				    (accept-change-group ellama--change-group)
+				    (when ellama-spinner-enabled
+				      (spinner-stop))
+				    (if (and (listp donecb)
+					     (functionp (car donecb)))
+					(mapc (lambda (fn) (funcall fn text))
+					      donecb)
+				      (funcall donecb text))
+				    (when ellama-session-hide-org-quotes
+				      (ellama-collapse-org-quotes))
+				    (setq ellama--current-request nil)
+				    (ellama-request-mode -1))))
+			      (lambda (_ msg)
+				(with-current-buffer buffer
+				  (cancel-change-group ellama--change-group)
+				  (when ellama-spinner-enabled
+				    (spinner-stop))
+				  (funcall errcb msg)
+				  (setq ellama--current-request nil)
+				  (ellama-request-mode -1)))
+			      t))))))
 	  (with-current-buffer buffer
 	    (setq ellama--current-request request)))))))
 
