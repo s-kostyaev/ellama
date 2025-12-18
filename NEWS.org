@@ -1,3 +1,7 @@
+* Version 1.8.8
+- Added new static method to indicate quotes in ellama-context module.
+- Enhanced ellama-transient to display richer context information including
+  current session and context list contents.
 * Version 1.8.7
 - Adapt and improve templates.
 * Version 1.8.6
