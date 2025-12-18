@@ -320,6 +320,10 @@ File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Top
      buffer.
    • ‘ellama-community-prompts-update-variables’: Prompt user for values
      of variables found in current buffer and update them.
+   • ‘ellama-response-process-method’: Configure how LLM responses are
+     processed.  Options include streaming for real-time output, async
+     for asynchronous processing, or skipping every N messages to reduce
+     resource usage.
 
 
 File: ellama.info,  Node: Keymap,  Next: Configuration,  Prev: Commands,  Up: Top
@@ -1418,33 +1422,33 @@ Tag Table:
 Node: Top1379
 Node: Installation3613
 Node: Commands8621
-Node: Keymap14965
-Node: Configuration17798
-Node: Context Management23397
-Node: Transient Menus for Context Management24305
-Node: Managing the Context25919
-Node: Considerations26694
-Node: Minor modes27287
-Node: ellama-context-header-line-mode29275
-Node: ellama-context-header-line-global-mode30100
-Node: ellama-context-mode-line-mode30820
-Node: ellama-context-mode-line-global-mode31668
-Node: Ellama Session Header Line Mode32372
-Node: Enabling and Disabling32941
-Node: Customization33388
-Node: Ellama Session Mode Line Mode33676
-Node: Enabling and Disabling (1)34261
-Node: Customization (1)34708
-Node: Using Blueprints35002
-Node: Key Components of Ellama Blueprints35621
-Node: Creating and Managing Blueprints36228
-Node: Variable Management37209
-Node: Keymap and Mode37678
-Node: Transient Menus38614
-Node: Running Blueprints programmatically39160
-Node: Acknowledgments39747
-Node: Contributions40460
-Node: GNU Free Documentation License40844
+Node: Keymap15207
+Node: Configuration18040
+Node: Context Management23639
+Node: Transient Menus for Context Management24547
+Node: Managing the Context26161
+Node: Considerations26936
+Node: Minor modes27529
+Node: ellama-context-header-line-mode29517
+Node: ellama-context-header-line-global-mode30342
+Node: ellama-context-mode-line-mode31062
+Node: ellama-context-mode-line-global-mode31910
+Node: Ellama Session Header Line Mode32614
+Node: Enabling and Disabling33183
+Node: Customization33630
+Node: Ellama Session Mode Line Mode33918
+Node: Enabling and Disabling (1)34503
+Node: Customization (1)34950
+Node: Using Blueprints35244
+Node: Key Components of Ellama Blueprints35863
+Node: Creating and Managing Blueprints36470
+Node: Variable Management37451
+Node: Keymap and Mode37920
+Node: Transient Menus38856
+Node: Running Blueprints programmatically39402
+Node: Acknowledgments39989
+Node: Contributions40702
+Node: GNU Free Documentation License41086
 
 End Tag Table
 
