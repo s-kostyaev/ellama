@@ -225,6 +225,14 @@ PROMPT is a prompt string."
 	  (const :tag "By generating name with reasoning LLM based on prompt." ellama-generate-name-by-reasoning-llm)
           (function :tag "By custom function")))
 
+(defcustom ellama-response-process-method 'streaming
+  "How to process LLM response.
+If the default streaming method is too resource-heavy, you can try other
+options."
+  :type `(choice
+	  (const :tag "Streaming" streaming)
+	  (const :tag "Async" async)))
+
 (defcustom ellama-define-word-prompt-template "Define %s"
   "Prompt template for `ellama-define-word'."
   :type 'string)
@@ -1437,39 +1445,72 @@ failure (with BUFFER current).
 	  (require 'spinner)
 	  (spinner-start ellama-spinner-type))
 	(let* ((handler (ellama--handle-partial insert-text insert-reasoning reasoning-buffer))
-	       (request (llm-chat-streaming
-			 provider
-			 llm-prompt
-			 handler
-			 (lambda (response)
-			   (let ((text (plist-get response :text))
-				 (reasoning (plist-get response :reasoning)))
-			     (funcall handler response)
-			     (when (or ellama--current-session
-				       (not reasoning))
-			       (kill-buffer reasoning-buffer))
-			     (with-current-buffer buffer
-			       (accept-change-group ellama--change-group)
-			       (when ellama-spinner-enabled
-				 (spinner-stop))
-			       (if (and (listp donecb)
-					(functionp (car donecb)))
-				   (mapc (lambda (fn) (funcall fn text))
-					 donecb)
-				 (funcall donecb text))
-			       (when ellama-session-hide-org-quotes
-				 (ellama-collapse-org-quotes))
-			       (setq ellama--current-request nil)
-			       (ellama-request-mode -1))))
-			 (lambda (_ msg)
-			   (with-current-buffer buffer
-			     (cancel-change-group ellama--change-group)
-			     (when ellama-spinner-enabled
-			       (spinner-stop))
-			     (funcall errcb msg)
-			     (setq ellama--current-request nil)
-			     (ellama-request-mode -1)))
-			 t)))
+	       (request (pcase ellama-response-process-method
+			  ('async (llm-chat-async
+				   provider
+				   llm-prompt
+				   (lambda (response)
+				     (let ((text (plist-get response :text))
+					   (reasoning (plist-get response :reasoning)))
+				       (funcall handler response)
+				       (when (or ellama--current-session
+						 (not reasoning))
+					 (kill-buffer reasoning-buffer))
+				       (with-current-buffer buffer
+					 (accept-change-group ellama--change-group)
+					 (when ellama-spinner-enabled
+					   (spinner-stop))
+					 (if (and (listp donecb)
+						  (functionp (car donecb)))
+					     (mapc (lambda (fn) (funcall fn text))
+						   donecb)
+					   (funcall donecb text))
+					 (when ellama-session-hide-org-quotes
+					   (ellama-collapse-org-quotes))
+					 (setq ellama--current-request nil)
+					 (ellama-request-mode -1))))
+				   (lambda (_ msg)
+				     (with-current-buffer buffer
+				       (cancel-change-group ellama--change-group)
+				       (when ellama-spinner-enabled
+					 (spinner-stop))
+				       (funcall errcb msg)
+				       (setq ellama--current-request nil)
+				       (ellama-request-mode -1)))
+				   t))
+			  ('streaming (llm-chat-streaming
+				       provider
+				       llm-prompt
+				       handler
+				       (lambda (response)
+					 (let ((text (plist-get response :text))
+					       (reasoning (plist-get response :reasoning)))
+					   (funcall handler response)
+					   (when (or ellama--current-session
+						     (not reasoning))
+					     (kill-buffer reasoning-buffer))
+					   (with-current-buffer buffer
+					     (accept-change-group ellama--change-group)
+					     (when ellama-spinner-enabled
+					       (spinner-stop))
+					     (if (and (listp donecb)
+						      (functionp (car donecb)))
+						 (mapc (lambda (fn) (funcall fn text))
+						       donecb)
+					       (funcall donecb text))
+					     (when ellama-session-hide-org-quotes
+					       (ellama-collapse-org-quotes))
+					     (setq ellama--current-request nil)
+					     (ellama-request-mode -1))))
+				       (lambda (_ msg)
+					 (with-current-buffer buffer
+					   (cancel-change-group ellama--change-group)
+					   (when ellama-spinner-enabled
+					     (spinner-stop))
+					   (funcall errcb msg)
+					   (setq ellama--current-request nil)
+					   (ellama-request-mode -1)))
+				       t)))))
 	  (with-current-buffer buffer
 	    (setq ellama--current-request request)))))))
 
