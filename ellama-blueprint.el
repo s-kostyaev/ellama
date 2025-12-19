@@ -58,8 +58,12 @@
   "C-c C-c" #'ellama-transient-blueprint-mode-menu
   "C-c C-k" #'ellama-kill-current-buffer)
 
+(defvar ellama-blueprint-variable-regexp
+  "{\\([[:alnum:]_-]+\\)}"
+  "Regular expression to match blueprint variables like {var_name}.")
+
 (defvar ellama-blueprint-font-lock-keywords
-  '(("{\\([^}]+\\)}" 1 'font-lock-keyword-face))
+  '((,ellama-blueprint-variable-regexp 1 'font-lock-keyword-face))
   "Highlight variables in curly braces for Ellama Blueprint Mode.")
 
 ;;;###autoload
@@ -69,7 +73,7 @@
   "Toggle Ellama Blueprint mode."
   :keymap ellama-blueprint-mode-map
   :group 'ellama
-  (setq font-lock-defaults '((("{\\([^}]+\\)}" 1 font-lock-keyword-face t))))
+  (setq font-lock-defaults '(((,ellama-blueprint-variable-regexp 1 font-lock-keyword-face t))))
   (setq header-line-format
 	(concat
 	 (propertize
@@ -228,7 +232,7 @@ corresponding prompt is inserted into a blueprint buffer."
   (save-excursion
     (let ((vars '()))
       (goto-char (point-min))
-      (while (re-search-forward "\{\\([^}]+\\)}" nil t)
+      (while (re-search-forward ellama-blueprint-variable-regexp nil t)
 	(push (match-string 1) vars))
       (seq-uniq vars))))
 
