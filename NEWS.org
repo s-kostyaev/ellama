@@ -1,3 +1,9 @@
+* Version 1.9.1
+- Restricted template variable expansion to self-contained variables that don't
+  span multiple lines to avoid conflicts with code snippets.
+- Created a variable for the regular expression to simplify future changes.
+- Made template variable matching less aggressive to accommodate various
+  programming languages that use {} as function markers.
 * Version 1.9.0
 - Added new ~ellama-response-process-method~ customization option to choose
   between streaming and async response processing methods.
