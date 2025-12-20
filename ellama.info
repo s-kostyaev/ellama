@@ -324,6 +324,8 @@ File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Top
      processed.  Options include streaming for real-time output, async
      for asynchronous processing, or skipping every N messages to reduce
      resource usage.
+   • ‘ellama-blueprint-variable-regexp’: Regular expression to match
+     blueprint variables like ‘{var_name}’.
 
 
 File: ellama.info,  Node: Keymap,  Next: Configuration,  Prev: Commands,  Up: Top
@@ -1422,33 +1424,33 @@ Tag Table:
 Node: Top1379
 Node: Installation3613
 Node: Commands8621
-Node: Keymap15207
-Node: Configuration18040
-Node: Context Management23639
-Node: Transient Menus for Context Management24547
-Node: Managing the Context26161
-Node: Considerations26936
-Node: Minor modes27529
-Node: ellama-context-header-line-mode29517
-Node: ellama-context-header-line-global-mode30342
-Node: ellama-context-mode-line-mode31062
-Node: ellama-context-mode-line-global-mode31910
-Node: Ellama Session Header Line Mode32614
-Node: Enabling and Disabling33183
-Node: Customization33630
-Node: Ellama Session Mode Line Mode33918
-Node: Enabling and Disabling (1)34503
-Node: Customization (1)34950
-Node: Using Blueprints35244
-Node: Key Components of Ellama Blueprints35863
-Node: Creating and Managing Blueprints36470
-Node: Variable Management37451
-Node: Keymap and Mode37920
-Node: Transient Menus38856
-Node: Running Blueprints programmatically39402
-Node: Acknowledgments39989
-Node: Contributions40702
-Node: GNU Free Documentation License41086
+Node: Keymap15330
+Node: Configuration18163
+Node: Context Management23762
+Node: Transient Menus for Context Management24670
+Node: Managing the Context26284
+Node: Considerations27059
+Node: Minor modes27652
+Node: ellama-context-header-line-mode29640
+Node: ellama-context-header-line-global-mode30465
+Node: ellama-context-mode-line-mode31185
+Node: ellama-context-mode-line-global-mode32033
+Node: Ellama Session Header Line Mode32737
+Node: Enabling and Disabling33306
+Node: Customization33753
+Node: Ellama Session Mode Line Mode34041
+Node: Enabling and Disabling (1)34626
+Node: Customization (1)35073
+Node: Using Blueprints35367
+Node: Key Components of Ellama Blueprints35986
+Node: Creating and Managing Blueprints36593
+Node: Variable Management37574
+Node: Keymap and Mode38043
+Node: Transient Menus38979
+Node: Running Blueprints programmatically39525
+Node: Acknowledgments40112
+Node: Contributions40825
+Node: GNU Free Documentation License41209
 
 End Tag Table
 
