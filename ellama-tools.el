@@ -243,7 +243,7 @@ otherwise."
   "Return a string representing the directory tree under DIR.
 DEPTH is the current recursion depth, used internally."
   (if (not (file-exists-p dir))
-      ("Directory %s doesn't exists" dir)
+      (format "Directory %s doesn't exists" dir)
     (let ((indent (make-string (* (or depth 0) 2) ? ))
           (tree ""))
       (dolist (f (sort (cl-remove-if
@@ -497,15 +497,15 @@ Replace OLDCONTENT with NEWCONTENT."
    'ellama-tools--today))
 
 (add-to-list
-'ellama-tools-available
-(llm-make-tool :function
-               'ellama-tools-today
-               :name
-               "today"
-               :args
-               nil
-               :description
-               "Return current date."))
+ 'ellama-tools-available
+ (llm-make-tool :function
+                'ellama-tools-today
+                :name
+                "today"
+                :args
+                nil
+                :description
+                "Return current date."))
 
 (defun ellama-tools--now ()
   "Return current date, time and timezone."
