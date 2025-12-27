@@ -84,7 +84,8 @@ otherwise."
   (let* ((tool-name name)
          (tool (seq-find (lambda (tool) (string= tool-name (llm-tool-name tool)))
                          ellama-tools-available)))
-    (add-to-list 'ellama-tools-enabled tool)))
+    (add-to-list 'ellama-tools-enabled tool)
+    nil))
 
 (defun ellama-tools-enable-by-name (&optional name)
   "Add to `ellama-tools-enabled' each tool that matches NAME."
@@ -122,7 +123,7 @@ otherwise."
                         :description
                         "Name of the tool to enable."))
                 :description
-                "Enable each tool that matches NAME."))
+                "Enable each tool that matches NAME. You need to reply to the user before using newly enabled tool."))
 
 (defun ellama-tools--disable-by-name (name)
   "Remove from `ellama-tools-enabled' each tool that matches NAME."
@@ -241,22 +242,24 @@ otherwise."
 (defun ellama-tools--directory-tree (dir &optional depth)
   "Return a string representing the directory tree under DIR.
 DEPTH is the current recursion depth, used internally."
-  (let ((indent (make-string (* (or depth 0) 2) ? ))
-        (tree ""))
-    (dolist (f (sort (cl-remove-if
-                      (lambda (f)
-                        (string-prefix-p "." f))
-                      (directory-files dir))
-                     #'string-lessp))
-      (let* ((full   (expand-file-name f dir))
-             (name   (file-name-nondirectory f))
-             (type   (if (file-directory-p full) "|-" "`-"))
-             (line   (concat indent type name "\n")))
-        (setq tree (concat tree line))
-        (when (file-directory-p full)
-          (setq tree (concat tree
-                             (ellama-tools--directory-tree full (+ (or depth 0) 1)))))))
-    tree))
+  (if (not (file-exists-p dir))
+      ("Directory %s doesn't exists" dir)
+    (let ((indent (make-string (* (or depth 0) 2) ? ))
+          (tree ""))
+      (dolist (f (sort (cl-remove-if
+                        (lambda (f)
+                          (string-prefix-p "." f))
+                        (directory-files dir))
+                       #'string-lessp))
+        (let* ((full   (expand-file-name f dir))
+               (name   (file-name-nondirectory f))
+               (type   (if (file-directory-p full) "|-" "`-"))
+               (line   (concat indent type name "\n")))
+          (setq tree (concat tree line))
+          (when (file-directory-p full)
+            (setq tree (concat tree
+                               (ellama-tools--directory-tree full (+ (or depth 0) 1)))))))
+      tree)))
 
 (defun ellama-tools-directory-tree (dir)
   "Return a string representing the directory tree under DIR."
