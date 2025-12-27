@@ -57,24 +57,27 @@ otherwise."
           (funcall function))))
      ;; Otherwise, ask for confirmation
      (t
-      (let ((answer (read-char-choice
-                     (format "%s (y)es, (a)lways, (n)o: " prompt)
-                     '(?y ?a ?n))))
-        (cond
-         ;; Yes - execute function once
-         ((eq answer ?y)
-          (if args
-              (apply function args)
-            (funcall function)))
-         ;; Always - remember approval and execute function
-         ((eq answer ?a)
-          (puthash function t ellama-tools-confirm-allowed)
-          (if args
-              (apply function args)
-            (funcall function)))
-         ;; No - return nil
-         ((eq answer ?n)
-          "Forbidden by the user")))))))
+      (let* ((answer (read-char-choice
+                      (format "%s (y)es, (a)lways, (n)o: " prompt)
+                      '(?y ?a ?n)))
+             (result (cond
+                      ;; Yes - execute function once
+                      ((eq answer ?y)
+                       (if args
+                           (apply function args)
+                         (funcall function)))
+                      ;; Always - remember approval and execute function
+                      ((eq answer ?a)
+                       (puthash function t ellama-tools-confirm-allowed)
+                       (if args
+                           (apply function args)
+                         (funcall function)))
+                      ;; No - return nil
+                      ((eq answer ?n)
+                       "Forbidden by the user"))))
+        (if (stringp result)
+            result
+          (json-encode result)))))))
 
 (defun ellama-tools--enable-by-name (name)
   "Add to `ellama-tools-enabled' each tool that matches NAME."
@@ -421,11 +424,11 @@ Replace OLDCONTENT with NEWCONTENT."
 
 (defun ellama-tools--list ()
   "List all available tools."
-  (mapcar
-   (lambda (tool)
-     `(("name" . ,(llm-tool-name tool))
-       ("description" . ,(llm-tool-description tool))))
-   ellama-tools-available))
+  (json-encode (mapcar
+                (lambda (tool)
+                  `(("name" . ,(llm-tool-name tool))
+                    ("description" . ,(llm-tool-description tool))))
+                ellama-tools-available)))
 
 (defun ellama-tools-list ()
   "List all available tools."

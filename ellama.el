@@ -1391,22 +1391,20 @@ ASYNC flag is for asyncronous requests."
 	  (reasoning (plist-get response :reasoning))
 	  (tool-result (plist-get response :tool-results)))
       (if tool-result
-	  (progn
-	    (message "tool result: %s\nprompt: %s" tool-result llm-prompt)
-	    (if async
-		(llm-chat-async
-		 provider
-		 llm-prompt
-		 (ellama--response-handler handler reasoning-buffer buffer donecb errcb provider llm-prompt async)
-		 (ellama--error-handler buffer errcb)
-		 t)
-	      (llm-chat-streaming
+	  (if async
+	      (llm-chat-async
 	       provider
 	       llm-prompt
-	       handler
 	       (ellama--response-handler handler reasoning-buffer buffer donecb errcb provider llm-prompt async)
 	       (ellama--error-handler buffer errcb)
-	       t)))
+	       t)
+	    (llm-chat-streaming
+	     provider
+	     llm-prompt
+	     handler
+	     (ellama--response-handler handler reasoning-buffer buffer donecb errcb provider llm-prompt async)
+	     (ellama--error-handler buffer errcb)
+	     t))
 	(funcall handler response)
 	(when (or ellama--current-session
 		  (not reasoning))
