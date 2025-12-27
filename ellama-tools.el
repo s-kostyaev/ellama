@@ -37,27 +37,78 @@
 (defvar ellama-tools-enabled nil
   "List of tools that have been enabled.")
 
-(defun ellama-tools-enable-by-name (&optional name)
+(defvar-local ellama-tools-confirm-allowed (make-hash-table)
+  "Contains hash table of allowed functions.
+Key is a function name symbol.  Value is a boolean t.")
+
+(defun ellama-tools-confirm (prompt function &optional args)
+  "Ask user for confirmation before calling FUNCTION with ARGS.
+PROMPT is the message to display to the user.  FUNCTION is the function
+to call if confirmed.  ARGS are the arguments to pass to FUNCTION.  User
+can approve once (y), approve for all future calls (a), or forbid (n).
+Returns the result of FUNCTION if approved, \"Forbidden by the user\"
+otherwise."
+  (let ((confirmation (gethash function ellama-tools-confirm-allowed nil)))
+    (cond
+     ;; If user has approved all calls, just execute the function
+     ((when confirmation
+        (if args
+            (apply function args)
+          (funcall function))))
+     ;; Otherwise, ask for confirmation
+     (t
+      (let ((answer (read-char-choice
+                     (format "%s (y)es, (a)lways, (n)o: " prompt)
+                     '(?y ?a ?n))))
+        (cond
+         ;; Yes - execute function once
+         ((eq answer ?y)
+          (if args
+              (apply function args)
+            (funcall function)))
+         ;; Always - remember approval and execute function
+         ((eq answer ?a)
+          (puthash function t ellama-tools-confirm-allowed)
+          (if args
+              (apply function args)
+            (funcall function)))
+         ;; No - return nil
+         ((eq answer ?n)
+          "Forbidden by the user")))))))
+
+(defun ellama-tools--enable-by-name (name)
   "Add to `ellama-tools-enabled' each tool that matches NAME."
-  (interactive)
-  (let* ((tool-name (or name
-                        (completing-read
-                         "Tool to enable: "
-                         (cl-remove-if
-                          (lambda (tname)
-                            (cl-find-if
-                             (lambda (tool)
-                               (string= tname (llm-tool-name tool)))
-                             ellama-tools-enabled))
-                          (mapcar (lambda (tool) (llm-tool-name tool)) ellama-tools-available)))))
+  (let* ((tool-name name)
          (tool (seq-find (lambda (tool) (string= tool-name (llm-tool-name tool)))
                          ellama-tools-available)))
     (add-to-list 'ellama-tools-enabled tool)))
 
+(defun ellama-tools-enable-by-name (&optional name)
+  "Add to `ellama-tools-enabled' each tool that matches NAME."
+  (interactive)
+  (let ((tool-name (or name
+                       (completing-read
+                        "Tool to enable: "
+                        (cl-remove-if
+                         (lambda (tname)
+                           (cl-find-if
+                            (lambda (tool)
+                              (string= tname (llm-tool-name tool)))
+                            ellama-tools-enabled))
+                         (mapcar (lambda (tool) (llm-tool-name tool)) ellama-tools-available))))))
+    (ellama-tools--enable-by-name tool-name)))
+
+(defun ellama-tools-enable-by-name-tool (name)
+  "Add to `ellama-tools-enabled' each tool that matches NAME."
+  (ellama-tools-confirm
+   (format "Allow enabling tool %s?" name)
+   'ellama-tools--enable-by-name
+   (list name)))
+
 (add-to-list
  'ellama-tools-available
  (llm-make-tool :function
-                'ellama-tools-enable-by-name
+                'ellama-tools-enable-by-name-tool
                 :name
                 "enable_tool"
                 :args
@@ -70,22 +121,33 @@
                 :description
                 "Enable each tool that matches NAME."))
 
+(defun ellama-tools--disable-by-name (name)
+  "Remove from `ellama-tools-enabled' each tool that matches NAME."
+  (let* ((tool (seq-find (lambda (tool) (string= name (llm-tool-name tool)))
+                         ellama-tools-enabled)))
+    (setq ellama-tools-enabled (seq-remove (lambda (enabled-tool) (eq enabled-tool tool))
+                                           ellama-tools-enabled))))
+
 (defun ellama-tools-disable-by-name (&optional name)
   "Remove from `ellama-tools-enabled' each tool that matches NAME."
   (interactive)
   (let* ((tool-name (or name
                         (completing-read
                          "Tool to disable: "
-                         (mapcar (lambda (tool) (llm-tool-name tool)) ellama-tools-enabled))))
-         (tool (seq-find (lambda (tool) (string= tool-name (llm-tool-name tool)))
-                         ellama-tools-enabled)))
-    (setq ellama-tools-enabled (seq-remove (lambda (enabled-tool) (eq enabled-tool tool))
-                                           ellama-tools-enabled))))
+                         (mapcar (lambda (tool) (llm-tool-name tool)) ellama-tools-enabled)))))
+    (ellama-tools--disable-by-name tool-name)))
+
+(defun ellama-tools-disable-by-name-tool (name)
+  "Remove from `ellama-tools-enabled' each tool that matches NAME."
+  (ellama-tools-confirm
+   (format "Allow disabling tool %s?" name)
+   'ellama-tools--disable-by-name
+   (list name)))
 
 (add-to-list
  'ellama-tools-available
  (llm-make-tool :function
-                'ellama-tools-disable-by-name
+                'ellama-tools-disable-by-name-tool
                 :name
                 "disable_tool"
                 :args
@@ -108,11 +170,18 @@
   (interactive)
   (setq ellama-tools-enabled nil))
 
-(defun ellama-tools-read-file (path)
+(defun ellama-tools--read-file (path)
   "Read the file located at the specified PATH."
   (with-temp-buffer
     (insert-file-contents-literally path)
     (buffer-string)))
+
+(defun ellama-tools-read-file (path)
+  "Read the file located at the specified PATH."
+  (ellama-tools-confirm
+   (format "Allow reading file %s?" path)
+   'ellama-tools--read-file
+   (list path)))
 
 (add-to-list
  'ellama-tools-available
@@ -130,12 +199,19 @@
                 :description
                 "Read the file located at the specified PATH."))
 
-(defun ellama-tools-write-file (path content)
+(defun ellama-tools--write-file (path content)
   "Write CONTENT to the file located at the specified PATH."
   (with-temp-buffer
     (insert content)
     (setq buffer-file-name path)
     (save-buffer)))
+
+(defun ellama-tools-write-file (path content)
+  "Write CONTENT to the file located at the specified PATH."
+  (ellama-tools-confirm
+   (format "Allow writing file %s?" path)
+   'ellama-tools--write-file
+   (list path content)))
 
 (add-to-list
  'ellama-tools-available
@@ -159,10 +235,9 @@
                 :description
                 "Write CONTENT to the file located at the specified PATH."))
 
-(defun ellama-tools-directory-tree (dir &optional depth)
+(defun ellama-tools--directory-tree (dir &optional depth)
   "Return a string representing the directory tree under DIR.
-DEPTH is the current recursion depth, used internally.
-TREE represents current tree."
+DEPTH is the current recursion depth, used internally."
   (let ((indent (make-string (* (or depth 0) 2) ? ))
         (tree ""))
     (dolist (f (sort (cl-remove-if
@@ -177,8 +252,15 @@ TREE represents current tree."
         (setq tree (concat tree line))
         (when (file-directory-p full)
           (setq tree (concat tree
-                             (ellama-tools-directory-tree full (+ (or depth 0) 1)))))))
+                             (ellama-tools--directory-tree full (+ (or depth 0) 1)))))))
     tree))
+
+(defun ellama-tools-directory-tree (dir)
+  "Return a string representing the directory tree under DIR."
+  (ellama-tools-confirm
+   (format "Allow LLM to see %s directory tree?" dir)
+   'ellama-tools--directory-tree
+   (list dir nil)))
 
 (add-to-list
  'ellama-tools-available
@@ -196,13 +278,20 @@ TREE represents current tree."
                 :description
                 "Return a string representing the directory tree under DIR."))
 
-(defun ellama-tools-move-file (path newpath)
+(defun ellama-tools--move-file (path newpath)
   "Move the file from the specified PATH to the NEWPATH."
   (if (and (file-exists-p path)
            (not (file-exists-p newpath)))
       (progn
         (rename-file path newpath))
     (error "Cannot move file: source file does not exist or destination already exists")))
+
+(defun ellama-tools-move-file (path newpath)
+  "Move the file from the specified PATH to the NEWPATH."
+  (ellama-tools-confirm
+   (format "Allow moving file %s to %s?" path newpath)
+   'ellama-tools--move-file
+   (list path newpath)))
 
 (add-to-list
  'ellama-tools-available
@@ -226,7 +315,7 @@ TREE represents current tree."
                 :description
                 "Move the file from the specified PATH to the NEWPATH."))
 
-(defun ellama-tools-edit-file (path oldcontent newcontent)
+(defun ellama-tools--edit-file (path oldcontent newcontent)
   "Edit file located at PATH.
 Replace OLDCONTENT with NEWCONTENT."
   (let ((content (with-temp-buffer
@@ -239,6 +328,14 @@ Replace OLDCONTENT with NEWCONTENT."
         (delete-region (match-beginning 0) (match-end 0))
         (insert newcontent)
         (write-region (point-min) (point-max) path)))))
+
+(defun ellama-tools-edit-file (path oldcontent newcontent)
+  "Edit file located at PATH.
+Replace OLDCONTENT with NEWCONTENT."
+  (ellama-tools-confirm
+   (format "Allow editing file %s?" path)
+   'ellama-tools--edit-file
+   (list path oldcontent newcontent)))
 
 (add-to-list
  'ellama-tools-available
@@ -268,9 +365,16 @@ Replace OLDCONTENT with NEWCONTENT."
                 :description
                 "Edit file located at PATH. Replace OLDCONTENT with NEWCONTENT."))
 
-(defun ellama-tools-shell-command (cmd)
+(defun ellama-tools--shell-command (cmd)
   "Execute shell command CMD."
   (shell-command-to-string cmd))
+
+(defun ellama-tools-shell-command (cmd)
+  "Execute shell command CMD."
+  (ellama-tools-confirm
+   (format "Allow executing shell command %s?" cmd)
+   'ellama-tools--shell-command
+   (list cmd)))
 
 (add-to-list
  'ellama-tools-available
@@ -288,9 +392,16 @@ Replace OLDCONTENT with NEWCONTENT."
                 :description
                 "Execute shell command CMD."))
 
+(defun ellama-tools--grep (search-string)
+  "Grep SEARCH-STRING in directory files."
+  (shell-command-to-string (format "find . -type f -exec grep --color=never -nh -e %s \\{\\} +" search-string)))
+
 (defun ellama-tools-grep (search-string)
   "Grep SEARCH-STRING in directory files."
-  (shell-command-to-string (format "find . -type f -exec grep --color=never -nh -e %s \{\} +" search-string)))
+  (ellama-tools-confirm
+   (format "Allow grepping for %s in directory files?" search-string)
+   'ellama-tools--grep
+   (list search-string)))
 
 (add-to-list
  'ellama-tools-available
@@ -308,13 +419,19 @@ Replace OLDCONTENT with NEWCONTENT."
                 :description
                 "Grep SEARCH-STRING in directory files."))
 
+(defun ellama-tools--list ()
+  "List all available tools."
+  (mapcar
+   (lambda (tool)
+     `(("name" . ,(llm-tool-name tool))
+       ("description" . ,(llm-tool-description tool))))
+   ellama-tools-available))
+
 (defun ellama-tools-list ()
   "List all available tools."
-  (json-encode (mapcar
-                (lambda (tool)
-                  `(("name" . ,(llm-tool-name tool))
-                    ("description" . ,(llm-tool-description tool))))
-                ellama-tools-available)))
+  (ellama-tools-confirm
+   "Allow LLM to see available tools?"
+   'ellama-tools--list))
 
 (add-to-list
  'ellama-tools-available
@@ -327,7 +444,7 @@ Replace OLDCONTENT with NEWCONTENT."
                 :description
                 "List all available tools."))
 
-(defun ellama-tools-search (search-string)
+(defun ellama-tools--search (search-string)
   "Search available tools that matches SEARCH-STRING."
   (json-encode
    (cl-remove-if-not
@@ -339,6 +456,13 @@ Replace OLDCONTENT with NEWCONTENT."
        `(("name" . ,(llm-tool-name tool))
          ("description" . ,(llm-tool-description tool))))
      ellama-tools-available))))
+
+(defun ellama-tools-search (search-string)
+  "Search available tools that matches SEARCH-STRING."
+  (ellama-tools-confirm
+   (format "Allow searching tools with pattern %s?" search-string)
+   'ellama-tools--search
+   (list search-string)))
 
 (add-to-list
  'ellama-tools-available
@@ -356,24 +480,36 @@ Replace OLDCONTENT with NEWCONTENT."
                 :description
                 "Search available tools that matches SEARCH-STRING."))
 
-(defun ellama-tools-today ()
+(defun ellama-tools--today ()
   "Return current date."
   (format-time-string "%Y-%m-%d"))
 
+(defun ellama-tools-today ()
+  "Return current date."
+  (ellama-tools-confirm
+   "Allow reading current date?"
+   'ellama-tools--today))
+
 (add-to-list
- 'ellama-tools-available
- (llm-make-tool :function
-                'ellama-tools-today
-                :name
-                "today"
-                :args
-                nil
-                :description
-                "Return current date."))
+'ellama-tools-available
+(llm-make-tool :function
+               'ellama-tools-today
+               :name
+               "today"
+               :args
+               nil
+               :description
+               "Return current date."))
+
+(defun ellama-tools--now ()
+  "Return current date, time and timezone."
+  (format-time-string "%Y-%m-%d %H:%M:%S %Z"))
 
 (defun ellama-tools-now ()
   "Return current date, time and timezone."
-  (format-time-string "%Y-%m-%d %H:%M:%S %Z"))
+  (ellama-tools-confirm
+   "Allow reading current date, time and timezone?"
+   'ellama-tools--now))
 
 (add-to-list
  'ellama-tools-available
@@ -386,10 +522,16 @@ Replace OLDCONTENT with NEWCONTENT."
                 :description
                 "Return current date, time and timezone."))
 
+(defun ellama-tools--project-root ()
+  "Return current project root directory."
+  (when (project-current)
+    (project-root (project-current))))
+
 (defun ellama-tools-project-root ()
   "Return current project root directory."
-  (json-encode (when (project-current)
-                 (project-root (project-current)))))
+  (ellama-tools-confirm
+   "Allow LLM to know the project root directory?"
+   'ellama-tools--project-root))
 
 (add-to-list
  'ellama-tools-available
