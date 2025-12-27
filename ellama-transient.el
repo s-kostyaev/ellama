@@ -440,10 +440,14 @@ ARGS used for transient arguments."
                                                ellama-tools-enabled)
                                        " ")))
    ["Tools"
-    ("e" "Enable tool" ellama-tools-enable-by-name)
-    ("E" "Enable all tools" ellama-tools-enable-all)
-    ("d" "Disable tool" ellama-tools-disable-by-name)
-    ("D" "Disable all tools" ellama-tools-disable-all)]
+    ("e" "Enable tool" ellama-tools-enable-by-name
+     :transient t)
+    ("E" "Enable all tools" ellama-tools-enable-all
+     :transient t)
+    ("d" "Disable tool" ellama-tools-disable-by-name
+     :transient t)
+    ("D" "Disable all tools" ellama-tools-disable-all
+     :transient t)]
    ["Quit"
     ("k" "Kill" ellama-kill-current-buffer)
     ("q" "Quit" transient-quit-one)]])
