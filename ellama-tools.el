@@ -176,9 +176,11 @@ otherwise."
 
 (defun ellama-tools--read-file (path)
   "Read the file located at the specified PATH."
-  (with-temp-buffer
-    (insert-file-contents-literally path)
-    (buffer-string)))
+  (if (not (file-exists-p path))
+      (format "File %s doesn't exists." path)
+    (with-temp-buffer
+      (insert-file-contents-literally path)
+      (buffer-string))))
 
 (defun ellama-tools-read-file (path)
   "Read the file located at the specified PATH."
