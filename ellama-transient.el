@@ -430,6 +430,28 @@ ARGS used for transient arguments."
     ("k" "Kill" ellama-kill-current-buffer)
     ("q" "Quit" transient-quit-one)]])
 
+;;;###autoload (autoload 'ellama-transient-tools-menu "ellama-transient" nil t)
+(transient-define-prefix ellama-transient-tools-menu ()
+  ["Tools Commands"
+   :description (lambda ()
+                  (format "Enabled tools:\n%s"
+                          (string-join (mapcar (lambda (tool)
+                                                 (llm-tool-name tool))
+                                               ellama-tools-enabled)
+                                       " ")))
+   ["Tools"
+    ("e" "Enable tool" ellama-tools-enable-by-name
+     :transient t)
+    ("E" "Enable all tools" ellama-tools-enable-all
+     :transient t)
+    ("d" "Disable tool" ellama-tools-disable-by-name
+     :transient t)
+    ("D" "Disable all tools" ellama-tools-disable-all
+     :transient t)]
+   ["Quit"
+    ("k" "Kill" ellama-kill-current-buffer)
+    ("q" "Quit" transient-quit-one)]])
+
 (transient-define-suffix ellama-transient-chat (&optional args)
   "Chat with Ellama.  ARGS used for transient arguments."
   (interactive (list (transient-args transient-current-command)))
@@ -450,7 +472,8 @@ ARGS used for transient arguments."
   ["Main"
    [("c" "Chat" ellama-transient-chat)
     ("b" "Chat with blueprint" ellama-blueprint-select)
-    ("B" "Blueprint Commands" ellama-transient-blueprint-menu)]
+    ("B" "Blueprint Commands" ellama-transient-blueprint-menu)
+    ("T" "Tools Commands" ellama-transient-tools-menu)]
    [("a" "Ask Commands" ellama-transient-ask-menu)
     ("C" "Code Commands" ellama-transient-code-menu)]]
   ["Text"

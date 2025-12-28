@@ -1,3 +1,17 @@
+* Version 1.10.0
+- Added comprehensive tool support, enabling filesystem operations, shell
+  commands, and utilities through LLM tools, including tool registration, file
+  operations, directory tree exploration, and date/time utilities.
+- Integrated tool system into ~ellama.el~, adding dependencies, modifying
+  session creation, and refactoring error and response handlers.
+- Implemented a new transient menu for managing tools with enable/disable
+  functionalities, accessible via the main transient interface.
+- Added user confirmation system for potentially dangerous operations like file
+  and shell command executions.
+- Refactored tool confirmation logic and response handling in ~ellama-tools.el~
+  and ~ellama.el~ for improved structure and JSON encoding.
+- Fixed directory tree function errors, ensuring proper checks and formatted
+  output.
 * Version 1.9.1
 - Restricted template variable expansion to self-contained variables that don't
   span multiple lines to avoid conflicts with code snippets.
