@@ -222,7 +222,18 @@ More sofisticated configuration example:
     Options include streaming for real-time output, async for asynchronous
     processing, or skipping every N messages to reduce resource usage.
 - ~ellama-blueprint-variable-regexp~: Regular expression to match blueprint
-  variables like ~{var_name}~.
+    variables like ~{var_name}~.
+- ~ellama-tools-enable-by-name~: Enable a specific tool by its name. Use
+    this command to activate individual tools. Requires the tool name as input.
+- ~ellama-tools-enable-all~: Enable all available tools at once. Use this
+    command to activate every tool in the system for comprehensive functionality
+    without manual selection.
+- ~ellama-tools-disable-by-name~: Disable a specific tool by its name. Use
+    this command to deactivate individual tools when their functionality is no
+    longer needed.
+- ~ellama-tools-disable-all~: Disable all enabled tools simultaneously. Use
+    this command to reset the system to a minimal state, ensuring no tools are
+    active.
 
 * Keymap
 
