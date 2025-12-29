@@ -1,3 +1,22 @@
+* Version 1.10.1
+- Added option to allow all tools without confirmation using new
+  ~ellama-tools-allow-all~ variable marked as dangerous.
+- Introduced ~ellama-tools-allowed~ option to specify a list of allowed tools
+  that execute without user confirmation.
+- Updated execution logic to check for tool's presence in the allowed list and
+  properly encode non-string results using ~json-encode~.
+- Added documentation for new tool access configuration options in README.org
+  and ellama.info.
+- Refactored tool functions to use new naming conventions with "-tool" suffix
+  and confirmation wrappers with "-tool-confirm" suffix.
+- Added support for processing and displaying tool uses and their results in LLM
+  responses.
+- Updated response handler function signature to accept a result-handler and
+  filter function.
+- Modified response processing logic to handle tool results and continue
+  processing with updated prompts.
+- Adjusted async and streaming request handling to pass new parameters for
+  better tool integration.
 * Version 1.10.0
 - Added comprehensive tool support, enabling filesystem operations, shell
   commands, and utilities through LLM tools, including tool registration, file
