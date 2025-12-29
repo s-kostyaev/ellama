@@ -1,3 +1,7 @@
+* Version 1.10.2
+- Added directory tracking to sessions, including a directory path in the extra
+  data field and setting the default directory when a session is initialized to
+  maintain working directory context.
 * Version 1.10.1
 - Added option to allow all tools without confirmation using new
   ~ellama-tools-allow-all~ variable marked as dangerous.
