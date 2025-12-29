@@ -37,6 +37,12 @@ Dangerous.  Use at your own risk."
   :type 'boolean
   :group 'ellama)
 
+(defcustom ellama-tools-allowed nil
+  "List of allowed `ellama' tools.
+Tools from this list will work without user confirmation."
+  :type '(repeat function)
+  :group 'ellama)
+
 (defvar ellama-tools-available nil
   "Alist containing all registered tools.")
 
@@ -57,10 +63,14 @@ otherwise."
   (let ((confirmation (gethash function ellama-tools-confirm-allowed nil)))
     (cond
      ;; If user has approved all calls, just execute the function
-     ((when (or confirmation ellama-tools-allow-all)
-        (if args
-            (apply function args)
-          (funcall function))))
+     ((when (or confirmation ellama-tools-allow-all
+                (cl-find function ellama-tools-allowed))
+        (let ((result (if args
+                          (apply function args)
+                        (funcall function))))
+          (if (stringp result)
+              result
+            (json-encode result)))))
      ;; Otherwise, ask for confirmation
      (t
       (let* ((answer (read-char-choice
