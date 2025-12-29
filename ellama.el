@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1"))
-;; Version: 1.10.0
+;; Version: 1.10.1
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -1340,7 +1340,9 @@ INSERT-REASONING is a function for reasoning insertion.
 REASONING-BUFFER is a buffer for reasoning."
   (lambda (response)
     (let ((text (plist-get response :text))
-	  (reasoning (plist-get response :reasoning)))
+	  (reasoning (plist-get response :reasoning))
+	  (tool-uses (plist-get response :tool-uses))
+	  (tool-results (plist-get response :tool-results)))
       (funcall
        insert-text
        (concat
@@ -1348,7 +1350,7 @@ REASONING-BUFFER is a buffer for reasoning."
 	  (if
 	      (or (not ellama-output-remove-reasoning)
 		  ellama--current-session)
-	      (concat "<think>\n" reasoning)
+	      (concat "<think>\n" reasoning "\n</think>\n")
 	    (progn
 	      (with-current-buffer reasoning-buffer
 		(funcall insert-reasoning reasoning)
@@ -1358,10 +1360,15 @@ REASONING-BUFFER is a buffer for reasoning."
 		   (when ellama-reasoning-display-action-function
 		     `((ignore . (,ellama-reasoning-display-action-function)))))))
 	      nil)))
+	(when tool-uses
+	  (format "\n<think>%s\n%s\n</think>\n"
+		  (plist-get tool-uses :name)
+		  (plist-get tool-uses :args)))
+	(when tool-results
+	  (format "\n<think>\n%s\n</think>\n"
+		  tool-results))
 	(when text
-	  (if (and reasoning ellama--current-session)
-	      (concat "</think>\n" (string-trim text))
-	    (string-trim text))))))))
+	  (string-trim text)))))))
 
 (defun ellama--error-handler (buffer errcb)
   "Error handler function.
@@ -1376,39 +1383,62 @@ ERRCB is an error callback."
       (setq ellama--current-request nil)
       (ellama-request-mode -1))))
 
-(defun ellama--response-handler (handler reasoning-buffer buffer donecb errcb provider llm-prompt async)
+(defun ellama--response-handler (result-handler reasoning-buffer buffer donecb errcb provider llm-prompt async filter)
   "Response handler function.
-HANDLER handles text insertion.
+RESULT-HANDLER handles text insertion.
 REASONING-BUFFER used for reasoning output.
 BUFFER is the current ellama buffer.
 DONECB is a done callback.
 PROVIDER is an llm provider.
 ERRCB is an error callback.
 LLM-PROMPT is current llm prompt.
-ASYNC flag is for asyncronous requests."
+ASYNC flag is for asyncronous requests.
+FILTER is a function that's applied to (partial) response strings before they're
+inserted into the BUFFER."
   (lambda (response)
     (let ((text (plist-get response :text))
 	  (reasoning (plist-get response :reasoning))
 	  (tool-result (plist-get response :tool-results)))
+      (funcall result-handler response)
+      (when (or ellama--current-session
+		(not reasoning))
+	(when (not tool-result) (kill-buffer reasoning-buffer)))
       (if tool-result
-	  (if async
-	      (llm-chat-async
-	       provider
-	       llm-prompt
-	       (ellama--response-handler handler reasoning-buffer buffer donecb errcb provider llm-prompt async)
-	       (ellama--error-handler buffer errcb)
-	       t)
-	    (llm-chat-streaming
-	     provider
-	     llm-prompt
-	     handler
-	     (ellama--response-handler handler reasoning-buffer buffer donecb errcb provider llm-prompt async)
-	     (ellama--error-handler buffer errcb)
-	     t))
-	(funcall handler response)
-	(when (or ellama--current-session
-		  (not reasoning))
-	  (kill-buffer reasoning-buffer))
+	  (let* ((insert-text
+		  (ellama--insert buffer (with-current-buffer buffer (if ellama--current-session
+									 (point-max)
+								       (point)))
+				  filter))
+		 (insert-reasoning
+		  (ellama--insert reasoning-buffer nil #'ellama--translate-markdown-to-org-filter))
+		 (handler (ellama--handle-partial insert-text insert-reasoning reasoning-buffer))
+		 (cnt 0)
+		 (skip-handler
+		  (lambda (request)
+		    (if (= cnt ellama-response-process-method)
+			(progn
+			  (funcall handler request)
+			  (setq cnt 0))
+		      (cl-incf cnt)))))
+	    (with-current-buffer buffer
+	      (if async
+		  (llm-chat-async
+		   provider
+		   llm-prompt
+		   (ellama--response-handler
+		    handler reasoning-buffer buffer donecb errcb provider llm-prompt async filter)
+		   (ellama--error-handler buffer errcb)
+		   t)
+		(llm-chat-streaming
+		 provider
+		 llm-prompt
+		 (if (integerp ellama-response-process-method)
+		     skip-handler handler)
+		 (ellama--response-handler
+		  handler
+		  reasoning-buffer buffer donecb errcb provider llm-prompt async filter)
+		 (ellama--error-handler buffer errcb)
+		 t))))
 	(with-current-buffer buffer
 	  (accept-change-group ellama--change-group)
 	  (when ellama-spinner-enabled
@@ -1514,14 +1544,14 @@ failure (with BUFFER current).
 			  ('async (llm-chat-async
 				   provider
 				   llm-prompt
-				   (ellama--response-handler handler reasoning-buffer buffer donecb errcb provider llm-prompt t)
+				   (ellama--response-handler handler reasoning-buffer buffer donecb errcb provider llm-prompt t filter)
 				   (ellama--error-handler buffer errcb)
 				   t))
 			  ('streaming (llm-chat-streaming
 				       provider
 				       llm-prompt
 				       handler
-				       (ellama--response-handler handler reasoning-buffer buffer donecb errcb provider llm-prompt nil)
+				       (ellama--response-handler handler reasoning-buffer buffer donecb errcb provider llm-prompt nil filter)
 				       (ellama--error-handler buffer errcb)
 				       t))
 			  ((pred integerp)
@@ -1537,7 +1567,7 @@ failure (with BUFFER current).
 			      provider
 			      llm-prompt
 			      skip-handler
-			      (ellama--response-handler handler reasoning-buffer buffer donecb errcb provider llm-prompt t)
+			      (ellama--response-handler handler reasoning-buffer buffer donecb errcb provider llm-prompt t filter)
 			      (ellama--error-handler buffer errcb)
 			      t))))))
 	  (with-current-buffer buffer
