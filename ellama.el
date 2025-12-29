@@ -882,7 +882,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
 		       ellama-sessions-directory
 		       (concat id "." (ellama-get-session-file-extension)))))
 	 (session (make-ellama-session
-		   :id id :provider provider :file file-name))
+		   :id id :provider provider :file file-name :extra `(:dir ,dir)))
 	 (buffer (if file-name
 		     (progn
 		       (make-directory ellama-sessions-directory t)
@@ -1021,7 +1021,13 @@ If EPHEMERAL non nil new session will not be associated with any file."
 	       :provider (ellama-session-provider session)
 	       :file (ellama-session-file session)
 	       :prompt (ellama-session-prompt session)
-	       :extra extra)))
+	       :extra extra))
+	(with-current-buffer buffer
+	  (when-let* ((extra)
+		      ((plistp extra))
+		      (dir (plist-get extra :dir))
+		      ((file-exists-p dir)))
+	    (setq default-directory dir))))
       (setq ellama--current-session-id (ellama-session-id ellama--current-session))
       (puthash (ellama-session-id ellama--current-session)
 	       buffer ellama--active-sessions)
