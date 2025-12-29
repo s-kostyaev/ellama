@@ -31,6 +31,12 @@
 ;;; Code:
 (require 'project)
 
+(defcustom ellama-tools-allow-all nil
+  "Allow `ellama' using all the tools without user confirmation.
+Dangerous.  Use at your own risk."
+  :type 'boolean
+  :group 'ellama)
+
 (defvar ellama-tools-available nil
   "Alist containing all registered tools.")
 
@@ -51,7 +57,7 @@ otherwise."
   (let ((confirmation (gethash function ellama-tools-confirm-allowed nil)))
     (cond
      ;; If user has approved all calls, just execute the function
-     ((when confirmation
+     ((when (or confirmation ellama-tools-allow-all)
         (if args
             (apply function args)
           (funcall function))))
