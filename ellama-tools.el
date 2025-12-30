@@ -65,9 +65,7 @@ otherwise."
      ;; If user has approved all calls, just execute the function
      ((when (or confirmation ellama-tools-allow-all
                 (cl-find function ellama-tools-allowed))
-        (let ((result (if args
-                          (apply function args)
-                        (funcall function))))
+        (let ((result (apply function args)))
           (if (stringp result)
               result
             (json-encode result)))))
@@ -79,15 +77,11 @@ otherwise."
              (result (cond
                       ;; Yes - execute function once
                       ((eq answer ?y)
-                       (if args
-                           (apply function args)
-                         (funcall function)))
+                       (apply function args))
                       ;; Always - remember approval and execute function
                       ((eq answer ?a)
                        (puthash function t ellama-tools-confirm-allowed)
-                       (if args
-                           (apply function args)
-                         (funcall function)))
+                       (apply function args))
                       ;; No - return nil
                       ((eq answer ?n)
                        "Forbidden by the user"))))

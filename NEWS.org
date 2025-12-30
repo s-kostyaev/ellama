@@ -1,3 +1,7 @@
+* Version 1.10.3
+- Removed redundant checks for function arguments and streamlined the execution
+  logic in ellama-tools.el, making the code more concise and maintainable by
+  using the apply function directly in all cases.
 * Version 1.10.2
 - Added directory tracking to sessions, including a directory path in the extra
   data field and setting the default directory when a session is initialized to
