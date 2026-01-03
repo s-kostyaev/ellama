@@ -255,6 +255,42 @@ otherwise."
                 :description
                 "Write CONTENT to the file located at the specified PATH."))
 
+(defun ellama-tools-append-file-tool (path content)
+  "Append CONTENT to the file located at the specified PATH."
+  (with-current-buffer (find-file-noselect path)
+    (goto-char (point-max))
+    (insert content)
+    (save-buffer)))
+
+(defun ellama-tools-append-file-tool-confirm (path content)
+  "Append CONTENT to the file located at the specified PATH."
+  (ellama-tools-confirm
+   (format "Allow appending file %s?" path)
+   'ellama-tools-append-file-tool
+   (list path content)))
+
+(add-to-list
+ 'ellama-tools-available
+ (llm-make-tool :function
+                'ellama-tools-append-file-tool-confirm
+                :name
+                "append_file"
+                :args
+                (list '(:name
+                        "path"
+                        :type
+                        string
+                        :description
+                        "Path to the file.")
+                      '(:name
+                        "content"
+                        :type
+                        string
+                        :description
+                        "Content to append to the file."))
+                :description
+                "Append CONTENT to the file located at the specified PATH."))
+
 (defun ellama-tools-directory-tree-tool (dir &optional depth)
   "Return a string representing the directory tree under DIR.
 DEPTH is the current recursion depth, used internally."
