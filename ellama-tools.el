@@ -566,5 +566,34 @@ Replace OLDCONTENT with NEWCONTENT."
                 :description
                 "Return current project root directory."))
 
+(defun ellama-tools-ask-user-tool (question answer-variant-list)
+  "Ask user a QUESTION to receive a clarification.
+ANSWER-VARIANT-LIST is a list of possible answer variants."
+  (completing-read (concat question " ") (seq--into-list answer-variant-list)))
+
+(add-to-list
+ 'ellama-tools-available
+ (llm-make-tool :function
+                'ellama-tools-ask-user-tool
+                :name
+                "ask_user"
+                :args
+                (list
+                 '(:name
+                   "question"
+                   :type
+                   string
+                   :description
+                   "Question to ask user for clarification.")
+                 '(:name
+                   "answer_variant_list"
+                   :type array
+                   :description
+                   "List of possible answer variants."
+                   :items (:type string)))
+                :description
+                "Ask user a QUESTION to receive a clarification.
+ANSWER-VARIANT-LIST is a list of possible answer variants."))
+
 (provide 'ellama-tools)
 ;;; ellama-tools.el ends here
