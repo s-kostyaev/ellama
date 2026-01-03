@@ -255,6 +255,42 @@ otherwise."
                 :description
                 "Write CONTENT to the file located at the specified PATH."))
 
+(defun ellama-tools-append-file-tool (path content)
+  "Append CONTENT to the file located at the specified PATH."
+  (with-current-buffer (find-file-noselect path)
+    (goto-char (point-max))
+    (insert content)
+    (save-buffer)))
+
+(defun ellama-tools-append-file-tool-confirm (path content)
+  "Append CONTENT to the file located at the specified PATH."
+  (ellama-tools-confirm
+   (format "Allow appending file %s?" path)
+   'ellama-tools-append-file-tool
+   (list path content)))
+
+(add-to-list
+ 'ellama-tools-available
+ (llm-make-tool :function
+                'ellama-tools-append-file-tool-confirm
+                :name
+                "append_file"
+                :args
+                (list '(:name
+                        "path"
+                        :type
+                        string
+                        :description
+                        "Path to the file.")
+                      '(:name
+                        "content"
+                        :type
+                        string
+                        :description
+                        "Content to append to the file."))
+                :description
+                "Append CONTENT to the file located at the specified PATH."))
+
 (defun ellama-tools-directory-tree-tool (dir &optional depth)
   "Return a string representing the directory tree under DIR.
 DEPTH is the current recursion depth, used internally."
@@ -565,6 +601,35 @@ Replace OLDCONTENT with NEWCONTENT."
                 nil
                 :description
                 "Return current project root directory."))
+
+(defun ellama-tools-ask-user-tool (question answer-variant-list)
+  "Ask user a QUESTION to receive a clarification.
+ANSWER-VARIANT-LIST is a list of possible answer variants."
+  (completing-read (concat question " ") (seq--into-list answer-variant-list)))
+
+(add-to-list
+ 'ellama-tools-available
+ (llm-make-tool :function
+                'ellama-tools-ask-user-tool
+                :name
+                "ask_user"
+                :args
+                (list
+                 '(:name
+                   "question"
+                   :type
+                   string
+                   :description
+                   "Question to ask user for clarification.")
+                 '(:name
+                   "answer_variant_list"
+                   :type array
+                   :description
+                   "List of possible answer variants."
+                   :items (:type string)))
+                :description
+                "Ask user a QUESTION to receive a clarification.
+ANSWER-VARIANT-LIST is a list of possible answer variants."))
 
 (provide 'ellama-tools)
 ;;; ellama-tools.el ends here

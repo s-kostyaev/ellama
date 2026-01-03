@@ -1,3 +1,10 @@
+* Version 1.10.4
+- Added a new tool called "ask_user" that allows the system to pose questions to
+  the user and receive clarifications.
+- Added a new tool to append content to files, including
+  ~ellama-tools-append-file-tool~ and ~ellama-tools-append-file-tool-confirm~.
+- Registered the new append file tool in ~ellama-tools-available~ with
+  appropriate arguments and description.
 * Version 1.10.3
 - Removed redundant checks for function arguments and streamlined the execution
   logic in ellama-tools.el, making the code more concise and maintainable by
