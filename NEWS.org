@@ -1,3 +1,8 @@
+* Version 1.10.5
+- Added ~count_lines~ and ~lines_range~ tools for counting lines and retrieving
+  file content by line range.
+- Introduced ~grep_in_file~ tool with confirmation prompt and updated
+  ~ellama-tools-available~ list.
 * Version 1.10.4
 - Added a new tool called "ask_user" that allows the system to pose questions to
   the user and receive clarifications.
