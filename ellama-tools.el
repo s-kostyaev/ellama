@@ -477,6 +477,27 @@ Replace OLDCONTENT with NEWCONTENT."
                 :description
                 "Grep SEARCH-STRING in directory files."))
 
+(defun ellama-tools-grep-in-file-tool (search-string file)
+  "Grep SEARCH-STRING in FILE."
+  (shell-command-to-string (format "grep --color=never -nh %s %s" search-string file)))
+
+(defun ellama-tools-grep-in-file-tool-confirm (search-string file)
+  "Confirm grepping for SEARCH-STRING in FILE."
+  (ellama-tools-confirm
+   (format "Allow grepping for %s in file %s?" search-string file)
+   'ellama-tools-grep-in-file-tool
+   (list search-string file)))
+
+(add-to-list
+ 'ellama-tools-available
+ (llm-make-tool :function
+                'ellama-tools-grep-in-file-tool-confirm
+                :name "grep_in_file"
+                :args (list
+                       '(:name "search_string" :type string :description "String to search for.")
+                       '(:name "file" :type file :description "File to search in."))
+                :description "Grep SEARCH-STRING in FILE."))
+
 (defun ellama-tools-list-tool ()
   "List all available tools."
   (json-encode (mapcar
