@@ -1,6 +1,6 @@
 ;;; ellama-transient.el --- Transient menus for ellama -*- lexical-binding: t; package-lint-main-file: "ellama.el"; -*-
 
-;; Copyright (C) 2023-2025  Free Software Foundation, Inc.
+;; Copyright (C) 2023-2026  Free Software Foundation, Inc.
 
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; SPDX-License-Identifier: GPL-3.0-or-later

@@ -1,6 +1,6 @@
 ;;; integration-test-ellama.el --- Ellama integration tests -*- lexical-binding: t; package-lint-main-file: "../ellama.el"; -*-
 
-;; Copyright (C) 2023-2025  Free Software Foundation, Inc.
+;; Copyright (C) 2023-2026  Free Software Foundation, Inc.
 
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 
