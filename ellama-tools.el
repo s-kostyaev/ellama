@@ -190,11 +190,11 @@ otherwise."
 
 (defun ellama-tools-read-file-tool (path)
   "Read the file located at the specified PATH."
-  (if (not (file-exists-p path))
-      (format "File %s doesn't exists." path)
-    (with-temp-buffer
-      (insert-file-contents-literally path)
-      (buffer-string))))
+  (json-encode (if (not (file-exists-p path))
+                   (format "File %s doesn't exists." path)
+                 (with-temp-buffer
+                   (insert-file-contents-literally path)
+                   (buffer-string)))))
 
 (defun ellama-tools-read-file-tool-confirm (path)
   "Read the file located at the specified PATH."
@@ -452,7 +452,9 @@ Replace OLDCONTENT with NEWCONTENT."
 
 (defun ellama-tools-grep-tool (search-string)
   "Grep SEARCH-STRING in directory files."
-  (shell-command-to-string (format "find . -type f -exec grep --color=never -nh -e %s \\{\\} +" search-string)))
+  (json-encode
+   (shell-command-to-string
+    (format "find . -type f -exec grep --color=never -nh -e %s \\{\\} +" search-string))))
 
 (defun ellama-tools-grep-tool-confirm (search-string)
   "Grep SEARCH-STRING in directory files."
@@ -479,7 +481,8 @@ Replace OLDCONTENT with NEWCONTENT."
 
 (defun ellama-tools-grep-in-file-tool (search-string file)
   "Grep SEARCH-STRING in FILE."
-  (shell-command-to-string (format "grep --color=never -nh %s %s" search-string file)))
+  (json-encode
+   (shell-command-to-string (format "grep --color=never -nh %s %s" search-string file))))
 
 (defun ellama-tools-grep-in-file-tool-confirm (search-string file)
   "Confirm grepping for SEARCH-STRING in FILE."
@@ -682,19 +685,19 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
 
 (defun ellama-tools-lines-range-tool (path from to)
   "Return content of file located at PATH lines in range FROM TO."
-  (with-current-buffer (find-file-noselect path)
-    (save-excursion
-      (let ((start (progn
-                     (goto-char (point-min))
-                     (forward-line (1- from))
-                     (beginning-of-line)
-                     (point)))
-            (end (progn
-                   (goto-char (point-min))
-                   (forward-line (1- to))
-                   (end-of-line)
-                   (point))))
-        (buffer-substring-no-properties start end)))))
+  (json-encode (with-current-buffer (find-file-noselect path)
+                 (save-excursion
+                   (let ((start (progn
+                                  (goto-char (point-min))
+                                  (forward-line (1- from))
+                                  (beginning-of-line)
+                                  (point)))
+                         (end (progn
+                                (goto-char (point-min))
+                                (forward-line (1- to))
+                                (end-of-line)
+                                (point))))
+                     (buffer-substring-no-properties start end))))))
 
 (defun ellama-tools-lines-range-tool-confirm (path from to)
   "Return content of file located at PATH lines in range FROM TO."
