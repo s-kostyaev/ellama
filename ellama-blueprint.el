@@ -211,6 +211,7 @@ corresponding prompt is inserted into a blueprint buffer."
 	 (for-devs (y-or-n-p "For developers? "))
 	 (content (buffer-substring-no-properties (point-min) (point-max)))
 	 (blueprint `(:act ,name :prompt ,content :for-devs ,for-devs)))
+    (ellama-blueprint-remove name)
     (add-to-list 'ellama-blueprints blueprint t)
     (customize-save-variable 'ellama-blueprints ellama-blueprints)))
 
