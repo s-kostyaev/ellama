@@ -252,5 +252,20 @@ corresponding prompt is inserted into a blueprint buffer."
       (let ((value (read-string (format "Enter value for {%s}: " var))))
 	(ellama-blueprint-set-variable var value)))))
 
+;;;###autoload
+(defun ellama-blueprint-remove (act)
+  "Remove user defined blueprint with ACT name.
+ACT should be the act string of the blueprint to remove.
+If called interactively, prompts the user to select a blueprint."
+  (interactive
+   (let ((acts (mapcar (lambda (bp) (plist-get bp :act)) ellama-blueprints)))
+     (list (completing-read "Remove blueprint: " acts nil t))))
+  (let ((found (cl-remove-if (lambda (bp) (string= act (plist-get bp :act))) ellama-blueprints)))
+    (if (eq (length found) (length ellama-blueprints))
+        (message "No blueprint named '%s' found" act)
+      (setq ellama-blueprints found)
+      (customize-save-variable 'ellama-blueprints ellama-blueprints)
+      (message "Removed blueprint '%s'" act))))
+
 (provide 'ellama-blueprint)
 ;;; ellama-blueprint.el ends here.

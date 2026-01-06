@@ -409,9 +409,10 @@ ARGS used for transient arguments."
     ("b" "Blueprint" ellama-blueprint-select)
     ("U" "User defined blueprint" ellama-blueprint-select-user-defined-blueprint)
     ("C" "Community blueprint" ellama-community-prompts-select-blueprint)]
-   ["Create"
+   ["Manage"
     ("c" "Create from buffer" ellama-blueprint-create)
-    ("n" "New blueprint" ellama-blueprint-new)]
+    ("n" "New blueprint" ellama-blueprint-new)
+    ("r" "Remove blueprint" ellama-blueprint-remove)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 ;;;###autoload (autoload 'ellama-transient-blueprint-mode-menu "ellama-transient" nil t)
