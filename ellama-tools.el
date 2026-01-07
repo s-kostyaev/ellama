@@ -30,6 +30,8 @@
 
 ;;; Code:
 (require 'project)
+(require 'json)
+(require 'llm)
 
 (defcustom ellama-tools-allow-all nil
   "Allow `ellama' using all the tools without user confirmation.
