@@ -378,12 +378,14 @@ DEPTH is the current recursion depth, used internally."
 Replace OLDCONTENT with NEWCONTENT."
   (let ((content (with-temp-buffer
                    (insert-file-contents-literally path)
-                   (buffer-string))))
-    (when (string-match oldcontent content)
+                   (buffer-string)))
+        (coding-system-for-write 'raw-text))
+    (when (string-match (regexp-quote oldcontent) content)
       (with-temp-buffer
         (insert content)
         (goto-char (match-beginning 0))
-        (delete-region (match-beginning 0) (match-end 0))
+        (delete-region (1+ (match-beginning 0)) (1+ (match-end 0)))
+        (forward-char)
         (insert newcontent)
         (write-region (point-min) (point-max) path)))))
 
@@ -450,18 +452,19 @@ Replace OLDCONTENT with NEWCONTENT."
                 :description
                 "Execute shell command CMD."))
 
-(defun ellama-tools-grep-tool (search-string)
-  "Grep SEARCH-STRING in directory files."
-  (json-encode
-   (shell-command-to-string
-    (format "find . -type f -exec grep --color=never -nh -e %s \\{\\} +" search-string))))
+(defun ellama-tools-grep-tool (dir search-string)
+  "Grep SEARCH-STRING in DIR files."
+  (let ((default-directory dir))
+    (json-encode
+     (shell-command-to-string
+      (format "find . -type f -exec grep --color=never -nH -e %s \\{\\} +" search-string)))))
 
-(defun ellama-tools-grep-tool-confirm (search-string)
-  "Grep SEARCH-STRING in directory files."
+(defun ellama-tools-grep-tool-confirm (dir search-string)
+  "Grep SEARCH-STRING in DIR files."
   (ellama-tools-confirm
-   (format "Allow grepping for %s in directory files?" search-string)
+   (format "Allow grepping for %s in %s directory files?" dir search-string)
    'ellama-tools-grep-tool
-   (list search-string)))
+   (list dir search-string)))
 
 (add-to-list
  'ellama-tools-available
@@ -471,7 +474,13 @@ Replace OLDCONTENT with NEWCONTENT."
                 "grep"
                 :args
                 (list '(:name
-                        "search-string"
+                        "dir"
+                        :type
+                        string
+                        :description
+                        "Directory to search in.")
+                      '(:name
+                        "search_string"
                         :type
                         string
                         :description
