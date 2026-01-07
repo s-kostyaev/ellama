@@ -378,12 +378,14 @@ DEPTH is the current recursion depth, used internally."
 Replace OLDCONTENT with NEWCONTENT."
   (let ((content (with-temp-buffer
                    (insert-file-contents-literally path)
-                   (buffer-string))))
-    (when (string-match oldcontent content)
+                   (buffer-string)))
+        (coding-system-for-write 'raw-text))
+    (when (string-match (regexp-quote oldcontent) content)
       (with-temp-buffer
         (insert content)
         (goto-char (match-beginning 0))
-        (delete-region (match-beginning 0) (match-end 0))
+        (delete-region (1+ (match-beginning 0)) (1+ (match-end 0)))
+        (forward-char)
         (insert newcontent)
         (write-region (point-min) (point-max) path)))))
 
