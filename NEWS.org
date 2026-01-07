@@ -1,3 +1,9 @@
+* Version 1.10.7
+- Add blueprint removal functionality.
+- Overwrite blueprint with the same name during creation.
+- Update grep tools to accept directory parameter.
+- Fix content replacement in edit_file tool.
+- Update changelog generation instructions.
 * Version 1.10.6
 - Added json-encode wrapping to ~ellama-tools-read-file-tool~,
   ~ellama-tools-grep-tool~, ~ellama-tools-grep-in-file-tool~ and
