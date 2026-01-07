@@ -464,7 +464,7 @@ Replace OLDCONTENT with NEWCONTENT."
 (defun ellama-tools-grep-tool-confirm (dir search-string)
   "Grep SEARCH-STRING in DIR files."
   (ellama-tools-confirm
-   (format "Allow grepping for %s in %s directory files?" dir search-string)
+   (format "Allow grepping for %s in %s directory files?" search-string dir)
    'ellama-tools-grep-tool
    (list dir search-string)))
 
