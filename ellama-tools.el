@@ -459,7 +459,7 @@ Replace OLDCONTENT with NEWCONTENT."
   (let ((default-directory dir))
     (json-encode
      (shell-command-to-string
-      (format "find . -type f -exec grep --color=never -nH -e %s \\{\\} +" search-string)))))
+      (format "find . -type f -exec grep --color=never -nH -e %s \\{\\} +" (shell-quote-argument search-string))))))
 
 (defun ellama-tools-grep-tool-confirm (dir search-string)
   "Grep SEARCH-STRING in DIR files."
@@ -493,7 +493,7 @@ Replace OLDCONTENT with NEWCONTENT."
 (defun ellama-tools-grep-in-file-tool (search-string file)
   "Grep SEARCH-STRING in FILE."
   (json-encode
-   (shell-command-to-string (format "grep --color=never -nh %s %s" search-string file))))
+   (shell-command-to-string (format "grep --color=never -nh %s %s" (shell-quote-argument search-string) file))))
 
 (defun ellama-tools-grep-in-file-tool-confirm (search-string file)
   "Confirm grepping for SEARCH-STRING in FILE."
