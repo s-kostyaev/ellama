@@ -745,5 +745,63 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
                 :description
                 "Return content of file located at PATH lines in range FROM TO."))
 
+(defun ellama-tools-apply-patch-tool (path patch)
+  "Apply PATCH to file located at PATH.
+PATCH is a string containing the patch data.
+Returns the output of the patch command or an error message."
+  (cond ((not path)
+         "path is required")
+        ((not (file-exists-p path))
+         (format "file %s doesn't exists" path))
+        ((not patch)
+         "patch is required")
+        (t
+         (let* ((dir (file-name-directory (file-truename path)))
+                (tmp (make-temp-file "ellama-patch-"))
+                (patch-file (concat tmp ".patch")))
+           (unwind-protect
+               (progn
+                 (with-temp-buffer
+                   (insert patch)
+                   (write-region (point-min) (point-max) patch-file))
+                 (shell-command-to-string
+                  (format "patch -p0 -d %s -i %s"
+                          (shell-quote-argument dir)
+                          (shell-quote-argument patch-file))))
+             (when (file-exists-p patch-file)
+               (delete-file patch-file)))))))
+
+(defun ellama-tools-apply-patch-tool-confirm (path patch)
+  "Apply PATCH to file located at PATH.
+PATCH is a string containing the patch data.
+Confirms with the user before applying."
+  (ellama-tools-confirm
+   (format "Allow applying patch to file %s?" path)
+   'ellama-tools-apply-patch-tool
+   (list path patch)))
+
+(add-to-list
+ 'ellama-tools-available
+ (llm-make-tool :function
+                'ellama-tools-apply-patch-tool-confirm
+                :name
+                "apply_patch"
+                :args
+                (list
+                 '(:name
+                   "path"
+                   :type
+                   string
+                   :description
+                   "Path to the file to apply patch to.")
+                 '(:name
+                   "patch"
+                   :type
+                   string
+                   :description
+                   "Patch data to apply."))
+                :description
+                "Apply a patch to the file at PATH."))
+
 (provide 'ellama-tools)
 ;;; ellama-tools.el ends here
