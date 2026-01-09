@@ -1522,6 +1522,8 @@ failure (with BUFFER current).
 			       (llm-chat-prompt-append-response
 				(ellama-session-prompt session)
 				prompt-with-ctx)
+			       (setf (llm-chat-prompt-tools (ellama-session-prompt session))
+				     ellama-tools-enabled)
 			       (when system
 				 (llm-chat-prompt-append-response
 				  (ellama-session-prompt session)
