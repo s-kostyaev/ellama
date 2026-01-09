@@ -1,3 +1,10 @@
+* Version 1.10.8
+- Add missing import statements to fix native compiler warnings.
+- Fix parameter order in grep tool confirmation message.
+- Fix shell command injection vulnerability in grep tools.
+- Add patch application functionality.
+- Add *.elc to .gitignore.
+- Add AGENTS.md and Makefile.
 * Version 1.10.7
 - Add blueprint removal functionality.
 - Overwrite blueprint with the same name during creation.
