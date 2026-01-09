@@ -1,3 +1,7 @@
+* Version 1.10.9
+- Use ~call-process~ instead of ~shell-command-to-string~ for ~grep_in_file~ and
+  ~apply_patch~ tools.
+- Update tools for already running sessions.
 * Version 1.10.8
 - Add missing import statements to fix native compiler warnings.
 - Fix parameter order in grep tool confirmation message.
