@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1"))
-;; Version: 1.10.8
+;; Version: 1.10.9
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -1522,6 +1522,8 @@ failure (with BUFFER current).
 			       (llm-chat-prompt-append-response
 				(ellama-session-prompt session)
 				prompt-with-ctx)
+			       (setf (llm-chat-prompt-tools (ellama-session-prompt session))
+				     ellama-tools-enabled)
 			       (when system
 				 (llm-chat-prompt-append-response
 				  (ellama-session-prompt session)

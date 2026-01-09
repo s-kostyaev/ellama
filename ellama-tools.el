@@ -493,7 +493,11 @@ Replace OLDCONTENT with NEWCONTENT."
 (defun ellama-tools-grep-in-file-tool (search-string file)
   "Grep SEARCH-STRING in FILE."
   (json-encode
-   (shell-command-to-string (format "grep --color=never -nh %s %s" (shell-quote-argument search-string) file))))
+   (with-output-to-string
+     (call-process
+      "grep"
+      nil standard-output nil
+      "--color=never" "-nh" search-string (file-truename file)))))
 
 (defun ellama-tools-grep-in-file-tool-confirm (search-string file)
   "Confirm grepping for SEARCH-STRING in FILE."
@@ -758,16 +762,17 @@ Returns the output of the patch command or an error message."
         (t
          (let* ((dir (file-name-directory (file-truename path)))
                 (tmp (make-temp-file "ellama-patch-"))
-                (patch-file (concat tmp ".patch")))
+                (patch-file (file-truename (concat tmp ".patch"))))
            (unwind-protect
                (progn
                  (with-temp-buffer
                    (insert patch)
                    (write-region (point-min) (point-max) patch-file))
-                 (shell-command-to-string
-                  (format "patch -p0 -d %s -i %s"
-                          (shell-quote-argument dir)
-                          (shell-quote-argument patch-file))))
+                 (with-output-to-string
+                   (call-process
+                    "patch"
+                    nil standard-output nil
+                    "-p0" "-d" dir "-i" patch-file)))
              (when (file-exists-p patch-file)
                (delete-file patch-file)))))))
 
