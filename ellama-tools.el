@@ -30,6 +30,8 @@
 
 ;;; Code:
 (require 'project)
+(require 'json)
+(require 'llm)
 
 (defcustom ellama-tools-allow-all nil
   "Allow `ellama' using all the tools without user confirmation.
@@ -457,12 +459,12 @@ Replace OLDCONTENT with NEWCONTENT."
   (let ((default-directory dir))
     (json-encode
      (shell-command-to-string
-      (format "find . -type f -exec grep --color=never -nH -e %s \\{\\} +" search-string)))))
+      (format "find . -type f -exec grep --color=never -nH -e %s \\{\\} +" (shell-quote-argument search-string))))))
 
 (defun ellama-tools-grep-tool-confirm (dir search-string)
   "Grep SEARCH-STRING in DIR files."
   (ellama-tools-confirm
-   (format "Allow grepping for %s in %s directory files?" dir search-string)
+   (format "Allow grepping for %s in %s directory files?" search-string dir)
    'ellama-tools-grep-tool
    (list dir search-string)))
 
@@ -491,7 +493,7 @@ Replace OLDCONTENT with NEWCONTENT."
 (defun ellama-tools-grep-in-file-tool (search-string file)
   "Grep SEARCH-STRING in FILE."
   (json-encode
-   (shell-command-to-string (format "grep --color=never -nh %s %s" search-string file))))
+   (shell-command-to-string (format "grep --color=never -nh %s %s" (shell-quote-argument search-string) file))))
 
 (defun ellama-tools-grep-in-file-tool-confirm (search-string file)
   "Confirm grepping for SEARCH-STRING in FILE."
@@ -742,6 +744,64 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
                         "Ending line number."))
                 :description
                 "Return content of file located at PATH lines in range FROM TO."))
+
+(defun ellama-tools-apply-patch-tool (path patch)
+  "Apply PATCH to file located at PATH.
+PATCH is a string containing the patch data.
+Returns the output of the patch command or an error message."
+  (cond ((not path)
+         "path is required")
+        ((not (file-exists-p path))
+         (format "file %s doesn't exists" path))
+        ((not patch)
+         "patch is required")
+        (t
+         (let* ((dir (file-name-directory (file-truename path)))
+                (tmp (make-temp-file "ellama-patch-"))
+                (patch-file (concat tmp ".patch")))
+           (unwind-protect
+               (progn
+                 (with-temp-buffer
+                   (insert patch)
+                   (write-region (point-min) (point-max) patch-file))
+                 (shell-command-to-string
+                  (format "patch -p0 -d %s -i %s"
+                          (shell-quote-argument dir)
+                          (shell-quote-argument patch-file))))
+             (when (file-exists-p patch-file)
+               (delete-file patch-file)))))))
+
+(defun ellama-tools-apply-patch-tool-confirm (path patch)
+  "Apply PATCH to file located at PATH.
+PATCH is a string containing the patch data.
+Confirms with the user before applying."
+  (ellama-tools-confirm
+   (format "Allow applying patch to file %s?" path)
+   'ellama-tools-apply-patch-tool
+   (list path patch)))
+
+(add-to-list
+ 'ellama-tools-available
+ (llm-make-tool :function
+                'ellama-tools-apply-patch-tool-confirm
+                :name
+                "apply_patch"
+                :args
+                (list
+                 '(:name
+                   "path"
+                   :type
+                   string
+                   :description
+                   "Path to the file to apply patch to.")
+                 '(:name
+                   "patch"
+                   :type
+                   string
+                   :description
+                   "Patch data to apply."))
+                :description
+                "Apply a patch to the file at PATH."))
 
 (provide 'ellama-tools)
 ;;; ellama-tools.el ends here
