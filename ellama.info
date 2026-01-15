@@ -500,6 +500,8 @@ argument generated text string.
      without user confirmation.  Dangerous.  Use at your own risk.
    • ‘ellama-tools-allowed’: List of allowed ‘ellama’ tools.  Tools from
      this list will work without user confirmation.
+   • ‘ellama-tools-argument-max-length’: Max length of function argument
+     in the confirmation prompt.  Default value 50.
 
 
 File: ellama.info,  Node: Context Management,  Next: Minor modes,  Prev: Configuration,  Up: Top
@@ -1442,31 +1444,31 @@ Node: Installation3613
 Node: Commands8621
 Node: Keymap16060
 Node: Configuration18893
-Node: Context Management24770
-Node: Transient Menus for Context Management25678
-Node: Managing the Context27292
-Node: Considerations28067
-Node: Minor modes28660
-Node: ellama-context-header-line-mode30648
-Node: ellama-context-header-line-global-mode31473
-Node: ellama-context-mode-line-mode32193
-Node: ellama-context-mode-line-global-mode33041
-Node: Ellama Session Header Line Mode33745
-Node: Enabling and Disabling34314
-Node: Customization34761
-Node: Ellama Session Mode Line Mode35049
-Node: Enabling and Disabling (1)35634
-Node: Customization (1)36081
-Node: Using Blueprints36375
-Node: Key Components of Ellama Blueprints36994
-Node: Creating and Managing Blueprints37601
-Node: Variable Management38582
-Node: Keymap and Mode39051
-Node: Transient Menus39987
-Node: Running Blueprints programmatically40533
-Node: Acknowledgments41120
-Node: Contributions41833
-Node: GNU Free Documentation License42217
+Node: Context Management24901
+Node: Transient Menus for Context Management25809
+Node: Managing the Context27423
+Node: Considerations28198
+Node: Minor modes28791
+Node: ellama-context-header-line-mode30779
+Node: ellama-context-header-line-global-mode31604
+Node: ellama-context-mode-line-mode32324
+Node: ellama-context-mode-line-global-mode33172
+Node: Ellama Session Header Line Mode33876
+Node: Enabling and Disabling34445
+Node: Customization34892
+Node: Ellama Session Mode Line Mode35180
+Node: Enabling and Disabling (1)35765
+Node: Customization (1)36212
+Node: Using Blueprints36506
+Node: Key Components of Ellama Blueprints37125
+Node: Creating and Managing Blueprints37732
+Node: Variable Management38713
+Node: Keymap and Mode39182
+Node: Transient Menus40118
+Node: Running Blueprints programmatically40664
+Node: Acknowledgments41251
+Node: Contributions41964
+Node: GNU Free Documentation License42348
 
 End Tag Table
 

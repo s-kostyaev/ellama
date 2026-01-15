@@ -377,6 +377,8 @@ argument generated text string.
   confirmation. Dangerous. Use at your own risk.
 - ~ellama-tools-allowed~: List of allowed ~ellama~ tools. Tools from this list
   will work without user confirmation.
+- ~ellama-tools-argument-max-length~: Max length of function argument in the
+  confirmation prompt. Default value 50.
 
 * Context Management
 
