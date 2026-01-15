@@ -1347,7 +1347,6 @@ REASONING-BUFFER is a buffer for reasoning."
   (lambda (response)
     (let ((text (plist-get response :text))
 	  (reasoning (plist-get response :reasoning))
-	  (tool-uses (plist-get response :tool-uses))
 	  (tool-results (plist-get response :tool-results)))
       (funcall
        insert-text
@@ -1366,10 +1365,6 @@ REASONING-BUFFER is a buffer for reasoning."
 		   (when ellama-reasoning-display-action-function
 		     `((ignore . (,ellama-reasoning-display-action-function)))))))
 	      nil)))
-	(when tool-uses
-	  (format "\n<think>%s\n%s\n</think>\n"
-		  (plist-get tool-uses :name)
-		  (plist-get tool-uses :args)))
 	(when tool-results
 	  (format "\n<think>\n%s\n</think>\n"
 		  tool-results))
