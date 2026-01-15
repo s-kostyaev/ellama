@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1"))
-;; Version: 1.10.9
+;; Version: 1.10.10
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -1347,7 +1347,6 @@ REASONING-BUFFER is a buffer for reasoning."
   (lambda (response)
     (let ((text (plist-get response :text))
 	  (reasoning (plist-get response :reasoning))
-	  (tool-uses (plist-get response :tool-uses))
 	  (tool-results (plist-get response :tool-results)))
       (funcall
        insert-text
@@ -1366,10 +1365,6 @@ REASONING-BUFFER is a buffer for reasoning."
 		   (when ellama-reasoning-display-action-function
 		     `((ignore . (,ellama-reasoning-display-action-function)))))))
 	      nil)))
-	(when tool-uses
-	  (format "\n<think>%s\n%s\n</think>\n"
-		  (plist-get tool-uses :name)
-		  (plist-get tool-uses :args)))
 	(when tool-results
 	  (format "\n<think>\n%s\n</think>\n"
 		  tool-results))
