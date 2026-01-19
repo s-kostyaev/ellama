@@ -65,6 +65,7 @@ Assistant".  Previous sentence was written by Ellama itself.
 * Context Management::
 * Minor modes::
 * Using Blueprints::
+* MCP Integration::
 * Acknowledgments::
 * Contributions::
 * GNU Free Documentation License::
@@ -797,7 +798,7 @@ The session ID is displayed with a customizable face called
 ‘ellama-face’.  You can customize this face to change its appearance.
 
 
-File: ellama.info,  Node: Using Blueprints,  Next: Acknowledgments,  Prev: Minor modes,  Up: Top
+File: ellama.info,  Node: Using Blueprints,  Next: MCP Integration,  Prev: Minor modes,  Up: Top
 
 7 Using Blueprints
 ******************
@@ -924,9 +925,39 @@ arguments.
      (global-set-key (kbd "C-c e M") #'my-chat-with-morpheus)
 
 
-File: ellama.info,  Node: Acknowledgments,  Next: Contributions,  Prev: Using Blueprints,  Up: Top
+File: ellama.info,  Node: MCP Integration,  Next: Acknowledgments,  Prev: Using Blueprints,  Up: Top
 
-8 Acknowledgments
+8 MCP Integration
+*****************
+
+You can also use MCP (Model Context Protocol) tools with ‘ellama’.  You
+need Emacs 30 or higher version.  Install ‘mcp.el’ -
+<https://github.com/lizqwerscott/mcp.el>.  For example to add web search
+capability to ‘ellama’ you can add duckduckgo mcp server
+(<https://github.com/nickclyde/duckduckgo-mcp-server>):
+
+     (use-package mcp
+       :ensure t
+       :demand t
+       :custom
+       (mcp-hub-servers
+        `(("ddg" . (:command "uvx"
+                             :args
+                             ("duckduckgo-mcp-server")))))
+       :config
+       (require 'mcp-hub)
+       (mcp-hub-start-all-server
+        (lambda ()
+          (let ((tools (mcp-hub-get-all-tool :asyncp t :categoryp t)))
+            (mapcar #'(lambda (tool)
+                        (apply #'ellama-tools-define-tool
+                               (list tool)))
+                    tools)))))
+
+
+File: ellama.info,  Node: Acknowledgments,  Next: Contributions,  Prev: MCP Integration,  Up: Top
+
+9 Acknowledgments
 *****************
 
 Thanks Jeffrey Morgan (https://github.com/jmorganca) for excellent
@@ -946,8 +977,8 @@ Without it only ‘ollama’ would be supported.
 
 File: ellama.info,  Node: Contributions,  Next: GNU Free Documentation License,  Prev: Acknowledgments,  Up: Top
 
-9 Contributions
-***************
+10 Contributions
+****************
 
 To contribute, submit a pull request or report a bug.  This library is
 part of GNU ELPA; major contributions must be from someone with FSF
@@ -1440,35 +1471,36 @@ their use in free software.
 
 Tag Table:
 Node: Top1379
-Node: Installation3613
-Node: Commands8621
-Node: Keymap16060
-Node: Configuration18893
-Node: Context Management24901
-Node: Transient Menus for Context Management25809
-Node: Managing the Context27423
-Node: Considerations28198
-Node: Minor modes28791
-Node: ellama-context-header-line-mode30779
-Node: ellama-context-header-line-global-mode31604
-Node: ellama-context-mode-line-mode32324
-Node: ellama-context-mode-line-global-mode33172
-Node: Ellama Session Header Line Mode33876
-Node: Enabling and Disabling34445
-Node: Customization34892
-Node: Ellama Session Mode Line Mode35180
-Node: Enabling and Disabling (1)35765
-Node: Customization (1)36212
-Node: Using Blueprints36506
-Node: Key Components of Ellama Blueprints37125
-Node: Creating and Managing Blueprints37732
-Node: Variable Management38713
-Node: Keymap and Mode39182
-Node: Transient Menus40118
-Node: Running Blueprints programmatically40664
-Node: Acknowledgments41251
-Node: Contributions41964
-Node: GNU Free Documentation License42348
+Node: Installation3633
+Node: Commands8641
+Node: Keymap16080
+Node: Configuration18913
+Node: Context Management24921
+Node: Transient Menus for Context Management25829
+Node: Managing the Context27443
+Node: Considerations28218
+Node: Minor modes28811
+Node: ellama-context-header-line-mode30799
+Node: ellama-context-header-line-global-mode31624
+Node: ellama-context-mode-line-mode32344
+Node: ellama-context-mode-line-global-mode33192
+Node: Ellama Session Header Line Mode33896
+Node: Enabling and Disabling34465
+Node: Customization34912
+Node: Ellama Session Mode Line Mode35200
+Node: Enabling and Disabling (1)35785
+Node: Customization (1)36232
+Node: Using Blueprints36526
+Node: Key Components of Ellama Blueprints37145
+Node: Creating and Managing Blueprints37752
+Node: Variable Management38733
+Node: Keymap and Mode39202
+Node: Transient Menus40138
+Node: Running Blueprints programmatically40684
+Node: MCP Integration41271
+Node: Acknowledgments42296
+Node: Contributions43008
+Node: GNU Free Documentation License43394
 
 End Tag Table
 
