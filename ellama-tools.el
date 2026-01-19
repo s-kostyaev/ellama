@@ -117,10 +117,22 @@ FUNCTION if approved, \"Forbidden by the user\" otherwise."
 TOOL-PLIST is a property list in the format expected by `llm-make-tool'.
 Returns a new tool definition with the :function wrapped."
   (let* ((func (plist-get tool-plist :function))
+         (args (plist-get tool-plist :args))
+         (wrapped-args
+          (mapcar
+           (lambda (arg)
+             (let*
+                 ((type (plist-get tool-plist :type))
+                  (wrapped-type (if (symbolp type)
+                                    type
+                                  (intern type))))
+               (plist-put arg :type wrapped-type)))
+           args))
          (wrapped-func (lambda (&rest args)
                          (apply #'ellama-tools-confirm func args))))
     ;; Return a new plist with the wrapped function
-    (plist-put tool-plist :function wrapped-func)))
+    (setq tool-plist (plist-put tool-plist :function wrapped-func))
+    (plist-put tool-plist :args wrapped-args)))
 
 (defun ellama-tools-define-tool (tool-plist)
   "Define a new ellama tool with automatic confirmation wrapping.
