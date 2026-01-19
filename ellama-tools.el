@@ -88,8 +88,6 @@ FUNCTION if approved, \"Forbidden by the user\" otherwise."
                           (string-truncate-left
                            arg
                            ellama-tools-argument-max-length))
-                         ((numberp arg)
-                          (number-to-string arg))
                          (t
                           (format "%S" arg))))
                       args))
