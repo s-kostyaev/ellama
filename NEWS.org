@@ -1,3 +1,7 @@
+* Version 1.10.11
+- Remove explicit handling of numeric arguments in ellama-tools.
+- Add argument processing and type wrapping to tool definitions.
+- Add MCP Integration documentation.
 * Version 1.10.10
 - Refactored tool confirmation and simplified tool definitions.
 - Simplified tool calling response handling.
