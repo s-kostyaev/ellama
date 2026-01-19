@@ -672,6 +672,34 @@ blueprint. It pre-fills variables based on the provided arguments.
   (global-set-key (kbd "C-c e M") #'my-chat-with-morpheus)
 #+END_SRC
 
+* MCP Integration
+
+You can also use MCP (Model Context Protocol) tools with ~ellama~. You need
+Emacs 30 or higher version. Install ~mcp.el~ -
+https://github.com/lizqwerscott/mcp.el. For example to add web search capability
+to ~ellama~ you can add duckduckgo mcp server
+(https://github.com/nickclyde/duckduckgo-mcp-server):
+
+#+begin_src emacs-lisp
+(use-package mcp
+  :ensure t
+  :demand t
+  :custom
+  (mcp-hub-servers
+   `(("ddg" . (:command "uvx"
+			:args
+			("duckduckgo-mcp-server")))))
+  :config
+  (require 'mcp-hub)
+  (mcp-hub-start-all-server
+   (lambda ()
+     (let ((tools (mcp-hub-get-all-tool :asyncp t :categoryp t)))
+       (mapcar #'(lambda (tool)
+		   (apply #'ellama-tools-define-tool
+			  (list tool)))
+	       tools)))))
+#+end_src
+
 * Acknowledgments
 
 Thanks [[https://github.com/jmorganca][Jeffrey Morgan]] for excellent project [[https://github.com/jmorganca/ollama][ollama]]. This project
