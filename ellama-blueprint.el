@@ -37,6 +37,70 @@
   :group 'ellama
   :type '(repeat plist))
 
+(defcustom ellama-blueprint-global-dir
+  (expand-file-name "ellama/blueprints" user-emacs-directory)
+  "Global directory for storing blueprint files."
+  :group 'ellama
+  :type 'directory)
+
+(defcustom ellama-blueprint-local-dir "blueprints"
+  "Local directory name for project-specific blueprints.
+When set to a string like \"blueprints\", it will look for this
+directory in the current project root."
+  :group 'ellama
+  :type 'string)
+
+(defcustom ellama-blueprint-file-extensions '("ellama-blueprint" "blueprint")
+  "File extensions recognized as blueprint files."
+  :group 'ellama
+  :type '(repeat string))
+
+(defun ellama-blueprint-get-local-dir ()
+  "Get local blueprint directory for current project."
+  (let ((project-root (ellama-tools-project-root-tool)))
+    (expand-file-name ellama-blueprint-local-dir project-root)))
+
+(defun ellama-blueprint-find-files (&optional dir extensions)
+  "Find blueprint files in DIR with given EXTENSIONS."
+  (let* ((search-dir (or dir ellama-blueprint-global-dir))
+         (exts (or extensions ellama-blueprint-file-extensions))
+         (files '()))
+    (when (file-exists-p search-dir)
+      (dolist (ext exts)
+        (setq files (append files
+			    (directory-files-recursively
+			     search-dir (concat "\\." ext "\\'"))))))
+    files))
+
+(defun ellama-blueprint-load-from-files ()
+  "Load blueprints from files."
+  (let ((global-files (ellama-blueprint-find-files ellama-blueprint-global-dir))
+        (local-files (ellama-blueprint-find-files (ellama-blueprint-get-local-dir)))
+        blueprints)
+    (dolist (file (append global-files local-files))
+      (when-let ((content (ellama-blueprint-read-file file))
+                 (name (file-name-sans-extension (file-name-nondirectory file)))
+                 (prompt (string-trim content)))
+        (push `(:act ,name :prompt ,prompt :file ,file) blueprints)))
+    blueprints))
+
+(defun ellama-blueprint-read-file (file)
+  "Read blueprint content from FILE."
+  (when (file-exists-p file)
+    (with-temp-buffer
+      (insert-file-contents file)
+      (buffer-string))))
+
+(defun ellama-blueprint-get-all-sources ()
+  "Get blueprints from all sources."
+  (let ((file-blueprints (ellama-blueprint-load-from-files))
+        (variable-blueprints ellama-blueprints)
+        (community-blueprints (ellama-community-prompts-ensure)))
+    (seq-uniq
+     (append file-blueprints variable-blueprints community-blueprints)
+     (lambda (b1 b2)
+       (string= (plist-get b1 :act) (plist-get b2 :act))))))
+
 ;;;###autoload
 (defun ellama-blueprint-set-system-kill-buffer ()
   "Set system message from current buffer and kill it."
@@ -102,6 +166,9 @@
 		    (define-key m [mode-line mouse-1] #'ellama-kill-current-buffer)
 		    m)))))
 
+;;;###autoload
+(add-to-list 'auto-mode-alist '("\\.ellama-blueprint\\'" . ellama-blueprint-mode))
+
 (defvar ellama-blueprint-buffer "*ellama-blueprint-buffer*"
   "Buffer for prompt blueprint.")
 
@@ -151,13 +218,8 @@ ARGS contains keys for fine control.
 	 (collection (pcase source
 		       ('user ellama-blueprints)
 		       ('community (ellama-community-prompts-ensure))
-		       (_ (seq-union
-			   ellama-blueprints
-			   (ellama-community-prompts-ensure)
-			   (lambda (blueprint1 blueprint2)
-			     (string=
-			      (plist-get blueprint1 :act)
-			      (plist-get blueprint2 :act)))))))
+		       ('files (ellama-blueprint-load-from-files))
+		       (_ (ellama-blueprint-get-all-sources))))
 	 selected-act
 	 selected-prompt)
     ;; Collect unique acts from the filtered collection
