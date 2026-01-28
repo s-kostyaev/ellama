@@ -1,3 +1,0 @@
-Based on shell_command "git log --reverse main..HEAD" output write short
-changelog in markdown list format. Do not add any headings or anknowledgements.
-Every changelog element should be ended with full stop.

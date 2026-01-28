@@ -101,6 +101,7 @@ Using Blueprints
 
 * Key Components of Ellama Blueprints::
 * Creating and Managing Blueprints::
+* Blueprints files::
 * Variable Management::
 * Keymap and Mode::
 * Transient Menus::
@@ -503,6 +504,12 @@ argument generated text string.
      this list will work without user confirmation.
    • ‘ellama-tools-argument-max-length’: Max length of function argument
      in the confirmation prompt.  Default value 50.
+   • ‘ellama-blueprint-global-dir’: Global directory for storing
+     blueprint files.
+   • ‘ellama-blueprint-local-dir’: Local directory name for
+     project-specific blueprints.
+   • ‘ellama-blueprint-file-extensions’: File extensions recognized as
+     blueprint files.
 
 
 File: ellama.info,  Node: Context Management,  Next: Minor modes,  Prev: Configuration,  Up: Top
@@ -813,6 +820,7 @@ for interactions.
 
 * Key Components of Ellama Blueprints::
 * Creating and Managing Blueprints::
+* Blueprints files::
 * Variable Management::
 * Keymap and Mode::
 * Transient Menus::
@@ -836,7 +844,7 @@ needed to guide the conversation.
 developers.
 
 
-File: ellama.info,  Node: Creating and Managing Blueprints,  Next: Variable Management,  Prev: Key Components of Ellama Blueprints,  Up: Using Blueprints
+File: ellama.info,  Node: Creating and Managing Blueprints,  Next: Blueprints files,  Prev: Key Components of Ellama Blueprints,  Up: Using Blueprints
 
 7.2 Creating and Managing Blueprints
 ====================================
@@ -859,9 +867,20 @@ blueprints:
      community, or all).
 
 
-File: ellama.info,  Node: Variable Management,  Next: Keymap and Mode,  Prev: Creating and Managing Blueprints,  Up: Using Blueprints
+File: ellama.info,  Node: Blueprints files,  Next: Variable Management,  Prev: Creating and Managing Blueprints,  Up: Using Blueprints
 
-7.3 Variable Management
+7.3 Blueprints files
+====================
+
+You can also store blueprints as plain text files.  You can store it
+globally inside ‘ellama-blueprint-global-dir’ or locally in the project
+local directory ‘ellama-blueprint-local-dir’ with
+‘ellama-blueprint-file-extensions’.
+
+
+File: ellama.info,  Node: Variable Management,  Next: Keymap and Mode,  Prev: Blueprints files,  Up: Using Blueprints
+
+7.4 Variable Management
 =======================
 
 Blueprints can include variables that need to be filled before running
@@ -873,7 +892,7 @@ the chat session.  Ellama provides command to fill these variables:
 
 File: ellama.info,  Node: Keymap and Mode,  Next: Transient Menus,  Prev: Variable Management,  Up: Using Blueprints
 
-7.4 Keymap and Mode
+7.5 Keymap and Mode
 ===================
 
 Ellama provides a local keymap ‘ellama-blueprint-mode-map’ for managing
@@ -897,7 +916,7 @@ available:
 
 File: ellama.info,  Node: Transient Menus,  Next: Running Blueprints programmatically,  Prev: Keymap and Mode,  Up: Using Blueprints
 
-7.5 Transient Menus
+7.6 Transient Menus
 ===================
 
 Ellama includes transient menus for easy access to blueprint commands.
@@ -910,7 +929,7 @@ main menu, providing a comprehensive interface for all Ellama commands.
 
 File: ellama.info,  Node: Running Blueprints programmatically,  Prev: Transient Menus,  Up: Using Blueprints
 
-7.6 Running Blueprints programmatically
+7.7 Running Blueprints programmatically
 =======================================
 
 The ‘ellama-blueprint-run’ function initiates a chat session using a
@@ -1471,36 +1490,37 @@ their use in free software.
 
 Tag Table:
 Node: Top1379
-Node: Installation3633
-Node: Commands8641
-Node: Keymap16080
-Node: Configuration18913
-Node: Context Management24921
-Node: Transient Menus for Context Management25829
-Node: Managing the Context27443
-Node: Considerations28218
-Node: Minor modes28811
-Node: ellama-context-header-line-mode30799
-Node: ellama-context-header-line-global-mode31624
-Node: ellama-context-mode-line-mode32344
-Node: ellama-context-mode-line-global-mode33192
-Node: Ellama Session Header Line Mode33896
-Node: Enabling and Disabling34465
-Node: Customization34912
-Node: Ellama Session Mode Line Mode35200
-Node: Enabling and Disabling (1)35785
-Node: Customization (1)36232
-Node: Using Blueprints36526
-Node: Key Components of Ellama Blueprints37145
-Node: Creating and Managing Blueprints37752
-Node: Variable Management38733
-Node: Keymap and Mode39202
-Node: Transient Menus40138
-Node: Running Blueprints programmatically40684
-Node: MCP Integration41271
-Node: Acknowledgments42296
-Node: Contributions43008
-Node: GNU Free Documentation License43394
+Node: Installation3654
+Node: Commands8662
+Node: Keymap16101
+Node: Configuration18934
+Node: Context Management25234
+Node: Transient Menus for Context Management26142
+Node: Managing the Context27756
+Node: Considerations28531
+Node: Minor modes29124
+Node: ellama-context-header-line-mode31112
+Node: ellama-context-header-line-global-mode31937
+Node: ellama-context-mode-line-mode32657
+Node: ellama-context-mode-line-global-mode33505
+Node: Ellama Session Header Line Mode34209
+Node: Enabling and Disabling34778
+Node: Customization35225
+Node: Ellama Session Mode Line Mode35513
+Node: Enabling and Disabling (1)36098
+Node: Customization (1)36545
+Node: Using Blueprints36839
+Node: Key Components of Ellama Blueprints37479
+Node: Creating and Managing Blueprints38086
+Node: Blueprints files39064
+Node: Variable Management39485
+Node: Keymap and Mode39938
+Node: Transient Menus40874
+Node: Running Blueprints programmatically41420
+Node: MCP Integration42007
+Node: Acknowledgments43032
+Node: Contributions43744
+Node: GNU Free Documentation License44130
 
 End Tag Table
 

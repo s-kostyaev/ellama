@@ -303,6 +303,34 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
    :description
    "Append CONTENT to the file located at the specified PATH."))
 
+(defun ellama-tools-prepend-file-tool (path content)
+  "Prepend CONTENT to the file located at the specified PATH."
+  (with-current-buffer (find-file-noselect path)
+    (goto-char (point-min))
+    (insert content)
+    (save-buffer)))
+
+(ellama-tools-define-tool
+ '(:function
+   ellama-tools-prepend-file-tool
+   :name
+   "prepend_file"
+   :args
+   ((:name
+     "path"
+     :type
+     string
+     :description
+     "Path to the file.")
+    (:name
+     "content"
+     :type
+     string
+     :description
+     "Content to prepend to the file."))
+   :description
+   "Prepend CONTENT to the file located at the specified PATH."))
+
 (defun ellama-tools-directory-tree-tool (dir &optional depth)
   "Return a string representing the directory tree under DIR.
 DEPTH is the current recursion depth, used internally."
