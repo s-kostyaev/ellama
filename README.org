@@ -379,6 +379,11 @@ argument generated text string.
   will work without user confirmation.
 - ~ellama-tools-argument-max-length~: Max length of function argument in the
   confirmation prompt. Default value 50.
+- ~ellama-blueprint-global-dir~: Global directory for storing blueprint files.
+- ~ellama-blueprint-local-dir~: Local directory name for project-specific
+  blueprints.
+- ~ellama-blueprint-file-extensions~: File extensions recognized as blueprint
+  files.
 
 * Context Management
 
@@ -622,6 +627,12 @@ Ellama provides several functions to create, select, and manage blueprints:
 - ~ellama-blueprint-select~: This function allows users to select a prompt
    from the collection of blueprints. It filters prompts based on whether they
    are for developers and their source (user-defined, community, or all).
+
+** Blueprints files
+
+You can also store blueprints as plain text files. You can store it globally
+inside ~ellama-blueprint-global-dir~ or locally in the project local directory
+~ellama-blueprint-local-dir~ with ~ellama-blueprint-file-extensions~.
 
 ** Variable Management
 
