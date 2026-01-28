@@ -1,3 +1,13 @@
+* Version 1.10.12
+- Added prepend_file tool that allows prepending content to files. This expands
+  the set of file manipulation utilities available through the ellama tools.
+- Introduced customizable global and local directories for storing blueprint
+  files. Added support for configurable file extensions and utility functions to
+  locate, read, and load blueprints from files. This provides a flexible,
+  project-aware mechanism for discovering and loading blueprint resources.
+- Switched to backquote quoting for ellama-blueprint font-lock. This adjustment
+  ensures the regex is evaluated correctly and the font-lock face is applied as
+  intended.
 * Version 1.10.11
 - Remove explicit handling of numeric arguments in ellama-tools.
 - Add argument processing and type wrapping to tool definitions.
