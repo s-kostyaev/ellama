@@ -126,10 +126,6 @@ directory in the current project root."
   "{\\([[:alnum:]_-]+\\)}"
   "Regular expression to match blueprint variables like {var_name}.")
 
-(defvar ellama-blueprint-font-lock-keywords
-  '((,ellama-blueprint-variable-regexp 1 'font-lock-keyword-face))
-  "Highlight variables in curly braces for Ellama Blueprint Mode.")
-
 ;;;###autoload
 (define-derived-mode ellama-blueprint-mode
   text-mode
@@ -137,7 +133,7 @@ directory in the current project root."
   "Toggle Ellama Blueprint mode."
   :keymap ellama-blueprint-mode-map
   :group 'ellama
-  (setq font-lock-defaults '(((,ellama-blueprint-variable-regexp 1 font-lock-keyword-face t))))
+  (setq font-lock-defaults `(((,ellama-blueprint-variable-regexp 1 font-lock-keyword-face t))))
   (setq header-line-format
 	(concat
 	 (propertize
