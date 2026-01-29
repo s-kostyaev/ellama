@@ -1,3 +1,7 @@
+* Version 1.11.0
+- Add skills system to Ellama.
+- Add Agent Skills to the documentation.
+- Add changelog generation skill to the project.
 * Version 1.10.12
 - Added prepend_file tool that allows prepending content to files. This expands
   the set of file manipulation utilities available through the ellama tools.
