@@ -384,6 +384,10 @@ argument generated text string.
   blueprints.
 - ~ellama-blueprint-file-extensions~: File extensions recognized as blueprint
   files.
+- ~ellama-skills-global-path~: Path to the global directory containing Agent
+  Skills.
+- ~ellama-skills-local-path~: Project-relative path for local Agent Skills.
+  Default value is ~"skills"~.
 
 * Context Management
 
@@ -710,6 +714,58 @@ to ~ellama~ you can add duckduckgo mcp server
 			  (list tool)))
 	       tools)))))
 #+end_src
+
+* Agent Skills
+
+Ellama supports *Agent Skills*, a lightweight format for extending AI
+capabilities. Skills are loaded into context only when needed (Progressive
+Disclosure).
+
+** Directory Structure
+
+Ellama looks for skills in two locations:
+1.  *Global*: =~/.emacs.d/ellama/skills/= (Customizable via
+~ellama-skills-global-path~)
+2.  *Project-Local*: ~skills/~ inside your project root (Customizable via
+~ellama-skills-local-path~)
+
+A skill is a directory containing a ~SKILL.md~ file. This file includes metadata
+(~name~ and ~description~, at minimum) and instructions that tell an agent how
+to perform a specific task. Skills can also bundle scripts, templates, and
+reference materials.
+
+#+begin_src
+my-project/
+└──skills/
+   └── pdf-processing/
+       ├── SKILL.md          # Required: instructions + metadata
+       ├── scripts/          # Optional: executable code
+       ├── references/       # Optional: documentation
+       └── assets/           # Optional: templates, resources
+#+end_src
+
+** Creating a Skill
+
+SKILL.md must contain YAML frontmatter:
+
+#+begin_src markdown
+---
+name: pdf-processing
+description: Extract text from PDFs and summarize them.
+---
+
+# PDF Processing Instructions
+To extract text from a PDF...
+#+end_src
+
+** How it works
+
+*Auto-Discovery*: Ellama scans skill directories automatically whenever a chat
+ starts.
+*Context*: Skill metadata (name, description, location) is injected into the
+ system prompt.
+*Activation*: The LLM uses the read_file tool to load the SKILL.md content when
+ needed.
 
 * Acknowledgments
 

@@ -66,6 +66,7 @@ Assistant".  Previous sentence was written by Ellama itself.
 * Minor modes::
 * Using Blueprints::
 * MCP Integration::
+* Agent Skills::
 * Acknowledgments::
 * Contributions::
 * GNU Free Documentation License::
@@ -106,6 +107,12 @@ Using Blueprints
 * Keymap and Mode::
 * Transient Menus::
 * Running Blueprints programmatically::
+
+Agent Skills
+
+* Directory Structure::
+* Creating a Skill::
+* How it works::
 
 
 
@@ -510,6 +517,10 @@ argument generated text string.
      project-specific blueprints.
    • ‘ellama-blueprint-file-extensions’: File extensions recognized as
      blueprint files.
+   • ‘ellama-skills-global-path’: Path to the global directory
+     containing Agent Skills.
+   • ‘ellama-skills-local-path’: Project-relative path for local Agent
+     Skills.  Default value is ‘"skills"’.
 
 
 File: ellama.info,  Node: Context Management,  Next: Minor modes,  Prev: Configuration,  Up: Top
@@ -944,7 +955,7 @@ arguments.
      (global-set-key (kbd "C-c e M") #'my-chat-with-morpheus)
 
 
-File: ellama.info,  Node: MCP Integration,  Next: Acknowledgments,  Prev: Using Blueprints,  Up: Top
+File: ellama.info,  Node: MCP Integration,  Next: Agent Skills,  Prev: Using Blueprints,  Up: Top
 
 8 MCP Integration
 *****************
@@ -974,10 +985,79 @@ capability to ‘ellama’ you can add duckduckgo mcp server
                     tools)))))
 
 
-File: ellama.info,  Node: Acknowledgments,  Next: Contributions,  Prev: MCP Integration,  Up: Top
+File: ellama.info,  Node: Agent Skills,  Next: Acknowledgments,  Prev: MCP Integration,  Up: Top
 
-9 Acknowledgments
-*****************
+9 Agent Skills
+**************
+
+Ellama supports *Agent Skills*, a lightweight format for extending AI
+capabilities.  Skills are loaded into context only when needed
+(Progressive Disclosure).
+
+* Menu:
+
+* Directory Structure::
+* Creating a Skill::
+* How it works::
+
+
+File: ellama.info,  Node: Directory Structure,  Next: Creating a Skill,  Up: Agent Skills
+
+9.1 Directory Structure
+=======================
+
+Ellama looks for skills in two locations:
+  1. *Global*: ‘~/.emacs.d/ellama/skills/’ (Customizable via
+‘ellama-skills-global-path’)
+  1. *Project-Local*: ‘skills/’ inside your project root (Customizable
+     via
+‘ellama-skills-local-path’)
+
+A skill is a directory containing a ‘SKILL.md’ file.  This file includes
+metadata (‘name’ and ‘description’, at minimum) and instructions that
+tell an agent how to perform a specific task.  Skills can also bundle
+scripts, templates, and reference materials.
+
+     my-project/
+     └──skills/
+        └── pdf-processing/
+            ├── SKILL.md          # Required: instructions + metadata
+            ├── scripts/          # Optional: executable code
+            ├── references/       # Optional: documentation
+            └── assets/           # Optional: templates, resources
+
+
+File: ellama.info,  Node: Creating a Skill,  Next: How it works,  Prev: Directory Structure,  Up: Agent Skills
+
+9.2 Creating a Skill
+====================
+
+SKILL.md must contain YAML frontmatter:
+
+     ---
+     name: pdf-processing
+     description: Extract text from PDFs and summarize them.
+     ---
+
+     # PDF Processing Instructions
+     To extract text from a PDF...
+
+
+File: ellama.info,  Node: How it works,  Prev: Creating a Skill,  Up: Agent Skills
+
+9.3 How it works
+================
+
+*Auto-Discovery*: Ellama scans skill directories automatically whenever
+a chat starts.  *Context*: Skill metadata (name, description, location)
+is injected into the system prompt.  *Activation*: The LLM uses the
+read_file tool to load the SKILL.md content when needed.
+
+
+File: ellama.info,  Node: Acknowledgments,  Next: Contributions,  Prev: Agent Skills,  Up: Top
+
+10 Acknowledgments
+******************
 
 Thanks Jeffrey Morgan (https://github.com/jmorganca) for excellent
 project ollama (https://github.com/jmorganca/ollama).  This project
@@ -996,7 +1076,7 @@ Without it only ‘ollama’ would be supported.
 
 File: ellama.info,  Node: Contributions,  Next: GNU Free Documentation License,  Prev: Acknowledgments,  Up: Top
 
-10 Contributions
+11 Contributions
 ****************
 
 To contribute, submit a pull request or report a bug.  This library is
@@ -1490,37 +1570,41 @@ their use in free software.
 
 Tag Table:
 Node: Top1379
-Node: Installation3654
-Node: Commands8662
-Node: Keymap16101
-Node: Configuration18934
-Node: Context Management25234
-Node: Transient Menus for Context Management26142
-Node: Managing the Context27756
-Node: Considerations28531
-Node: Minor modes29124
-Node: ellama-context-header-line-mode31112
-Node: ellama-context-header-line-global-mode31937
-Node: ellama-context-mode-line-mode32657
-Node: ellama-context-mode-line-global-mode33505
-Node: Ellama Session Header Line Mode34209
-Node: Enabling and Disabling34778
-Node: Customization35225
-Node: Ellama Session Mode Line Mode35513
-Node: Enabling and Disabling (1)36098
-Node: Customization (1)36545
-Node: Using Blueprints36839
-Node: Key Components of Ellama Blueprints37479
-Node: Creating and Managing Blueprints38086
-Node: Blueprints files39064
-Node: Variable Management39485
-Node: Keymap and Mode39938
-Node: Transient Menus40874
-Node: Running Blueprints programmatically41420
-Node: MCP Integration42007
-Node: Acknowledgments43032
-Node: Contributions43744
-Node: GNU Free Documentation License44130
+Node: Installation3748
+Node: Commands8756
+Node: Keymap16195
+Node: Configuration19028
+Node: Context Management25551
+Node: Transient Menus for Context Management26459
+Node: Managing the Context28073
+Node: Considerations28848
+Node: Minor modes29441
+Node: ellama-context-header-line-mode31429
+Node: ellama-context-header-line-global-mode32254
+Node: ellama-context-mode-line-mode32974
+Node: ellama-context-mode-line-global-mode33822
+Node: Ellama Session Header Line Mode34526
+Node: Enabling and Disabling35095
+Node: Customization35542
+Node: Ellama Session Mode Line Mode35830
+Node: Enabling and Disabling (1)36415
+Node: Customization (1)36862
+Node: Using Blueprints37156
+Node: Key Components of Ellama Blueprints37796
+Node: Creating and Managing Blueprints38403
+Node: Blueprints files39381
+Node: Variable Management39802
+Node: Keymap and Mode40255
+Node: Transient Menus41191
+Node: Running Blueprints programmatically41737
+Node: MCP Integration42324
+Node: Agent Skills43346
+Node: Directory Structure43709
+Node: Creating a Skill44736
+Node: How it works45111
+Node: Acknowledgments45502
+Node: Contributions46213
+Node: GNU Free Documentation License46599
 
 End Tag Table
 
