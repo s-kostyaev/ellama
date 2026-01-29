@@ -5,7 +5,7 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1"))
+;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
 ;; Version: 1.10.12
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
@@ -41,6 +41,7 @@
 (require 'compat)
 (eval-when-compile (require 'rx))
 (require 'ellama-tools)
+(require 'ellama-skills)
 
 (defgroup ellama nil
   "Tool for interacting with LLMs."
@@ -1212,6 +1213,13 @@ Otherwire return current active session."
 
 (defvar ellama-global-system nil)
 
+(defun ellama-get-system-message ()
+  "Return the effective system message, including dynamically scanned skills."
+  (let ((msg (concat (or ellama-global-system "")
+		     (ellama-skills-generate-prompt))))
+    (when (not (string= msg ""))
+      msg)))
+
 (defvar-local ellama--stop-scroll nil)
 
 ;;;###autoload
@@ -1510,7 +1518,7 @@ failure (with BUFFER current).
 	 (donecb (or (plist-get args :on-done) #'ignore))
 	 (prompt-with-ctx (ellama-context-prompt-with-context prompt))
 	 (system (or (plist-get args :system)
-		     ellama-global-system))
+		     (ellama-get-system-message)))
 	 (llm-prompt (if session
 			 (if (llm-chat-prompt-p (ellama-session-prompt session))
 			     (progn
