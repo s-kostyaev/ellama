@@ -1213,9 +1213,39 @@ Otherwire return current active session."
 
 (defvar ellama-global-system nil)
 
+(defun ellama-get-agents-md-path ()
+  "Search for AGENTS.md file from current directory up to project root.
+Returns the full path to AGENTS.md if found, or nil if not found."
+  (let* ((current-dir (file-name-directory (expand-file-name default-directory)))
+         (project-root
+	  (file-name-directory (expand-file-name
+				(or (project-root (project-current)) current-dir))))
+         found-path)
+    ;; Walk up from current directory to project root
+    (while (and (not found-path)
+		(or (string= current-dir project-root)
+		    (string> current-dir project-root)))
+      (let ((agents-path (expand-file-name "AGENTS.md" current-dir)))
+        (when (file-exists-p agents-path)
+          (setq found-path agents-path)))
+      ;; Move to parent directory
+      (setq current-dir (file-name-directory (expand-file-name ".." current-dir))))
+    found-path))
+
+(defun ellama-get-agents-md ()
+  "Return current project or subproject AGENTS.md content."
+  (or (when-let ((path (ellama-get-agents-md-path)))
+	(concat
+	 "\n"
+	 (with-temp-buffer
+	   (insert-file-contents path)
+	   (buffer-string))))
+      ""))
+
 (defun ellama-get-system-message ()
   "Return the effective system message, including dynamically scanned skills."
   (let ((msg (concat (or ellama-global-system "")
+		     (ellama-get-agents-md)
 		     (ellama-skills-generate-prompt))))
     (when (not (string= msg ""))
       msg)))
