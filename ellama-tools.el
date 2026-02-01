@@ -165,21 +165,6 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
                          (mapcar (lambda (tool) (llm-tool-name tool)) ellama-tools-available))))))
     (ellama-tools-enable-by-name-tool tool-name)))
 
-(ellama-tools-define-tool
- '(:function
-   ellama-tools-enable-by-name-tool
-   :name
-   "enable_tool"
-   :args
-   ((:name
-     "name"
-     :type
-     string
-     :description
-     "Name of the tool to enable."))
-   :description
-   "Enable each tool that matches NAME. You need to reply to the user before using newly enabled tool."))
-
 (defun ellama-tools-disable-by-name-tool (name)
   "Remove from `ellama-tools-enabled' each tool that matches NAME."
   (let* ((tool (seq-find (lambda (tool) (string= name (llm-tool-name tool)))
@@ -196,21 +181,6 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
                          "Tool to disable: "
                          (mapcar (lambda (tool) (llm-tool-name tool)) ellama-tools-enabled)))))
     (ellama-tools-disable-by-name-tool tool-name)))
-
-(ellama-tools-define-tool
- '(:function
-   ellama-tools-disable-by-name-tool
-   :name
-   "disable_tool"
-   :args
-   ((:name
-     "name"
-     :type
-     string
-     :description
-     "Name of the tool to disable."))
-   :description
-   "Disable each tool that matches NAME."))
 
 ;;;###autoload
 (defun ellama-tools-enable-all ()
@@ -521,48 +491,6 @@ Replace OLDCONTENT with NEWCONTENT."
    nil
    :description
    "List all available tools."))
-
-(defun ellama-tools-search-tool (search-string)
-  "Search available tools that matches SEARCH-STRING."
-  (json-encode
-   (cl-remove-if-not
-    (lambda (item)
-      (or (string-match-p search-string (alist-get "name" item nil nil 'string=))
-          (string-match-p search-string (alist-get "description" item nil nil 'string=))))
-    (mapcar
-     (lambda (tool)
-       `(("name" . ,(llm-tool-name tool))
-         ("description" . ,(llm-tool-description tool))))
-     ellama-tools-available))))
-
-(ellama-tools-define-tool
- '(:function
-   ellama-tools-search-tool
-   :name
-   "search_tools"
-   :args
-   ((:name
-     "search-string"
-     :type
-     string
-     :description
-     "String to search for in tool names or descriptions."))
-   :description
-   "Search available tools that matches SEARCH-STRING."))
-
-(defun ellama-tools-today-tool ()
-  "Return current date."
-  (format-time-string "%Y-%m-%d"))
-
-(ellama-tools-define-tool
- '(:function
-   ellama-tools-today-tool
-   :name
-   "today"
-   :args
-   nil
-   :description
-   "Return current date."))
 
 (defun ellama-tools-now-tool ()
   "Return current date, time and timezone."
