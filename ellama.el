@@ -468,6 +468,16 @@ It should be a function with single argument generated text string."
   "Enable debug."
   :type 'boolean)
 
+(defcustom ellama-subagent-default-max-steps 30
+  "Default maximum number of auto-continue steps for a sub-agent."
+  :type 'integer
+  :group 'ellama)
+
+(defcustom ellama-subagent-continue-prompt "Task not marked complete. Continue working. If you are done, YOU MUST use the `report_result` tool."
+  "Prompt sent to sub-agent to keep the loop going."
+  :type 'string
+  :group 'ellama)
+
 (defun ellama--set-file-name-and-save ()
   "Set buffer file name and save buffer."
   (interactive)
