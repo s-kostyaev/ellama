@@ -15,7 +15,8 @@
 	  - In `ellama-tools.el` in tool spec use `snake_case`.
 - **Error handling**: Wrap risky calls in `(condition-case err ...)` and signal with `(error "msg")` when appropriate.
 - **Docstrings**: One‑line summary, then optional details; keep under 80 chars
-  per line. Do not add empty lines.
+  per line. Do not add empty lines. If there are multiple sentences on one line,
+  sentences should be separated by two spaces.
 - **Comments**: Prefix with `;;` for buffer comments; avoid inline `#` clutter.
 
 ## Operation Guidelines

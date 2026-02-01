@@ -1,3 +1,10 @@
+* Version 1.11.1
+- Add AGENTS.md support to system message. Include the AGENTS.md file content
+  from the current project or subproject in the system message by adding helper
+  functions to locate and read the file from the directory tree up to the
+  project root.
+- Refine style guidelines and remove old instructions. Updated docstring
+  formatting rules in AGENTS.md and removed legacy instructions.org file.
 * Version 1.11.0
 - Add skills system to Ellama.
 - Add Agent Skills to the documentation.
