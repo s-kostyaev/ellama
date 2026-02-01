@@ -1513,6 +1513,8 @@ in.  Default value is (current-buffer).
 
 :point POINT -- POINT is the point in buffer to insert ellama reply at.
 
+:tools LIST -- LIST of enabled in the current session tools.
+
 :filter FILTER -- FILTER is a function that's applied to (partial) response
 strings before they're inserted into the BUFFER.
 
@@ -1559,6 +1561,12 @@ failure (with BUFFER current).
 	 (prompt-with-ctx (ellama-context-prompt-with-context prompt))
 	 (system (or (plist-get args :system)
 		     (ellama-get-system-message)))
+	 (session-tools (and session
+                             (ellama-session-extra session)
+                             (plist-get (ellama-session-extra session) :tools)))
+	 (tools (or session-tools
+		    (plist-get args :tools)
+		    ellama-tools-enabled))
 	 (llm-prompt (if session
 			 (if (llm-chat-prompt-p (ellama-session-prompt session))
 			     (progn
@@ -1566,7 +1574,7 @@ failure (with BUFFER current).
 				(ellama-session-prompt session)
 				prompt-with-ctx)
 			       (setf (llm-chat-prompt-tools (ellama-session-prompt session))
-				     ellama-tools-enabled)
+				     tools)
 			       (when system
 				 (llm-chat-prompt-append-response
 				  (ellama-session-prompt session)
@@ -1574,9 +1582,9 @@ failure (with BUFFER current).
 			       (ellama-session-prompt session))
 			   (setf (ellama-session-prompt session)
 				 (llm-make-chat-prompt prompt-with-ctx :context system
-						       :tools ellama-tools-enabled)))
+						       :tools tools)))
 		       (llm-make-chat-prompt prompt-with-ctx :context system
-					     :tools ellama-tools-enabled))))
+					     :tools tools))))
     (with-current-buffer reasoning-buffer
       (org-mode))
     (with-current-buffer buffer
