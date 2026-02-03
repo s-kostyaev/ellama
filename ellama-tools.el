@@ -747,7 +747,7 @@ CALLBACK will be used to report result asyncronously."
        :session session
        :on-done #'ellama--subagent-loop-handler)))))
 
-(defun ellama-tool-task (callback description &optional role)
+(defun ellama-tools-task-tool (callback description &optional role)
   "Delegate DESCRIPTION to a sub-agent asynchronously.
 
 CALLBACK   – function called once with the result string.
@@ -819,7 +819,7 @@ When the task is COMPLETE you MUST call `report_result` exactly once."
     nil))
 
 (ellama-tools-define-tool
- `(:function ellama-tool-task
+ `(:function ellama-tools-task-tool
              :name "task"
              :async t
              :description "Delegate a task to a sub-agent."
