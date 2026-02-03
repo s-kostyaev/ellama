@@ -50,6 +50,54 @@ Tools from this list will work without user confirmation."
   :type 'integer
   :group 'ellama)
 
+(defcustom ellama-tools-subagent-default-max-steps 30
+  "Default maximum number of auto-continue steps for a sub-agent."
+  :type 'integer
+  :group 'ellama)
+
+(defcustom ellama-tools-subagent-continue-prompt "Task not marked complete. Continue working. If you are done, YOU MUST use the `report_result` tool."
+  "Prompt sent to sub-agent to keep the loop going."
+  :type 'string
+  :group 'ellama)
+
+(defcustom ellama-tools-subagent-roles
+  '(("general"
+     :system "You are a helpful general assistant."
+     :tools :all)
+
+    ("explorer"
+     :system "Explore, inspect, and report findings. Do not modify files."
+     :tools ("read_file" "directory_tree" "grep" "grep_in_file"
+	     "count_lines" "lines_range" "project_root" "shell_command"))
+
+    ("coder"
+     :system "You are an expert software developer. Make precise changes."
+     :tools ("read_file" "write_file" "edit_file" "append_file" "prepend_file"
+	     "move_file" "apply_patch" "grep" "grep_in_file" "project_root"
+	     "directory_tree" "count_lines" "lines_range" "shell_command"))
+
+    ("bash"
+     :system "You are a bash scripting expert."
+     :tools ("shell_command")))
+
+  "Subagent roles with system prompt and allowed tools."
+  :type '(alist :key-type string :value-type plist)
+  :group 'ellama)
+
+(defun ellama--tools-for-role (role)
+  "Resolve tools allowed for ROLE."
+  (let* ((cfg (cdr (assoc role ellama-tools-subagent-roles)))
+	 (tools (plist-get cfg :tools)))
+    (cond
+     ((eq tools :all)
+      ellama-tools-available)
+     ((listp tools)
+      (cl-remove-if-not
+       (lambda (tool) (member (llm-tool-name tool) tools))
+       ellama-tools-available))
+     (t
+      nil))))
+
 (defvar ellama-tools-available nil
   "Alist containing all registered tools.")
 
@@ -682,7 +730,7 @@ CALLBACK will be used to report result asyncronously."
          (done (plist-get extra :task-completed))
          (steps (or (plist-get extra :step-count) 0))
          (max (or (plist-get extra :max-steps)
-                  ellama-subagent-default-max-steps))
+                  ellama-tools-subagent-default-max-steps))
          (callback (plist-get extra :result-callback)))
     (cond
      (done
@@ -695,7 +743,7 @@ CALLBACK will be used to report result asyncronously."
       (setf (ellama-session-extra session)
             (plist-put extra :step-count (1+ steps)))
       (ellama-stream
-       ellama-subagent-continue-prompt
+       ellama-tools-subagent-continue-prompt
        :session session
        :on-done #'ellama--subagent-loop-handler)))))
 
@@ -703,19 +751,19 @@ CALLBACK will be used to report result asyncronously."
   "Delegate DESCRIPTION to a sub-agent asynchronously.
 
 CALLBACK   – function called once with the result string.
-ROLE       – role key from `ellama-subagent-roles'."
+ROLE       – role key from `ellama-tools-subagent-roles'."
   (let* ((parent-id ellama--current-session-id)
          (provider ellama-provider)
 
          ;; ---- role resolution (safe fallback) ----
-         (role-key (if (assoc role ellama-subagent-roles)
+         (role-key (if (assoc role ellama-tools-subagent-roles)
                        role
                      "general"))
 
-         (role-cfg   (cdr (assoc role-key ellama-subagent-roles)))
+         (role-cfg   (cdr (assoc role-key ellama-tools-subagent-roles)))
          (system-msg (plist-get role-cfg :system))
 
-         (steps-limit ellama-subagent-default-max-steps)
+         (steps-limit ellama-tools-subagent-default-max-steps)
 
          ;; ---- create ephemeral worker session ----
          (worker (ellama-new-session provider description t))
@@ -778,7 +826,7 @@ When the task is COMPLETE you MUST call `report_result` exactly once."
              :description "Delegate a task to a sub-agent."
              :args ((:name "description" :type string)
                     (:name "role" :type string
-                           :enum ,(seq--into-vector (mapcar #'car ellama-subagent-roles))))))
+                           :enum ,(seq--into-vector (mapcar #'car ellama-tools-subagent-roles))))))
 
 (provide 'ellama-tools)
 ;;; ellama-tools.el ends here

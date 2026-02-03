@@ -468,54 +468,6 @@ It should be a function with single argument generated text string."
   "Enable debug."
   :type 'boolean)
 
-(defcustom ellama-subagent-default-max-steps 30
-  "Default maximum number of auto-continue steps for a sub-agent."
-  :type 'integer
-  :group 'ellama)
-
-(defcustom ellama-subagent-continue-prompt "Task not marked complete. Continue working. If you are done, YOU MUST use the `report_result` tool."
-  "Prompt sent to sub-agent to keep the loop going."
-  :type 'string
-  :group 'ellama)
-
-(defcustom ellama-subagent-roles
-  '(("general"
-     :system "You are a helpful general assistant."
-     :tools :all)
-
-    ("explorer"
-     :system "Explore, inspect, and report findings. Do not modify files."
-     :tools ("read_file" "directory_tree" "grep" "grep_in_file"
-             "count_lines" "lines_range" "project_root" "shell_command"))
-
-    ("coder"
-     :system "You are an expert software developer. Make precise changes."
-     :tools ("read_file" "write_file" "edit_file" "append_file" "prepend_file"
-	     "move_file" "apply_patch" "grep" "grep_in_file" "project_root"
-	     "directory_tree" "count_lines" "lines_range" "shell_command"))
-
-    ("bash"
-     :system "You are a bash scripting expert."
-     :tools ("shell_command")))
-
-  "Subagent roles with system prompt and allowed tools."
-  :type '(alist :key-type string :value-type plist)
-  :group 'ellama)
-
-(defun ellama--tools-for-role (role)
-  "Resolve tools allowed for ROLE."
-  (let* ((cfg (cdr (assoc role ellama-subagent-roles)))
-         (tools (plist-get cfg :tools)))
-    (cond
-     ((eq tools :all)
-      ellama-tools-available)
-     ((listp tools)
-      (cl-remove-if-not
-       (lambda (tool) (member (llm-tool-name tool) tools))
-       ellama-tools-available))
-     (t
-      nil))))
-
 (defun ellama--set-file-name-and-save ()
   "Set buffer file name and save buffer."
   (interactive)
