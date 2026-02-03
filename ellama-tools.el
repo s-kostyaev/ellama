@@ -659,5 +659,21 @@ Returns the output of the patch command or an error message."
    :description
    "Apply a patch to the file at PATH."))
 
+(defun ellama-tools--make-report-result-tool (callback session)
+  "Make report_result tool dynamically for SESSION.
+CALLBACK will be used to report result asyncronously."
+  `(:function
+    (lambda (result)
+      (let* ((extra (ellama-session-extra ,session))
+             (done (plist-get extra :task-completed)))
+        (unless done
+          (setf (ellama-session-extra ,session)
+                (plist-put extra :task-completed t))
+          (funcall ,callback result)))
+      "Result received. Task completed.")
+    :name "report_result"
+    :description "Report final result and terminate the task."
+    :args ((:name "result" :type string))))
+
 (provide 'ellama-tools)
 ;;; ellama-tools.el ends here
