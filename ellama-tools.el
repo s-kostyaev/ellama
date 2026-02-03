@@ -675,5 +675,29 @@ CALLBACK will be used to report result asyncronously."
     :description "Report final result and terminate the task."
     :args ((:name "result" :type string))))
 
+(defun ellama--subagent-loop-handler (_text)
+  "Internal subagent loop handler."
+  (let* ((session ellama--current-session)
+         (extra (ellama-session-extra session))
+         (done (plist-get extra :task-completed))
+         (steps (or (plist-get extra :step-count) 0))
+         (max (or (plist-get extra :max-steps)
+                  ellama-subagent-default-max-steps))
+         (callback (plist-get extra :result-callback)))
+    (cond
+     (done
+      (message "Subagent finished."))
+     ((>= steps max)
+      (setf (ellama-session-extra session)
+            (plist-put extra :task-completed t))
+      (funcall callback (format "Max steps (%d) reached." max)))
+     (t
+      (setf (ellama-session-extra session)
+            (plist-put extra :step-count (1+ steps)))
+      (ellama-stream
+       ellama-subagent-continue-prompt
+       :session session
+       :on-done #'ellama--subagent-loop-handler)))))
+
 (provide 'ellama-tools)
 ;;; ellama-tools.el ends here
