@@ -478,6 +478,30 @@ It should be a function with single argument generated text string."
   :type 'string
   :group 'ellama)
 
+(defcustom ellama-subagent-roles
+  '(("general"
+     :system "You are a helpful general assistant."
+     :tools :all)
+
+    ("explorer"
+     :system "Explore, inspect, and report findings. Do not modify files."
+     :tools ("read_file" "directory_tree" "grep" "grep_in_file"
+             "count_lines" "lines_range" "project_root" "shell_command"))
+
+    ("coder"
+     :system "You are an expert software developer. Make precise changes."
+     :tools ("read_file" "write_file" "edit_file" "append_file" "prepend_file"
+	     "move_file" "apply_patch" "grep" "grep_in_file" "project_root"
+	     "directory_tree" "count_lines" "lines_range" "shell_command"))
+
+    ("bash"
+     :system "You are a bash scripting expert."
+     :tools ("shell_command")))
+
+  "Subagent roles with system prompt and allowed tools."
+  :type '(alist :key-type string :value-type plist)
+  :group 'ellama)
+
 (defun ellama--set-file-name-and-save ()
   "Set buffer file name and save buffer."
   (interactive)
