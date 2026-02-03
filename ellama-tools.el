@@ -771,5 +771,14 @@ When the task is COMPLETE you MUST call `report_result` exactly once."
              role-key)
     nil))
 
+(ellama-tools-define-tool
+ `(:function ellama-tool-task
+             :name "task"
+             :async t
+             :description "Delegate a task to a sub-agent."
+             :args ((:name "description" :type string)
+                    (:name "role" :type string
+                           :enum ,(seq--into-vector (mapcar #'car ellama-subagent-roles))))))
+
 (provide 'ellama-tools)
 ;;; ellama-tools.el ends here
