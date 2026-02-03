@@ -572,7 +572,10 @@ Replace OLDCONTENT with NEWCONTENT."
 (defun ellama-tools-ask-user-tool (question answer-variant-list)
   "Ask user a QUESTION to receive a clarification.
 ANSWER-VARIANT-LIST is a list of possible answer variants."
-  (completing-read (concat question " ") (seq--into-list answer-variant-list)))
+  (completing-read (concat question " ")
+                   (if (stringp answer-variant-list)
+                       (seq--into-list (json-parse-string answer-variant-list))
+                     (seq--into-list answer-variant-list))))
 
 (ellama-tools-define-tool
  '(:function
