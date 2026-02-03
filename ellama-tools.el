@@ -156,9 +156,9 @@ FUNCTION if approved, \"Forbidden by the user\" otherwise."
                       ;; No - return nil
                       ((eq answer ?n)
                        "Forbidden by the user"))))
-        (if (stringp result)
-            result
-          (json-encode result)))))))
+        (when result (if (stringp result)
+                         result
+                       (json-encode result))))))))
 
 (defun ellama-tools-wrap-with-confirm (tool-plist)
   "Wrap a tool's function with automatic confirmation.
@@ -774,8 +774,7 @@ ROLE       – role key from `ellama-tools-subagent-roles'."
          ;; ---- dynamic report_result tool ----
          (report-tool
           (apply #'llm-make-tool
-                 (ellama-tools-wrap-with-confirm
-                  (ellama-tools--make-report-result-tool callback worker))))
+                 (ellama-tools--make-report-result-tool callback worker)))
 
          ;; IMPORTANT: report tool must be first (termination tool priority)
          (all-tools (cons report-tool role-tools)))
