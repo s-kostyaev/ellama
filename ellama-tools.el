@@ -699,5 +699,77 @@ CALLBACK will be used to report result asyncronously."
        :session session
        :on-done #'ellama--subagent-loop-handler)))))
 
+(defun ellama-tool-task (callback description &optional role)
+  "Delegate DESCRIPTION to a sub-agent asynchronously.
+
+CALLBACK   – function called once with the result string.
+ROLE       – role key from `ellama-subagent-roles'."
+  (let* ((parent-id ellama--current-session-id)
+         (provider ellama-provider)
+
+         ;; ---- role resolution (safe fallback) ----
+         (role-key (if (assoc role ellama-subagent-roles)
+                       role
+                     "general"))
+
+         (role-cfg   (cdr (assoc role-key ellama-subagent-roles)))
+         (system-msg (plist-get role-cfg :system))
+
+         (steps-limit ellama-subagent-default-max-steps)
+
+         ;; ---- create ephemeral worker session ----
+         (worker (ellama-new-session provider description t))
+
+         ;; ---- resolve tools for role ----
+         (role-tools (ellama--tools-for-role role-key))
+
+         ;; ---- dynamic report_result tool ----
+         (report-tool
+          (apply #'llm-make-tool
+                 (ellama-tools-wrap-with-confirm
+                  (ellama-tools--make-report-result-tool callback worker))))
+
+         ;; IMPORTANT: report tool must be first (termination tool priority)
+         (all-tools (cons report-tool role-tools)))
+
+    ;; ============================================================
+    ;; Initialize session state (single source of truth)
+    ;; ============================================================
+
+    (setf (ellama-session-extra worker)
+          (list
+           :parent-session parent-id
+           :role role-key
+           :tools all-tools
+           :result-callback callback
+           :task-completed nil
+           :step-count 0
+           :max-steps steps-limit))
+
+    ;; ============================================================
+    ;; Start the agent loop
+    ;; ============================================================
+
+    (ellama-stream
+     description
+     :session worker
+     :on-done #'ellama--subagent-loop-handler
+     :tools all-tools
+     :system
+     (format
+      "%s\n\nINSTRUCTIONS:\n\
+Work step-by-step. Use tools when needed.\n\
+When the task is COMPLETE you MUST call `report_result` exactly once."
+      system-msg))
+
+    ;; ============================================================
+    ;; Immediate response to parent LLM (async contract)
+    ;; ============================================================
+
+    (message "Subtask started (session %s, role %s). Waiting for result via callback."
+             (ellama-session-id worker)
+             role-key)
+    nil))
+
 (provide 'ellama-tools)
 ;;; ellama-tools.el ends here
