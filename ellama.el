@@ -502,6 +502,20 @@ It should be a function with single argument generated text string."
   :type '(alist :key-type string :value-type plist)
   :group 'ellama)
 
+(defun ellama--tools-for-role (role)
+  "Resolve tools allowed for ROLE."
+  (let* ((cfg (cdr (assoc role ellama-subagent-roles)))
+         (tools (plist-get cfg :tools)))
+    (cond
+     ((eq tools :all)
+      ellama-tools-available)
+     ((listp tools)
+      (cl-remove-if-not
+       (lambda (tool) (member (llm-tool-name tool) tools))
+       ellama-tools-available))
+     (t
+      nil))))
+
 (defun ellama--set-file-name-and-save ()
   "Set buffer file name and save buffer."
   (interactive)
