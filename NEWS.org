@@ -1,3 +1,15 @@
+* Version 1.12.0
+- Add asynchronous task delegation functionality via the new ~task~ tool that
+  allows delegating descriptions to subagents with custom roles and max-steps
+  limits.
+- Add configurable subagent roles with ~ellama-tools-subagent-roles~
+  customization variable, enabling custom providers, system prompts and tool
+  access permissions for different agent types.
+- Add JSON support to answer variants in the ~ellama-tools-ask-user-tool~ to
+  handle both list and string inputs.
+- Simplify tool result handling by adding nil checks before JSON encoding.
+- Remove redundant tool definitions including ~enable_tool~, ~disable_tool~,
+  ~search_tools~, and ~today~ to streamline the tool management system.
 * Version 1.11.1
 - Add AGENTS.md support to system message. Include the AGENTS.md file content
   from the current project or subproject in the system message by adding helper

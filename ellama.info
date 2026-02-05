@@ -521,6 +521,11 @@ argument generated text string.
      containing Agent Skills.
    • ‘ellama-skills-local-path’: Project-relative path for local Agent
      Skills.  Default value is ‘"skills"’.
+   • ‘ellama-tools-subagent-default-max-steps’: Default maximum number
+     of auto-continue steps for a sub-agent.  Default value is 30.
+   • ‘ellama-tools-subagent-roles’: Subagent roles with provider, system
+     prompt and allowed tools.  Configuration of subagents for the
+     ‘task’ tool.
 
 
 File: ellama.info,  Node: Context Management,  Next: Minor modes,  Prev: Configuration,  Up: Top
@@ -1574,37 +1579,37 @@ Node: Installation3748
 Node: Commands8756
 Node: Keymap16195
 Node: Configuration19028
-Node: Context Management25551
-Node: Transient Menus for Context Management26459
-Node: Managing the Context28073
-Node: Considerations28848
-Node: Minor modes29441
-Node: ellama-context-header-line-mode31429
-Node: ellama-context-header-line-global-mode32254
-Node: ellama-context-mode-line-mode32974
-Node: ellama-context-mode-line-global-mode33822
-Node: Ellama Session Header Line Mode34526
-Node: Enabling and Disabling35095
-Node: Customization35542
-Node: Ellama Session Mode Line Mode35830
-Node: Enabling and Disabling (1)36415
-Node: Customization (1)36862
-Node: Using Blueprints37156
-Node: Key Components of Ellama Blueprints37796
-Node: Creating and Managing Blueprints38403
-Node: Blueprints files39381
-Node: Variable Management39802
-Node: Keymap and Mode40255
-Node: Transient Menus41191
-Node: Running Blueprints programmatically41737
-Node: MCP Integration42324
-Node: Agent Skills43346
-Node: Directory Structure43709
-Node: Creating a Skill44736
-Node: How it works45111
-Node: Acknowledgments45502
-Node: Contributions46213
-Node: GNU Free Documentation License46599
+Node: Context Management25863
+Node: Transient Menus for Context Management26771
+Node: Managing the Context28385
+Node: Considerations29160
+Node: Minor modes29753
+Node: ellama-context-header-line-mode31741
+Node: ellama-context-header-line-global-mode32566
+Node: ellama-context-mode-line-mode33286
+Node: ellama-context-mode-line-global-mode34134
+Node: Ellama Session Header Line Mode34838
+Node: Enabling and Disabling35407
+Node: Customization35854
+Node: Ellama Session Mode Line Mode36142
+Node: Enabling and Disabling (1)36727
+Node: Customization (1)37174
+Node: Using Blueprints37468
+Node: Key Components of Ellama Blueprints38108
+Node: Creating and Managing Blueprints38715
+Node: Blueprints files39693
+Node: Variable Management40114
+Node: Keymap and Mode40567
+Node: Transient Menus41503
+Node: Running Blueprints programmatically42049
+Node: MCP Integration42636
+Node: Agent Skills43658
+Node: Directory Structure44021
+Node: Creating a Skill45048
+Node: How it works45423
+Node: Acknowledgments45814
+Node: Contributions46525
+Node: GNU Free Documentation License46911
 
 End Tag Table
 

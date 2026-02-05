@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.11.1
+;; Version: 1.12.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -467,16 +467,6 @@ It should be a function with single argument generated text string."
 (defcustom ellama-debug nil
   "Enable debug."
   :type 'boolean)
-
-(defcustom ellama-subagent-default-max-steps 30
-  "Default maximum number of auto-continue steps for a sub-agent."
-  :type 'integer
-  :group 'ellama)
-
-(defcustom ellama-subagent-continue-prompt "Task not marked complete. Continue working. If you are done, YOU MUST use the `report_result` tool."
-  "Prompt sent to sub-agent to keep the loop going."
-  :type 'string
-  :group 'ellama)
 
 (defun ellama--set-file-name-and-save ()
   "Set buffer file name and save buffer."

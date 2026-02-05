@@ -50,6 +50,66 @@ Tools from this list will work without user confirmation."
   :type 'integer
   :group 'ellama)
 
+(defcustom ellama-tools-subagent-default-max-steps 30
+  "Default maximum number of auto-continue steps for a sub-agent."
+  :type 'integer
+  :group 'ellama)
+
+(defcustom ellama-tools-subagent-continue-prompt "Task not marked complete. Continue working. If you are done, YOU MUST use the `report_result` tool."
+  "Prompt sent to sub-agent to keep the loop going."
+  :type 'string
+  :group 'ellama)
+
+(defcustom ellama-tools-subagent-roles
+  '(("general"
+     :system "You are a helpful general assistant."
+     :tools :all)
+
+    ("explorer"
+     :system "Explore, inspect, and report findings. Do not modify files."
+     :tools ("read_file" "directory_tree" "grep" "grep_in_file"
+	     "count_lines" "lines_range" "project_root" "shell_command"))
+
+    ("coder"
+     :system "You are an expert software developer. Make precise changes."
+     :tools ("read_file" "write_file" "edit_file" "append_file" "prepend_file"
+	     "move_file" "apply_patch" "grep" "grep_in_file" "project_root"
+	     "directory_tree" "count_lines" "lines_range" "shell_command")
+     :provider 'ellama-coding-provider)
+
+    ("bash"
+     :system "You are a bash scripting expert."
+     :tools ("shell_command")
+     :provider 'ellama-coding-provider))
+
+  "Subagent roles with provider, system prompt and allowed tools."
+  :type '(alist :key-type string :value-type plist)
+  :group 'ellama)
+
+(defun ellama-tools--for-role (role)
+  "Resolve tools allowed for ROLE."
+  (let* ((cfg (cdr (assoc role ellama-tools-subagent-roles)))
+	 (tools (plist-get cfg :tools)))
+    (cond
+     ((eq tools :all)
+      ellama-tools-available)
+     ((listp tools)
+      (cl-remove-if-not
+       (lambda (tool) (member (llm-tool-name tool) tools))
+       ellama-tools-available))
+     (t
+      nil))))
+
+(defun ellama-tools--provider-for-role (role)
+  "Resolve provider for ROLE."
+  (let* ((cfg (cdr (assoc role ellama-tools-subagent-roles)))
+         (provider (plist-get cfg :provider)))
+    (if (not provider)
+        ellama-provider
+      (while (not (llm-standard-provider-p provider))
+        (setq provider (eval provider)))
+      provider)))
+
 (defvar ellama-tools-available nil
   "Alist containing all registered tools.")
 
@@ -108,9 +168,9 @@ FUNCTION if approved, \"Forbidden by the user\" otherwise."
                       ;; No - return nil
                       ((eq answer ?n)
                        "Forbidden by the user"))))
-        (if (stringp result)
-            result
-          (json-encode result)))))))
+        (when result (if (stringp result)
+                         result
+                       (json-encode result))))))))
 
 (defun ellama-tools-wrap-with-confirm (tool-plist)
   "Wrap a tool's function with automatic confirmation.
@@ -165,21 +225,6 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
                          (mapcar (lambda (tool) (llm-tool-name tool)) ellama-tools-available))))))
     (ellama-tools-enable-by-name-tool tool-name)))
 
-(ellama-tools-define-tool
- '(:function
-   ellama-tools-enable-by-name-tool
-   :name
-   "enable_tool"
-   :args
-   ((:name
-     "name"
-     :type
-     string
-     :description
-     "Name of the tool to enable."))
-   :description
-   "Enable each tool that matches NAME. You need to reply to the user before using newly enabled tool."))
-
 (defun ellama-tools-disable-by-name-tool (name)
   "Remove from `ellama-tools-enabled' each tool that matches NAME."
   (let* ((tool (seq-find (lambda (tool) (string= name (llm-tool-name tool)))
@@ -196,21 +241,6 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
                          "Tool to disable: "
                          (mapcar (lambda (tool) (llm-tool-name tool)) ellama-tools-enabled)))))
     (ellama-tools-disable-by-name-tool tool-name)))
-
-(ellama-tools-define-tool
- '(:function
-   ellama-tools-disable-by-name-tool
-   :name
-   "disable_tool"
-   :args
-   ((:name
-     "name"
-     :type
-     string
-     :description
-     "Name of the tool to disable."))
-   :description
-   "Disable each tool that matches NAME."))
 
 ;;;###autoload
 (defun ellama-tools-enable-all ()
@@ -522,48 +552,6 @@ Replace OLDCONTENT with NEWCONTENT."
    :description
    "List all available tools."))
 
-(defun ellama-tools-search-tool (search-string)
-  "Search available tools that matches SEARCH-STRING."
-  (json-encode
-   (cl-remove-if-not
-    (lambda (item)
-      (or (string-match-p search-string (alist-get "name" item nil nil 'string=))
-          (string-match-p search-string (alist-get "description" item nil nil 'string=))))
-    (mapcar
-     (lambda (tool)
-       `(("name" . ,(llm-tool-name tool))
-         ("description" . ,(llm-tool-description tool))))
-     ellama-tools-available))))
-
-(ellama-tools-define-tool
- '(:function
-   ellama-tools-search-tool
-   :name
-   "search_tools"
-   :args
-   ((:name
-     "search-string"
-     :type
-     string
-     :description
-     "String to search for in tool names or descriptions."))
-   :description
-   "Search available tools that matches SEARCH-STRING."))
-
-(defun ellama-tools-today-tool ()
-  "Return current date."
-  (format-time-string "%Y-%m-%d"))
-
-(ellama-tools-define-tool
- '(:function
-   ellama-tools-today-tool
-   :name
-   "today"
-   :args
-   nil
-   :description
-   "Return current date."))
-
 (defun ellama-tools-now-tool ()
   "Return current date, time and timezone."
   (format-time-string "%Y-%m-%d %H:%M:%S %Z"))
@@ -596,7 +584,10 @@ Replace OLDCONTENT with NEWCONTENT."
 (defun ellama-tools-ask-user-tool (question answer-variant-list)
   "Ask user a QUESTION to receive a clarification.
 ANSWER-VARIANT-LIST is a list of possible answer variants."
-  (completing-read (concat question " ") (seq--into-list answer-variant-list)))
+  (completing-read (concat question " ")
+                   (if (stringp answer-variant-list)
+                       (seq--into-list (json-parse-string answer-variant-list))
+                     (seq--into-list answer-variant-list))))
 
 (ellama-tools-define-tool
  '(:function
@@ -730,6 +721,126 @@ Returns the output of the patch command or an error message."
      "Patch data to apply."))
    :description
    "Apply a patch to the file at PATH."))
+
+(defun ellama-tools--make-report-result-tool (callback session)
+  "Make report_result tool dynamically for SESSION.
+CALLBACK will be used to report result asyncronously."
+  `(:function
+    (lambda (result)
+      (let* ((extra (ellama-session-extra ,session))
+             (done (plist-get extra :task-completed)))
+        (unless done
+          (setf (ellama-session-extra ,session)
+                (plist-put extra :task-completed t))
+          (funcall ,callback result)))
+      "Result received. Task completed.")
+    :name "report_result"
+    :description "Report final result and terminate the task."
+    :args ((:name "result" :type string))))
+
+(defun ellama--subagent-loop-handler (_text)
+  "Internal subagent loop handler."
+  (let* ((session ellama--current-session)
+         (extra (ellama-session-extra session))
+         (done (plist-get extra :task-completed))
+         (steps (or (plist-get extra :step-count) 0))
+         (max (or (plist-get extra :max-steps)
+                  ellama-tools-subagent-default-max-steps))
+         (callback (plist-get extra :result-callback)))
+    (cond
+     (done
+      (message "Subagent finished."))
+     ((>= steps max)
+      (setf (ellama-session-extra session)
+            (plist-put extra :task-completed t))
+      (funcall callback (format "Max steps (%d) reached." max)))
+     (t
+      (setf (ellama-session-extra session)
+            (plist-put extra :step-count (1+ steps)))
+      (ellama-stream
+       ellama-tools-subagent-continue-prompt
+       :session session
+       :on-done #'ellama--subagent-loop-handler)))))
+
+(defun ellama-tools-task-tool (callback description &optional role)
+  "Delegate DESCRIPTION to a sub-agent asynchronously.
+
+CALLBACK   – function called once with the result string.
+ROLE       – role key from `ellama-tools-subagent-roles'."
+  (let* ((parent-id ellama--current-session-id)
+
+         ;; ---- role resolution (safe fallback) ----
+         (role-key (if (assoc role ellama-tools-subagent-roles)
+                       role
+                     "general"))
+
+         (provider (ellama-tools--provider-for-role role-key))
+         (role-cfg   (cdr (assoc role-key ellama-tools-subagent-roles)))
+         (system-msg (plist-get role-cfg :system))
+
+         (steps-limit ellama-tools-subagent-default-max-steps)
+
+         ;; ---- create ephemeral worker session ----
+         (worker (ellama-new-session provider description t))
+
+         ;; ---- resolve tools for role ----
+         (role-tools (ellama-tools--for-role role-key))
+
+         ;; ---- dynamic report_result tool ----
+         (report-tool
+          (apply #'llm-make-tool
+                 (ellama-tools--make-report-result-tool callback worker)))
+
+         ;; IMPORTANT: report tool must be first (termination tool priority)
+         (all-tools (cons report-tool role-tools)))
+
+    ;; ============================================================
+    ;; Initialize session state (single source of truth)
+    ;; ============================================================
+
+    (setf (ellama-session-extra worker)
+          (list
+           :parent-session parent-id
+           :role role-key
+           :tools all-tools
+           :result-callback callback
+           :task-completed nil
+           :step-count 0
+           :max-steps steps-limit))
+
+    ;; ============================================================
+    ;; Start the agent loop
+    ;; ============================================================
+
+    (ellama-stream
+     description
+     :session worker
+     :on-done #'ellama--subagent-loop-handler
+     :tools all-tools
+     :system
+     (format
+      "%s\n\nINSTRUCTIONS:\n\
+Work step-by-step. Use tools when needed.\n\
+When the task is COMPLETE you MUST call `report_result` exactly once."
+      system-msg))
+
+    ;; ============================================================
+    ;; Immediate response to parent LLM (async contract)
+    ;; ============================================================
+
+    (message "Subtask started (session %s, role %s). Waiting for result via callback."
+             (ellama-session-id worker)
+             role-key)
+    nil))
+
+(ellama-tools-define-tool
+ `(:function ellama-tools-task-tool
+             :name "task"
+             :async t
+             :description "Delegate a task to a sub-agent."
+             :args ((:name "description" :type string)
+                    (:name "role" :type string
+                           :enum ,(seq--into-vector (mapcar #'car ellama-tools-subagent-roles))))))
 
 (provide 'ellama-tools)
 ;;; ellama-tools.el ends here
