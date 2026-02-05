@@ -74,17 +74,19 @@ Tools from this list will work without user confirmation."
      :system "You are an expert software developer. Make precise changes."
      :tools ("read_file" "write_file" "edit_file" "append_file" "prepend_file"
 	     "move_file" "apply_patch" "grep" "grep_in_file" "project_root"
-	     "directory_tree" "count_lines" "lines_range" "shell_command"))
+	     "directory_tree" "count_lines" "lines_range" "shell_command")
+     :provider 'ellama-coding-provider)
 
     ("bash"
      :system "You are a bash scripting expert."
-     :tools ("shell_command")))
+     :tools ("shell_command")
+     :provider 'ellama-coding-provider))
 
-  "Subagent roles with system prompt and allowed tools."
+  "Subagent roles with provider, system prompt and allowed tools."
   :type '(alist :key-type string :value-type plist)
   :group 'ellama)
 
-(defun ellama--tools-for-role (role)
+(defun ellama-tools--for-role (role)
   "Resolve tools allowed for ROLE."
   (let* ((cfg (cdr (assoc role ellama-tools-subagent-roles)))
 	 (tools (plist-get cfg :tools)))
@@ -97,6 +99,16 @@ Tools from this list will work without user confirmation."
        ellama-tools-available))
      (t
       nil))))
+
+(defun ellama-tools--provider-for-role (role)
+  "Resolve provider for ROLE."
+  (let* ((cfg (cdr (assoc role ellama-tools-subagent-roles)))
+         (provider (plist-get cfg :provider)))
+    (if (not provider)
+        ellama-provider
+      (while (not (llm-standard-provider-p provider))
+        (setq provider (eval provider)))
+      provider)))
 
 (defvar ellama-tools-available nil
   "Alist containing all registered tools.")
@@ -756,13 +768,13 @@ CALLBACK will be used to report result asyncronously."
 CALLBACK   – function called once with the result string.
 ROLE       – role key from `ellama-tools-subagent-roles'."
   (let* ((parent-id ellama--current-session-id)
-         (provider ellama-provider)
 
          ;; ---- role resolution (safe fallback) ----
          (role-key (if (assoc role ellama-tools-subagent-roles)
                        role
                      "general"))
 
+         (provider (ellama-tools--provider-for-role role-key))
          (role-cfg   (cdr (assoc role-key ellama-tools-subagent-roles)))
          (system-msg (plist-get role-cfg :system))
 
@@ -772,7 +784,7 @@ ROLE       – role key from `ellama-tools-subagent-roles'."
          (worker (ellama-new-session provider description t))
 
          ;; ---- resolve tools for role ----
-         (role-tools (ellama--tools-for-role role-key))
+         (role-tools (ellama-tools--for-role role-key))
 
          ;; ---- dynamic report_result tool ----
          (report-tool
