@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.12.0
+;; Version: 1.12.1
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -1217,9 +1217,8 @@ Otherwire return current active session."
   "Search for AGENTS.md file from current directory up to project root.
 Returns the full path to AGENTS.md if found, or nil if not found."
   (let* ((current-dir (file-name-directory (expand-file-name default-directory)))
-         (project-root
-	  (file-name-directory (expand-file-name
-				(or (project-root (project-current)) current-dir))))
+         (project-root (file-name-directory (expand-file-name
+					     (ellama-tools-project-root-tool))))
          found-path)
     ;; Walk up from current directory to project root
     (while (and (not found-path)
