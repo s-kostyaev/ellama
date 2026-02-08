@@ -123,56 +123,97 @@ Key is a function name symbol.  Value is a boolean t.")
 (defun ellama-tools-confirm (function &rest args)
   "Ask user for confirmation before calling FUNCTION with ARGS.
 Generates prompt automatically.  User can approve once (y), approve
-for all future calls (a), or forbid (n).  Returns the result of
-FUNCTION if approved, \"Forbidden by the user\" otherwise."
+for all future calls (a), forbid (n), or view the details in a
+buffer (v) before deciding.  Returns the result of FUNCTION if
+approved, \"Forbidden by the user\" otherwise."
   (let ((function-name (if (symbolp function)
-                           (symbol-name function)
-                         "anonymous-function"))
-        (confirmation (gethash function ellama-tools-confirm-allowed nil)))
+			   (symbol-name function)
+			 "anonymous-function"))
+	(confirmation (gethash function ellama-tools-confirm-allowed nil)))
     (cond
      ;; If user has approved all calls, just execute the function
      ((or confirmation
-          ellama-tools-allow-all
-          (cl-find function ellama-tools-allowed))
+	  ellama-tools-allow-all
+	  (cl-find function ellama-tools-allowed))
       (let ((result (apply function args)))
-        (if (stringp result)
-            result
-          (json-encode result))))
+	(if (stringp result)
+	    result
+	  (json-encode result))))
      ;; Otherwise, ask for confirmation
      (t
       ;; Generate prompt with truncated string arguments
-      (let* ((args-display
-              (mapcar (lambda (arg)
-                        (cond
-                         ((stringp arg)
-                          (string-truncate-left
-                           arg
-                           ellama-tools-argument-max-length))
-                         (t
-                          (format "%S" arg))))
-                      args))
-             (prompt (format "Allow calling %s with arguments: %s?"
-                             function-name
-                             (mapconcat #'identity args-display ", ")))
-             (answer (read-char-choice
-                      (format "%s (y)es, (a)lways, (n)o, (r)eply: " prompt)
-                      '(?y ?a ?n ?r)))
-             (result (cond
-                      ;; Yes - execute function once
-                      ((eq answer ?y)
-                       (apply function args))
-                      ;; Always - remember approval and execute function
-                      ((eq answer ?a)
-                       (puthash function t ellama-tools-confirm-allowed)
-                       (apply function args))
-                      ;; No - return nil
-                      ((eq answer ?n)
-                       "Forbidden by the user")
-                      ((eq answer ?r)
-                       (read-string "Answer to the agent: ")))))
-        (when result (if (stringp result)
-                         result
-                       (json-encode result))))))))
+      (save-window-excursion
+	(let* ((args-display
+		(mapcar (lambda (arg)
+			  (cond
+			   ((stringp arg)
+			    (string-truncate-left
+			     arg
+			     ellama-tools-argument-max-length))
+			   (t
+			    (format "%S" arg))))
+			args))
+	       (prompt (format "Allow calling %s with arguments: %s?"
+			       function-name
+			       (mapconcat #'identity args-display ", ")))
+	       answer result)
+	  (catch 'done
+	    (while t
+	      (setq answer (read-char-choice
+			    (format "%s (y)es, (a)lways, (n)o, (r)eply, (v)iew: " prompt)
+			    '(?y ?a ?n ?r ?v)))
+	      (cond
+	       ;; View - show buffer with full details
+	       ((eq answer ?v)
+		(let* ((buf (get-buffer-create "*Ellama Confirmation*"))
+		       (args-full
+			(mapcar (lambda (arg)
+				  (cond
+				   ((stringp arg)
+				    arg)
+				   (t
+				    (format "%S" arg))))
+				args)))
+		  (with-current-buffer buf
+		    (erase-buffer)
+		    (insert (propertize "Ellama Function Call Confirmation\n"
+					'face '(:weight bold :height 1.2)))
+		    (insert "\n")
+		    (insert (format "Function: %s\n\n" function-name))
+		    (insert "Arguments:\n")
+		    (dolist (arg args-full)
+		      (insert (format "  - %s\n" arg)))
+		    (insert "\n")
+		    (insert (propertize "Please review the arguments above.\n"
+					'face '(:slant italic)))
+		    (insert "Return to the minibuffer to make your choice.\n\n")
+		    (insert "Available choices:\n")
+		    (insert "  (y)es - Execute once\n")
+		    (insert "  (a)lways - Always execute for this function\n")
+		    (insert "  (n)o - Do not execute\n")
+		    (insert "  (r)eply - Provide a custom reply\n"))
+		  (display-buffer buf)
+		  (message "Viewing details in buffer. Return to minibuffer to choose.")))
+	       ;; Yes - execute function once
+	       ((eq answer ?y)
+		(setq result (apply function args))
+		(throw 'done t))
+	       ;; Always - remember approval and execute function
+	       ((eq answer ?a)
+		(puthash function t ellama-tools-confirm-allowed)
+		(setq result (apply function args))
+		(throw 'done t))
+	       ;; No - return nil
+	       ((eq answer ?n)
+		(setq result "Forbidden by the user")
+		(throw 'done t))
+	       ;; Reply - custom response
+	       ((eq answer ?r)
+		(setq result (read-string "Answer to the agent: "))
+		(throw 'done t)))))
+	  (when result (if (stringp result)
+			   result
+			 (json-encode result)))))))))
 
 (defun ellama-tools-wrap-with-confirm (tool-plist)
   "Wrap a tool's function with automatic confirmation.
