@@ -1,3 +1,8 @@
+* Version 1.12.1
+- Simplify project root detection in ~ellama-get-agents-md-path~ to use
+  ~ellama-tools-project-root-tool~. This refactoring eliminates potential nil
+  returns from project-current, making the function more robust when locating
+  the AGENTS.md file.
 * Version 1.12.0
 - Add asynchronous task delegation functionality via the new ~task~ tool that
   allows delegating descriptions to subagents with custom roles and max-steps
