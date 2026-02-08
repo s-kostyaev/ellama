@@ -155,8 +155,8 @@ FUNCTION if approved, \"Forbidden by the user\" otherwise."
                              function-name
                              (mapconcat #'identity args-display ", ")))
              (answer (read-char-choice
-                      (format "%s (y)es, (a)lways, (n)o: " prompt)
-                      '(?y ?a ?n)))
+                      (format "%s (y)es, (a)lways, (n)o, (r)eply: " prompt)
+                      '(?y ?a ?n ?r)))
              (result (cond
                       ;; Yes - execute function once
                       ((eq answer ?y)
@@ -167,7 +167,9 @@ FUNCTION if approved, \"Forbidden by the user\" otherwise."
                        (apply function args))
                       ;; No - return nil
                       ((eq answer ?n)
-                       "Forbidden by the user"))))
+                       "Forbidden by the user")
+                      ((eq answer ?r)
+                       (read-string "Answer to the agent: ")))))
         (when result (if (stringp result)
                          result
                        (json-encode result))))))))
