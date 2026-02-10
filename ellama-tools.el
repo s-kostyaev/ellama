@@ -567,24 +567,6 @@ Replace OLDCONTENT with NEWCONTENT."
           (:name "file" :type file :description "File to search in."))
    :description "Grep SEARCH-STRING in FILE."))
 
-(defun ellama-tools-list-tool ()
-  "List all available tools."
-  (json-encode (mapcar
-                (lambda (tool)
-                  `(("name" . ,(llm-tool-name tool))
-                    ("description" . ,(llm-tool-description tool))))
-                ellama-tools-available)))
-
-(ellama-tools-define-tool
- '(:function
-   ellama-tools-list-tool
-   :name
-   "list_tools"
-   :args
-   nil
-   :description
-   "List all available tools."))
-
 (defun ellama-tools-now-tool ()
   "Return current date, time and timezone."
   (format-time-string "%Y-%m-%d %H:%M:%S %Z"))
