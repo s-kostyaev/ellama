@@ -33,3 +33,5 @@ Example:
 - Third change description.
 - Some fix in ~ellama-example-command~ description.
 ```
+
+After all of that call shell_command tool with "make refill-news" argument.

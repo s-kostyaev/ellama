@@ -165,9 +165,9 @@
 - Added reproduction of duplicate lines bug. Fix this bug.
 * Version 1.8.2
 - Refactored ~ellama--apply-transformations~ to use markers for stability during
-  replacements. Added ~set-hard-newline~ properties to handle hard newlines during
-  text filling. Updated test cases to include a new test for markdown list to
-  org list conversion.
+  replacements. Added ~set-hard-newline~ properties to handle hard newlines
+  during text filling. Updated test cases to include a new test for markdown
+  list to org list conversion.
 - Added check for function existence to avoid errors when ~llm-ollama-p~ is not
   available.
 - Displayed ellama instant result buffer on done instead of visible reasoning
@@ -255,8 +255,9 @@
   feature.
 * Version 1.5.3
 - Added ~ellama-completion-provider~ custom variable to specify the LLM provider
-  for completions. Updated ~ellama-stream~ call in ~ellama-complete~ to use this new
-  provider and modified the filter function to handle prefix trimming correctly.
+  for completions. Updated ~ellama-stream~ call in ~ellama-complete~ to use this
+  new provider and modified the filter function to handle prefix trimming
+  correctly.
 * Version 1.5.2
 - Fixed a bug in session delete or kill that deletes or kills the current file
   or buffer when no session is selected.
@@ -358,13 +359,13 @@
 * Version 1.2.5
 - Fix scroll function.
 * Version 1.2.4
-- Improve the default behavior of auto-scroll. It will now move the
-  cursor to the end of the ellama-chat buffer and enable auto-scroll
-  for all buffers, not just chat buffers.
+- Improve the default behavior of auto-scroll. It will now move the cursor to
+  the end of the ellama-chat buffer and enable auto-scroll for all buffers, not
+  just chat buffers.
 * Version 1.2.3
 - Remove default ellama provider.
-- Use first available ollama chat model if ellama provider not set.
-  Ensure ~ellama~ is usable with zero configuration.
+- Use first available ollama chat model if ellama provider not set. Ensure
+  ~ellama~ is usable with zero configuration.
 * Version 1.2.2
 - Fix org to markdown conversion with broken links.
 * Version 1.2.1
@@ -381,56 +382,50 @@
 - Add system message support to ~ellama-stream~, ~ellama-chat~ and
   ~ellama-instant~.
 - Fix think tag handling for some models.
-- Provide buffer to all ~kill-buffer~ calls. Tried to fix an
-  unreproducible in my environment bug.
+- Provide buffer to all ~kill-buffer~ calls. Tried to fix an unreproducible in
+  my environment bug.
 * Version 1.1.5
-- Fix cancel current stream by pressing ~C-g~ in buffer with active
-  streaming.
+- Fix cancel current stream by pressing ~C-g~ in buffer with active streaming.
 * Version 1.1.4
-- Improve the accuracy and reliability of the
-  ~ellama-semantic-similar-p~ function.
+- Improve the accuracy and reliability of the ~ellama-semantic-similar-p~
+  function.
 * Version 1.1.3
 - Ensure unique elements in session and global contexts.
 - Change default transient host and port to fix ollama provider setup.
 - Deactivate ellama session on setting ellama-provider.
-- Added functionality to convert Org mode content to Markdown when
-  extracting buffer or file content for the context. This ensures that
-  any Org mode files are properly formatted as Markdown before being
-  processed further.
+- Added functionality to convert Org mode content to Markdown when extracting
+  buffer or file content for the context. This ensures that any Org mode files
+  are properly formatted as Markdown before being processed further.
 * Version 1.1.2
-- Clear session context when resetting context to prevent unexpected
-  behavior.
+- Clear session context when resetting context to prevent unexpected behavior.
 * Version 1.1.1
 - Improve ~ellama-add-selection~.
 - Add buffer quote context element.
 * Version 1.1.0
-- Enhancing interaction with reasoning models. Thinking tags within
-  session buffers will be collapsed by default after generation.
-  Outside of ellama sessions reasoning will be removed from model
-  output. This ensures a seamless experience for users interacting
-  with reasoning models.
+- Enhancing interaction with reasoning models. Thinking tags within session
+  buffers will be collapsed by default after generation. Outside of ellama
+  sessions reasoning will be removed from model output. This ensures a seamless
+  experience for users interacting with reasoning models.
 * Version 1.0.3
 - Unquote symbols in ~ellama-provider-list~.
 * Version 1.0.2
 - Add ollama model selection to transient menu.
 * Version 1.0.1
-- Refactor ellama-code-add function for better efficiency. Remove
-  redundant context handling in ~ellama-code-add~. Simplify the prompt
-  template by removing unnecessary context instructions. Improve
-  function documentation for clarity. Add region selection handling
-  outside of ~ellama-stream~ call.
+- Refactor ellama-code-add function for better efficiency. Remove redundant
+  context handling in ~ellama-code-add~. Simplify the prompt template by
+  removing unnecessary context instructions. Improve function documentation for
+  clarity. Add region selection handling outside of ~ellama-stream~ call.
 * Version 1.0.0
 - Added ~ellama-write~ command.
 - Added ~ellama-proofread~ command.
 - Added global context management, including functions to reset context.
 * Version 0.13.11
-- Add function ~ellama-make-semantic-similar-p-with-context~ that
-  return test function for checking if two provided texts are meaning
-  the same in provided context. It can be useful for creating
-  semantically uniq lists of strings.
+- Add function ~ellama-make-semantic-similar-p-with-context~ that return test
+  function for checking if two provided texts are meaning the same in provided
+  context. It can be useful for creating semantically uniq lists of strings.
 * Version 0.13.10
-- Refactor file name fixing logic. Change the regular expression for
-  handling forbidden filename characters to improve efficiency.
+- Refactor file name fixing logic. Change the regular expression for handling
+  forbidden filename characters to improve efficiency.
 * Version 0.13.9
 - Fix adding buffer to context.
 * Version 0.13.8
@@ -442,13 +437,14 @@ r1 distilled models for naming new sessions.
 * Version 0.13.7
 - Add missing requires for integration tests.
 * Version 0.13.6
-- Add function ~ellama-semantic-similar-p~. It can be useful for
-  creating lists without duplicates by meaning.
+- Add function ~ellama-semantic-similar-p~. It can be useful for creating lists
+  without duplicates by meaning.
 - Add integration tests.
 * Version 0.13.5
 - Fix defcustom validation. Remove unnecessary quote.
 * Version 0.13.4
-- Add string list extraction functions. Can be useful for creating LLM workflows.
+- Add string list extraction functions. Can be useful for creating LLM
+  workflows.
 * Version 0.13.3
 - Refactor markdown to org translation.
 - Fix bug when transformations was applied inside code blocks.
@@ -457,11 +453,11 @@ r1 distilled models for naming new sessions.
 * Version 0.13.1
 - Add support for extra information in ellama session.
 * Version 0.13.0
-- Add command ~ellama-chat-send-last-message~ to compose and modify
-  messages within the chat buffer and send them directly from there.
+- Add command ~ellama-chat-send-last-message~ to compose and modify messages
+  within the chat buffer and send them directly from there.
 - Add ~ellama-chat-display-action-function~ and
-  ~ellama-instant-display-action-function~ custom variables to
-  customize display buffers behaviour.
+  ~ellama-instant-display-action-function~ custom variables to customize display
+  buffers behaviour.
 * Version 0.12.8
 - Provide code review in chat session.
 - Improve code review prompt template.
@@ -486,8 +482,8 @@ r1 distilled models for naming new sessions.
 * Version 0.12.0
 - Add transient menu.
 * Version 0.11.14
-- Add interactive template modification for ellama-improve-* functions
-  with universal prefix argument.
+- Add interactive template modification for ellama-improve-* functions with
+  universal prefix argument.
 * Version 0.11.13
 - Add ability to use sessions in other elisp packages.
 * Version 0.11.12
@@ -517,21 +513,22 @@ r1 distilled models for naming new sessions.
 * Version 0.11.1
 - Add function ~ellama-context-add-text~ for non-intercative usage.
 * Version 0.11.0
-- Refactor markdown to org conversion code. Now all transformations
-  will be applied only outside of code blocks.
+- Refactor markdown to org conversion code. Now all transformations will be
+  applied only outside of code blocks.
 * Version 0.10.2
-- Fix bug when translation from markdown to org syntax breaks python
-  code blocks.
+- Fix bug when translation from markdown to org syntax breaks python code
+  blocks.
 * Version 0.10.1
-- Add ~ellama-solve-domain-specific-problem~ command. It leverages the
-  popular "act like a professional" prompt engineering method,
-  enhanced by an automated planning step.
+- Add ~ellama-solve-domain-specific-problem~ command. It leverages the popular
+  "act like a professional" prompt engineering method, enhanced by an automated
+  planning step.
 * Version 0.10.0
 - Add ~ellama-solve-reasoning-problem~ command that implements
-  [[https://arxiv.org/pdf/2406.12442][Absctraction of Thought]] technique. It uses a chain of multiple
-  messages to LLM and help it to provide much better answers on
-  reasoning problems. Even small LLMs like [[https://ollama.com/library/phi3][phi3-mini]] provides much
-  better results on reasoning tasks using AoT.
+  [[https://arxiv.org/pdf/2406.12442][Absctraction of Thought]] technique. It
+  uses a chain of multiple messages to LLM and help it to provide much better
+  answers on reasoning problems. Even small LLMs like
+  [[https://ollama.com/library/phi3][phi3-mini]] provides much better results on
+  reasoning tasks using AoT.
 * Version 0.9.11
 - Transform org quote content to avoid rendering issues.
 * Version 0.9.10
@@ -539,16 +536,16 @@ r1 distilled models for naming new sessions.
 * Version 0.9.9
 - Add info node quote context elements.
 * Version 0.9.8
-- Copy context from previous session on creating new session. This is
-  useful when you create new session by calling ~ellama-ask-about~
-  with prefix argument.
+- Copy context from previous session on creating new session. This is useful
+  when you create new session by calling ~ellama-ask-about~ with prefix
+  argument.
 * Version 0.9.7
 - Add webpage quote context elements.
 * Version 0.9.6
 - Improve code blocks translation from markdown to org.
 * Version 0.9.5
-- Establish a fresh chat session whenever the ~ellama-chat~ function
-  is invoked with a provider different from the one currently in use.
+- Establish a fresh chat session whenever the ~ellama-chat~ function is invoked
+  with a provider different from the one currently in use.
 * Version 0.9.4
 - Improve code blocks translation from markdown to org.
 * Version 0.9.3
@@ -590,8 +587,8 @@ r1 distilled models for naming new sessions.
   - Add command for adding info nodes into context.
   - Fix keybindings documentation.
 * Version 0.8.4
-- Fix keybindings. Keymap prefix now not set by default to prevent
-  usage of reserved for end user customisation keys.
+- Fix keybindings. Keymap prefix now not set by default to prevent usage of
+  reserved for end user customisation keys.
 * Version 0.8.3
 - Fix non-chat commands.
 * Version 0.8.2
@@ -609,11 +606,10 @@ r1 distilled models for naming new sessions.
 * Version 0.7.4
 - Avoid advising global functions. Use minor modes instead.
 * Version 0.7.3
-- Add sessions auto save. If not set will not use named files for new
-  sessions. Enabled by default.
-- ~ellama-major-mode~ used instead of ~ellama-instant-mode~ and used
-  not only for ellama instant buffers, but also for ellama chat
-  buffers.
+- Add sessions auto save. If not set will not use named files for new sessions.
+  Enabled by default.
+- ~ellama-major-mode~ used instead of ~ellama-instant-mode~ and used not only
+  for ellama instant buffers, but also for ellama chat buffers.
 * Version 0.7.2
 - Replace / with _ in new note filenames to prevent errors.
 * Version 0.7.1

@@ -7,3 +7,6 @@ build:
 
 test:
 	emacs -batch --eval "(package-initialize)" -l ellama.el -l tests/test-ellama.el --eval "(ert t)"
+
+refill-news:
+	emacs -batch --eval "(with-current-buffer (find-file-noselect \"./NEWS.org\") (setq fill-column 80) (fill-region (point-min) (point-max)) (save-buffer))"
