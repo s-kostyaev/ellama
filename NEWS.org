@@ -1,3 +1,8 @@
+* Version 1.12.3
+- Improve loop control in confirmation dialog. Refactored the while loop in the
+  confirmation prompt to use explicit t/nil returns for loop continuation
+  instead of throw/catch. This improves code readability and maintainability
+  while preserving all existing functionality.
 * Version 1.12.2
 - Add view and reply options to ellama-tools confirmation.
 - Remove tools list tool to minimize LLMs distraction.
