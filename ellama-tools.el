@@ -156,51 +156,51 @@ approved, \"Forbidden by the user\" otherwise."
 	       (prompt (format "Allow calling %s with arguments: %s?"
 			       function-name
 			       (mapconcat #'identity args-display ", ")))
-	       answer result)
-	  (catch 'done
-	    (while t
-	      (setq answer (read-char-choice
-			    (format "%s (y)es, (a)lways, (n)o, (r)eply, (v)iew: " prompt)
-			    '(?y ?a ?n ?r ?v)))
-	      (cond
-	       ;; View - show buffer with full details
-	       ((eq answer ?v)
-		(let* ((buf (get-buffer-create "*Ellama Confirmation*"))
-		       (args-full
-			(mapcar (lambda (arg)
-				  (cond
-				   ((stringp arg)
-				    arg)
-				   (t
-				    (format "%S" arg))))
-				args)))
-		  (with-current-buffer buf
-		    (erase-buffer)
-		    (insert (propertize "Ellama Function Call Confirmation\n"
-					'face '(:weight bold :height 1.2)))
-		    (insert "\n")
-		    (insert (format "Function: %s\n\n" function-name))
-		    (insert "Arguments:\n")
-		    (dolist (arg args-full)
-		      (insert (format "  - %s\n" arg))))
-		  (display-buffer buf)))
-	       ;; Yes - execute function once
-	       ((eq answer ?y)
-		(setq result (apply function args))
-		(throw 'done t))
-	       ;; Always - remember approval and execute function
-	       ((eq answer ?a)
-		(puthash function t ellama-tools-confirm-allowed)
-		(setq result (apply function args))
-		(throw 'done t))
-	       ;; No - return nil
-	       ((eq answer ?n)
-		(setq result "Forbidden by the user")
-		(throw 'done t))
-	       ;; Reply - custom response
-	       ((eq answer ?r)
-		(setq result (read-string "Answer to the agent: "))
-		(throw 'done t)))))
+	       result)
+          (while
+              (let ((answer (read-char-choice
+                             (format "%s (y)es, (a)lways, (n)o, (r)eply, (v)iew: " prompt)
+                             '(?y ?a ?n ?r ?v))))
+                (cond
+                 ;; View - show buffer with full details
+                 ((eq answer ?v)
+                  (let* ((buf (get-buffer-create "*Ellama Confirmation*"))
+                         (args-full
+                          (mapcar (lambda (arg)
+                                    (cond
+                                     ((stringp arg)
+                                      arg)
+                                     (t
+                                      (format "%S" arg))))
+                                  args)))
+                    (with-current-buffer buf
+                      (erase-buffer)
+                      (insert (propertize "Ellama Function Call Confirmation\n"
+                                          'face '(:weight bold :height 1.2)))
+                      (insert "\n")
+                      (insert (format "Function: %s\n\n" function-name))
+                      (insert "Arguments:\n")
+                      (dolist (arg args-full)
+                        (insert (format "  - %s\n" arg))))
+                    (display-buffer buf))
+                  t) ;; Try again.
+                 ;; Yes - execute function once
+                 ((eq answer ?y)
+                  (setq result (apply function args))
+                  nil) ;; Done.
+                 ;; Always - remember approval and execute function
+                 ((eq answer ?a)
+                  (puthash function t ellama-tools-confirm-allowed)
+                  (setq result (apply function args))
+                  nil) ;; done
+                 ;; No - return nil
+                 ((eq answer ?n)
+                  (setq result "Forbidden by the user")
+                  nil) ;; Done.
+                 ;; Reply - custom response
+                 ((eq answer ?r)
+                  (setq result (read-string "Answer to the agent: "))
+                  nil))))
 	  (when result (if (stringp result)
 			   result
 			 (json-encode result)))))))))
