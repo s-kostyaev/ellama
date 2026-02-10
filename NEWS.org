@@ -1,3 +1,7 @@
+* Version 1.12.2
+- Add view and reply options to ellama-tools confirmation.
+- Remove tools list tool to minimize LLMs distraction.
+- Add automated NEWS formatting using ~make refill-news~.
 * Version 1.12.1
 - Simplify project root detection in ~ellama-get-agents-md-path~ to use
   ~ellama-tools-project-root-tool~. This refactoring eliminates potential nil
