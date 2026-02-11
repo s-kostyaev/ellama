@@ -154,7 +154,7 @@ approved, \"Forbidden by the user\" otherwise."
 			     ellama-tools-argument-max-length))
 			   (t
 			    (format "%S" arg))))
-			args))
+			(cl-remove-if (lambda (arg) (functionp arg)) args)))
 	       (prompt (format "Allow calling %s with arguments: %s?"
 			       function-name
 			       (mapconcat #'identity args-display ", ")))
@@ -174,7 +174,7 @@ approved, \"Forbidden by the user\" otherwise."
                                       arg)
                                      (t
                                       (format "%S" arg))))
-                                  args)))
+                                  (cl-remove-if (lambda (arg) (functionp arg)) args))))
                     (with-current-buffer buf
                       (erase-buffer)
                       (insert (propertize "Ellama Function Call Confirmation\n"
