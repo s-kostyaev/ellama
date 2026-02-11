@@ -92,7 +92,9 @@ Tools from this list will work without user confirmation."
 	 (tools (plist-get cfg :tools)))
     (cond
      ((eq tools :all)
-      ellama-tools-available)
+      (cl-remove-if
+       (lambda (tool) (string= (llm-tool-name tool) "task"))
+       ellama-tools-available))
      ((listp tools)
       (cl-remove-if-not
        (lambda (tool) (member (llm-tool-name tool) tools))
