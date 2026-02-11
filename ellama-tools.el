@@ -315,8 +315,8 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
 (defun ellama-tools-write-file-tool (path content)
   "Write CONTENT to the file located at the specified PATH."
   (with-temp-buffer
-    (insert content)
     (setq buffer-file-name (expand-file-name path))
+    (insert content)
     (save-buffer)))
 
 (ellama-tools-define-tool
