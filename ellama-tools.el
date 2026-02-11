@@ -203,14 +203,16 @@ approved, \"Forbidden by the user\" otherwise."
                  ((eq answer ?r)
                   (setq result (read-string "Answer to the agent: "))
                   nil))))
-	  (when result (let ((result-str (if (stringp result)
-			                     result
-			                   (json-encode result)))
-                             (cb (and args
-                                      (functionp (car args))
-                                      (car args))))
-                         (if cb (funcall cb result-str)
-                           result-str)))))))))
+          (let ((result-str (if (stringp result)
+                                result
+                              (if result
+                                  (json-encode result)
+                                "done")))
+                (cb (and args
+                         (functionp (car args))
+                         (car args))))
+            (if cb (funcall cb result-str)
+              result-str))))))))
 
 (defun ellama-tools-wrap-with-confirm (tool-plist)
   "Wrap a tool's function with automatic confirmation.
