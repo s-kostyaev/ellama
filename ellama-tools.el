@@ -205,14 +205,14 @@ approved, \"Forbidden by the user\" otherwise."
                   nil))))
           (let ((result-str (if (stringp result)
                                 result
-                              (if result
-                                  (json-encode result)
-                                "done")))
+                              (when result
+                                  (json-encode result))))
                 (cb (and args
                          (functionp (car args))
                          (car args))))
-            (if cb (funcall cb result-str)
-              result-str))))))))
+            (if (and cb result-str)
+                (funcall cb result-str)
+              (or result-str "done")))))))))
 
 (defun ellama-tools-wrap-with-confirm (tool-plist)
   "Wrap a tool's function with automatic confirmation.
