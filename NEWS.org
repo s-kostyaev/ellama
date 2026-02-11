@@ -1,3 +1,24 @@
+* Version 1.12.4
+- Normalize file path in write-file function. Added expand-file-name to properly
+  handle both absolute and relative paths when writing files, preventing
+  potential issues with file path resolution.
+- Filter function objects from function call arguments. This prevents display of
+  uncallable function objects in the confirmation prompt.
+- Make task tool unaccessible for general subagents. This change improves
+  security and control over tool access.
+- Fix file write tool. Corrected the order of operations in
+  ellama-tools-write-file-tool by setting the buffer file name before inserting
+  content.
+- Fix async tools confirmation. Use callback function to return result to the
+  agent.
+- Improve system message handling. Added optional MSG parameter to
+  ellama-get-system-message to allow callers to provide custom system messages
+  via the :system plist key. This allows sub-agents to use skills.
+- Improve agent response result handling. Updated result encoding to return
+  "done" for nil results instead of causing potential errors.
+- Fix result handling in tool execution wrapper. Improved the logic for handling
+  tool results by ensuring JSON encoding only occurs when a result exists. This
+  change fixes async task execution.
 * Version 1.12.3
 - Improve loop control in confirmation dialog. Refactored the while loop in the
   confirmation prompt to use explicit t/nil returns for loop continuation

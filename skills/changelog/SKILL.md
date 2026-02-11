@@ -22,7 +22,7 @@ with header:
 
 * Version {version}
 
-After header should be changelog content. Content should ends with single
+After header should be changelog content. Content must ends with single
 newline.
 Example:
  ```text

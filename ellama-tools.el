@@ -92,7 +92,9 @@ Tools from this list will work without user confirmation."
 	 (tools (plist-get cfg :tools)))
     (cond
      ((eq tools :all)
-      ellama-tools-available)
+      (cl-remove-if
+       (lambda (tool) (string= (llm-tool-name tool) "task"))
+       ellama-tools-available))
      ((listp tools)
       (cl-remove-if-not
        (lambda (tool) (member (llm-tool-name tool) tools))
@@ -152,7 +154,7 @@ approved, \"Forbidden by the user\" otherwise."
 			     ellama-tools-argument-max-length))
 			   (t
 			    (format "%S" arg))))
-			args))
+			(cl-remove-if (lambda (arg) (functionp arg)) args)))
 	       (prompt (format "Allow calling %s with arguments: %s?"
 			       function-name
 			       (mapconcat #'identity args-display ", ")))
@@ -172,7 +174,7 @@ approved, \"Forbidden by the user\" otherwise."
                                       arg)
                                      (t
                                       (format "%S" arg))))
-                                  args)))
+                                  (cl-remove-if (lambda (arg) (functionp arg)) args))))
                     (with-current-buffer buf
                       (erase-buffer)
                       (insert (propertize "Ellama Function Call Confirmation\n"
@@ -201,9 +203,16 @@ approved, \"Forbidden by the user\" otherwise."
                  ((eq answer ?r)
                   (setq result (read-string "Answer to the agent: "))
                   nil))))
-	  (when result (if (stringp result)
-			   result
-			 (json-encode result)))))))))
+          (let ((result-str (if (stringp result)
+                                result
+                              (when result
+                                  (json-encode result))))
+                (cb (and args
+                         (functionp (car args))
+                         (car args))))
+            (if (and cb result-str)
+                (funcall cb result-str)
+              (or result-str "done")))))))))
 
 (defun ellama-tools-wrap-with-confirm (tool-plist)
   "Wrap a tool's function with automatic confirmation.
@@ -313,8 +322,8 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
 (defun ellama-tools-write-file-tool (path content)
   "Write CONTENT to the file located at the specified PATH."
   (with-temp-buffer
+    (setq buffer-file-name (expand-file-name path))
     (insert content)
-    (setq buffer-file-name path)
     (save-buffer)))
 
 (ellama-tools-define-tool

@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.12.3
+;; Version: 1.12.4
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -1241,9 +1241,10 @@ Returns the full path to AGENTS.md if found, or nil if not found."
 	   (buffer-string))))
       ""))
 
-(defun ellama-get-system-message ()
-  "Return the effective system message, including dynamically scanned skills."
-  (let ((msg (concat (or ellama-global-system "")
+(defun ellama-get-system-message (&optional msg)
+  "Return the effective system message, including dynamically scanned skills.
+MSG is a text that will be included in the resulting system message."
+  (let ((msg (concat (or msg ellama-global-system "")
 		     (ellama-get-agents-md)
 		     (ellama-skills-generate-prompt))))
     (when (not (string= msg ""))
@@ -1548,8 +1549,7 @@ failure (with BUFFER current).
 		      (error "Error calling the LLM: %s" msg))))
 	 (donecb (or (plist-get args :on-done) #'ignore))
 	 (prompt-with-ctx (ellama-context-prompt-with-context prompt))
-	 (system (or (plist-get args :system)
-		     (ellama-get-system-message)))
+	 (system (ellama-get-system-message (plist-get args :system)))
 	 (session-tools (and session
                              (ellama-session-extra session)
                              (plist-get (ellama-session-extra session) :tools)))
