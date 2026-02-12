@@ -6,11 +6,11 @@ description: Use this skill to generate changelog.
 # Generating changelog
 
 Call shell_command tool with "git log --reverse main..HEAD" argument. Based on
-the output write short changelog in org-mode list format. Use "~tildas~" quoting
-instead of "`backticks`" quoting. Do not add any anknowledgements. Every
-changelog element should be ended with full stop. Changelog shouldn't be too
-short or too long, use detailed description for major changes and concise
-description for minor changes.
+the output write changelog in org-mode list format. Use org quoting
+(~quoted-text~) instead of markdown quoting (`quoted-text`). Every changelog
+element should be ended with full stop. Changelog shouldn't be too short or too
+long, use detailed description for major changes and concise description for
+minor changes.
 
 Call shell_command tools with "git tag -l --points-at=main" argument to see
 previously released version. Based on this information and minority/majority of
@@ -22,7 +22,7 @@ with header:
 
 * Version {version}
 
-After header should be changelog content. Content must ends with single
+After header should be changelog content. Content MUST ends with single
 newline.
 Example:
  ```text
