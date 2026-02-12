@@ -299,12 +299,12 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
   (interactive)
   (setq ellama-tools-enabled nil))
 
-(defun ellama-tools-read-file-tool (path)
-  "Read the file located at the specified PATH."
-  (json-encode (if (not (file-exists-p path))
-                   (format "File %s doesn't exists." path)
+(defun ellama-tools-read-file-tool (file-name)
+  "Read the file FILE-NAME."
+  (json-encode (if (not (file-exists-p file-name))
+                   (format "File %s doesn't exists." file-name)
                  (with-temp-buffer
-                   (insert-file-contents-literally path)
+                   (insert-file-contents-literally file-name)
                    (buffer-string)))))
 
 (ellama-tools-define-tool
@@ -314,17 +314,17 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
    "read_file"
    :args
    ((:name
-     "path"
+     "file_name"
      :type
      string
      :description
-     "Path to the file."))
+     "File name."))
    :description
-   "Read the file located at the specified PATH."))
+   "Read the file FILE_NAME."))
 
-(defun ellama-tools-write-file-tool (path content)
-  "Write CONTENT to the file located at the specified PATH."
-  (write-region content nil path nil 'silent))
+(defun ellama-tools-write-file-tool (file-name content)
+  "Write CONTENT to the file FILE-NAME."
+  (write-region content nil file-name nil 'silent))
 
 (ellama-tools-define-tool
  '(:function
@@ -333,11 +333,11 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
    "write_file"
    :args
    ((:name
-     "path"
+     "file_name"
      :type
      string
      :description
-     "Path to the file.")
+     "Name of the file.")
     (:name
      "content"
      :type
@@ -345,11 +345,11 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
      :description
      "Content to write to the file."))
    :description
-   "Write CONTENT to the file located at the specified PATH."))
+   "Write CONTENT to the file FILE_NAME."))
 
-(defun ellama-tools-append-file-tool (path content)
-  "Append CONTENT to the file located at the specified PATH."
-  (with-current-buffer (find-file-noselect path)
+(defun ellama-tools-append-file-tool (file-name content)
+  "Append CONTENT to the file FILE-NAME."
+  (with-current-buffer (find-file-noselect file-name)
     (goto-char (point-max))
     (insert content)
     (save-buffer)))
@@ -361,11 +361,11 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
    "append_file"
    :args
    ((:name
-     "path"
+     "file_name"
      :type
      string
      :description
-     "Path to the file.")
+     "Name of the file.")
     (:name
      "content"
      :type
@@ -373,11 +373,11 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
      :description
      "Content to append to the file."))
    :description
-   "Append CONTENT to the file located at the specified PATH."))
+   "Append CONTENT to the file FILE-NAME."))
 
-(defun ellama-tools-prepend-file-tool (path content)
-  "Prepend CONTENT to the file located at the specified PATH."
-  (with-current-buffer (find-file-noselect path)
+(defun ellama-tools-prepend-file-tool (file-name content)
+  "Prepend CONTENT to the file FILE-NAME."
+  (with-current-buffer (find-file-noselect file-name)
     (goto-char (point-min))
     (insert content)
     (save-buffer)))
@@ -389,11 +389,11 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
    "prepend_file"
    :args
    ((:name
-     "path"
+     "file_name"
      :type
      string
      :description
-     "Path to the file.")
+     "Name of the file.")
     (:name
      "content"
      :type
@@ -401,7 +401,7 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
      :description
      "Content to prepend to the file."))
    :description
-   "Prepend CONTENT to the file located at the specified PATH."))
+   "Prepend CONTENT to the file FILE_NAME."))
 
 (defun ellama-tools-directory-tree-tool (dir &optional depth)
   "Return a string representing the directory tree under DIR.
@@ -440,12 +440,12 @@ DEPTH is the current recursion depth, used internally."
    :description
    "Return a string representing the directory tree under DIR."))
 
-(defun ellama-tools-move-file-tool (path newpath)
-  "Move the file from the specified PATH to the NEWPATH."
-  (if (and (file-exists-p path)
-           (not (file-exists-p newpath)))
+(defun ellama-tools-move-file-tool (file-name new-file-name)
+  "Move the file from the specified FILE-NAME to the NEW-FILE-NAME."
+  (if (and (file-exists-p file-name)
+           (not (file-exists-p new-file-name)))
       (progn
-        (rename-file path newpath))
+        (rename-file file-name new-file-name))
     (error "Cannot move file: source file does not exist or destination already exists")))
 
 (ellama-tools-define-tool
@@ -455,25 +455,25 @@ DEPTH is the current recursion depth, used internally."
    "move_file"
    :args
    ((:name
-     "path"
+     "file_name"
      :type
      string
      :description
-     "Current path of the file.")
+     "Current name of the file.")
     (:name
-     "newpath"
+     "new_file_name"
      :type
      string
      :description
-     "New path for the file."))
+     "New name of the file."))
    :description
-   "Move the file from the specified PATH to the NEWPATH."))
+   "Move the file from the specified FILE_NAME to the NEW_FILE_NAME."))
 
-(defun ellama-tools-edit-file-tool (path oldcontent newcontent)
-  "Edit file located at PATH.
+(defun ellama-tools-edit-file-tool (file-name oldcontent newcontent)
+  "Edit file FILE-NAME.
 Replace OLDCONTENT with NEWCONTENT."
   (let ((content (with-temp-buffer
-                   (insert-file-contents-literally path)
+                   (insert-file-contents-literally file-name)
                    (buffer-string)))
         (coding-system-for-write 'raw-text))
     (when (string-match (regexp-quote oldcontent) content)
@@ -483,7 +483,7 @@ Replace OLDCONTENT with NEWCONTENT."
         (delete-region (1+ (match-beginning 0)) (1+ (match-end 0)))
         (forward-char)
         (insert newcontent)
-        (write-region (point-min) (point-max) path)))))
+        (write-region (point-min) (point-max) file-name)))))
 
 (ellama-tools-define-tool
  '(:function
@@ -492,11 +492,11 @@ Replace OLDCONTENT with NEWCONTENT."
    "edit_file"
    :args
    ((:name
-     "path"
+     "file_name"
      :type
      string
      :description
-     "Path to the file.")
+     "Name of the file.")
     (:name
      "oldcontent"
      :type
@@ -510,7 +510,7 @@ Replace OLDCONTENT with NEWCONTENT."
      :description
      "New content to replace with."))
    :description
-   "Edit file located at PATH. Replace OLDCONTENT with NEWCONTENT."))
+   "Edit file FILE_NAME. Replace OLDCONTENT with NEWCONTENT."))
 
 (defun ellama-tools-shell-command-tool (cmd)
   "Execute shell command CMD."
@@ -635,9 +635,9 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."
    "Ask user a QUESTION to receive a clarification.
 ANSWER-VARIANT-LIST is a list of possible answer variants."))
 
-(defun ellama-tools-count-lines-tool (path)
-  "Count lines in file located at PATH."
-  (with-current-buffer (find-file-noselect path)
+(defun ellama-tools-count-lines-tool (file-name)
+  "Count lines in file FILE-NAME."
+  (with-current-buffer (find-file-noselect file-name)
     (count-lines (point-min) (point-max))))
 
 (ellama-tools-define-tool
@@ -647,17 +647,17 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
    "count_lines"
    :args
    ((:name
-     "path"
+     "file_name"
      :type
      string
      :description
-     "Path to the file to count lines in."))
+     "Name of the file to count lines in."))
    :description
-   "Count lines in file located at PATH."))
+   "Count lines in file FILE_NAME."))
 
-(defun ellama-tools-lines-range-tool (path from to)
-  "Return content of file located at PATH lines in range FROM TO."
-  (json-encode (with-current-buffer (find-file-noselect path)
+(defun ellama-tools-lines-range-tool (file-name from to)
+  "Return content of file FILE-NAME lines in range FROM TO."
+  (json-encode (with-current-buffer (find-file-noselect file-name)
                  (save-excursion
                    (let ((start (progn
                                   (goto-char (point-min))
@@ -678,11 +678,11 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
    "lines_range"
    :args
    ((:name
-     "path"
+     "file_name"
      :type
      string
      :description
-     "Path to the file to get lines from.")
+     "Name of the file to get lines from.")
     (:name
      "from"
      :type
@@ -696,20 +696,20 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
      :description
      "Ending line number."))
    :description
-   "Return content of file located at PATH lines in range FROM TO."))
+   "Return content of file FILE_NAME lines in range FROM TO."))
 
-(defun ellama-tools-apply-patch-tool (path patch)
-  "Apply PATCH to file located at PATH.
+(defun ellama-tools-apply-patch-tool (file-name patch)
+  "Apply PATCH to file FILE-NAME.
 PATCH is a string containing the patch data.
 Returns the output of the patch command or an error message."
-  (cond ((not path)
-         "path is required")
-        ((not (file-exists-p path))
-         (format "file %s doesn't exists" path))
+  (cond ((not file-name)
+         "file-name is required")
+        ((not (file-exists-p file-name))
+         (format "file %s doesn't exists" file-name))
         ((not patch)
          "patch is required")
         (t
-         (let* ((dir (file-name-directory (file-truename path)))
+         (let* ((dir (file-name-directory (file-truename file-name)))
                 (tmp (make-temp-file "ellama-patch-"))
                 (patch-file (file-truename (concat tmp ".patch"))))
            (unwind-protect
@@ -732,11 +732,11 @@ Returns the output of the patch command or an error message."
    "apply_patch"
    :args
    ((:name
-     "path"
+     "file_name"
      :type
      string
      :description
-     "Path to the file to apply patch to.")
+     "Name of the file to apply patch to.")
     (:name
      "patch"
      :type
@@ -744,7 +744,7 @@ Returns the output of the patch command or an error message."
      :description
      "Patch data to apply."))
    :description
-   "Apply a patch to the file at PATH."))
+   "Apply a patch to the file FILE_NAME."))
 
 (defun ellama-tools--make-report-result-tool (callback session)
   "Make report_result tool dynamically for SESSION.
