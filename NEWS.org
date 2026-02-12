@@ -1,3 +1,10 @@
+* Version 1.12.6
+- Simplify file writing in ~ellama-tools-write-file-tool~. Replaced temp
+  buffer-based file writing with write-region to simplify implementation and
+  avoid temporary buffer overhead.
+- Refactor file tool parameters. Renamed ~path~ parameter to ~file_name~ across
+  all file operation tools to follow GNU coding convention. Updated function
+  signatures, docstrings, and tool definitions accordingly.
 * Version 1.12.5
 - Prevent duplicate tools in ellama-tools. Added a test function to add-to-list
   to check if a tool with the same name already exists before adding it to
