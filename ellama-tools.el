@@ -241,7 +241,10 @@ Returns a new tool definition with the :function wrapped."
 TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
   (add-to-list
    'ellama-tools-available
-   (apply 'llm-make-tool (ellama-tools-wrap-with-confirm tool-plist))))
+   (apply 'llm-make-tool (ellama-tools-wrap-with-confirm tool-plist))
+   nil (lambda (a b)
+         (string= (plist-get a :name)
+                  (plist-get b :name)))))
 
 (defun ellama-tools-enable-by-name-tool (name)
   "Add to `ellama-tools-enabled' each tool that matches NAME."
