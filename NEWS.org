@@ -1,3 +1,12 @@
+* Version 1.12.5
+- Prevent duplicate tools in ellama-tools. Added a test function to add-to-list
+  to check if a tool with the same name already exists before adding it to
+  ellama-tools-available. This prevents duplicate tools from being registered
+  when enabling tools by name.
+- Update changelog skill quoting style. Changed the changelog generation skill
+  to use org-mode quoting (~text~) instead of markdown backticks (`text`). Also
+  use "MUST" instead of "must" to pay LLM's attention to the newline
+  requirement.
 * Version 1.12.4
 - Normalize file path in write-file function. Added expand-file-name to properly
   handle both absolute and relative paths when writing files, preventing
