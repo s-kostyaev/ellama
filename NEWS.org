@@ -1,3 +1,10 @@
+* Version 1.12.9
+- Fix result delivery for already approved async tools. Ensure results are
+  delivered via callback function for both interactive and pre‑approved tools.
+- Guard against nil project root tool result. Wrap
+  ~ellama-tools-project-root-tool~ result in an and expression to prevent errors
+  when the tool returns nil, protecting file-name-directory and expand-file-name
+  calls.
 * Version 1.12.8
 - Add fallback for AGENTS.md search when ~ellama-tools-project-root-tool~
   returns nil. This ensures reliable detection of the AGENTS.md file by falling
