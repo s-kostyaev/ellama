@@ -512,15 +512,23 @@ Replace OLDCONTENT with NEWCONTENT."
    :description
    "Edit file FILE_NAME. Replace OLDCONTENT with NEWCONTENT."))
 
-(defun ellama-tools-shell-command-tool (cmd)
-  "Execute shell command CMD."
-  (shell-command-to-string cmd))
+(defun ellama-tools-shell-command-tool (callback cmd)
+  "Execute shell command CMD.
+CALLBACK – function called once with the result string."
+  (let ((buf (get-buffer-create (concat (make-temp-name " *ellama shell command") "*"))))
+    (set-process-sentinel
+     (start-process "*ellama-shell-command*" buf shell-file-name shell-command-switch cmd)
+     (lambda (process _)
+       (when (not (process-live-p process))
+         (funcall callback (with-current-buffer buf (buffer-string)))
+         (kill-buffer buf))))))
 
 (ellama-tools-define-tool
  '(:function
    ellama-tools-shell-command-tool
    :name
    "shell_command"
+   :async t
    :args
    ((:name
      "cmd"
