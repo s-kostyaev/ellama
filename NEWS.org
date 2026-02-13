@@ -1,3 +1,7 @@
+* Version 1.12.8
+- Add fallback for AGENTS.md search when ~ellama-tools-project-root-tool~
+  returns nil. This ensures reliable detection of the AGENTS.md file by falling
+  back to the current directory.
 * Version 1.12.7
 - Fix bug when only single tool was available. This change fixes a duplicate
   checking issue in the tool list by using ~llm-tool-name~ instead of
