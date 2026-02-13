@@ -243,8 +243,8 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
    'ellama-tools-available
    (apply 'llm-make-tool (ellama-tools-wrap-with-confirm tool-plist))
    nil (lambda (a b)
-         (string= (plist-get a :name)
-                  (plist-get b :name)))))
+         (string= (llm-tool-name a)
+                  (llm-tool-name b)))))
 
 (defun ellama-tools-enable-by-name-tool (name)
   "Add to `ellama-tools-enabled' each tool that matches NAME."
