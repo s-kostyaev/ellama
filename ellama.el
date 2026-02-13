@@ -1217,8 +1217,9 @@ Otherwire return current active session."
   "Search for AGENTS.md file from current directory up to project root.
 Returns the full path to AGENTS.md if found, or nil if not found."
   (let* ((current-dir (file-name-directory (expand-file-name default-directory)))
-         (project-root (or (file-name-directory (expand-file-name
-						 (ellama-tools-project-root-tool)))
+         (project-root (or (and (ellama-tools-project-root-tool)
+				(file-name-directory (expand-file-name
+						      (ellama-tools-project-root-tool))))
 			   current-dir))
          found-path)
     ;; Walk up from current directory to project root
