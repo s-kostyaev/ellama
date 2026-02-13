@@ -520,8 +520,15 @@ CALLBACK – function called once with the result string."
      (start-process "*ellama-shell-command*" buf shell-file-name shell-command-switch cmd)
      (lambda (process _)
        (when (not (process-live-p process))
-         (funcall callback (with-current-buffer buf (buffer-string)))
-         (kill-buffer buf))))))
+         (funcall callback
+                  ;; we need to trim trailing newline
+                  (string-trim-right
+                   (with-current-buffer buf (buffer-string))
+                   "\n"))
+         (kill-buffer buf)))))
+  ;; async tool should always return nil
+  ;; to work properly with the llm library
+  nil)
 
 (ellama-tools-define-tool
  '(:function
