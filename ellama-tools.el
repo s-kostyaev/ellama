@@ -243,8 +243,8 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
    'ellama-tools-available
    (apply 'llm-make-tool (ellama-tools-wrap-with-confirm tool-plist))
    nil (lambda (a b)
-         (string= (plist-get a :name)
-                  (plist-get b :name)))))
+         (string= (llm-tool-name a)
+                  (llm-tool-name b)))))
 
 (defun ellama-tools-enable-by-name-tool (name)
   "Add to `ellama-tools-enabled' each tool that matches NAME."
@@ -512,15 +512,30 @@ Replace OLDCONTENT with NEWCONTENT."
    :description
    "Edit file FILE_NAME. Replace OLDCONTENT with NEWCONTENT."))
 
-(defun ellama-tools-shell-command-tool (cmd)
-  "Execute shell command CMD."
-  (shell-command-to-string cmd))
+(defun ellama-tools-shell-command-tool (callback cmd)
+  "Execute shell command CMD.
+CALLBACK – function called once with the result string."
+  (let ((buf (get-buffer-create (concat (make-temp-name " *ellama shell command") "*"))))
+    (set-process-sentinel
+     (start-process "*ellama-shell-command*" buf shell-file-name shell-command-switch cmd)
+     (lambda (process _)
+       (when (not (process-live-p process))
+         (funcall callback
+                  ;; we need to trim trailing newline
+                  (string-trim-right
+                   (with-current-buffer buf (buffer-string))
+                   "\n"))
+         (kill-buffer buf)))))
+  ;; async tool should always return nil
+  ;; to work properly with the llm library
+  nil)
 
 (ellama-tools-define-tool
  '(:function
    ellama-tools-shell-command-tool
    :name
    "shell_command"
+   :async t
    :args
    ((:name
      "cmd"

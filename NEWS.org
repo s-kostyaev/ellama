@@ -1,3 +1,14 @@
+* Version 1.12.7
+- Fix bug when only single tool was available. This change fixes a duplicate
+  checking issue in the tool list by using ~llm-tool-name~ instead of
+  ~plist-get~ for proper duplicate detection.
+- Make ~shell_command~ tool async. The tool now executes commands asynchronously
+  using a callback function for better performance.
+- Trim shell command output and return nil for async tools. This ensures proper
+  return value handling for async commands to maintain compatibility with the
+  llm library.
+- Add --no-pager flag to git commands in changelog generation. This prevents
+  output paging and ensures clean command output.
 * Version 1.12.6
 - Simplify file writing in ~ellama-tools-write-file-tool~. Replaced temp
   buffer-based file writing with write-region to simplify implementation and
