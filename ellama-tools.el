@@ -137,10 +137,17 @@ approved, \"Forbidden by the user\" otherwise."
      ((or confirmation
 	  ellama-tools-allow-all
 	  (cl-find function ellama-tools-allowed))
-      (let ((result (apply function args)))
-	(if (stringp result)
-	    result
-	  (json-encode result))))
+      (let* ((result (apply function args))
+             (result-str (if (stringp result)
+                             result
+                           (when result
+                             (json-encode result))))
+             (cb (and args
+                      (functionp (car args))
+                      (car args))))
+        (if (and cb result-str)
+            (funcall cb result-str)
+          (or result-str "done"))))
      ;; Otherwise, ask for confirmation
      (t
       ;; Generate prompt with truncated string arguments
@@ -206,7 +213,7 @@ approved, \"Forbidden by the user\" otherwise."
           (let ((result-str (if (stringp result)
                                 result
                               (when result
-                                  (json-encode result))))
+                                (json-encode result))))
                 (cb (and args
                          (functionp (car args))
                          (car args))))
