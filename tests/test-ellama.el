@@ -31,6 +31,12 @@
 (require 'ert)
 (require 'llm-fake)
 
+(defconst ellama-test-root
+  (expand-file-name
+   ".."
+   (file-name-directory (or load-file-name buffer-file-name)))
+  "Project root directory for test assets.")
+
 (ert-deftest test-ellama--code-filter ()
   (should (equal "" (ellama--code-filter "")))
   (should (equal "(hello)" (ellama--code-filter "(hello)")))
@@ -1022,6 +1028,84 @@ region, season, or type)! 🍎🍊"))))
                  ""))
   (should (equal (ellama--string-without-last-two-lines "Line1\nLine2")
                  "")))
+
+(defun ellama-test--ensure-local-ellama-tools ()
+  "Ensure tests use local `ellama-tools.el' from project root."
+  (unless (fboundp 'ellama-tools--sanitize-tool-text-output)
+    (load-file (expand-file-name "ellama-tools.el" ellama-test-root))))
+
+(defun ellama-test--wait-shell-command-result (cmd)
+  "Run shell tool CMD and wait for a result string."
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((result :pending)
+	(deadline (+ (float-time) 3.0)))
+    (ellama-tools-shell-command-tool
+     (lambda (res)
+       (setq result res))
+     cmd)
+    (while (and (eq result :pending)
+		(< (float-time) deadline))
+      (accept-process-output nil 0.01))
+    (when (eq result :pending)
+      (ert-fail (format "Timeout while waiting result for: %s" cmd)))
+    result))
+
+(ert-deftest test-ellama-shell-command-tool-empty-success-output ()
+  (should
+   (string=
+    (ellama-test--wait-shell-command-result "sh -c 'true'")
+    "Command completed successfully with no output.")))
+
+(ert-deftest test-ellama-shell-command-tool-empty-failure-output ()
+  (should
+   (string-match-p
+    "Command failed with exit code 7 and no output\\."
+    (ellama-test--wait-shell-command-result "sh -c 'exit 7'"))))
+
+(ert-deftest test-ellama-shell-command-tool-returns-stdout ()
+  (should
+   (string=
+    (ellama-test--wait-shell-command-result "printf 'ok\\n'")
+    "ok")))
+
+(ert-deftest test-ellama-shell-command-tool-rejects-binary-output ()
+  (should
+   (string-match-p
+    "binary data"
+    (ellama-test--wait-shell-command-result
+     "awk 'BEGIN { printf \"%c\", 0 }'"))))
+
+(ert-deftest test-ellama-read-file-tool-rejects-binary-content ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-read-file-bin-")))
+    (unwind-protect
+        (progn
+          (let ((coding-system-for-write 'no-conversion))
+            (with-temp-buffer
+              (set-buffer-multibyte nil)
+              (insert "%PDF-1.5\n%")
+              (insert (char-to-string 143))
+              (insert "\n")
+              (write-region (point-min) (point-max) file nil 'silent)))
+          (let ((result (ellama-tools-read-file-tool file)))
+            (should (string-match-p "binary data" result))
+            (should (string-match-p "bad idea" result))))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-read-file-tool-accepts-utf8-markdown-text ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-read-file-utf8-" nil ".md")))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "# Research Plan\n\n")
+            (insert "Sub‑topics: temporal reasoning overview.\n"))
+          (let ((result (ellama-tools-read-file-tool file)))
+            (should-not (string-match-p "binary data" result))
+            (should (string-match-p "Research Plan" result))))
+      (when (file-exists-p file)
+        (delete-file file)))))
 
 (provide 'test-ellama)
 

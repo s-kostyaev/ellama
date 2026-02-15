@@ -306,13 +306,38 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
   (interactive)
   (setq ellama-tools-enabled nil))
 
+(defun ellama-tools--string-has-raw-bytes-p (string)
+  "Return non-nil when STRING contain binary-like chars.
+Treat Emacs raw-byte chars and NUL bytes as binary-like."
+  (let ((idx 0)
+        (len (length string))
+        found)
+    (while (and (not found) (< idx len))
+      (when (or (> (aref string idx) #x10FFFF)
+                (= (aref string idx) 0))
+        (setq found t))
+      (setq idx (1+ idx)))
+    found))
+
+(defun ellama-tools--sanitize-tool-text-output (text label)
+  "Return TEXT or a warning when TEXT is binary-like.
+LABEL is used to identify the source in the warning."
+  (if (ellama-tools--string-has-raw-bytes-p text)
+      (concat label
+              " appears to contain binary data.  Reading binary data as "
+              "text is a bad idea for this tool.")
+    text))
+
 (defun ellama-tools-read-file-tool (file-name)
   "Read the file FILE-NAME."
   (json-encode (if (not (file-exists-p file-name))
                    (format "File %s doesn't exists." file-name)
-                 (with-temp-buffer
-                   (insert-file-contents-literally file-name)
-                   (buffer-string)))))
+                 (let ((content (with-temp-buffer
+                                  (insert-file-contents file-name)
+                                  (buffer-string))))
+                   (ellama-tools--sanitize-tool-text-output
+                    content
+                    (format "File %s" file-name))))))
 
 (ellama-tools-define-tool
  '(:function
@@ -522,17 +547,42 @@ Replace OLDCONTENT with NEWCONTENT."
 (defun ellama-tools-shell-command-tool (callback cmd)
   "Execute shell command CMD.
 CALLBACK – function called once with the result string."
-  (let ((buf (get-buffer-create (concat (make-temp-name " *ellama shell command") "*"))))
-    (set-process-sentinel
-     (start-process "*ellama-shell-command*" buf shell-file-name shell-command-switch cmd)
-     (lambda (process _)
-       (when (not (process-live-p process))
-         (funcall callback
-                  ;; we need to trim trailing newline
-                  (string-trim-right
-                   (with-current-buffer buf (buffer-string))
-                   "\n"))
-         (kill-buffer buf)))))
+  (condition-case err
+      (let ((buf (get-buffer-create
+		  (concat (make-temp-name " *ellama shell command") "*"))))
+	(set-process-sentinel
+	 (start-process
+	  "*ellama-shell-command*" buf shell-file-name shell-command-switch cmd)
+	 (lambda (process _)
+	   (when (not (process-live-p process))
+	     (let* ((raw-output
+		     ;; trim trailing newline to reduce noisy tool output
+		     (string-trim-right
+		      (with-current-buffer buf (buffer-string))
+		      "\n"))
+		    (output
+		     (ellama-tools--sanitize-tool-text-output
+		      raw-output
+		      "Command output"))
+		    (exit-code (process-exit-status process))
+		    (result
+		     (cond
+		      ((and (string= output "") (zerop exit-code))
+		       "Command completed successfully with no output.")
+		      ((string= output "")
+		       (format "Command failed with exit code %d and no output."
+			       exit-code))
+		      ((zerop exit-code)
+		       output)
+		      (t
+		       (format "Command failed with exit code %d.\n%s"
+			       exit-code output)))))
+	       (funcall callback result)
+	       (kill-buffer buf))))))
+    (error
+     (funcall callback
+	      (format "Failed to start shell command: %s"
+		      (error-message-string err)))))
   ;; async tool should always return nil
   ;; to work properly with the llm library
   nil)
@@ -691,7 +741,9 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
                                 (forward-line (1- to))
                                 (end-of-line)
                                 (point))))
-                     (buffer-substring-no-properties start end))))))
+                     (ellama-tools--sanitize-tool-text-output
+                      (buffer-substring-no-properties start end)
+                      (format "File %s" file-name)))))))
 
 (ellama-tools-define-tool
  '(:function
