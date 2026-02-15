@@ -1596,10 +1596,8 @@ failure (with BUFFER current).
 				prompt-with-ctx)
 			       (setf (llm-chat-prompt-tools (ellama-session-prompt session))
 				     tools)
-			       (when system
-				 (llm-chat-prompt-append-response
-				  (ellama-session-prompt session)
-				  system 'system))
+			       ;; System message is part of prompt context and should not be
+			       ;; appended on each interaction.
 			       (ellama-session-prompt session))
 			   (setf (ellama-session-prompt session)
 				 (llm-make-chat-prompt prompt-with-ctx :context system
