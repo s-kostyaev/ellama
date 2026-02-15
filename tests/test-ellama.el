@@ -1029,6 +1029,17 @@ region, season, or type)! 🍎🍊"))))
   (should (equal (ellama--string-without-last-two-lines "Line1\nLine2")
                  "")))
 
+(ert-deftest test-ellama--append-tool-error-to-prompt-uses-llm-message ()
+  (let (captured)
+    (cl-letf (((symbol-function 'llm-chat-prompt-append-response)
+	       (lambda (_prompt msg role)
+		 (setq captured (list msg role)))))
+      (ellama--append-tool-error-to-prompt
+       'prompt
+       "Unknown tool 'search' called"))
+    (should (equal captured
+		   '("Unknown tool 'search' called" system)))))
+
 (defun ellama-test--ensure-local-ellama-tools ()
   "Ensure tests use local `ellama-tools.el' from project root."
   (unless (fboundp 'ellama-tools--sanitize-tool-text-output)
