@@ -1,3 +1,9 @@
+* Version 1.12.10
+- Fix stack overflow in markdown code fence conversion in
+  ~ellama--translate-markdown-to-org-filter~ by replacing expensive regular
+  expressions with linear line parsing for inline fences.
+- Add regression test ~test-ellama-md-to-org-inline-fence-long-line~ to cover
+  long lines with inline code fences and prevent this failure from returning.
 * Version 1.12.9
 - Fix result delivery for already approved async tools. Ensure results are
   delivered via callback function for both interactive and pre‑approved tools.
