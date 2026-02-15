@@ -842,6 +842,10 @@ That's it."))))
     (should (string-match-p "#\\+END_SRC" result))
     (should (string-match-p "#\\+END_QUOTE" result))))
 
+(ert-deftest test-ellama-replace-bad-code-blocks-no-src-blocks ()
+  (let ((text "\n#+BEGIN_QUOTE\n((shell_command . ))\n#+END_QUOTE\n"))
+    (should (string-equal (ellama--replace-bad-code-blocks text) text))))
+
 (ert-deftest test-ellama-md-to-org-code-inline-latex ()
   (let ((result (ellama--translate-markdown-to-org-filter "_some italic_
 $$P_\\theta(Y_T, ..., Y_2|Y_1, x_1, ..., x_T)$$

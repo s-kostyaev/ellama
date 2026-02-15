@@ -568,17 +568,18 @@ It should be a function with single argument generated text string."
   "Replace code src blocks in TEXT."
   (with-temp-buffer
     (insert (propertize text 'hard t))
-    (goto-char (point-min))
-    ;; skip good code blocks
-    (while (re-search-forward "#\\+BEGIN_SRC\\(.\\|\n\\)*?#\\+END_SRC" nil t))
-    (while (re-search-forward "#\\+END_SRC\\(\\(.\\|\n\\)*?\\)#\\+END_SRC" nil t)
-      (unless (string-match-p "#\\+BEGIN_SRC" (match-string 1))
-	(replace-match "#+BEGIN_SRC\\1#+END_SRC")))
-    (goto-char (match-beginning 0))
-    (while (re-search-backward "#\\+END_SRC\\(\\(.\\|\n\\)*?\\)#\\+END_SRC" nil t)
-      (unless (string-match-p "#\\+BEGIN_SRC" (match-string 1))
-	(replace-match "#+BEGIN_SRC\\1#+END_SRC"))
-      (goto-char (match-beginning 0)))
+    (let ((open-blocks 0)
+          (pattern
+           "^\\([[:blank:]]*\\)#\\+\\(BEGIN_SRC\\|END_SRC\\)\\(?:[[:blank:]].*\\)?$"))
+      (goto-char (point-min))
+      (while (re-search-forward pattern nil t)
+        (if (string= (match-string 2) "BEGIN_SRC")
+            (setq open-blocks (1+ open-blocks))
+          (if (> open-blocks 0)
+              (setq open-blocks (1- open-blocks))
+            (let ((indent (match-string 1)))
+              (replace-match (concat indent "#+BEGIN_SRC") t t))
+            (setq open-blocks (1+ open-blocks))))))
     (buffer-substring-no-properties (point-min) (point-max))))
 
 (defun ellama--replace (from to beg end)
