@@ -33,6 +33,29 @@
 (require 'json)
 (require 'llm)
 
+(declare-function llm-standard-provider-p "llm-provider-utils" (provider))
+(declare-function ellama-new-session "ellama"
+                  (provider prompt &optional ephemeral))
+(declare-function ellama-session-extra "ellama" (session))
+(declare-function ellama-session-id "ellama" (session))
+(declare-function ellama-stream "ellama" (prompt &rest args))
+
+(defvar ellama-provider)
+(defvar ellama-coding-provider)
+(defvar ellama--current-session)
+(defvar ellama--current-session-id)
+
+(defvar ellama-tools-available nil
+  "Alist containing all registered tools.")
+
+(defvar ellama-tools-enabled nil
+  "List of tools that have been enabled.")
+
+(defun ellama-tools--set-session-extra (session extra)
+  "Set SESSION EXTRA."
+  (with-no-warnings
+    (setf (ellama-session-extra session) extra)))
+
 (defcustom ellama-tools-allow-all nil
   "Allow `ellama' using all the tools without user confirmation.
 Dangerous.  Use at your own risk."
@@ -111,12 +134,6 @@ Tools from this list will work without user confirmation."
       (while (not (llm-standard-provider-p provider))
         (setq provider (eval provider)))
       provider)))
-
-(defvar ellama-tools-available nil
-  "Alist containing all registered tools.")
-
-(defvar ellama-tools-enabled nil
-  "List of tools that have been enabled.")
 
 (defvar-local ellama-tools-confirm-allowed (make-hash-table)
   "Contains hash table of allowed functions.
@@ -828,8 +845,9 @@ CALLBACK will be used to report result asyncronously."
       (let* ((extra (ellama-session-extra ,session))
              (done (plist-get extra :task-completed)))
         (unless done
-          (setf (ellama-session-extra ,session)
-                (plist-put extra :task-completed t))
+          (ellama-tools--set-session-extra
+           ,session
+           (plist-put extra :task-completed t))
           (funcall ,callback result)))
       "Result received. Task completed.")
     :name "report_result"
@@ -849,12 +867,14 @@ CALLBACK will be used to report result asyncronously."
      (done
       (message "Subagent finished."))
      ((>= steps max)
-      (setf (ellama-session-extra session)
-            (plist-put extra :task-completed t))
+      (ellama-tools--set-session-extra
+       session
+       (plist-put extra :task-completed t))
       (funcall callback (format "Max steps (%d) reached." max)))
      (t
-      (setf (ellama-session-extra session)
-            (plist-put extra :step-count (1+ steps)))
+      (ellama-tools--set-session-extra
+       session
+       (plist-put extra :step-count (1+ steps)))
       (ellama-stream
        ellama-tools-subagent-continue-prompt
        :session session
@@ -896,15 +916,16 @@ ROLE       – role key from `ellama-tools-subagent-roles'."
     ;; Initialize session state (single source of truth)
     ;; ============================================================
 
-    (setf (ellama-session-extra worker)
-          (list
-           :parent-session parent-id
-           :role role-key
-           :tools all-tools
-           :result-callback callback
-           :task-completed nil
-           :step-count 0
-           :max-steps steps-limit))
+    (ellama-tools--set-session-extra
+     worker
+     (list
+      :parent-session parent-id
+      :role role-key
+      :tools all-tools
+      :result-callback callback
+      :task-completed nil
+      :step-count 0
+      :max-steps steps-limit))
 
     ;; ============================================================
     ;; Start the agent loop

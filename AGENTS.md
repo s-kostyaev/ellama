@@ -4,6 +4,7 @@
 
 1. **Build**: `make build`
 2. **Run unit tests** (ERT): `make test`
+3. **Check native compilation warnings**: `make check-compile-warnings`
 
 ## Code Style Guidelines
 
