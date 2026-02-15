@@ -17,6 +17,8 @@
 - **Docstrings**: One‑line summary, then optional details; keep under 80 chars
   per line. Do not add empty lines. If there are multiple sentences on one line,
   sentences should be separated by two spaces.
+  Use base verb form in function docstrings (no `-s`), e.g. `contain` not
+  `contains`, `return` not `returns`.
 - **Comments**: Prefix with `;;` for buffer comments; avoid inline `#` clutter.
 
 ## Operation Guidelines
