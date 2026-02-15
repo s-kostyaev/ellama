@@ -833,6 +833,15 @@ That's it."))))
 (message \"ok\")
 #+END_SRC"))))
 
+(ert-deftest test-ellama-md-to-org-inline-fence-long-line ()
+  (let* ((long-part (make-string 150000 ?a))
+         (text (concat "<think>\n" long-part "```text\nbody\n```\n</think>"))
+         (result (ellama--translate-markdown-to-org-filter text)))
+    (should (string-match-p "#\\+BEGIN_QUOTE" result))
+    (should (string-match-p "#\\+BEGIN_SRC text" result))
+    (should (string-match-p "#\\+END_SRC" result))
+    (should (string-match-p "#\\+END_QUOTE" result))))
+
 (ert-deftest test-ellama-md-to-org-code-inline-latex ()
   (let ((result (ellama--translate-markdown-to-org-filter "_some italic_
 $$P_\\theta(Y_T, ..., Y_2|Y_1, x_1, ..., x_T)$$

@@ -530,8 +530,39 @@ It should be a function with single argument generated text string."
 (defun ellama--replace-first-begin-src (text)
   "Replace first begin src in TEXT."
   (if (not (string-match-p (rx (literal "#+BEGIN_SRC")) text))
-      (replace-regexp-in-string "^[[:space:]]*```\\(\\(.\\|\n\\)*\\)" "#+BEGIN_SRC\\1" text)
+      (with-temp-buffer
+        (insert text)
+        (goto-char (point-min))
+        (when (re-search-forward "^[[:space:]]*```" nil t)
+          (replace-match "#+BEGIN_SRC" t t))
+        (buffer-substring-no-properties (point-min) (point-max)))
     text))
+
+(defun ellama--replace-inline-code-fences (text)
+  "Replace inline markdown code fences in TEXT with org equivalents."
+  (with-temp-buffer
+    (insert text)
+    (goto-char (point-min))
+    (while (not (eobp))
+      (let* ((line-beg (line-beginning-position))
+             (line-end (line-end-position))
+             (line (buffer-substring-no-properties line-beg line-end))
+             (fence-pos (string-match "```" line)))
+        ;; Handle cases like `text ```lang' and `text ```text'.
+        (when (and fence-pos (> fence-pos 0))
+          (let ((prefix (substring line 0 fence-pos))
+                (suffix (substring line (+ fence-pos 3))))
+            (cond
+             ((string-match-p "\\`[A-Za-z0-9-]+\\'" suffix)
+              (goto-char line-beg)
+              (delete-region line-beg line-end)
+              (insert prefix "\n#+BEGIN_SRC " suffix))
+             ((not (string= suffix ""))
+              (goto-char line-beg)
+              (delete-region line-beg line-end)
+              (insert prefix "\n#+END_SRC\n" suffix))))))
+      (forward-line 1))
+    (buffer-substring-no-properties (point-min) (point-max))))
 
 (defun ellama--replace-bad-code-blocks (text)
   "Replace code src blocks in TEXT."
@@ -655,8 +686,7 @@ This filter contains only subset of markdown syntax to be good enough."
     text
     ;; code blocks
     (replace-regexp-in-string "^[[:space:]]*```\\(.+\\)$" "#+BEGIN_SRC \\1")
-    (replace-regexp-in-string "^\\(.+\\)```\\([A-Za-z0-9\\-]+\\)$" "\\1\n#+BEGIN_SRC \\2")
-    (replace-regexp-in-string "^\\(.+\\)```\\(.+\\)$" "\\1\n#+END_SRC\n\\2")
+    (ellama--replace-inline-code-fences)
     (ellama--replace-first-begin-src)
     (replace-regexp-in-string "^<!-- language: \\(.+\\) -->\n```" "#+BEGIN_SRC \\1")
     (replace-regexp-in-string "^[[:space:]]*```$" "#+END_SRC")
