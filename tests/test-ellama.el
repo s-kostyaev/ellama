@@ -1061,6 +1061,42 @@ region, season, or type)! 🍎🍊"))))
       (ert-fail (format "Timeout while waiting result for: %s" cmd)))
     result))
 
+(defun ellama-test--named-tool-no-args ()
+  "Return constant string."
+  "zero")
+
+(defun ellama-test--named-tool-one-arg (arg)
+  "Return ARG with prefix."
+  (format "one:%s" arg))
+
+(defun ellama-test--named-tool-two-args (arg1 arg2)
+  "Return ARG1 and ARG2 with prefix."
+  (format "two:%s:%s" arg1 arg2))
+
+(defun ellama-test--make-confirm-wrapper-old (function)
+  "Make wrapper for FUNCTION using old confirm call style."
+  (lambda (&rest args)
+    (apply #'ellama-tools-confirm function args)))
+
+(defun ellama-test--make-confirm-wrapper-new (function name)
+  "Make wrapper for FUNCTION and NAME using wrapper factory."
+  (ellama-tools--make-confirm-wrapper function name))
+
+(defun ellama-test--invoke-confirm-with-yes (wrapper &rest args)
+  "Call WRAPPER with ARGS and auto-answer confirmation with yes.
+Return list with result and prompt."
+  (let ((ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all nil)
+        (ellama-tools-allowed nil)
+        result
+        prompt)
+    (cl-letf (((symbol-function 'read-char-choice)
+               (lambda (message _choices)
+                 (setq prompt message)
+                 ?y)))
+      (setq result (apply wrapper args)))
+    (list result prompt)))
+
 (ert-deftest test-ellama-shell-command-tool-empty-success-output ()
   (should
    (string=
@@ -1117,6 +1153,87 @@ region, season, or type)! 🍎🍊"))))
             (should (string-match-p "Research Plan" result))))
       (when (file-exists-p file)
         (delete-file file)))))
+
+(ert-deftest test-ellama-tools-confirm-wrapped-named-no-args-old-and-new ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((old-wrapper (ellama-test--make-confirm-wrapper-old
+                       #'ellama-test--named-tool-no-args))
+         (new-wrapper (ellama-test--make-confirm-wrapper-new
+                       #'ellama-test--named-tool-no-args
+                       "named_tool"))
+         (old-call (ellama-test--invoke-confirm-with-yes old-wrapper))
+         (new-call (ellama-test--invoke-confirm-with-yes new-wrapper)))
+    (should (equal (car old-call) "zero"))
+    (should (equal (car new-call) "zero"))
+    (should
+     (string-match-p
+      "Allow calling ellama-test--named-tool-no-args with arguments: \\?"
+      (cadr old-call)))
+    (should
+     (string-match-p
+      "Allow calling ellama-test--named-tool-no-args with arguments: \\?"
+      (cadr new-call)))))
+
+(ert-deftest test-ellama-tools-confirm-wrapped-named-one-arg-old-and-new ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((old-wrapper (ellama-test--make-confirm-wrapper-old
+                       #'ellama-test--named-tool-one-arg))
+         (new-wrapper (ellama-test--make-confirm-wrapper-new
+                       #'ellama-test--named-tool-one-arg
+                       "named_tool"))
+         (old-call (ellama-test--invoke-confirm-with-yes old-wrapper "A"))
+         (new-call (ellama-test--invoke-confirm-with-yes new-wrapper "A")))
+    (should (equal (car old-call) "one:A"))
+    (should (equal (car new-call) "one:A"))
+    (should
+     (string-match-p
+      "Allow calling ellama-test--named-tool-one-arg with arguments: A\\?"
+      (cadr old-call)))
+    (should
+     (string-match-p
+      "Allow calling ellama-test--named-tool-one-arg with arguments: A\\?"
+      (cadr new-call)))))
+
+(ert-deftest test-ellama-tools-confirm-wrapped-named-two-args-old-and-new ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((old-wrapper (ellama-test--make-confirm-wrapper-old
+                       #'ellama-test--named-tool-two-args))
+         (new-wrapper (ellama-test--make-confirm-wrapper-new
+                       #'ellama-test--named-tool-two-args
+                       "named_tool"))
+         (old-call (ellama-test--invoke-confirm-with-yes old-wrapper "A" "B"))
+         (new-call (ellama-test--invoke-confirm-with-yes new-wrapper "A" "B")))
+    (should (equal (car old-call) "two:A:B"))
+    (should (equal (car new-call) "two:A:B"))
+    (should
+     (string-match-p
+      "Allow calling ellama-test--named-tool-two-args with arguments: A, B\\?"
+      (cadr old-call)))
+    (should
+     (string-match-p
+      "Allow calling ellama-test--named-tool-two-args with arguments: A, B\\?"
+      (cadr new-call)))))
+
+(ert-deftest test-ellama-tools-confirm-prompt-uses-tool-name-for-lambda ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((ellama-tools-confirm-allowed (make-hash-table))
+         (ellama-tools-allow-all nil)
+         (ellama-tools-allowed nil)
+         (tool-plist `(:function ,(lambda (_arg) "ok")
+                       :name "mcp_tool"
+                       :args ((:name "arg" :type string))))
+         (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+         (wrapped-func (plist-get wrapped :function))
+         seen-prompt)
+    (cl-letf (((symbol-function 'read-char-choice)
+               (lambda (prompt _choices)
+                 (setq seen-prompt prompt)
+                 ?n)))
+      (funcall wrapped-func "value"))
+    (should
+     (string-match-p
+      "Allow calling mcp_tool with arguments: value\\?"
+      seen-prompt))))
 
 (provide 'test-ellama)
 

@@ -139,16 +139,14 @@ Tools from this list will work without user confirmation."
   "Contains hash table of allowed functions.
 Key is a function name symbol.  Value is a boolean t.")
 
-(defun ellama-tools-confirm (function &rest args)
-  "Ask user for confirmation before calling FUNCTION with ARGS.
+(defun ellama-tools--confirm-call (function function-name &rest args)
+  "Ask for confirmation before calling FUNCTION named FUNCTION-NAME.
+ARGS are passed to FUNCTION.
 Generates prompt automatically.  User can approve once (y), approve
 for all future calls (a), forbid (n), or view the details in a
 buffer (v) before deciding.  Returns the result of FUNCTION if
 approved, \"Forbidden by the user\" otherwise."
-  (let ((function-name (if (symbolp function)
-			   (symbol-name function)
-			 "anonymous-function"))
-	(confirmation (gethash function ellama-tools-confirm-allowed nil)))
+  (let ((confirmation (gethash function ellama-tools-confirm-allowed nil)))
     (cond
      ;; If user has approved all calls, just execute the function
      ((or confirmation
@@ -238,11 +236,43 @@ approved, \"Forbidden by the user\" otherwise."
                 (funcall cb result-str)
               (or result-str "done")))))))))
 
+(defun ellama-tools-confirm (function &rest args)
+  "Ask user for confirmation before calling FUNCTION with ARGS."
+  (apply #'ellama-tools--confirm-call
+	 function
+	 (if (symbolp function)
+	     (symbol-name function)
+	   "anonymous-function")
+	 args))
+
+(defun ellama-tools-confirm-with-name (function name &rest args)
+  "Ask user for confirmation before calling FUNCTION with ARGS.
+NAME is fallback label used when FUNCTION has no symbol name."
+  (apply #'ellama-tools--confirm-call
+	 function
+	 (if (symbolp function)
+	     (symbol-name function)
+	   (cond
+	    ((stringp name) name)
+	    ((symbolp name) (symbol-name name))
+	    (t "anonymous-function")))
+	 args))
+
+(defun ellama-tools--make-confirm-wrapper (func name)
+  "Make confirmation wrapper for FUNC.
+NAME is fallback label used when FUNC has no symbol name."
+  (if (symbolp func)
+      (lambda (&rest args)
+	(apply #'ellama-tools-confirm func args))
+    (lambda (&rest args)
+      (apply #'ellama-tools-confirm-with-name func name args))))
+
 (defun ellama-tools-wrap-with-confirm (tool-plist)
   "Wrap a tool's function with automatic confirmation.
 TOOL-PLIST is a property list in the format expected by `llm-make-tool'.
 Returns a new tool definition with the :function wrapped."
   (let* ((func (plist-get tool-plist :function))
+         (name (plist-get tool-plist :name))
          (args (plist-get tool-plist :args))
          (wrapped-args
           (mapcar
@@ -254,8 +284,7 @@ Returns a new tool definition with the :function wrapped."
                                   (intern type))))
                (plist-put arg :type wrapped-type)))
            args))
-         (wrapped-func (lambda (&rest args)
-                         (apply #'ellama-tools-confirm func args))))
+         (wrapped-func (ellama-tools--make-confirm-wrapper func name)))
     ;; Return a new plist with the wrapped function
     (setq tool-plist (plist-put tool-plist :function wrapped-func))
     (plist-put tool-plist :args wrapped-args)))

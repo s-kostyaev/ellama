@@ -1,3 +1,9 @@
+* Version 1.12.13
+- Refactor confirmation system architecture. Split confirmation logic into
+  reusable internal functions and improved wrapper factory. The system now
+  accepts explicit tool names and uses them in confirmation prompts for lambda
+  functions. This change improves ellama confirmation and makes it easier to
+  extend.
 * Version 1.12.12
 - Add native compilation warnings check. This adds a new check-compile-warnings
   Make target that allows developers to verify native compilation warnings.
