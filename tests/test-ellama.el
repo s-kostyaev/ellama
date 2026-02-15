@@ -37,6 +37,50 @@
    (file-name-directory (or load-file-name buffer-file-name)))
   "Project root directory for test assets.")
 
+(defun ellama-test--fake-stream-partials (response style)
+  "Return streaming partial strings for RESPONSE using STYLE."
+  (let ((prev "")
+        (chunks (pcase style
+                  ('line (string-lines response))
+                  ((or 'word-leading 'word-trailing)
+                   (string-split response " "))
+                  (_ (error "Unknown style %S" style)))))
+    (mapcar
+     (lambda (chunk)
+       (setq prev
+             (pcase style
+               ('line (concat prev chunk))
+               ('word-leading (concat prev " " chunk))
+               ('word-trailing (concat prev chunk " "))))
+       prev)
+     chunks)))
+
+(defun ellama-test--run-with-fake-streaming (response prompt-regexp fn
+						      &optional style)
+  "Run FN with fake streaming RESPONSE and assert PROMPT-REGEXP.
+STYLE controls partial message shape.  Default value is `word-leading'."
+  (let* ((provider
+          (make-llm-fake
+           :chat-action-func (lambda () response)))
+         (ellama-provider provider)
+         (ellama-coding-provider provider)
+         (ellama-response-process-method 'streaming)
+         (ellama-spinner-enabled nil)
+         (partial-style (or style 'word-leading)))
+    (cl-letf (((symbol-function 'llm-chat-streaming)
+               (lambda (stream-provider prompt partial-callback
+                        response-callback _error-callback _multi-output)
+                 (should (string-match-p prompt-regexp
+                                         (llm-chat-prompt-to-text prompt)))
+                 (let ((response-plist (llm-chat stream-provider prompt t)))
+                   (dolist (partial
+                            (ellama-test--fake-stream-partials
+                             (plist-get response-plist :text)
+                             partial-style))
+                     (funcall partial-callback `(:text ,partial)))
+                   (funcall response-callback response-plist)))))
+      (funcall fn))))
+
 (ert-deftest test-ellama--code-filter ()
   (should (equal "" (ellama--code-filter "")))
   (should (equal "(hello)" (ellama--code-filter "(hello)")))
@@ -44,20 +88,16 @@
 
 (ert-deftest test-ellama-code-improve ()
   (let ((original "(hello)\n")
-        (improved "```lisp\n(hello)\n```")
-        (ellama-provider (make-llm-fake))
-        prev-lines)
+        (improved "```lisp\n(hello)\n```"))
     (with-temp-buffer
       (insert original)
-      (cl-letf (((symbol-function 'llm-chat-streaming)
-                 (lambda (_provider prompt partial-callback response-callback _error-callback _multi-output)
-                   (should (string-match original (llm-chat-prompt-to-text prompt)))
-                   (dolist (s (string-lines improved))
-                     (funcall partial-callback `(:text ,(concat prev-lines s)))
-                     (setq prev-lines (concat prev-lines s)))
-                   (funcall response-callback `(:text ,improved)))))
-        (ellama-code-improve)
-        (should (equal original (buffer-string)))))))
+      (ellama-test--run-with-fake-streaming
+       improved
+       original
+       (lambda ()
+         (ellama-code-improve))
+       'line)
+      (should (equal original (buffer-string))))))
 
 (ert-deftest test-ellama-lorem-ipsum ()
   (let ((fill-column 70)
@@ -73,19 +113,16 @@ tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
 veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex
 ea commodo consequat. Duis aute irure dolor in reprehenderit in
 voluptate velit esse cillum dolore eu fugiat nulla pariatur.")
-        (ellama-provider (make-llm-fake))
-        prev-lines)
+        )
     (with-temp-buffer
       (org-mode)
-      (cl-letf (((symbol-function 'llm-chat-streaming)
-	         (lambda (_provider prompt partial-callback response-callback _error-callback _multi-output)
-	           (should (string-match "test" (llm-chat-prompt-to-text prompt)))
-	           (dolist (s (string-split raw " "))
-	             (funcall partial-callback `(:text ,(concat prev-lines " " s)))
-	             (setq prev-lines (concat prev-lines " " s)))
-	           (funcall response-callback `(:text ,raw)))))
-        (ellama-write "test")
-        (should (equal expected (buffer-string)))))))
+      (ellama-test--run-with-fake-streaming
+       raw
+       "test"
+       (lambda ()
+         (ellama-write "test"))
+       'word-leading)
+      (should (equal expected (buffer-string))))))
 
 (ert-deftest test-ellama-sieve-of-eratosthenes ()
   (let* ((fill-column 80)
@@ -435,19 +472,18 @@ circumference with remarkable accuracy!
 
 Let me know if you'd like to see a visual version, or try it with a different
 number! 😊")
-	 (ellama-provider (make-llm-fake))
-	 prev-lines)
+	 )
     (with-temp-buffer
       (org-mode)
-      (cl-letf (((symbol-function 'llm-chat-streaming)
-		 (lambda (_provider prompt partial-callback response-callback _error-callback _multi-output)
-		   (should (string-match "test" (llm-chat-prompt-to-text prompt)))
-		   (dolist (s (string-split raw " "))
-		     (funcall partial-callback `(:text ,(concat prev-lines " " s)))
-		     (setq prev-lines (concat prev-lines " " s)))
-		   (funcall response-callback `(:text ,raw)))))
-	(ellama-write "test")
-	(should (equal expected (buffer-substring-no-properties (point-min) (point-max))))))))
+      (ellama-test--run-with-fake-streaming
+       raw
+       "test"
+       (lambda ()
+         (ellama-write "test"))
+       'word-leading)
+      (should (equal expected
+                     (buffer-substring-no-properties (point-min)
+                                                     (point-max)))))))
 
 (ert-deftest test-ellama-duplicate-strings ()
   (let ((fill-column 80)
@@ -463,19 +499,80 @@ Scratch)\"* depends on your *goals, background, and learning style*. Here’s a
 detailed comparison to help you decide:
 
 ---")
-	(ellama-provider (make-llm-fake))
-	prev-lines)
+	)
     (with-temp-buffer
       (org-mode)
-      (cl-letf (((symbol-function 'llm-chat-streaming)
-		 (lambda (_provider prompt partial-callback response-callback _error-callback _multi-output)
-		   (should (string-match "test" (llm-chat-prompt-to-text prompt)))
-		   (dolist (s (string-split raw " "))
-		     (funcall partial-callback `(:text ,(concat prev-lines s " ")))
-		     (setq prev-lines (concat prev-lines s " ")))
-		   (funcall response-callback `(:text ,raw)))))
-	(ellama-write "test")
-	(should (equal expected (buffer-string)))))))
+      (ellama-test--run-with-fake-streaming
+       raw
+       "test"
+       (lambda ()
+         (ellama-write "test"))
+       'word-trailing)
+      (should (equal expected (buffer-string))))))
+
+(ert-deftest test-ellama-stream-llm-fake-output-to-buffer ()
+  (let* ((ellama-provider
+          (make-llm-fake
+           :output-to-buffer "*ellama-fake-log*"
+           :chat-action-func (lambda () "Fake answer")))
+         (ellama-response-process-method 'streaming)
+         (ellama-spinner-enabled nil)
+         (ellama-fill-paragraphs nil)
+         done-text)
+    (unwind-protect
+        (with-temp-buffer
+          (cl-letf (((symbol-function 'sleep-for)
+                     (lambda (&rest _args) nil)))
+            (ellama-stream "test prompt"
+                           :provider ellama-provider
+                           :buffer (current-buffer)
+                           :on-done (lambda (text) (setq done-text text))))
+          (should (equal done-text "Fake answer"))
+          (should (equal (buffer-string) "Fake answer"))
+          (with-current-buffer (get-buffer-create "*ellama-fake-log*")
+            (let ((log (buffer-string)))
+              (should (string-match-p "Call to llm-chat-streaming" log))
+              (should (string-match-p "test prompt" log)))))
+      (let ((buf (get-buffer "*ellama-fake-log*")))
+        (when buf
+          (kill-buffer buf))))))
+
+(ert-deftest test-ellama-stream-retry-with-llm-fake-tool-call-error ()
+  (let* ((call-count 0)
+         (error-captured nil)
+         (done-text nil)
+         (_ (unless (get 'ellama-test-tool-call-error 'error-conditions)
+              (define-error 'ellama-test-tool-call-error
+                "Tool call error used in tests"
+                'llm-tool-call-error)))
+         (ellama-provider
+          (make-llm-fake
+           :chat-action-func
+           (lambda ()
+             (setq call-count (1+ call-count))
+             (if (= call-count 1)
+                 '(ellama-test-tool-call-error "Temporary tool failure")
+               "Recovered answer"))))
+         (ellama-response-process-method 'async)
+         (ellama-spinner-enabled nil)
+         (ellama-fill-paragraphs nil))
+    (cl-letf (((symbol-function 'llm-chat-async)
+               (lambda (provider prompt response-callback error-callback
+                        &optional _multi-output)
+                 (condition-case err
+                     (funcall response-callback (llm-chat provider prompt t))
+                   (t (funcall error-callback (car err) (cdr err))))
+                 nil)))
+      (with-temp-buffer
+        (ellama-stream "test retry"
+                       :provider ellama-provider
+                       :buffer (current-buffer)
+                       :on-error (lambda (msg) (setq error-captured msg))
+                       :on-done (lambda (text) (setq done-text text)))
+        (should (= call-count 2))
+        (should (null error-captured))
+        (should (equal done-text "Recovered answer"))
+        (should (equal (buffer-string) "Recovered answer"))))))
 
 (ert-deftest test-ellama-context-element-format-buffer-markdown ()
   (let ((element (ellama-context-element-buffer :name "*scratch*")))
