@@ -1,3 +1,17 @@
+* Version 1.12.11
+- Fix duplicate system message handling in chat prompts. This change removes the
+  redundant ~llm-chat-prompt-append-response~ call that was appending the system
+  message on each interaction, ensuring the system message is included only once
+  in the initial prompt context setup.
+- Fix bad src block replacement nil match crash that occurred when handling
+  certain source code blocks.
+- Warn LLM when reading binary content to prevent potential parsing errors and
+  improve robustness of tool integration.
+- Generalize docstring verb-form rule to apply consistently across documentation
+  and code.
+- Implement automatic retry for tool call errors. This feature adds retry logic
+  to handle transient failures during tool usage by appending error messages to
+  the prompt and re-invoking requests, improving overall request reliability.
 * Version 1.12.10
 - Fix stack overflow in markdown code fence conversion in
   ~ellama--translate-markdown-to-org-filter~ by replacing expensive regular
