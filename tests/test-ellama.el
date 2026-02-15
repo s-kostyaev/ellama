@@ -1137,6 +1137,105 @@ region, season, or type)! 🍎🍊"))))
     (should (equal captured
 		   '("Unknown tool 'search' called" system)))))
 
+(ert-deftest test-ellama-remove-reasoning ()
+  (should (equal
+           (ellama-remove-reasoning "<think>\nabc\n</think>\nFinal")
+           "Final"))
+  (should (equal
+           (ellama-remove-reasoning "Before <think>x</think> After")
+           "Before  After")))
+
+(ert-deftest test-ellama-mode-derived-helpers ()
+  (let ((ellama-major-mode 'org-mode)
+        (ellama-nick-prefix-depth 3))
+    (should (equal (ellama-get-nick-prefix-for-mode) "***"))
+    (should (equal (ellama-get-session-file-extension) "org")))
+  (let ((ellama-major-mode 'text-mode)
+        (ellama-nick-prefix-depth 2))
+    (should (equal (ellama-get-nick-prefix-for-mode) "##"))
+    (should (equal (ellama-get-session-file-extension) "md"))))
+
+(ert-deftest test-ellama--tool-call-error-p ()
+  (unless (get 'ellama-test-tool-call-error-2 'error-conditions)
+    (define-error 'ellama-test-tool-call-error-2
+      "Tool call test error"
+      'llm-tool-call-error))
+  (should (ellama--tool-call-error-p 'ellama-test-tool-call-error-2))
+  (should-not (ellama--tool-call-error-p 'error))
+  (should-not (ellama--tool-call-error-p nil)))
+
+(ert-deftest test-ellama--error-handler-retry-on-tool-call-error ()
+  (unless (get 'ellama-test-tool-call-error-3 'error-conditions)
+    (define-error 'ellama-test-tool-call-error-3
+      "Tool call retry error"
+      'llm-tool-call-error))
+  (let ((retry-called nil)
+        (err-called nil)
+        (appended nil))
+    (with-temp-buffer
+      (cl-letf (((symbol-function 'ellama--append-tool-error-to-prompt)
+                 (lambda (_prompt msg)
+                   (setq appended msg))))
+        (let ((handler
+               (ellama--error-handler
+                (current-buffer)
+                (lambda (_msg) (setq err-called t))
+                'prompt
+                (lambda () (setq retry-called t)))))
+          (funcall handler 'ellama-test-tool-call-error-3 "tool failed"))))
+    (should retry-called)
+    (should-not err-called)
+    (should (equal appended "tool failed"))))
+
+(ert-deftest test-ellama--error-handler-calls-errcb-for-non-tool-errors ()
+  (let ((err-msg nil)
+        (request-mode-arg nil)
+        (spinner-stop-called nil)
+        (ellama--change-group (prepare-change-group))
+        (ellama-spinner-enabled t))
+    (with-temp-buffer
+      (setq-local ellama--current-request 'request)
+      (activate-change-group ellama--change-group)
+      (cl-letf (((symbol-function 'cancel-change-group)
+                 (lambda (_cg) nil))
+                ((symbol-function 'spinner-stop)
+                 (lambda () (setq spinner-stop-called t)))
+                ((symbol-function 'ellama-request-mode)
+                 (lambda (arg)
+                   (setq request-mode-arg arg))))
+        (let ((handler
+               (ellama--error-handler
+                (current-buffer)
+                (lambda (msg) (setq err-msg msg))
+                'prompt
+                (lambda () (error "Retry should not run")))))
+          (funcall handler 'error "bad")))
+      (should (null ellama--current-request)))
+    (should (equal err-msg "bad"))
+    (should (equal request-mode-arg -1))
+    (should spinner-stop-called)))
+
+(ert-deftest test-ellama-chat-done-appends-user-header-and-callbacks ()
+  (let* ((ellama-major-mode 'org-mode)
+         (ellama-user-nick "Tester")
+         (ellama-nick-prefix-depth 2)
+         (ellama-session-auto-save nil)
+         (global-callback-text nil)
+         (local-callback-text nil)
+         (ellama-chat-done-callback (lambda (text)
+                                      (setq global-callback-text text))))
+    (with-temp-buffer
+      (insert "Assistant output")
+      (cl-letf (((symbol-function 'ellama--scroll)
+                 (lambda (&optional _buffer _point) nil)))
+        (ellama-chat-done "final"
+                          (lambda (text)
+                            (setq local-callback-text text))))
+      (should (equal (buffer-string)
+                     "Assistant output\n\n** Tester:\n"))
+      (should (equal global-callback-text "final"))
+      (should (equal local-callback-text "final")))))
+
 (defun ellama-test--ensure-local-ellama-tools ()
   "Ensure tests use local `ellama-tools.el' from project root."
   (unless (fboundp 'ellama-tools--sanitize-tool-text-output)
