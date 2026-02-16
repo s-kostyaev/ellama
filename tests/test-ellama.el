@@ -1431,6 +1431,285 @@ Return list with result and prompt."
       "Allow calling mcp_tool with arguments: value\\?"
       seen-prompt))))
 
+(ert-deftest test-ellama-tools-wrap-with-confirm-preserves-arg-types ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((tool-plist '(:function ignore
+                       :name "typed_tool"
+                       :args ((:name "a" :type string)
+                              (:name "b" :type number))))
+         (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+         (types (mapcar (lambda (arg) (plist-get arg :type))
+                        (plist-get wrapped :args))))
+    (should (equal types '(string number)))))
+
+(ert-deftest test-ellama-tools-edit-file-tool-replace-at-file-start ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-edit-start-")))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "abcde"))
+          (ellama-tools-edit-file-tool file "ab" "XX")
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (equal (buffer-string) "XXcde"))))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest
+    test-ellama-tools-enable-by-name-tool-missing-name-does-not-add-nil ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-enabled nil)
+        (ellama-tools-available nil))
+    (ellama-tools-enable-by-name-tool "missing")
+    (should (null ellama-tools-enabled))))
+
+(ert-deftest test-ellama-tools-confirm-answer-always-caches-approval ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all nil)
+        (ellama-tools-allowed nil)
+        (prompt-count 0))
+    (cl-letf (((symbol-function 'read-char-choice)
+               (lambda (_prompt _choices)
+                 (setq prompt-count (1+ prompt-count))
+                 ?a)))
+      (should (equal (ellama-tools-confirm 'ellama-test--named-tool-one-arg "A")
+                     "one:A"))
+      (should (equal (ellama-tools-confirm 'ellama-test--named-tool-one-arg "B")
+                     "one:B")))
+    (should (= prompt-count 1))
+    (should (gethash 'ellama-test--named-tool-one-arg
+                     ellama-tools-confirm-allowed))))
+
+(ert-deftest test-ellama-tools-confirm-answer-reply-returns-user-text ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all nil)
+        (ellama-tools-allowed nil))
+    (cl-letf (((symbol-function 'read-char-choice)
+               (lambda (_prompt _choices) ?r))
+              ((symbol-function 'read-string)
+               (lambda (_prompt &rest _args) "custom reply")))
+      (should (equal
+               (ellama-tools-confirm 'ellama-test--named-tool-one-arg "A")
+               "custom reply")))))
+
+(ert-deftest test-ellama-tools-confirm-answer-no-returns-forbidden ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all nil)
+        (ellama-tools-allowed nil))
+    (cl-letf (((symbol-function 'read-char-choice)
+               (lambda (_prompt _choices) ?n)))
+      (should (equal
+               (ellama-tools-confirm 'ellama-test--named-tool-one-arg "A")
+               "Forbidden by the user")))))
+
+(ert-deftest test-ellama-read-file-tool-missing-file ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((missing-file
+         (expand-file-name "missing-file-ellama-test.txt"
+                           (make-temp-name temporary-file-directory))))
+    (should (string-match-p "doesn't exists"
+                            (ellama-tools-read-file-tool missing-file)))))
+
+(ert-deftest test-ellama-tools-write-append-prepend-roundtrip ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-file-tools-")))
+    (unwind-protect
+        (progn
+          (ellama-tools-write-file-tool file "middle")
+          (ellama-tools-append-file-tool file "-tail")
+          (ellama-tools-prepend-file-tool file "head-")
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (equal (buffer-string) "head-middle-tail"))))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-tools-directory-tree-excludes-dotfiles-and-sorts ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-tree-" t))
+         (a-file (expand-file-name "a.txt" dir))
+         (b-file (expand-file-name "b.txt" dir))
+         (hidden (expand-file-name ".hidden" dir))
+         (result nil))
+    (unwind-protect
+        (progn
+          (with-temp-file b-file (insert "b"))
+          (with-temp-file a-file (insert "a"))
+          (with-temp-file hidden (insert "h"))
+          (setq result (ellama-tools-directory-tree-tool dir))
+          (should-not (string-match-p "\\.hidden" result))
+          (should (< (string-match-p "a\\.txt" result)
+                     (string-match-p "b\\.txt" result))))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest test-ellama-tools-move-file-success-and-error ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((src (make-temp-file "ellama-move-src-"))
+         (dst (concat src "-dst")))
+    (unwind-protect
+        (progn
+          (with-temp-file src (insert "x"))
+          (ellama-tools-move-file-tool src dst)
+          (should (file-exists-p dst))
+          (should-not (file-exists-p src))
+          (should-error (ellama-tools-move-file-tool src dst) :type 'error))
+      (when (file-exists-p src)
+        (delete-file src))
+      (when (file-exists-p dst)
+        (delete-file dst)))))
+
+(ert-deftest test-ellama-tools-lines-range-boundary ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-lines-range-")))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "alpha\nbeta\ngamma\n"))
+          (let ((single-line
+                 (json-parse-string
+                  (ellama-tools-lines-range-tool file 2 2)))
+                (full-range
+                 (json-parse-string
+                  (ellama-tools-lines-range-tool file 1 3))))
+            (should (equal single-line "beta"))
+            (should (equal full-range "alpha\nbeta\ngamma"))))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-tools-apply-patch-validation-branches ()
+  (ellama-test--ensure-local-ellama-tools)
+  (should (equal (ellama-tools-apply-patch-tool nil "patch")
+                 "file-name is required"))
+  (should (equal (ellama-tools-apply-patch-tool "missing-file" nil)
+                 "file missing-file doesn't exists"))
+  (let ((file (make-temp-file "ellama-patch-validate-")))
+    (unwind-protect
+        (should (equal (ellama-tools-apply-patch-tool file nil)
+                       "patch is required"))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-tools-role-and-provider-resolution ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((ellama-provider 'default-provider)
+         (ellama-tools-subagent-roles
+          (list (list "all" :tools :all)
+                (list "subset" :tools '("read_file" "task"))))
+         (ellama-tools-available
+          (list (llm-make-tool :name "task" :function #'ignore)
+                (llm-make-tool :name "read_file" :function #'ignore)
+                (llm-make-tool :name "grep" :function #'ignore))))
+    (should-not
+     (member "task"
+             (mapcar #'llm-tool-name (ellama-tools--for-role "all"))))
+    (should (equal
+             (mapcar #'llm-tool-name (ellama-tools--for-role "subset"))
+             '("task" "read_file")))
+    (should (null (ellama-tools--for-role "missing")))
+    (should (eq (ellama-tools--provider-for-role "all")
+                'default-provider))))
+
+(ert-deftest test-ellama-subagent-loop-handler-max-steps-and-continue ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((updated-extra nil)
+        (callback-msg nil)
+        (stream-call nil))
+    (let* ((session-max
+            (make-ellama-session
+             :id "worker-max"
+             :extra (list :task-completed nil
+                          :step-count 2
+                          :max-steps 2
+                          :result-callback (lambda (msg)
+                                             (setq callback-msg msg)))))
+           (ellama--current-session session-max))
+      (cl-letf (((symbol-function 'ellama-tools--set-session-extra)
+                 (lambda (_session extra)
+                   (setq updated-extra extra)))
+                ((symbol-function 'ellama-stream)
+                 (lambda (prompt &rest args)
+                   (setq stream-call (list prompt args)))))
+        (ellama--subagent-loop-handler "ignored")
+        (should (equal callback-msg "Max steps (2) reached."))
+        (should (plist-get updated-extra :task-completed))
+        (setq callback-msg nil)
+        (setq updated-extra nil)
+        (setq stream-call nil)
+        (let* ((session-continue
+                (make-ellama-session
+                 :id "worker-continue"
+                 :extra (list :task-completed nil
+                              :step-count 1
+                              :max-steps 3
+                              :result-callback (lambda (msg)
+                                                 (setq callback-msg msg)))))
+               (ellama--current-session session-continue))
+          (ellama--subagent-loop-handler "ignored")
+          (should (equal (plist-get updated-extra :step-count) 2))
+          (should (equal (car stream-call)
+                         ellama-tools-subagent-continue-prompt))
+          (should (eq (plist-get (cadr stream-call) :session)
+                      session-continue))
+          (should (eq (plist-get (cadr stream-call) :on-done)
+                      #'ellama--subagent-loop-handler))
+          (should (null callback-msg)))))))
+
+(ert-deftest test-ellama-tools-task-tool-role-fallback-and-report-priority ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama--current-session-id "parent-1")
+        (ellama-tools-subagent-default-max-steps 7)
+        (worker (make-ellama-session :id "worker-1"))
+        (resolved-provider nil)
+        (resolved-provider-role nil)
+        (resolved-tools-role nil)
+        (captured-extra nil)
+        (stream-call nil)
+        (role-tool (llm-make-tool :name "read_file" :function #'ignore)))
+    (cl-letf (((symbol-function 'ellama-tools--provider-for-role)
+               (lambda (role)
+                 (setq resolved-provider-role role)
+                 'provider))
+              ((symbol-function 'ellama-tools--for-role)
+               (lambda (role)
+                 (setq resolved-tools-role role)
+                 (list role-tool)))
+              ((symbol-function 'ellama-new-session)
+               (lambda (provider _prompt ephemeral)
+                 (setq resolved-provider provider)
+                 (should ephemeral)
+                 worker))
+              ((symbol-function 'ellama-tools--set-session-extra)
+               (lambda (_session extra)
+                 (setq captured-extra extra)))
+              ((symbol-function 'ellama-stream)
+               (lambda (prompt &rest args)
+                 (setq stream-call (list prompt args))))
+              ((symbol-function 'message)
+               (lambda (&rest _args) nil)))
+      (should (null (ellama-tools-task-tool (lambda (_res) nil)
+                                            "Do work"
+                                            "unknown-role")))
+      (should (eq resolved-provider 'provider))
+      (should (equal resolved-provider-role "general"))
+      (should (equal resolved-tools-role "general"))
+      (should (equal (plist-get captured-extra :role)
+                     "general"))
+      (should (equal (car stream-call) "Do work"))
+      (should (eq (plist-get (cadr stream-call) :session) worker))
+      (should (equal (plist-get (cadr stream-call) :tools)
+                     (plist-get captured-extra :tools)))
+      (should (string=
+               (llm-tool-name
+                (car (plist-get captured-extra :tools)))
+               "report_result"))
+      (should (eq (cadr (plist-get captured-extra :tools))
+                  role-tool)))))
+
 (provide 'test-ellama)
 
 ;;; test-ellama.el ends here

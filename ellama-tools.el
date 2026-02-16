@@ -277,11 +277,11 @@ Returns a new tool definition with the :function wrapped."
          (wrapped-args
           (mapcar
            (lambda (arg)
-             (let*
-                 ((type (plist-get tool-plist :type))
-                  (wrapped-type (if (symbolp type)
-                                    type
-                                  (intern type))))
+             (let* ((type (plist-get arg :type))
+                    (wrapped-type
+                     (if (symbolp type)
+                         type
+                       (and type (intern type)))))
                (plist-put arg :type wrapped-type)))
            args))
          (wrapped-func (ellama-tools--make-confirm-wrapper func name)))
@@ -304,7 +304,8 @@ TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
   (let* ((tool-name name)
          (tool (seq-find (lambda (tool) (string= tool-name (llm-tool-name tool)))
                          ellama-tools-available)))
-    (add-to-list 'ellama-tools-enabled tool)
+    (when tool
+      (add-to-list 'ellama-tools-enabled tool))
     nil))
 
 ;;;###autoload
@@ -556,11 +557,7 @@ Replace OLDCONTENT with NEWCONTENT."
         (coding-system-for-write 'raw-text))
     (when (string-match (regexp-quote oldcontent) content)
       (with-temp-buffer
-        (insert content)
-        (goto-char (match-beginning 0))
-        (delete-region (1+ (match-beginning 0)) (1+ (match-end 0)))
-        (forward-char)
-        (insert newcontent)
+        (insert (replace-match newcontent t t content))
         (write-region (point-min) (point-max) file-name)))))
 
 (ellama-tools-define-tool
