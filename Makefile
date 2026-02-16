@@ -9,6 +9,7 @@ test:
 	emacs -batch --eval "(package-initialize)" \
 		-l ellama.el \
 		-l tests/test-ellama.el \
+		-l tests/test-ellama-transient.el \
 		-l tests/test-ellama-blueprint.el \
 		-l tests/test-ellama-community-prompts.el \
 		--eval "(ert t)"
