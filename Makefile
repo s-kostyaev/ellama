@@ -2,6 +2,17 @@
 
 .PHONY: build test check-compile-warnings manual refill-news
 
+# This order is based on the packages dependency graph.
+ELLAMA_COMPILE_ORDER = \
+	ellama-tools.el \
+	ellama-skills.el \
+	ellama.el \
+	ellama-context.el \
+	ellama-transient.el \
+	ellama-blueprint.el \
+	ellama-community-prompts.el \
+	ellama-manual.el
+
 build:
 	emacs -batch --eval "(package-initialize)" -f batch-byte-compile ellama*.el
 
@@ -19,7 +30,7 @@ test:
 		--eval "(ert t)"
 
 check-compile-warnings:
-	emacs --batch --eval "(package-initialize)" --eval "(setq native-comp-eln-load-path (list default-directory))" -L . -f batch-native-compile ellama*.el
+	emacs --batch --eval "(package-initialize)" --eval "(setq native-comp-eln-load-path (list default-directory))" -L . -f batch-native-compile $(ELLAMA_COMPILE_ORDER)
 
 manual:
 	emacs -batch --eval "(package-initialize)" \

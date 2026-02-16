@@ -468,6 +468,15 @@ It should be a function with single argument generated text string."
   "Enable debug."
   :type 'boolean)
 
+(defcustom ellama-sessions-directory (file-truename
+				      (file-name-concat
+				       user-emacs-directory
+				       "ellama-sessions"))
+  "Directory for saved ellama sessions."
+  :type 'string)
+
+(defvar ellama--current-session-id nil)
+
 (defun ellama--set-file-name-and-save ()
   "Set buffer file name and save buffer."
   (interactive)
@@ -708,13 +717,6 @@ This filter contains only subset of markdown syntax to be good enough."
 	   ;; If ellama-enable-keymap is nil, remove the key bindings
 	   (define-key global-map (kbd ellama-keymap-prefix) nil))))
 
-(defcustom ellama-sessions-directory (file-truename
-				      (file-name-concat
-				       user-emacs-directory
-				       "ellama-sessions"))
-  "Directory for saved ellama sessions."
-  :type 'string)
-
 (defcustom ellama-naming-provider nil
   "LLM provider for generating names."
   :type '(sexp :validate llm-standard-provider-p))
@@ -724,8 +726,6 @@ This filter contains only subset of markdown syntax to be good enough."
   :type 'boolean)
 
 (defvar-local ellama--current-session nil)
-
-(defvar ellama--current-session-id nil)
 
 (defcustom ellama-session-line-template " ellama session: %s"
   "Template for formatting the current session line."
@@ -739,14 +739,6 @@ This filter contains only subset of markdown syntax to be good enough."
 			ellama--current-session-id))
 	      'face 'ellama-face))
 
-(defun ellama-session-update-header-line ()
-  "Update header line for ellama session header line mode."
-  (when (listp header-line-format)
-    (let ((element '(:eval (ellama-session-line))))
-      (if ellama-session-header-line-mode
-          (add-to-list 'header-line-format element t)
-	(setq header-line-format (delete element header-line-format))))))
-
 ;;;###autoload
 (define-minor-mode ellama-session-header-line-mode
   "Toggle Ellama Session header line mode."
@@ -758,14 +750,6 @@ This filter contains only subset of markdown syntax to be good enough."
   ellama-session-header-line-mode
   ellama-session-header-line-mode)
 
-(defun ellama-session-update-mode-line ()
-  "Update mode line for ellama session mode line mode."
-  (when (listp mode-line-format)
-    (let ((element '(:eval (ellama-session-line))))
-      (if ellama-session-mode-line-mode
-	  (add-to-list 'mode-line-format element t)
-	(setq mode-line-format (delete element mode-line-format))))))
-
 ;;;###autoload
 (define-minor-mode ellama-session-mode-line-mode
   "Toggle Ellama Session mode line mode."
@@ -776,6 +760,22 @@ This filter contains only subset of markdown syntax to be good enough."
 (define-globalized-minor-mode ellama-session-mode-line-global-mode
   ellama-session-mode-line-mode
   ellama-session-mode-line-mode)
+
+(defun ellama-session-update-header-line ()
+  "Update header line for ellama session header line mode."
+  (when (listp header-line-format)
+    (let ((element '(:eval (ellama-session-line))))
+      (if ellama-session-header-line-mode
+          (add-to-list 'header-line-format element t)
+	(setq header-line-format (delete element header-line-format))))))
+
+(defun ellama-session-update-mode-line ()
+  "Update mode line for ellama session mode line mode."
+  (when (listp mode-line-format)
+    (let ((element '(:eval (ellama-session-line))))
+      (if ellama-session-mode-line-mode
+	  (add-to-list 'mode-line-format element t)
+	(setq mode-line-format (delete element mode-line-format))))))
 
 (defvar ellama--active-sessions (make-hash-table :test #'equal))
 
