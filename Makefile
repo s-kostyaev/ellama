@@ -10,6 +10,7 @@ test:
 		-l ellama.el \
 		-l tests/test-ellama.el \
 		-l tests/test-ellama-blueprint.el \
+		-l tests/test-ellama-community-prompts.el \
 		--eval "(ert t)"
 
 check-compile-warnings:
