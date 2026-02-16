@@ -9,6 +9,8 @@ test:
 	emacs -batch --eval "(package-initialize)" \
 		-l ellama.el \
 		-l tests/test-ellama.el \
+		-l tests/test-ellama-context.el \
+		-l tests/test-ellama-tools.el \
 		-l tests/test-ellama-transient.el \
 		-l tests/test-ellama-blueprint.el \
 		-l tests/test-ellama-manual.el \
