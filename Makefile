@@ -1,15 +1,31 @@
 # Makefile for ellama project
 
-.PHONY: build test check-compile-warnings
+.PHONY: build test check-compile-warnings manual refill-news
 
 build:
 	emacs -batch --eval "(package-initialize)" -f batch-byte-compile ellama*.el
 
 test:
-	emacs -batch --eval "(package-initialize)" -l ellama.el -l tests/test-ellama.el --eval "(ert t)"
+	emacs -batch --eval "(package-initialize)" \
+		-l ellama.el \
+		-l tests/test-ellama.el \
+		-l tests/test-ellama-context.el \
+		-l tests/test-ellama-tools.el \
+		-l tests/test-ellama-skills.el \
+		-l tests/test-ellama-transient.el \
+		-l tests/test-ellama-blueprint.el \
+		-l tests/test-ellama-manual.el \
+		-l tests/test-ellama-community-prompts.el \
+		--eval "(ert t)"
 
 check-compile-warnings:
 	emacs --batch --eval "(package-initialize)" --eval "(setq native-comp-eln-load-path (list default-directory))" -L . -f batch-native-compile ellama*.el
+
+manual:
+	emacs -batch --eval "(package-initialize)" \
+		--eval "(require 'project)" \
+		-l ellama-manual.el \
+		--eval "(ellama-manual-export)"
 
 refill-news:
 	emacs -batch --eval "(with-current-buffer (find-file-noselect \"./NEWS.org\") (setq fill-column 80) (fill-region (point-min) (point-max)) (save-buffer))"

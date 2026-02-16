@@ -26,16 +26,54 @@
 
 (require 'cl-lib)
 (require 'ellama)
-(require 'ellama-context)
 (require 'ellama-transient)
 (require 'ert)
 (require 'llm-fake)
 
-(defconst ellama-test-root
-  (expand-file-name
-   ".."
-   (file-name-directory (or load-file-name buffer-file-name)))
-  "Project root directory for test assets.")
+
+(defun ellama-test--fake-stream-partials (response style)
+  "Return streaming partial strings for RESPONSE using STYLE."
+  (let ((prev "")
+        (chunks (pcase style
+                  ('line (string-lines response))
+                  ((or 'word-leading 'word-trailing)
+                   (string-split response " "))
+                  (_ (error "Unknown style %S" style)))))
+    (mapcar
+     (lambda (chunk)
+       (setq prev
+             (pcase style
+               ('line (concat prev chunk))
+               ('word-leading (concat prev " " chunk))
+               ('word-trailing (concat prev chunk " "))))
+       prev)
+     chunks)))
+
+(defun ellama-test--run-with-fake-streaming (response prompt-regexp fn
+						      &optional style)
+  "Run FN with fake streaming RESPONSE and assert PROMPT-REGEXP.
+STYLE controls partial message shape.  Default value is `word-leading'."
+  (let* ((provider
+          (make-llm-fake
+           :chat-action-func (lambda () response)))
+         (ellama-provider provider)
+         (ellama-coding-provider provider)
+         (ellama-response-process-method 'streaming)
+         (ellama-spinner-enabled nil)
+         (partial-style (or style 'word-leading)))
+    (cl-letf (((symbol-function 'llm-chat-streaming)
+               (lambda (stream-provider prompt partial-callback
+                        response-callback _error-callback _multi-output)
+                 (should (string-match-p prompt-regexp
+                                         (llm-chat-prompt-to-text prompt)))
+                 (let ((response-plist (llm-chat stream-provider prompt t)))
+                   (dolist (partial
+                            (ellama-test--fake-stream-partials
+                             (plist-get response-plist :text)
+                             partial-style))
+                     (funcall partial-callback `(:text ,partial)))
+                   (funcall response-callback response-plist)))))
+      (funcall fn))))
 
 (ert-deftest test-ellama--code-filter ()
   (should (equal "" (ellama--code-filter "")))
@@ -44,20 +82,16 @@
 
 (ert-deftest test-ellama-code-improve ()
   (let ((original "(hello)\n")
-        (improved "```lisp\n(hello)\n```")
-        (ellama-provider (make-llm-fake))
-        prev-lines)
+        (improved "```lisp\n(hello)\n```"))
     (with-temp-buffer
       (insert original)
-      (cl-letf (((symbol-function 'llm-chat-streaming)
-                 (lambda (_provider prompt partial-callback response-callback _error-callback _multi-output)
-                   (should (string-match original (llm-chat-prompt-to-text prompt)))
-                   (dolist (s (string-lines improved))
-                     (funcall partial-callback `(:text ,(concat prev-lines s)))
-                     (setq prev-lines (concat prev-lines s)))
-                   (funcall response-callback `(:text ,improved)))))
-        (ellama-code-improve)
-        (should (equal original (buffer-string)))))))
+      (ellama-test--run-with-fake-streaming
+       improved
+       original
+       (lambda ()
+         (ellama-code-improve))
+       'line)
+      (should (equal original (buffer-string))))))
 
 (ert-deftest test-ellama-lorem-ipsum ()
   (let ((fill-column 70)
@@ -73,19 +107,16 @@ tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
 veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex
 ea commodo consequat. Duis aute irure dolor in reprehenderit in
 voluptate velit esse cillum dolore eu fugiat nulla pariatur.")
-        (ellama-provider (make-llm-fake))
-        prev-lines)
+        )
     (with-temp-buffer
       (org-mode)
-      (cl-letf (((symbol-function 'llm-chat-streaming)
-	         (lambda (_provider prompt partial-callback response-callback _error-callback _multi-output)
-	           (should (string-match "test" (llm-chat-prompt-to-text prompt)))
-	           (dolist (s (string-split raw " "))
-	             (funcall partial-callback `(:text ,(concat prev-lines " " s)))
-	             (setq prev-lines (concat prev-lines " " s)))
-	           (funcall response-callback `(:text ,raw)))))
-        (ellama-write "test")
-        (should (equal expected (buffer-string)))))))
+      (ellama-test--run-with-fake-streaming
+       raw
+       "test"
+       (lambda ()
+         (ellama-write "test"))
+       'word-leading)
+      (should (equal expected (buffer-string))))))
 
 (ert-deftest test-ellama-sieve-of-eratosthenes ()
   (let* ((fill-column 80)
@@ -435,19 +466,18 @@ circumference with remarkable accuracy!
 
 Let me know if you'd like to see a visual version, or try it with a different
 number! 😊")
-	 (ellama-provider (make-llm-fake))
-	 prev-lines)
+	 )
     (with-temp-buffer
       (org-mode)
-      (cl-letf (((symbol-function 'llm-chat-streaming)
-		 (lambda (_provider prompt partial-callback response-callback _error-callback _multi-output)
-		   (should (string-match "test" (llm-chat-prompt-to-text prompt)))
-		   (dolist (s (string-split raw " "))
-		     (funcall partial-callback `(:text ,(concat prev-lines " " s)))
-		     (setq prev-lines (concat prev-lines " " s)))
-		   (funcall response-callback `(:text ,raw)))))
-	(ellama-write "test")
-	(should (equal expected (buffer-substring-no-properties (point-min) (point-max))))))))
+      (ellama-test--run-with-fake-streaming
+       raw
+       "test"
+       (lambda ()
+         (ellama-write "test"))
+       'word-leading)
+      (should (equal expected
+                     (buffer-substring-no-properties (point-min)
+                                                     (point-max)))))))
 
 (ert-deftest test-ellama-duplicate-strings ()
   (let ((fill-column 80)
@@ -463,218 +493,81 @@ Scratch)\"* depends on your *goals, background, and learning style*. Here’s a
 detailed comparison to help you decide:
 
 ---")
-	(ellama-provider (make-llm-fake))
-	prev-lines)
+	)
     (with-temp-buffer
       (org-mode)
-      (cl-letf (((symbol-function 'llm-chat-streaming)
-		 (lambda (_provider prompt partial-callback response-callback _error-callback _multi-output)
-		   (should (string-match "test" (llm-chat-prompt-to-text prompt)))
-		   (dolist (s (string-split raw " "))
-		     (funcall partial-callback `(:text ,(concat prev-lines s " ")))
-		     (setq prev-lines (concat prev-lines s " ")))
-		   (funcall response-callback `(:text ,raw)))))
-	(ellama-write "test")
-	(should (equal expected (buffer-string)))))))
+      (ellama-test--run-with-fake-streaming
+       raw
+       "test"
+       (lambda ()
+         (ellama-write "test"))
+       'word-trailing)
+      (should (equal expected (buffer-string))))))
 
-(ert-deftest test-ellama-context-element-format-buffer-markdown ()
-  (let ((element (ellama-context-element-buffer :name "*scratch*")))
-    (should (equal "```emacs-lisp\n(display-buffer \"*scratch*\")\n```\n"
-                   (ellama-context-element-format element 'markdown-mode)))))
+(ert-deftest test-ellama-stream-llm-fake-output-to-buffer ()
+  (let* ((ellama-provider
+          (make-llm-fake
+           :output-to-buffer "*ellama-fake-log*"
+           :chat-action-func (lambda () "Fake answer")))
+         (ellama-response-process-method 'streaming)
+         (ellama-spinner-enabled nil)
+         (ellama-fill-paragraphs nil)
+         done-text)
+    (unwind-protect
+        (with-temp-buffer
+          (cl-letf (((symbol-function 'sleep-for)
+                     (lambda (&rest _args) nil)))
+            (ellama-stream "test prompt"
+                           :provider ellama-provider
+                           :buffer (current-buffer)
+                           :on-done (lambda (text) (setq done-text text))))
+          (should (equal done-text "Fake answer"))
+          (should (equal (buffer-string) "Fake answer"))
+          (with-current-buffer (get-buffer-create "*ellama-fake-log*")
+            (let ((log (buffer-string)))
+              (should (string-match-p "Call to llm-chat-streaming" log))
+              (should (string-match-p "test prompt" log)))))
+      (let ((buf (get-buffer "*ellama-fake-log*")))
+        (when buf
+          (kill-buffer buf))))))
 
-(ert-deftest test-ellama-context-element-format-buffer-org-mode ()
-  (let ((element (ellama-context-element-buffer :name "*scratch*")))
-    (should (equal "[[elisp:(display-buffer \"*scratch*\")][*scratch*]]"
-                   (ellama-context-element-format element 'org-mode)))))
+(ert-deftest test-ellama-stream-retry-with-llm-fake-tool-call-error ()
+  (let* ((call-count 0)
+         (error-captured nil)
+         (done-text nil)
+         (_ (unless (get 'ellama-test-tool-call-error 'error-conditions)
+              (define-error 'ellama-test-tool-call-error
+                "Tool call error used in tests"
+                'llm-tool-call-error)))
+         (ellama-provider
+          (make-llm-fake
+           :chat-action-func
+           (lambda ()
+             (setq call-count (1+ call-count))
+             (if (= call-count 1)
+                 '(ellama-test-tool-call-error "Temporary tool failure")
+               "Recovered answer"))))
+         (ellama-response-process-method 'async)
+         (ellama-spinner-enabled nil)
+         (ellama-fill-paragraphs nil))
+    (cl-letf (((symbol-function 'llm-chat-async)
+               (lambda (provider prompt response-callback error-callback
+                        &optional _multi-output)
+                 (condition-case err
+                     (funcall response-callback (llm-chat provider prompt t))
+                   (t (funcall error-callback (car err) (cdr err))))
+                 nil)))
+      (with-temp-buffer
+        (ellama-stream "test retry"
+                       :provider ellama-provider
+                       :buffer (current-buffer)
+                       :on-error (lambda (msg) (setq error-captured msg))
+                       :on-done (lambda (text) (setq done-text text)))
+        (should (= call-count 2))
+        (should (null error-captured))
+        (should (equal done-text "Recovered answer"))
+        (should (equal (buffer-string) "Recovered answer"))))))
 
-(ert-deftest test-ellama-context-element-format-file-markdown ()
-  (let ((element (ellama-context-element-file :name "LICENSE")))
-    (should (equal "[LICENSE](<LICENSE>)"
-                   (ellama-context-element-format element 'markdown-mode)))))
-
-(ert-deftest test-ellama-context-element-format-file-org-mode ()
-  (let ((element (ellama-context-element-file :name "LICENSE")))
-    (should (equal "[[file:LICENSE][LICENSE]]"
-                   (ellama-context-element-format element 'org-mode)))))
-
-(ert-deftest test-ellama-context-element-format-info-node-markdown ()
-  (let ((element (ellama-context-element-info-node :name "(dir)Top")))
-    (should (equal "```emacs-lisp\n(info \"(dir)Top\")\n```\n"
-                   (ellama-context-element-format element 'markdown-mode)))))
-
-(ert-deftest test-ellama-context-element-format-info-node-org-mode ()
-  (let ((element (ellama-context-element-info-node :name "(dir)Top")))
-    (should (equal "[[(dir)Top][(dir)Top]]"
-                   (ellama-context-element-format element 'org-mode)))))
-
-(ert-deftest test-ellama-context-element-format-text-markdown ()
-  (let ((element (ellama-context-element-text :content "123")))
-    (should (equal "123" (ellama-context-element-format element 'markdown-mode)))))
-
-(ert-deftest test-ellama-context-element-format-text-org-mode ()
-  (let ((element (ellama-context-element-text :content "123")))
-    (should (equal "123" (ellama-context-element-format element 'org-mode)))))
-
-(ert-deftest test-ellama-context-element-format-webpage-quote-disabled-markdown ()
-  (let ((element (ellama-context-element-webpage-quote :name "test name" :url "https://example.com/" :content "1\n\n2"))
-	(ellama-show-quotes nil))
-    (should (string-match "\\[test name\\](https://example.com/):\n```emacs-lisp\n(display-buffer \"\\*ellama-quote-.+\\*\")\n```\n" (ellama-context-element-format element 'markdown-mode)))))
-
-(ert-deftest test-ellama-context-element-format-webpage-quote-enabled-markdown ()
-  (let ((element (ellama-context-element-webpage-quote :name "test name" :url "https://example.com/" :content "1\n\n2"))
-	(ellama-show-quotes t))
-    (should (equal "[test name](https://example.com/):
-> 1
-> 
-> 2
-
-"
-		   (ellama-context-element-format element 'markdown-mode)))))
-
-(ert-deftest test-ellama-context-element-format-webpage-quote-disabled-org-mode ()
-  (let ((element (ellama-context-element-webpage-quote :name "test name" :url "https://example.com/" :content "1\n\n2"))
-	(ellama-show-quotes nil))
-    (should (string-match "\\[\\[https://example.com/\\]\\[test name\\]\\] \\[\\[elisp:(display-buffer \"\\*ellama-quote-.+\\*\")\\]\\[show\\]\\]" (ellama-context-element-format element 'org-mode)))))
-
-(ert-deftest test-ellama-context-element-format-webpage-quote-enabled-org-mode ()
-  (let ((element (ellama-context-element-webpage-quote :name "test name" :url "https://example.com/" :content "1\n\n* 2"))
-	(ellama-show-quotes t))
-    (should (equal "[[https://example.com/][test name]]:
-#+BEGIN_QUOTE
-1
-
- * 2
-#+END_QUOTE
-"
-		   (ellama-context-element-format element 'org-mode)))))
-
-(ert-deftest test-ellama-context-element-format-info-node-quote-disabled-markdown ()
-  (let ((element (ellama-context-element-info-node-quote :name "(emacs)Top" :content "1\n\n2"))
-	(ellama-show-quotes nil))
-    (should (string-match "```emacs-lisp\n(info \"(emacs)Top\")\n```\nshow:\n```emacs-lisp\n(display-buffer \"\\*ellama-quote-.+\\*\")\n```\n" (ellama-context-element-format element 'markdown-mode)))))
-
-(ert-deftest test-ellama-context-element-format-info-node-quote-enabled-markdown ()
-  (let ((element (ellama-context-element-info-node-quote :name "(emacs)Top" :content "1\n\n2"))
-	(ellama-show-quotes t))
-    (should (equal "```emacs-lisp\n(info \"(emacs)Top\")\n```\n> 1\n> \n> 2\n\n"
-		   (ellama-context-element-format element 'markdown-mode)))))
-
-(ert-deftest test-ellama-context-element-format-info-node-quote-disabled-org-mode ()
-  (let ((element (ellama-context-element-info-node-quote :name "(emacs)Top" :content "1\n\n2"))
-	(ellama-show-quotes nil))
-    (should (string-match "\\[\\[(emacs)Top\\]\\[(emacs)Top\\]\\] \\[\\[elisp:(display-buffer \"\\*ellama-quote-.+\\*\")\\]\\[show\\]\\]" (ellama-context-element-format element 'org-mode)))))
-
-(ert-deftest test-ellama-context-element-format-info-node-quote-enabled-org-mode ()
-  (let ((element (ellama-context-element-info-node-quote :name "(emacs)Top" :content "1\n\n* 2"))
-	(ellama-show-quotes t))
-    (should (equal "[[(emacs)Top][(emacs)Top]]:\n#+BEGIN_QUOTE\n1\n\n * 2\n#+END_QUOTE\n"
-		   (ellama-context-element-format element 'org-mode)))))
-
-(ert-deftest test-ellama-context-element-format-file-quote-disabled-markdown ()
-  (let ((element (ellama-context-element-file-quote :path "/tmp/test.txt" :content "1\n\n2"))
-	(ellama-show-quotes nil))
-    (should (string-match "\\[/tmp/test.txt\\](/tmp/test.txt):\n```emacs-lisp\n(display-buffer \"\\*ellama-quote-.+\\*\")" (ellama-context-element-format element 'markdown-mode)))))
-
-(ert-deftest test-ellama-context-element-format-file-quote-enabled-markdown ()
-  (let ((element (ellama-context-element-file-quote :path "/tmp/test.txt" :content "1\n\n2"))
-	(ellama-show-quotes t))
-    (should (equal "[/tmp/test.txt](/tmp/test.txt):
-> 1
-> 
-> 2
-
-"
-		   (ellama-context-element-format element 'markdown-mode)))))
-
-(ert-deftest test-ellama-context-element-format-file-quote-disabled-org-mode ()
-  (let ((element (ellama-context-element-file-quote :path "/tmp/test.txt" :content "1\n\n2"))
-	(ellama-show-quotes nil))
-    (should (string-match "\\[\\[/tmp/test.txt\\]\\[/tmp/test.txt\\]\\] \\[\\[elisp:(display-buffer \"\\*ellama-quote-.+\\*\")\\]\\[show\\]\\]" (ellama-context-element-format element 'org-mode)))))
-
-(ert-deftest test-ellama-context-element-format-file-quote-enabled-org-mode ()
-  (let ((element (ellama-context-element-file-quote :path "/tmp/test.txt" :content "1\n\n* 2"))
-	(ellama-show-quotes t))
-    (should (equal "[[/tmp/test.txt][/tmp/test.txt]]:
-#+BEGIN_QUOTE
-1
-
- * 2
-#+END_QUOTE
-"
-		   (ellama-context-element-format element 'org-mode)))))
-
-(ert-deftest test-ellama-context-element-extract-buffer ()
-  (with-temp-buffer
-    (insert "123")
-    (let ((element (ellama-context-element-buffer :name (buffer-name))))
-      (should (equal "123" (ellama-context-element-extract element))))))
-
-(ert-deftest test-ellama-context-element-extract-file ()
-  (let* ((filename (expand-file-name "LICENSE" (locate-dominating-file "." ".git")))
-         (element (ellama-context-element-file :name filename)))
-    (should (string-match "GNU GENERAL PUBLIC LICENSE"
-                          (ellama-context-element-extract element)))))
-
-(ert-deftest test-ellama-context-element-extract-info-node ()
-  (let ((element (ellama-context-element-info-node :name "(dir)Top")))
-    (should (string-match "This" (ellama-context-element-extract element)))))
-
-(ert-deftest test-ellama-context-element-extract-text ()
-  (let ((element (ellama-context-element-text :content "123")))
-    (should (string-match "123" (ellama-context-element-extract element)))))
-
-(ert-deftest test-ellama-context-element-extract-webpage-quote ()
-  (let ((element (ellama-context-element-webpage-quote :content "123")))
-    (should (equal "123" (ellama-context-element-extract element)))))
-
-(ert-deftest test-ellama-context-element-extract-info-node-quote ()
-  (let ((element (ellama-context-element-info-node-quote :content "123")))
-    (should (equal "123" (ellama-context-element-extract element)))))
-
-(ert-deftest test-ellama-context-element-extract-file-quote ()
-  (let ((element (ellama-context-element-file-quote :content "123")))
-    (should (equal "123" (ellama-context-element-extract element)))))
-
-(ert-deftest test-ellama-context-element-display-buffer ()
-  (with-temp-buffer
-    (let ((element (ellama-context-element-buffer :name (buffer-name))))
-      (should (equal (buffer-name) (ellama-context-element-display element))))))
-
-(ert-deftest test-ellama-context-element-display-file ()
-  (let* ((filename (expand-file-name "LICENSE" (locate-dominating-file "." ".git")))
-         (element (ellama-context-element-file :name filename)))
-    (should (equal (file-name-nondirectory filename) (ellama-context-element-display element)))))
-
-(ert-deftest test-ellama-context-element-display-info-node ()
-  (let ((element (ellama-context-element-info-node :name "(dir)Top")))
-    (should (equal "(info \"(dir)Top\")" (ellama-context-element-display element)))))
-
-(ert-deftest test-ellama-context-element-display-text ()
-  (let ((element (ellama-context-element-text :content "123")))
-    (should (equal "\"123...\"" (ellama-context-element-display element)))))
-
-(ert-deftest test-ellama-context-element-display-webpage-quote ()
-  (let ((element (ellama-context-element-webpage-quote :name "Example" :url "http://example.com" :content "123")))
-    (should (equal "Example" (ellama-context-element-display element)))))
-
-(ert-deftest test-ellama-context-element-display-info-node-quote ()
-  (let ((element (ellama-context-element-info-node-quote :name "Example" :content "123")))
-    (should (equal "(info \"Example\")" (ellama-context-element-display element)))))
-
-(ert-deftest test-ellama-context-element-display-file-quote ()
-  (let ((element (ellama-context-element-file-quote :path "/path/to/file" :content "123")))
-    (should (equal "file" (ellama-context-element-display element)))))
-
-(ert-deftest test-ellama-context-element-extract-buffer-quote ()
-  (with-temp-buffer
-    (insert "123")
-    (let ((element (ellama-context-element-buffer-quote :name (buffer-name) :content "123")))
-      (should (equal "123" (ellama-context-element-extract element))))))
-
-(ert-deftest test-ellama-context-element-display-buffer-quote ()
-  (with-temp-buffer
-    (let ((element (ellama-context-element-buffer-quote :name (buffer-name) :content "123")))
-      (should (equal (buffer-name) (ellama-context-element-display element))))))
 
 (ert-deftest test-ellama-md-to-org-code-simple ()
   (let ((result (ellama--translate-markdown-to-org-filter "Here is your TikZ code for a blue rectangle:
@@ -1029,211 +922,46 @@ region, season, or type)! 🍎🍊"))))
   (should (equal (ellama--string-without-last-two-lines "Line1\nLine2")
                  "")))
 
-(ert-deftest test-ellama--append-tool-error-to-prompt-uses-llm-message ()
-  (let (captured)
-    (cl-letf (((symbol-function 'llm-chat-prompt-append-response)
-	       (lambda (_prompt msg role)
-		 (setq captured (list msg role)))))
-      (ellama--append-tool-error-to-prompt
-       'prompt
-       "Unknown tool 'search' called"))
-    (should (equal captured
-		   '("Unknown tool 'search' called" system)))))
 
-(defun ellama-test--ensure-local-ellama-tools ()
-  "Ensure tests use local `ellama-tools.el' from project root."
-  (unless (fboundp 'ellama-tools--sanitize-tool-text-output)
-    (load-file (expand-file-name "ellama-tools.el" ellama-test-root))))
+(ert-deftest test-ellama-chat-done-appends-user-header-and-callbacks ()
+  (let* ((ellama-major-mode 'org-mode)
+         (ellama-user-nick "Tester")
+         (ellama-nick-prefix-depth 2)
+         (ellama-session-auto-save nil)
+         (global-callback-text nil)
+         (local-callback-text nil)
+         (ellama-chat-done-callback (lambda (text)
+                                      (setq global-callback-text text))))
+    (with-temp-buffer
+      (insert "Assistant output")
+      (cl-letf (((symbol-function 'ellama--scroll)
+                 (lambda (&optional _buffer _point) nil)))
+        (ellama-chat-done "final"
+                          (lambda (text)
+                            (setq local-callback-text text))))
+      (should (equal (buffer-string)
+                     "Assistant output\n\n** Tester:\n"))
+      (should (equal global-callback-text "final"))
+      (should (equal local-callback-text "final")))))
 
-(defun ellama-test--wait-shell-command-result (cmd)
-  "Run shell tool CMD and wait for a result string."
-  (ellama-test--ensure-local-ellama-tools)
-  (let ((result :pending)
-	(deadline (+ (float-time) 3.0)))
-    (ellama-tools-shell-command-tool
-     (lambda (res)
-       (setq result res))
-     cmd)
-    (while (and (eq result :pending)
-		(< (float-time) deadline))
-      (accept-process-output nil 0.01))
-    (when (eq result :pending)
-      (ert-fail (format "Timeout while waiting result for: %s" cmd)))
-    result))
 
-(defun ellama-test--named-tool-no-args ()
-  "Return constant string."
-  "zero")
+(ert-deftest test-ellama-remove-reasoning ()
+  (should (equal
+           (ellama-remove-reasoning "<think>\nabc\n</think>\nFinal")
+           "Final"))
+  (should (equal
+           (ellama-remove-reasoning "Before <think>x</think> After")
+           "Before  After")))
 
-(defun ellama-test--named-tool-one-arg (arg)
-  "Return ARG with prefix."
-  (format "one:%s" arg))
-
-(defun ellama-test--named-tool-two-args (arg1 arg2)
-  "Return ARG1 and ARG2 with prefix."
-  (format "two:%s:%s" arg1 arg2))
-
-(defun ellama-test--make-confirm-wrapper-old (function)
-  "Make wrapper for FUNCTION using old confirm call style."
-  (lambda (&rest args)
-    (apply #'ellama-tools-confirm function args)))
-
-(defun ellama-test--make-confirm-wrapper-new (function name)
-  "Make wrapper for FUNCTION and NAME using wrapper factory."
-  (ellama-tools--make-confirm-wrapper function name))
-
-(defun ellama-test--invoke-confirm-with-yes (wrapper &rest args)
-  "Call WRAPPER with ARGS and auto-answer confirmation with yes.
-Return list with result and prompt."
-  (let ((ellama-tools-confirm-allowed (make-hash-table))
-        (ellama-tools-allow-all nil)
-        (ellama-tools-allowed nil)
-        result
-        prompt)
-    (cl-letf (((symbol-function 'read-char-choice)
-               (lambda (message _choices)
-                 (setq prompt message)
-                 ?y)))
-      (setq result (apply wrapper args)))
-    (list result prompt)))
-
-(ert-deftest test-ellama-shell-command-tool-empty-success-output ()
-  (should
-   (string=
-    (ellama-test--wait-shell-command-result "sh -c 'true'")
-    "Command completed successfully with no output.")))
-
-(ert-deftest test-ellama-shell-command-tool-empty-failure-output ()
-  (should
-   (string-match-p
-    "Command failed with exit code 7 and no output\\."
-    (ellama-test--wait-shell-command-result "sh -c 'exit 7'"))))
-
-(ert-deftest test-ellama-shell-command-tool-returns-stdout ()
-  (should
-   (string=
-    (ellama-test--wait-shell-command-result "printf 'ok\\n'")
-    "ok")))
-
-(ert-deftest test-ellama-shell-command-tool-rejects-binary-output ()
-  (should
-   (string-match-p
-    "binary data"
-    (ellama-test--wait-shell-command-result
-     "awk 'BEGIN { printf \"%c\", 0 }'"))))
-
-(ert-deftest test-ellama-read-file-tool-rejects-binary-content ()
-  (ellama-test--ensure-local-ellama-tools)
-  (let ((file (make-temp-file "ellama-read-file-bin-")))
-    (unwind-protect
-        (progn
-          (let ((coding-system-for-write 'no-conversion))
-            (with-temp-buffer
-              (set-buffer-multibyte nil)
-              (insert "%PDF-1.5\n%")
-              (insert (char-to-string 143))
-              (insert "\n")
-              (write-region (point-min) (point-max) file nil 'silent)))
-          (let ((result (ellama-tools-read-file-tool file)))
-            (should (string-match-p "binary data" result))
-            (should (string-match-p "bad idea" result))))
-      (when (file-exists-p file)
-        (delete-file file)))))
-
-(ert-deftest test-ellama-read-file-tool-accepts-utf8-markdown-text ()
-  (ellama-test--ensure-local-ellama-tools)
-  (let ((file (make-temp-file "ellama-read-file-utf8-" nil ".md")))
-    (unwind-protect
-        (progn
-          (with-temp-file file
-            (insert "# Research Plan\n\n")
-            (insert "Sub‑topics: temporal reasoning overview.\n"))
-          (let ((result (ellama-tools-read-file-tool file)))
-            (should-not (string-match-p "binary data" result))
-            (should (string-match-p "Research Plan" result))))
-      (when (file-exists-p file)
-        (delete-file file)))))
-
-(ert-deftest test-ellama-tools-confirm-wrapped-named-no-args-old-and-new ()
-  (ellama-test--ensure-local-ellama-tools)
-  (let* ((old-wrapper (ellama-test--make-confirm-wrapper-old
-                       #'ellama-test--named-tool-no-args))
-         (new-wrapper (ellama-test--make-confirm-wrapper-new
-                       #'ellama-test--named-tool-no-args
-                       "named_tool"))
-         (old-call (ellama-test--invoke-confirm-with-yes old-wrapper))
-         (new-call (ellama-test--invoke-confirm-with-yes new-wrapper)))
-    (should (equal (car old-call) "zero"))
-    (should (equal (car new-call) "zero"))
-    (should
-     (string-match-p
-      "Allow calling ellama-test--named-tool-no-args with arguments: \\?"
-      (cadr old-call)))
-    (should
-     (string-match-p
-      "Allow calling ellama-test--named-tool-no-args with arguments: \\?"
-      (cadr new-call)))))
-
-(ert-deftest test-ellama-tools-confirm-wrapped-named-one-arg-old-and-new ()
-  (ellama-test--ensure-local-ellama-tools)
-  (let* ((old-wrapper (ellama-test--make-confirm-wrapper-old
-                       #'ellama-test--named-tool-one-arg))
-         (new-wrapper (ellama-test--make-confirm-wrapper-new
-                       #'ellama-test--named-tool-one-arg
-                       "named_tool"))
-         (old-call (ellama-test--invoke-confirm-with-yes old-wrapper "A"))
-         (new-call (ellama-test--invoke-confirm-with-yes new-wrapper "A")))
-    (should (equal (car old-call) "one:A"))
-    (should (equal (car new-call) "one:A"))
-    (should
-     (string-match-p
-      "Allow calling ellama-test--named-tool-one-arg with arguments: A\\?"
-      (cadr old-call)))
-    (should
-     (string-match-p
-      "Allow calling ellama-test--named-tool-one-arg with arguments: A\\?"
-      (cadr new-call)))))
-
-(ert-deftest test-ellama-tools-confirm-wrapped-named-two-args-old-and-new ()
-  (ellama-test--ensure-local-ellama-tools)
-  (let* ((old-wrapper (ellama-test--make-confirm-wrapper-old
-                       #'ellama-test--named-tool-two-args))
-         (new-wrapper (ellama-test--make-confirm-wrapper-new
-                       #'ellama-test--named-tool-two-args
-                       "named_tool"))
-         (old-call (ellama-test--invoke-confirm-with-yes old-wrapper "A" "B"))
-         (new-call (ellama-test--invoke-confirm-with-yes new-wrapper "A" "B")))
-    (should (equal (car old-call) "two:A:B"))
-    (should (equal (car new-call) "two:A:B"))
-    (should
-     (string-match-p
-      "Allow calling ellama-test--named-tool-two-args with arguments: A, B\\?"
-      (cadr old-call)))
-    (should
-     (string-match-p
-      "Allow calling ellama-test--named-tool-two-args with arguments: A, B\\?"
-      (cadr new-call)))))
-
-(ert-deftest test-ellama-tools-confirm-prompt-uses-tool-name-for-lambda ()
-  (ellama-test--ensure-local-ellama-tools)
-  (let* ((ellama-tools-confirm-allowed (make-hash-table))
-         (ellama-tools-allow-all nil)
-         (ellama-tools-allowed nil)
-         (tool-plist `(:function ,(lambda (_arg) "ok")
-                       :name "mcp_tool"
-                       :args ((:name "arg" :type string))))
-         (wrapped (ellama-tools-wrap-with-confirm tool-plist))
-         (wrapped-func (plist-get wrapped :function))
-         seen-prompt)
-    (cl-letf (((symbol-function 'read-char-choice)
-               (lambda (prompt _choices)
-                 (setq seen-prompt prompt)
-                 ?n)))
-      (funcall wrapped-func "value"))
-    (should
-     (string-match-p
-      "Allow calling mcp_tool with arguments: value\\?"
-      seen-prompt))))
+(ert-deftest test-ellama-mode-derived-helpers ()
+  (let ((ellama-major-mode 'org-mode)
+        (ellama-nick-prefix-depth 3))
+    (should (equal (ellama-get-nick-prefix-for-mode) "***"))
+    (should (equal (ellama-get-session-file-extension) "org")))
+  (let ((ellama-major-mode 'text-mode)
+        (ellama-nick-prefix-depth 2))
+    (should (equal (ellama-get-nick-prefix-for-mode) "##"))
+    (should (equal (ellama-get-session-file-extension) "md"))))
 
 (provide 'test-ellama)
 

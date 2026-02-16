@@ -1,3 +1,63 @@
+* Version 1.12.14
+- Add fake streaming helpers and new stream tests. Introduce
+  ~ellama-test--fake-stream-partials~ and ~ellama-test--run-with-fake-streaming~
+  to simplify test setup for streaming LLM responses. Refactor existing tests to
+  use these helpers. Add tests for ~ellama-stream~ output to a log buffer and
+  for retry logic when a fake tool‑call error is raised. These changes improve
+  test readability and cover new streaming scenarios.
+- Add tests for ellama helper functions and error handling. Introduce unit tests
+  covering ~ellama-remove-reasoning~, mode-derived helpers, tool call error
+  detection, error handler retry logic on tool errors, error handling for
+  non-tool errors, chat-done callback behavior, and setup to use local
+  ellama-tools. These tests validate correct behavior and edge cases.
+- Correct tool argument handling, enable‑by‑name, and edit‑file logic. Update
+  ~ellama-tools-wrap-with-confirm~ to use each argument’s plist for type
+  resolution, prevent type removing. Guard ~ellama-tools-enable-by-name-tool~
+  against adding a nil tool when the name is missing. Simplify
+  ~ellama-tools-edit-file-tool~ to use replace-match for robust replacement. Add
+  extensive ERT tests covering argument type preservation, enable‑by‑name
+  nil‑check, edit‑file replacement at file start, confirmation caching, reply,
+  and denial flows, file read/write/append/prepend/directory tree/move/line
+  range/patch application validations, role and provider resolution logic,
+  subagent loop step limits, task tool role fallback and priority handling.
+- Add test for context prompt clearing ephemerals. Introduce a new ERT test
+  ~test-ellama-context-prompt-with-context-clears-ephemeral~ that verifies
+  ~ellama-context-prompt-with-context~ returns the combined prompt string and
+  clears the ellama-context-ephemeral list. The test also ensures that
+  ~ellama-context-global~ remains intact after the prompt is generated,
+  confirming that ephemerals are not persisted across prompts.
+- Add comprehensive tests for ellama skill handling. Implemented a suite of unit
+  tests covering skill frontmatter parsing, directory scanning with filtering of
+  invalid or hidden skills, project directory resolution, ordering of global and
+  local skills, and prompt generation for both empty and populated skill lists.
+- Add blueprint tests. Updated the Makefile test target to run the new
+  ellama‑blueprint tests and added tests/test-ellama-blueprint.el which
+  exercises blueprint loading, variable handling, selection, and command
+  execution.
+- Add community prompts tests and refactor download logic. Implemented
+  comprehensive unit tests for community prompts, updated Makefile to run the
+  new test, and refactored the prompt download routine in
+  ~ellama-community-prompts.el~ to simplify directory handling and response
+  processing.
+- Add transient tests for ellama. Introduce comprehensive tests for Ellama
+  transient features, covering model population, provider construction, provider
+  selection, system and prompt handling, context summary, argument forwarding,
+  and main menu initialization.
+- Add manual export tests. Add a comprehensive test suite for ellama manual
+  export, verifying that the version macro is included, badge.svg and gif links
+  are stripped, org-export-to-file is called with correct arguments, broken
+  links are bound locally, and an error is raised when the version header is
+  missing.
+- Split ~test-ellama.el~. Move tools and context related test to separated
+  files.
+- Add skills tests and update Makefile. Implemented a comprehensive test suite
+  for Ellama skills, covering front‑matter parsing, directory scanning, project
+  directory resolution, skill aggregation, and prompt generation.
+- Add manual export instructions. Add “Export manual” entry to AGENTS.md and a
+  new ~manual~ target to the Makefile. The target runs ~ellama-manual-export~
+  via Emacs batch mode.
+- Documentation fixes. Minor updates to documentation for clarity and
+  consistency.
 * Version 1.12.13
 - Refactor confirmation system architecture. Split confirmation logic into
   reusable internal functions and improved wrapper factory. The system now

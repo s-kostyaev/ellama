@@ -53,17 +53,21 @@ within your `user-emacs-directory'."
 Downloads the file from `ellama-community-prompts-url` if it does
 not already exist."
   (unless (file-exists-p ellama-community-prompts-file)
-    (let* ((directory (file-name-directory ellama-community-prompts-file))
-           (response (plz 'get ellama-community-prompts-url
-                       :as 'file
-                       :then (lambda (filename)
-                               (rename-file filename ellama-community-prompts-file t))
-                       :else (lambda (error)
-                               (message "Failed to download community prompts: %s" error)))))
-      (when (and response (not (file-directory-p directory)))
+    (let ((directory (file-name-directory ellama-community-prompts-file)))
+      (unless (file-directory-p directory)
         (make-directory directory t))
-      (when response
-        (message "Community prompts file downloaded successfully.")))))
+      (let ((response (plz 'get ellama-community-prompts-url
+                            :as 'file
+                            :then (lambda (filename)
+                                    (rename-file filename
+                                                 ellama-community-prompts-file
+                                                 t))
+                            :else (lambda (error)
+                                    (message
+                                     "Failed to download community prompts: %s"
+                                     error)))))
+        (when response
+          (message "Community prompts file downloaded successfully."))))))
 
 (defun ellama-community-prompts-parse-csv-line (line)
   "Parse a single CSV LINE into a list of fields, handling quotes.
@@ -133,7 +137,8 @@ Returns the collection of community prompts."
 			  line)))
 		      (cdr (string-lines
 			    (buffer-substring-no-properties
-			     (point-min) (point-max)))))))))
+			     (point-min) (point-max))
+			    t)))))))
   ellama-community-prompts-collection)
 
 ;;;###autoload
