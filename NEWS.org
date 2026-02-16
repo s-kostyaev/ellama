@@ -1,3 +1,6 @@
+* Version 1.12.15
+- Fix compilation warnings. This change resolves compilation warnings found
+  during building.
 * Version 1.12.14
 - Add fake streaming helpers and new stream tests. Introduce
   ~ellama-test--fake-stream-partials~ and ~ellama-test--run-with-fake-streaming~
