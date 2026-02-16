@@ -11,6 +11,7 @@ test:
 		-l tests/test-ellama.el \
 		-l tests/test-ellama-transient.el \
 		-l tests/test-ellama-blueprint.el \
+		-l tests/test-ellama-manual.el \
 		-l tests/test-ellama-community-prompts.el \
 		--eval "(ert t)"
 
