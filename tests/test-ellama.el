@@ -773,6 +773,18 @@ detailed comparison to help you decide:
     (let ((element (ellama-context-element-buffer-quote :name (buffer-name) :content "123")))
       (should (equal (buffer-name) (ellama-context-element-display element))))))
 
+(ert-deftest test-ellama-context-prompt-with-context-clears-ephemeral ()
+  (let ((ellama-context-global
+	 (list (ellama-context-element-text :content "global")))
+	(ellama-context-ephemeral
+	 (list (ellama-context-element-text :content "ephemeral"))))
+    (should (equal (ellama-context-prompt-with-context "Prompt")
+		   "Context:\nglobal\nephemeral\n\nPrompt"))
+    (should (null ellama-context-ephemeral))
+    (should (equal (mapcar #'ellama-context-element-extract
+			   ellama-context-global)
+		   '("global")))))
+
 (ert-deftest test-ellama-md-to-org-code-simple ()
   (let ((result (ellama--translate-markdown-to-org-filter "Here is your TikZ code for a blue rectangle:
 ```tex
