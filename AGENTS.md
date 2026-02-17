@@ -39,3 +39,6 @@
 Just one backslash (\) in front of quotes.
 
 3. Do not use git, util requested by user explicitly.
+4. ALWAYS use `oq` skill to see content of `.org` files (for example
+   ./README.org and ./NEWS.org) isntead of `read_file` tool. README.org and
+   NEWS.org are big enough, you NEED to use `oq` skill with it.
