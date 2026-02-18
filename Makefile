@@ -1,6 +1,6 @@
 # Makefile for ellama project
 
-.PHONY: build test check-compile-warnings manual refill-news
+.PHONY: build test check-compile-warnings manual format-elisp refill-news
 
 # This order is based on the packages dependency graph.
 ELLAMA_COMPILE_ORDER = \
@@ -37,6 +37,9 @@ manual:
 		--eval "(require 'project)" \
 		-l ellama-manual.el \
 		--eval "(ellama-manual-export)"
+
+format-elisp:
+	emacs -batch --eval "(let ((files (append (file-expand-wildcards \"ellama*.el\") (file-expand-wildcards \"tests/*.el\")))) (package-initialize) (require 'transient) (dolist (file files) (with-current-buffer (find-file-noselect file) (emacs-lisp-mode) (indent-region (point-min) (point-max)) (untabify (point-min) (point-max)) (delete-trailing-whitespace) (save-buffer))))"
 
 refill-news:
 	emacs -batch --eval "(with-current-buffer (find-file-noselect \"./NEWS.org\") (setq fill-column 80) (fill-region (point-min) (point-max)) (save-buffer))"

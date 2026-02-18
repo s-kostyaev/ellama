@@ -5,7 +5,8 @@
 1. **Build**: `make build`
 2. **Run unit tests** (ERT): `make test`
 3. **Check native compilation warnings**: `make check-compile-warnings`
-4. **Export manual**: `make manual`
+4. **Format Elisp files**: `make format-elisp`
+5. **Export manual**: `make manual`
 
 ## Code Style Guidelines
 
