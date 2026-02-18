@@ -37,19 +37,19 @@
 (ert-deftest test-ellama--append-tool-error-to-prompt-uses-llm-message ()
   (let (captured)
     (cl-letf (((symbol-function 'llm-chat-prompt-append-response)
-	       (lambda (_prompt msg role)
-		 (setq captured (list msg role)))))
+               (lambda (_prompt msg role)
+                 (setq captured (list msg role)))))
       (ellama--append-tool-error-to-prompt
        'prompt
        "Unknown tool 'search' called"))
     (should (equal captured
-		   '("Unknown tool 'search' called" system)))))
+                   '("Unknown tool 'search' called" system)))))
 
 (ert-deftest test-ellama--tool-call-error-p ()
   (unless (get 'ellama-test-tool-call-error-2 'error-conditions)
     (define-error 'ellama-test-tool-call-error-2
-      "Tool call test error"
-      'llm-tool-call-error))
+                  "Tool call test error"
+                  'llm-tool-call-error))
   (should (ellama--tool-call-error-p 'ellama-test-tool-call-error-2))
   (should-not (ellama--tool-call-error-p 'error))
   (should-not (ellama--tool-call-error-p nil)))
@@ -57,8 +57,8 @@
 (ert-deftest test-ellama--error-handler-retry-on-tool-call-error ()
   (unless (get 'ellama-test-tool-call-error-3 'error-conditions)
     (define-error 'ellama-test-tool-call-error-3
-      "Tool call retry error"
-      'llm-tool-call-error))
+                  "Tool call retry error"
+                  'llm-tool-call-error))
   (let ((retry-called nil)
         (err-called nil)
         (appended nil))
@@ -113,13 +113,13 @@
   "Run shell tool CMD and wait for a result string."
   (ellama-test--ensure-local-ellama-tools)
   (let ((result :pending)
-	(deadline (+ (float-time) 3.0)))
+        (deadline (+ (float-time) 3.0)))
     (ellama-tools-shell-command-tool
      (lambda (res)
        (setq result res))
      cmd)
     (while (and (eq result :pending)
-		(< (float-time) deadline))
+                (< (float-time) deadline))
       (accept-process-output nil 0.01))
     (when (eq result :pending)
       (ert-fail (format "Timeout while waiting result for: %s" cmd)))
@@ -284,8 +284,8 @@ Return list with result and prompt."
          (ellama-tools-allow-all nil)
          (ellama-tools-allowed nil)
          (tool-plist `(:function ,(lambda (_arg) "ok")
-                       :name "mcp_tool"
-                       :args ((:name "arg" :type string))))
+                                 :name "mcp_tool"
+                                 :args ((:name "arg" :type string))))
          (wrapped (ellama-tools-wrap-with-confirm tool-plist))
          (wrapped-func (plist-get wrapped :function))
          seen-prompt)
@@ -302,9 +302,9 @@ Return list with result and prompt."
 (ert-deftest test-ellama-tools-wrap-with-confirm-preserves-arg-types ()
   (ellama-test--ensure-local-ellama-tools)
   (let* ((tool-plist '(:function ignore
-                       :name "typed_tool"
-                       :args ((:name "a" :type string)
-                              (:name "b" :type number))))
+                                 :name "typed_tool"
+                                 :args ((:name "a" :type string)
+                                        (:name "b" :type number))))
          (wrapped (ellama-tools-wrap-with-confirm tool-plist))
          (types (mapcar (lambda (arg) (plist-get arg :type))
                         (plist-get wrapped :args))))

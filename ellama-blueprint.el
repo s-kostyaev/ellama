@@ -68,8 +68,8 @@ directory in the current project root."
     (when (file-exists-p search-dir)
       (dolist (ext exts)
         (setq files (append files
-			    (directory-files-recursively
-			     search-dir (concat "\\." ext "\\'"))))))
+                            (directory-files-recursively
+                             search-dir (concat "\\." ext "\\'"))))))
     files))
 
 (defun ellama-blueprint-load-from-files ()
@@ -135,32 +135,32 @@ directory in the current project root."
   :group 'ellama
   (setq font-lock-defaults `(((,ellama-blueprint-variable-regexp 1 font-lock-keyword-face t))))
   (setq header-line-format
-	(concat
-	 (propertize
-	  (concat (propertize
-		   (substitute-command-keys
-		    "`\\[ellama-transient-blueprint-mode-menu]'")
-		   'face 'ellama-key-face)
-		  " to continue")
-	  'help-echo "mouse-1: show menu"
-	  'mouse-face 'header-line-format
-	  'keymap (let ((m (make-sparse-keymap)))
-		    (define-key m [header-line mouse-1] #'ellama-transient-blueprint-mode-menu)
-		    (define-key m [mode-line mouse-1] #'ellama-transient-blueprint-mode-menu)
-		    m))
-	 " "
-	 (propertize
-	  (concat (propertize
-		   (substitute-command-keys
-		    "`\\[ellama-kill-current-buffer]'")
-		   'face 'ellama-key-face)
-		  " to cancel")
-	  'help-echo "mouse-1: kill buffer"
-	  'mouse-face 'header-line-format
-	  'keymap (let ((m (make-sparse-keymap)))
-		    (define-key m [header-line mouse-1] #'ellama-kill-current-buffer)
-		    (define-key m [mode-line mouse-1] #'ellama-kill-current-buffer)
-		    m)))))
+        (concat
+         (propertize
+          (concat (propertize
+                   (substitute-command-keys
+                    "`\\[ellama-transient-blueprint-mode-menu]'")
+                   'face 'ellama-key-face)
+                  " to continue")
+          'help-echo "mouse-1: show menu"
+          'mouse-face 'header-line-format
+          'keymap (let ((m (make-sparse-keymap)))
+                    (define-key m [header-line mouse-1] #'ellama-transient-blueprint-mode-menu)
+                    (define-key m [mode-line mouse-1] #'ellama-transient-blueprint-mode-menu)
+                    m))
+         " "
+         (propertize
+          (concat (propertize
+                   (substitute-command-keys
+                    "`\\[ellama-kill-current-buffer]'")
+                   'face 'ellama-key-face)
+                  " to cancel")
+          'help-echo "mouse-1: kill buffer"
+          'mouse-face 'header-line-format
+          'keymap (let ((m (make-sparse-keymap)))
+                    (define-key m [header-line mouse-1] #'ellama-kill-current-buffer)
+                    (define-key m [mode-line mouse-1] #'ellama-kill-current-buffer)
+                    m)))))
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.ellama-blueprint\\'" . ellama-blueprint-mode))
@@ -174,23 +174,23 @@ directory in the current project root."
 
 ARGS contains plist with variables to prefill."
   (let* ((collection (seq-union
-		      ellama-blueprints
-		      (ellama-community-prompts-ensure)
-		      (lambda (blueprint1 blueprint2)
-			(string=
-			 (plist-get blueprint1 :act)
-			 (plist-get blueprint2 :act)))))
-	 (prompt (cl-find-if (lambda (el)
-			       (string= blueprint (plist-get el :act)))
-			     collection))
-	 (content (plist-get prompt :prompt)))
+                      ellama-blueprints
+                      (ellama-community-prompts-ensure)
+                      (lambda (blueprint1 blueprint2)
+                        (string=
+                         (plist-get blueprint1 :act)
+                         (plist-get blueprint2 :act)))))
+         (prompt (cl-find-if (lambda (el)
+                               (string= blueprint (plist-get el :act)))
+                             collection))
+         (content (plist-get prompt :prompt)))
     (with-temp-buffer
       (insert content)
       (when args
-	(dolist (var (ellama-blueprint-get-variable-list))
-	  (ellama-blueprint-set-variable
-	   var
-	   (plist-get args (intern (concat ":" var))))))
+        (dolist (var (ellama-blueprint-get-variable-list))
+          (ellama-blueprint-set-variable
+           var
+           (plist-get args (intern (concat ":" var))))))
       (ellama-send-buffer-to-new-chat))))
 
 ;;;###autoload
@@ -209,34 +209,34 @@ ARGS contains keys for fine control.
   (interactive)
   (declare-function ellama-community-prompts-ensure "ellama-community-prompts")
   (let* ((for-devs (plist-get args :for-devs))
-	 (source (plist-get args :source))
-	 (acts '())
-	 (collection (pcase source
-		       ('user ellama-blueprints)
-		       ('community (ellama-community-prompts-ensure))
-		       ('files (ellama-blueprint-load-from-files))
-		       (_ (ellama-blueprint-get-all-sources))))
-	 selected-act
-	 selected-prompt)
+         (source (plist-get args :source))
+         (acts '())
+         (collection (pcase source
+                       ('user ellama-blueprints)
+                       ('community (ellama-community-prompts-ensure))
+                       ('files (ellama-blueprint-load-from-files))
+                       (_ (ellama-blueprint-get-all-sources))))
+         selected-act
+         selected-prompt)
     ;; Collect unique acts from the filtered collection
     (dolist (prompt collection)
       (when (or (not for-devs) (eq for-devs (plist-get prompt :for-devs)))
-	(cl-pushnew (plist-get prompt :act) acts)))
+        (cl-pushnew (plist-get prompt :act) acts)))
     ;; Prompt user to select an act
     (setq selected-act (completing-read "Select Act: " acts))
     ;; Find the corresponding prompt
     (catch 'found-prompt
       (dolist (prompt collection)
-	(when (and (string= selected-act (plist-get prompt :act))
-		   (or (not for-devs) (eq for-devs (plist-get prompt :for-devs))))
-	  (setq selected-prompt (plist-get prompt :prompt))
-	  (throw 'found-prompt nil))))
+        (when (and (string= selected-act (plist-get prompt :act))
+                   (or (not for-devs) (eq for-devs (plist-get prompt :for-devs))))
+          (setq selected-prompt (plist-get prompt :prompt))
+          (throw 'found-prompt nil))))
     ;; Create a new buffer and insert the selected prompt
     (with-current-buffer (get-buffer-create ellama-blueprint-buffer)
       (erase-buffer)
       (let ((hard-newline t))
-	(insert selected-prompt)
-	(ellama-blueprint-mode))
+        (insert selected-prompt)
+        (ellama-blueprint-mode))
       (switch-to-buffer (current-buffer))
       (ellama-blueprint-fill-variables))))
 
@@ -248,8 +248,8 @@ ARGS contains keys for fine control.
     (with-current-buffer (get-buffer-create ellama-blueprint-buffer)
       (erase-buffer)
       (let ((hard-newline t))
-	(insert ellama-global-system)
-	(ellama-blueprint-mode))
+        (insert ellama-global-system)
+        (ellama-blueprint-mode))
       (switch-to-buffer (current-buffer))
       (ellama-blueprint-fill-variables))))
 
@@ -266,9 +266,9 @@ corresponding prompt is inserted into a blueprint buffer."
   "Create blueprint from current buffer."
   (interactive)
   (let* ((name (read-string "Name: "))
-	 (for-devs (y-or-n-p "For developers? "))
-	 (content (buffer-substring-no-properties (point-min) (point-max)))
-	 (blueprint `(:act ,name :prompt ,content :for-devs ,for-devs)))
+         (for-devs (y-or-n-p "For developers? "))
+         (content (buffer-substring-no-properties (point-min) (point-max)))
+         (blueprint `(:act ,name :prompt ,content :for-devs ,for-devs)))
     (ellama-blueprint-remove name)
     (add-to-list 'ellama-blueprints blueprint t)
     (customize-save-variable 'ellama-blueprints ellama-blueprints)))
@@ -278,9 +278,9 @@ corresponding prompt is inserted into a blueprint buffer."
   "Create new blueprint."
   (interactive)
   (let* ((content (when (region-active-p)
-		    (buffer-substring-no-properties (region-beginning) (region-end))))
-	 (name (concat (make-temp-name "*ellama-blueprint-") "*"))
-	 (buf (get-buffer-create name)))
+                    (buffer-substring-no-properties (region-beginning) (region-end))))
+         (name (concat (make-temp-name "*ellama-blueprint-") "*"))
+         (buf (get-buffer-create name)))
     (switch-to-buffer buf t t)
     (with-current-buffer buf
       (when content (insert content))
@@ -292,7 +292,7 @@ corresponding prompt is inserted into a blueprint buffer."
     (let ((vars '()))
       (goto-char (point-min))
       (while (re-search-forward ellama-blueprint-variable-regexp nil t)
-	(push (match-string 1) vars))
+        (push (match-string 1) vars))
       (seq-uniq vars))))
 
 (defun ellama-blueprint-set-variable (var value)
@@ -309,7 +309,7 @@ corresponding prompt is inserted into a blueprint buffer."
   (let ((vars (ellama-blueprint-get-variable-list)))
     (dolist (var vars)
       (let ((value (read-string (format "Enter value for {%s}: " var))))
-	(ellama-blueprint-set-variable var value)))))
+        (ellama-blueprint-set-variable var value)))))
 
 ;;;###autoload
 (defun ellama-blueprint-remove (act)

@@ -122,11 +122,11 @@
             (let ((first (ellama-community-prompts-ensure)))
               (should (equal first
                              '((:act "dev"
-                                :prompt "Prompt, with comma"
-                                :for-devs t)
+                                     :prompt "Prompt, with comma"
+                                     :for-devs t)
                                (:act "all"
-                                :prompt "General"
-                                :for-devs nil))))
+                                     :prompt "General"
+                                     :for-devs nil))))
               (with-temp-file csv-file
                 (insert
                  "act,prompt,for_dev\n"

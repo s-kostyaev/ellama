@@ -24,6 +24,8 @@
 
 ;;; Code:
 
+(add-to-list 'load-path default-directory)
+
 (require 'cl-lib)
 (require 'ellama)
 (require 'ellama-transient)
@@ -50,7 +52,7 @@
      chunks)))
 
 (defun ellama-test--run-with-fake-streaming (response prompt-regexp fn
-						      &optional style)
+                                                      &optional style)
   "Run FN with fake streaming RESPONSE and assert PROMPT-REGEXP.
 STYLE controls partial message shape.  Default value is `word-leading'."
   (let* ((provider
@@ -63,7 +65,7 @@ STYLE controls partial message shape.  Default value is `word-leading'."
          (partial-style (or style 'word-leading)))
     (cl-letf (((symbol-function 'llm-chat-streaming)
                (lambda (stream-provider prompt partial-callback
-                        response-callback _error-callback _multi-output)
+                                        response-callback _error-callback _multi-output)
                  (should (string-match-p prompt-regexp
                                          (llm-chat-prompt-to-text prompt)))
                  (let ((response-plist (llm-chat stream-provider prompt t)))
@@ -74,6 +76,304 @@ STYLE controls partial message shape.  Default value is `word-leading'."
                      (funcall partial-callback `(:text ,partial)))
                    (funcall response-callback response-plist)))))
       (funcall fn))))
+
+(defun ellama-test--assert-replace-region-stream-args (call-fn)
+  "Assert CALL-FN passes replace-region arguments to `ellama-stream'."
+  (with-temp-buffer
+    (insert "one\ntwo\n")
+    (let (captured-args)
+      (cl-letf (((symbol-function 'ellama-stream)
+                 (lambda (&rest args)
+                   (setq captured-args (cdr args))
+                   (should (equal (buffer-string) "one\ntwo\n")))))
+        (funcall call-fn))
+      (should (equal (plist-get captured-args :replace-beg)
+                     (point-min)))
+      (should (equal (plist-get captured-args :replace-end)
+                     (point-max))))))
+
+(ert-deftest test-ellama-request-mode-binds-c-g-to-cancel ()
+  (with-temp-buffer
+    (ellama-request-mode +1)
+    (should (eq (key-binding (kbd "C-g") t)
+                #'ellama--cancel-current-request-and-quit))))
+
+(ert-deftest test-ellama-request-mode-c-g-cancels-current-request ()
+  (let ((cancelled-request nil)
+        (ellama-spinner-enabled nil))
+    (with-temp-buffer
+      (setq-local ellama--current-request 'request)
+      (ellama-request-mode +1)
+      (cl-letf (((symbol-function 'llm-cancel-request)
+                 (lambda (request)
+                   (setq cancelled-request request))))
+        (let ((cancel-command (key-binding (kbd "C-g") t)))
+          (should (eq cancel-command
+                      #'ellama--cancel-current-request-and-quit))
+          (condition-case nil
+              (call-interactively cancel-command)
+            (quit nil))))
+      (should (eq cancelled-request 'request))
+      (should (null ellama--current-request))
+      (should-not ellama-request-mode))))
+
+(ert-deftest test-ellama-request-mode-c-g-cancels-from-reasoning-buffer ()
+  (let ((cancelled-request nil)
+        (ellama-spinner-enabled nil)
+        (reasoning-buffer (generate-new-buffer " *ellama-reasoning-test*")))
+    (unwind-protect
+        (with-temp-buffer
+          (let ((main-buffer (current-buffer)))
+            (ellama--set-current-request
+             'request
+             (list main-buffer reasoning-buffer))
+            (cl-letf (((symbol-function 'llm-cancel-request)
+                       (lambda (request)
+                         (setq cancelled-request request))))
+              (with-current-buffer reasoning-buffer
+                (let ((cancel-command (key-binding (kbd "C-g") t)))
+                  (should (eq cancel-command
+                              #'ellama--cancel-current-request-and-quit))
+                  (condition-case nil
+                      (call-interactively cancel-command)
+                    (quit nil)))))
+            (should (eq cancelled-request 'request))
+            (should-not ellama-request-mode)
+            (with-current-buffer reasoning-buffer
+              (should-not ellama-request-mode))))
+      (when (buffer-live-p reasoning-buffer)
+        (kill-buffer reasoning-buffer)))))
+
+(ert-deftest test-ellama-cancel-does-not-affect-other-request-buffers ()
+  (let* ((cancelled-request nil)
+         (ellama-spinner-enabled nil)
+         (main-a (generate-new-buffer " *ellama-main-a*"))
+         (reasoning-a (generate-new-buffer " *ellama-reasoning-a*"))
+         (main-b (generate-new-buffer " *ellama-main-b*"))
+         (reasoning-b (generate-new-buffer " *ellama-reasoning-b*"))
+         request-context-a
+         request-context-b)
+    (unwind-protect
+        (progn
+          (setq request-context-a
+                (with-current-buffer main-a
+                  (ellama--set-current-request
+                   'request-a
+                   (list main-a reasoning-a))))
+          (setq request-context-b
+                (with-current-buffer main-b
+                  (ellama--set-current-request
+                   'request-b
+                   (list main-b reasoning-b))))
+          (cl-letf (((symbol-function 'llm-cancel-request)
+                     (lambda (request)
+                       (setq cancelled-request request))))
+            (with-current-buffer main-a
+              (let ((cancel-command (key-binding (kbd "C-g") t)))
+                (condition-case nil
+                    (call-interactively cancel-command)
+                  (quit nil)))))
+          (should (eq cancelled-request 'request-a))
+          (with-current-buffer main-a
+            (should-not ellama-request-mode))
+          (with-current-buffer reasoning-a
+            (should-not ellama-request-mode))
+          (with-current-buffer main-b
+            (should ellama-request-mode)
+            (should (eq ellama--current-request 'request-b)))
+          (with-current-buffer reasoning-b
+            (should ellama-request-mode)
+            (should (eq ellama--current-request 'request-b))))
+      (when (buffer-live-p main-a)
+        (with-current-buffer main-a
+          (ellama--deactivate-current-request request-context-a)))
+      (when (buffer-live-p main-b)
+        (with-current-buffer main-b
+          (ellama--deactivate-current-request request-context-b)))
+      (when (buffer-live-p reasoning-a)
+        (kill-buffer reasoning-a))
+      (when (buffer-live-p reasoning-b)
+        (kill-buffer reasoning-b))
+      (when (buffer-live-p main-a)
+        (kill-buffer main-a))
+      (when (buffer-live-p main-b)
+        (kill-buffer main-b)))))
+
+(ert-deftest test-ellama-response-handler-refresh-request-on-tool-call ()
+  (let* ((main-buffer (generate-new-buffer " *ellama-main-test*"))
+         (reasoning-buffer (generate-new-buffer " *ellama-reasoning-test*"))
+         (ellama-response-process-method 'streaming)
+         (ellama-spinner-enabled nil)
+         request-context)
+    (unwind-protect
+        (progn
+          (with-current-buffer main-buffer
+            (setq request-context
+                  (ellama--set-current-request
+                   'request-1
+                   (list main-buffer reasoning-buffer)))
+            (cl-letf (((symbol-function 'ellama--insert)
+                       (lambda (&rest _args) #'ignore))
+                      ((symbol-function 'ellama--handle-partial)
+                       (lambda (&rest _args) #'ignore))
+                      ((symbol-function 'llm-chat-streaming)
+                       (lambda (&rest _args) 'request-2)))
+              (funcall
+               (ellama--response-handler
+                #'ignore
+                reasoning-buffer
+                main-buffer
+                #'ignore
+                #'ignore
+                'provider
+                'prompt
+                nil
+                #'identity)
+               '(:tool-results "tool"))))
+          (with-current-buffer main-buffer
+            (should (eq ellama--current-request 'request-2)))
+          (with-current-buffer reasoning-buffer
+            (should (eq ellama--current-request 'request-2))))
+      (when (buffer-live-p main-buffer)
+        (with-current-buffer main-buffer
+          (ellama--deactivate-current-request request-context))
+        (kill-buffer main-buffer))
+      (when (buffer-live-p reasoning-buffer)
+        (kill-buffer reasoning-buffer)))))
+
+(ert-deftest test-ellama-ask-about-add-selection-ephemeral ()
+  (let (captured-ephemeral)
+    (with-temp-buffer
+      (cl-letf (((symbol-function 'read-string)
+                 (lambda (&rest _args) "question"))
+                ((symbol-function 'region-active-p)
+                 (lambda () t))
+                ((symbol-function 'ellama-context-add-selection)
+                 (lambda (&optional ephemeral)
+                   (setq captured-ephemeral ephemeral)))
+                ((symbol-function 'ellama-context-add-buffer)
+                 (lambda (&rest _args)
+                   (ert-fail "Unexpected call to ellama-context-add-buffer")))
+                ((symbol-function 'ellama-chat)
+                 (lambda (&rest _args) nil)))
+        (ellama-ask-about)))
+    (should (eq captured-ephemeral t))))
+
+(ert-deftest test-ellama-ask-about-add-buffer-ephemeral ()
+  (let (captured-ephemeral captured-buffer)
+    (with-temp-buffer
+      (cl-letf (((symbol-function 'read-string)
+                 (lambda (&rest _args) "question"))
+                ((symbol-function 'region-active-p)
+                 (lambda () nil))
+                ((symbol-function 'ellama-context-add-selection)
+                 (lambda (&rest _args)
+                   (ert-fail "Unexpected call to ellama-context-add-selection")))
+                ((symbol-function 'ellama-context-add-buffer)
+                 (lambda (buf &optional ephemeral)
+                   (setq captured-buffer buf)
+                   (setq captured-ephemeral ephemeral)))
+                ((symbol-function 'ellama-chat)
+                 (lambda (&rest _args) nil)))
+        (ellama-ask-about)
+        (should (equal captured-buffer (buffer-name (current-buffer))))))
+    (should (eq captured-ephemeral t))))
+
+(ert-deftest test-ellama-code-review-add-selection-ephemeral ()
+  (let (captured-ephemeral)
+    (with-temp-buffer
+      (cl-letf (((symbol-function 'region-active-p)
+                 (lambda () t))
+                ((symbol-function 'ellama-context-add-selection)
+                 (lambda (&optional ephemeral)
+                   (setq captured-ephemeral ephemeral)))
+                ((symbol-function 'ellama-context-add-buffer)
+                 (lambda (&rest _args)
+                   (ert-fail "Unexpected call to ellama-context-add-buffer")))
+                ((symbol-function 'ellama-chat)
+                 (lambda (&rest _args) nil)))
+        (ellama-code-review)))
+    (should (eq captured-ephemeral t))))
+
+(ert-deftest test-ellama-code-review-add-buffer-ephemeral ()
+  (let (captured-ephemeral captured-buffer)
+    (with-temp-buffer
+      (cl-letf (((symbol-function 'region-active-p)
+                 (lambda () nil))
+                ((symbol-function 'ellama-context-add-selection)
+                 (lambda (&rest _args)
+                   (ert-fail "Unexpected call to ellama-context-add-selection")))
+                ((symbol-function 'ellama-context-add-buffer)
+                 (lambda (buf &optional ephemeral)
+                   (setq captured-buffer buf)
+                   (setq captured-ephemeral ephemeral)))
+                ((symbol-function 'ellama-chat)
+                 (lambda (&rest _args) nil)))
+        (ellama-code-review)
+        (should (equal captured-buffer (current-buffer)))))
+    (should (eq captured-ephemeral t))))
+
+(ert-deftest test-ellama-write-add-selection-ephemeral ()
+  (let (captured-ephemeral)
+    (with-temp-buffer
+      (cl-letf (((symbol-function 'region-active-p)
+                 (lambda () t))
+                ((symbol-function 'ellama-context-add-selection)
+                 (lambda (&optional ephemeral)
+                   (setq captured-ephemeral ephemeral)))
+                ((symbol-function 'ellama-stream)
+                 (lambda (&rest _args) nil)))
+        (ellama-write "instruction")))
+    (should (eq captured-ephemeral t))))
+
+(ert-deftest test-ellama-code-add-add-selection-ephemeral ()
+  (let (captured-ephemeral)
+    (with-temp-buffer
+      (cl-letf (((symbol-function 'region-active-p)
+                 (lambda () t))
+                ((symbol-function 'ellama-context-add-selection)
+                 (lambda (&optional ephemeral)
+                   (setq captured-ephemeral ephemeral)))
+                ((symbol-function 'ellama-stream)
+                 (lambda (&rest _args) nil)))
+        (ellama-code-add "description")))
+    (should (eq captured-ephemeral t))))
+
+(ert-deftest test-ellama-change-passes-replace-region-to-stream ()
+  (ellama-test--assert-replace-region-stream-args
+   (lambda ()
+     (ellama-change "fix text" 1))))
+
+(ert-deftest test-ellama-code-edit-passes-replace-region-to-stream ()
+  (ellama-test--assert-replace-region-stream-args
+   (lambda ()
+     (ellama-code-edit "improve code"))))
+
+(ert-deftest test-ellama-code-improve-passes-replace-region-to-stream ()
+  (ellama-test--assert-replace-region-stream-args
+   (lambda ()
+     (ellama-code-improve))))
+
+(ert-deftest test-ellama-make-format-passes-replace-region-to-stream ()
+  (ellama-test--assert-replace-region-stream-args
+   (lambda ()
+     (ellama-make-format "as list"))))
+
+(ert-deftest test-ellama-change-restores-buffer-on-stream-error ()
+  (let ((ellama-spinner-enabled nil)
+        (ellama-response-process-method 'streaming)
+        (original "Hello world.\n"))
+    (with-temp-buffer
+      (insert original)
+      (cl-letf (((symbol-function 'llm-chat-streaming)
+                 (lambda (_provider _prompt _partial-callback _response-callback
+                                    error-callback _multi-output)
+                   (funcall error-callback 'error "network failed")
+                   'request)))
+        (should-error
+         (ellama-change "fix grammar")
+         :type 'error))
+      (should (equal (buffer-string) original)))))
 
 (ert-deftest test-ellama--code-filter ()
   (should (equal "" (ellama--code-filter "")))
@@ -120,7 +420,7 @@ voluptate velit esse cillum dolore eu fugiat nulla pariatur.")
 
 (ert-deftest test-ellama-sieve-of-eratosthenes ()
   (let* ((fill-column 80)
-	 (raw "Sure! Let's go through the **Sieve of Eratosthenes** step by step — it's an ancient and elegant algorithm used to find all **prime numbers** up to a given limit.
+         (raw "Sure! Let's go through the **Sieve of Eratosthenes** step by step — it's an ancient and elegant algorithm used to find all **prime numbers** up to a given limit.
 
 ---
 
@@ -156,7 +456,7 @@ We’ll go through them one by one.
 #### Step 2: Start with the first prime — 2
 
 - 2 is the first prime number.
-- Eliminate all multiples of 2 (except 2 itself):  
+- Eliminate all multiples of 2 (except 2 itself):
   → 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30
 
 Now our list looks like this (only numbers not crossed out):
@@ -172,7 +472,7 @@ Now our list looks like this (only numbers not crossed out):
 #### Step 3: Move to the next uneliminated number — 3
 
 - 3 is the next prime.
-- Eliminate all multiples of 3 (except 3 itself):  
+- Eliminate all multiples of 3 (except 3 itself):
   → 9, 15, 21, 27
 
 Now remove those from the list:
@@ -188,7 +488,7 @@ Now remove those from the list:
 #### Step 4: Next uneliminated number — 5
 
 - 5 is next prime.
-- Eliminate multiples of 5:  
+- Eliminate multiples of 5:
   → 25 (since 5×5=25)
 
 Remove 25:
@@ -250,17 +550,17 @@ All the remaining numbers are **prime**:
 ```python
 def sieve_of_eratosthenes(n):
     if n < 2:
-	return []
+        return []
 
     # Create a boolean array \"is_prime[0..n]\" and initialize all entries as True
     is_prime = [True] * (n + 1)
     is_prime[0] = is_prime[1] = False  # 0 and 1 are not prime
 
     for i in range(2, int(n**0.5) + 1):
-	if is_prime[i]:
-	    # Mark all multiples of i (starting from i*i) as not prime
-	    for j in range(i * i, n + 1, i):
-		is_prime[j] = False
+        if is_prime[i]:
+            # Mark all multiples of i (starting from i*i) as not prime
+            for j in range(i * i, n + 1, i):
+                is_prime[j] = False
 
     # Collect all prime numbers
     primes = [i for i in range(2, n + 1) if is_prime[i]]
@@ -289,7 +589,7 @@ Eratosthenes was not only a mathematician but also a geographer, astronomer, and
 
 Let me know if you'd like to see a visual version, or try it with a different number! 😊
 ")
-	 (expected "Sure! Let's go through the *Sieve of Eratosthenes* step by step — it's an
+         (expected "Sure! Let's go through the *Sieve of Eratosthenes* step by step — it's an
 ancient and elegant algorithm used to find all *prime numbers* up to a given
 limit.
 
@@ -330,7 +630,7 @@ We’ll go through them one by one.
 **** Step 2: Start with the first prime — 2
 
 - 2 is the first prime number.
-- Eliminate all multiples of 2 (except 2 itself):  
+- Eliminate all multiples of 2 (except 2 itself):
   → 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30
 
 Now our list looks like this (only numbers not crossed out):
@@ -345,7 +645,7 @@ Now our list looks like this (only numbers not crossed out):
 **** Step 3: Move to the next uneliminated number — 3
 
 - 3 is the next prime.
-- Eliminate all multiples of 3 (except 3 itself):  
+- Eliminate all multiples of 3 (except 3 itself):
   → 9, 15, 21, 27
 
 Now remove those from the list:
@@ -360,7 +660,7 @@ Now remove those from the list:
 **** Step 4: Next uneliminated number — 5
 
 - 5 is next prime.
-- Eliminate multiples of 5:  
+- Eliminate multiples of 5:
   → 25 (since 5×5=25)
 
 Remove 25:
@@ -425,17 +725,17 @@ number > √N).
 #+BEGIN_SRC python
 def sieve_of_eratosthenes(n):
     if n < 2:
-	return []
+        return []
 
     # Create a boolean array \"is_prime[0..n]\" and initialize all entries as True
     is_prime = [True] * (n + 1)
     is_prime[0] = is_prime[1] = False  # 0 and 1 are not prime
 
     for i in range(2, int(n**0.5) + 1):
-	if is_prime[i]:
-	    # Mark all multiples of i (starting from i*i) as not prime
-	    for j in range(i * i, n + 1, i):
-		is_prime[j] = False
+        if is_prime[i]:
+            # Mark all multiples of i (starting from i*i) as not prime
+            for j in range(i * i, n + 1, i):
+                is_prime[j] = False
 
     # Collect all prime numbers
     primes = [i for i in range(2, n + 1) if is_prime[i]]
@@ -466,7 +766,7 @@ circumference with remarkable accuracy!
 
 Let me know if you'd like to see a visual version, or try it with a different
 number! 😊")
-	 )
+         )
     (with-temp-buffer
       (org-mode)
       (ellama-test--run-with-fake-streaming
@@ -481,19 +781,19 @@ number! 😊")
 
 (ert-deftest test-ellama-duplicate-strings ()
   (let ((fill-column 80)
-	(raw "Great question! Whether you should start with **\"Natural Language Processing with Transformers\"** (O’Reilly) or wait for **\"Build a Large Language Model (From Scratch)\"** depends on your **goals, background, and learning style**. Here’s a detailed comparison to help
+        (raw "Great question! Whether you should start with **\"Natural Language Processing with Transformers\"** (O’Reilly) or wait for **\"Build a Large Language Model (From Scratch)\"** depends on your **goals, background, and learning style**. Here’s a detailed comparison to help
 you decide:
 
 ---
 
 ")
-	(expected "Great question! Whether you should start with *\"Natural Language Processing with
+        (expected "Great question! Whether you should start with *\"Natural Language Processing with
 Transformers\"* (O’Reilly) or wait for *\"Build a Large Language Model (From
 Scratch)\"* depends on your *goals, background, and learning style*. Here’s a
 detailed comparison to help you decide:
 
 ---")
-	)
+        )
     (with-temp-buffer
       (org-mode)
       (ellama-test--run-with-fake-streaming
@@ -537,8 +837,8 @@ detailed comparison to help you decide:
          (done-text nil)
          (_ (unless (get 'ellama-test-tool-call-error 'error-conditions)
               (define-error 'ellama-test-tool-call-error
-                "Tool call error used in tests"
-                'llm-tool-call-error)))
+                            "Tool call error used in tests"
+                            'llm-tool-call-error)))
          (ellama-provider
           (make-llm-fake
            :chat-action-func
@@ -552,7 +852,7 @@ detailed comparison to help you decide:
          (ellama-fill-paragraphs nil))
     (cl-letf (((symbol-function 'llm-chat-async)
                (lambda (provider prompt response-callback error-callback
-                        &optional _multi-output)
+                                 &optional _multi-output)
                  (condition-case err
                      (funcall response-callback (llm-chat provider prompt t))
                    (t (funcall error-callback (car err) (cdr err))))
@@ -567,6 +867,45 @@ detailed comparison to help you decide:
         (should (null error-captured))
         (should (equal done-text "Recovered answer"))
         (should (equal (buffer-string) "Recovered answer"))))))
+
+(ert-deftest test-ellama-stream-retry-tracks-latest-request-for-cancel ()
+  (let* ((call-count 0)
+         (cancelled-request nil)
+         (ellama-response-process-method 'streaming)
+         (ellama-spinner-enabled nil)
+         (_ (unless (get 'ellama-test-tool-call-error-4 'error-conditions)
+              (define-error 'ellama-test-tool-call-error-4
+                            "Tool call error used in retry request test"
+                            'llm-tool-call-error))))
+    (with-temp-buffer
+      (cl-letf (((symbol-function 'llm-chat-streaming)
+                 (lambda (_provider _prompt _partial-callback _response-callback
+                                    error-callback _multi-output)
+                   (setq call-count (1+ call-count))
+                   (if (= call-count 1)
+                       (progn
+                         (funcall error-callback
+                                  'ellama-test-tool-call-error-4
+                                  "Temporary tool failure")
+                         'request-1)
+                     'request-2)))
+                ((symbol-function 'llm-cancel-request)
+                 (lambda (request)
+                   (setq cancelled-request request))))
+        (ellama-stream "retry request tracking test"
+                       :provider 'test-provider
+                       :buffer (current-buffer)
+                       :on-error (lambda (_msg)
+                                   (ert-fail "Unexpected on-error call"))
+                       :on-done (lambda (_text)
+                                  (ert-fail "Unexpected on-done call")))
+        (should (= call-count 2))
+        (should (eq ellama--current-request 'request-2))
+        (condition-case nil
+            (call-interactively (key-binding (kbd "C-g") t))
+          (quit nil))
+        (should (eq cancelled-request 'request-2))
+        (should-not ellama-request-mode)))))
 
 
 (ert-deftest test-ellama-md-to-org-code-simple ()
@@ -727,8 +1066,7 @@ That's it."))))
   (let ((result (ellama--translate-markdown-to-org-filter "Sure! ```emacs-lisp
 (message \"ok\")
 ```")))
-    (should (string-equal result "Sure! 
-#+BEGIN_SRC emacs-lisp
+    (should (string-equal result "Sure! \n#+BEGIN_SRC emacs-lisp
 (message \"ok\")
 #+END_SRC"))))
 
@@ -782,7 +1120,7 @@ $P_\\theta$
 
 (ert-deftest test-ellama-md-to-org-code-snake-case ()
   (let* ((fill-column 70)
-	 (result (ellama--translate-markdown-to-org-filter "```python
+         (result (ellama--translate-markdown-to-org-filter "```python
 # Example of snake case variables and functions
 
 # Variable names using snake_case
@@ -813,8 +1151,8 @@ Snake case helps improve readability, especially in languages that are sensitive
 
 (ert-deftest test-ellama--fix-file-name ()
   (should (string=
-	   (ellama--fix-file-name "a/\\?%*:|\"<>.;=")
-	   "a_____________")))
+           (ellama--fix-file-name "a/\\?%*:|\"<>.;=")
+           "a_____________")))
 
 (ert-deftest test-ellama-md-to-org-code-inline-code ()
   (let ((result (ellama--translate-markdown-to-org-filter "_some italic_
@@ -962,6 +1300,81 @@ region, season, or type)! 🍎🍊"))))
         (ellama-nick-prefix-depth 2))
     (should (equal (ellama-get-nick-prefix-for-mode) "##"))
     (should (equal (ellama-get-session-file-extension) "md"))))
+
+(ert-deftest test-ellama-chat-rehydrate-after-revert ()
+  (let* ((provider (make-llm-fake :chat-action-func (lambda () "ok")))
+         (ellama-provider provider)
+         (ellama-coding-provider provider)
+         (ellama-major-mode 'text-mode)
+         (ellama-session-auto-save t)
+         (ellama-spinner-enabled nil)
+         (ellama-response-process-method 'sync)
+         (ellama-sessions-directory (make-temp-file "ellama-test-" t))
+         (session (ellama-new-session provider "initial prompt"))
+         (uid (ellama--session-uid session))
+         (buffer (ellama-get-session-buffer uid))
+         file-name)
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer
+            (save-buffer)
+            (setq file-name (buffer-file-name)))
+          (with-temp-file file-name
+            (insert "External update\n"))
+          (with-current-buffer buffer
+            (revert-buffer :ignore-auto :noconfirm)
+            (should (ellama-session-p (ellama--resolve-session nil uid))))
+          (cl-letf (((symbol-function 'ellama-stream)
+                     (lambda (&rest _args) :stubbed)))
+            (ellama-chat "repro prompt"))
+          (with-current-buffer buffer
+            (should ellama-session-mode)
+            (should (ellama-session-p ellama--current-session)))
+          (should (equal ellama--current-session-uid uid))
+          (should (equal ellama--current-session-id
+                         (ellama-session-id session))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest test-ellama-read-legacy-session-adds-uid ()
+  (let* ((file-name (make-temp-file "ellama-session-" nil ".el"))
+         (legacy-session (make-ellama-session
+                          :id "legacy"
+                          :provider :provider
+                          :prompt "prompt"
+                          :extra '(:dir "/tmp"))))
+    (unwind-protect
+        (progn
+          (with-temp-file file-name
+            (insert (prin1-to-string legacy-session)))
+          (let ((session (ellama--read-session-from-file file-name)))
+            (should (ellama-session-p session))
+            (should (equal (ellama-session-id session) "legacy"))
+            (should (equal (ellama--session-uid session) "legacy"))))
+      (delete-file file-name t))))
+
+(ert-deftest test-ellama-session-rename-keep-uid ()
+  (let* ((provider (make-llm-fake :chat-action-func (lambda () "ok")))
+         (ellama-provider provider)
+         (ellama-coding-provider provider)
+         (ellama-major-mode 'text-mode)
+         (ellama-session-auto-save nil)
+         (session (ellama-new-session provider "initial prompt" t))
+         (uid (ellama--session-uid session))
+         (buffer (ellama-get-session-buffer uid)))
+    (unwind-protect
+        (with-current-buffer buffer
+          (cl-letf (((symbol-function 'read-string)
+                     (lambda (&rest _args) "renamed-session")))
+            (ellama-session-rename))
+          (should (equal (ellama-session-id ellama--current-session)
+                         "renamed-session"))
+          (should (equal (ellama--session-uid ellama--current-session) uid))
+          (should (eq (gethash uid ellama--active-session-states)
+                      ellama--current-session))
+          (should (equal ellama--current-session-id "renamed-session")))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
 
 (provide 'test-ellama)
 

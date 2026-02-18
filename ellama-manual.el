@@ -42,20 +42,20 @@
   (declare-function project-current "project")
   (require 'ox-texinfo)
   (let* ((org-export-with-broken-links t)
-	 (version (with-current-buffer (find-file-noselect
-					(file-name-concat
-					 (project-root (project-current))
-					 "ellama.el"))
-		    (save-excursion
-		      (goto-char (point-min))
-		      (re-search-forward ";; Version: \\([0-9\\.]+\\)")
-		      (match-string 1))))
-	 (buf (find-file-noselect
-	       (file-name-concat
-		(project-root (project-current))
-		"README.org")))
-	 (content (with-current-buffer buf
-		    (buffer-string))))
+         (version (with-current-buffer (find-file-noselect
+                                        (file-name-concat
+                                         (project-root (project-current))
+                                         "ellama.el"))
+                    (save-excursion
+                      (goto-char (point-min))
+                      (re-search-forward ";; Version: \\([0-9\\.]+\\)")
+                      (match-string 1))))
+         (buf (find-file-noselect
+               (file-name-concat
+                (project-root (project-current))
+                "README.org")))
+         (content (with-current-buffer buf
+                    (buffer-string))))
     (with-temp-buffer
       (org-mode)
       (insert
@@ -99,20 +99,20 @@ modify this GNU manual.”
 #+end_quote
 
 "
-	       version))
+               version))
       (insert content)
       ;; remove badges
       (goto-char (point-min))
       (while (re-search-forward "\\[\\[.+?\\]\\[.+?\\.svg\\]\\]\\n?" nil t)
-	(replace-match ""))
+        (replace-match ""))
       ;; remove images
       (goto-char (point-min))
       (while (re-search-forward "\\[\\[.+?\\.gif\\]\\]\\n?" nil t)
-	(replace-match ""))
+        (replace-match ""))
       (org-export-to-file
-	  'texinfo "ellama.texi"
-	nil nil nil nil nil
-	#'org-texinfo-compile))))
+       'texinfo "ellama.texi"
+       nil nil nil nil nil
+       #'org-texinfo-compile))))
 
 (provide 'ellama-manual)
 ;;; ellama-manual.el ends here.
