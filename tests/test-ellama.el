@@ -75,6 +75,21 @@ STYLE controls partial message shape.  Default value is `word-leading'."
                    (funcall response-callback response-plist)))))
       (funcall fn))))
 
+(defun ellama-test--assert-replace-region-stream-args (call-fn)
+  "Assert CALL-FN passes replace-region arguments to `ellama-stream'."
+  (with-temp-buffer
+    (insert "one\ntwo\n")
+    (let (captured-args)
+      (cl-letf (((symbol-function 'ellama-stream)
+                 (lambda (&rest args)
+                   (setq captured-args (cdr args))
+                   (should (equal (buffer-string) "one\ntwo\n")))))
+        (funcall call-fn))
+      (should (equal (plist-get captured-args :replace-beg)
+                     (point-min)))
+      (should (equal (plist-get captured-args :replace-end)
+                     (point-max))))))
+
 (ert-deftest test-ellama-request-mode-binds-c-g-to-cancel ()
   (with-temp-buffer
     (ellama-request-mode +1)
@@ -321,6 +336,42 @@ STYLE controls partial message shape.  Default value is `word-leading'."
                  (lambda (&rest _args) nil)))
         (ellama-code-add "description")))
     (should (eq captured-ephemeral t))))
+
+(ert-deftest test-ellama-change-passes-replace-region-to-stream ()
+  (ellama-test--assert-replace-region-stream-args
+   (lambda ()
+     (ellama-change "fix text" 1))))
+
+(ert-deftest test-ellama-code-edit-passes-replace-region-to-stream ()
+  (ellama-test--assert-replace-region-stream-args
+   (lambda ()
+     (ellama-code-edit "improve code"))))
+
+(ert-deftest test-ellama-code-improve-passes-replace-region-to-stream ()
+  (ellama-test--assert-replace-region-stream-args
+   (lambda ()
+     (ellama-code-improve))))
+
+(ert-deftest test-ellama-make-format-passes-replace-region-to-stream ()
+  (ellama-test--assert-replace-region-stream-args
+   (lambda ()
+     (ellama-make-format "as list"))))
+
+(ert-deftest test-ellama-change-restores-buffer-on-stream-error ()
+  (let ((ellama-spinner-enabled nil)
+        (ellama-response-process-method 'streaming)
+        (original "Hello world.\n"))
+    (with-temp-buffer
+      (insert original)
+      (cl-letf (((symbol-function 'llm-chat-streaming)
+                 (lambda (_provider _prompt _partial-callback _response-callback
+                          error-callback _multi-output)
+                   (funcall error-callback 'error "network failed")
+                   'request)))
+        (should-error
+         (ellama-change "fix grammar")
+         :type 'error))
+      (should (equal (buffer-string) original)))))
 
 (ert-deftest test-ellama--code-filter ()
   (should (equal "" (ellama--code-filter "")))

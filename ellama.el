@@ -1540,7 +1540,7 @@ REASONING-BUFFER is a buffer for reasoning."
      'system)))
 
 (defun ellama--error-handler (buffer errcb &optional prompt
-					     retry-fn request-context)
+				     retry-fn request-context)
   "Error handler function.
 BUFFER is the current ellama buffer.
 ERRCB is an error callback.
@@ -1555,15 +1555,15 @@ REQUEST-CONTEXT is request context."
 	  (progn
 	    (ellama--append-tool-error-to-prompt prompt msg)
 	    (funcall retry-fn))
-			(cancel-change-group ellama--change-group)
-			(when ellama-spinner-enabled
-			  (spinner-stop))
-			(funcall errcb msg)
-			(ellama--deactivate-current-request request-context)))))
+	(cancel-change-group ellama--change-group)
+	(when ellama-spinner-enabled
+	  (spinner-stop))
+	(funcall errcb msg)
+	(ellama--deactivate-current-request request-context)))))
 
 (defun ellama--response-handler (result-handler reasoning-buffer buffer donecb
-					 errcb provider llm-prompt async filter
-					 &optional request-context)
+						errcb provider llm-prompt async filter
+						&optional request-context)
   "Response handler function.
 RESULT-HANDLER handles text insertion.
 REASONING-BUFFER used for reasoning output.
@@ -1622,28 +1622,28 @@ inserted into the BUFFER."
                               (start-request))
                             request-context))
                           (request
-                           (with-current-buffer buffer
-                             (if async
-                                 (llm-chat-async
-                                  provider
-                                  llm-prompt
-                                  (ellama--response-handler
-                                   handler reasoning-buffer buffer donecb errcb
-                                   provider llm-prompt async filter
-                                   request-context)
-                                  error-handler
-                                  t)
-                               (llm-chat-streaming
-                                provider
-                                llm-prompt
-                                (if (integerp ellama-response-process-method)
-                                    skip-handler handler)
-                                (ellama--response-handler
-                                 handler reasoning-buffer buffer donecb errcb
-                                 provider llm-prompt async filter
-                                 request-context)
-                                error-handler
-                                t)))))
+                            (with-current-buffer buffer
+                              (if async
+                                  (llm-chat-async
+                                   provider
+                                   llm-prompt
+                                   (ellama--response-handler
+                                    handler reasoning-buffer buffer donecb errcb
+                                    provider llm-prompt async filter
+                                    request-context)
+                                   error-handler
+                                   t)
+				(llm-chat-streaming
+                                 provider
+                                 llm-prompt
+                                 (if (integerp ellama-response-process-method)
+                                     skip-handler handler)
+                                 (ellama--response-handler
+                                  handler reasoning-buffer buffer donecb errcb
+                                  provider llm-prompt async filter
+                                  request-context)
+                                 error-handler
+                                 t)))))
                      (when (= generation request-generation)
                        (setq request-context
                              (ellama--set-current-request
@@ -1674,6 +1674,10 @@ ARGS contains keys for fine control.
 in.  Default value is (current-buffer).
 
 :point POINT -- POINT is the point in buffer to insert ellama reply at.
+
+:replace-beg POS -- POS is beginning of region to replace in BUFFER.
+
+:replace-end POS -- POS is end of region to replace in BUFFER.
 
 :tools LIST -- LIST of enabled in the current session tools.
 
@@ -1715,6 +1719,9 @@ failure (with BUFFER current).
 			    (concat (make-temp-name "*ellama-reasoning-") "*")))
 	 (point (or (plist-get args :point)
 		    (with-current-buffer buffer (point))))
+	 (replace-beg (plist-get args :replace-beg))
+	 (replace-end (plist-get args :replace-end))
+	 (replace-region-p (and replace-beg replace-end))
 	 (filter (or (plist-get args :filter) #'identity))
 	 (errcb (or (plist-get args :on-error)
 		    (lambda (msg)
@@ -1744,77 +1751,94 @@ failure (with BUFFER current).
 						       :tools tools)))
 		       (llm-make-chat-prompt prompt-with-ctx :context system
 					     :tools tools))))
+    (when (not (eq (null replace-beg) (null replace-end)))
+      (error "Specify both :replace-beg and :replace-end"))
     (with-current-buffer reasoning-buffer
       (org-mode))
     (with-current-buffer buffer
       (let ((request-generation 0)
-	    (request-context
-	     (ellama--make-request-context
-	      (list buffer reasoning-buffer))))
+            (request-started nil)
+            (insert-point (if replace-region-p
+                              (copy-marker replace-beg)
+                            point))
+            (replace-beg-marker (when replace-region-p
+                                  (copy-marker replace-beg)))
+            (replace-end-marker (when replace-region-p
+                                  (copy-marker replace-end)))
+            (request-context
+             (ellama--make-request-context
+              (list buffer reasoning-buffer))))
         (cl-labels
-	    ((start-request ()
-	       (let* ((generation (cl-incf request-generation))
-		      (insert-text
-		       (ellama--insert buffer point filter))
-		      (insert-reasoning
-		       (ellama--insert reasoning-buffer nil
-				       #'ellama--translate-markdown-to-org-filter))
-		      (handler
-		       (ellama--handle-partial
-			insert-text insert-reasoning reasoning-buffer))
-		      (error-handler
-		       (ellama--error-handler
-			buffer errcb llm-prompt
-			#'start-request
-			request-context))
-		      (request (pcase ellama-response-process-method
-				 ('async (llm-chat-async
-					  provider
-					  llm-prompt
-					  (ellama--response-handler
-					   handler reasoning-buffer buffer donecb errcb provider
-					   llm-prompt t filter request-context)
-					  error-handler
-					  t))
-				 ('streaming (llm-chat-streaming
-					      provider
-					      llm-prompt
-					      handler
-					      (ellama--response-handler
-					       handler reasoning-buffer buffer donecb errcb
-					       provider llm-prompt nil filter request-context)
-					      error-handler
-					      t))
-				 ((pred integerp)
-				  (let* ((cnt 0)
-					 (skip-handler
-					  (lambda (request)
-					    (if (= cnt ellama-response-process-method)
-						(progn
-						  (funcall handler request)
-						  (setq cnt 0))
-					      (cl-incf cnt)))))
-				    (llm-chat-streaming
-				     provider
-				     llm-prompt
-				     skip-handler
-				     (ellama--response-handler
-				      handler reasoning-buffer buffer donecb errcb provider
-				      llm-prompt t filter request-context)
-				     error-handler
-				     t))))))
-		 (setq ellama--change-group (prepare-change-group))
-		 (activate-change-group ellama--change-group)
-		 (when ellama-spinner-enabled
-		   (require 'spinner)
-		   (spinner-start ellama-spinner-type))
-		 (when (= generation request-generation)
-		   (setq request-context
-			 (ellama--set-current-request
-			  request
-			  (list buffer reasoning-buffer)
-			  request-context))))))
-	  (start-request))))))
+            ((start-request ()
+               (let* ((generation (cl-incf request-generation))
+                      (insert-text
+                       (ellama--insert buffer insert-point filter))
+                      (insert-reasoning
+                       (ellama--insert reasoning-buffer nil
+                                       #'ellama--translate-markdown-to-org-filter))
+                      (handler
+                       (ellama--handle-partial
+                        insert-text insert-reasoning reasoning-buffer))
+                      (error-handler
+                       (ellama--error-handler
+                        buffer errcb llm-prompt
+                        #'start-request
+                        request-context))
+                      request)
+                 (when (not request-started)
+                   (setq request-started t)
+                   (setq ellama--change-group (prepare-change-group))
+                   (activate-change-group ellama--change-group)
+                   (when replace-region-p
+                     (delete-region replace-beg-marker
+                                    replace-end-marker)))
+                 (setq request
+                       (pcase ellama-response-process-method
+                         ('async (llm-chat-async
+                                  provider
+                                  llm-prompt
+                                  (ellama--response-handler
+                                   handler reasoning-buffer buffer donecb errcb provider
+                                   llm-prompt t filter request-context)
+                                  error-handler
+                                  t))
+                         ('streaming (llm-chat-streaming
+                                      provider
+                                      llm-prompt
+                                      handler
+                                      (ellama--response-handler
+                                       handler reasoning-buffer buffer donecb errcb
+                                       provider llm-prompt nil filter request-context)
+                                      error-handler
+                                      t))
+                         ((pred integerp)
+                          (let* ((cnt 0)
+                                 (skip-handler
+                                  (lambda (request)
+                                    (if (= cnt ellama-response-process-method)
+                                        (progn
+                                          (funcall handler request)
+                                          (setq cnt 0))
+                                      (cl-incf cnt)))))
+                            (llm-chat-streaming
+                             provider
+                             llm-prompt
+                             skip-handler
+                             (ellama--response-handler
+                              handler reasoning-buffer buffer donecb errcb provider
+                              llm-prompt t filter request-context)
+                             error-handler
+                             t)))))
+                 (when ellama-spinner-enabled
+                   (require 'spinner)
+                   (spinner-start ellama-spinner-type))
+                 (when (= generation request-generation)
+                   (setq request-context
+                         (ellama--set-current-request
+                          request
+                          (list buffer reasoning-buffer)
+                          request-context))))))
+          (start-request))))))
 
 (defun ellama-chain (initial-prompt forms &optional acc)
   "Call chain of FORMS on INITIAL-PROMPT.
@@ -2484,14 +2508,15 @@ prefix (\\[universal-argument]), prompt the user to amend the template."
 		  (region-end)
 		(point-max)))
          (template-orig (format ellama-change-prompt-template change "%s"))
-         (template (if (= edit-template 4)
-                       (read-from-minibuffer "Template: " template-orig)
-                     template-orig))
+	 (template (if (eq edit-template 4)
+	               (read-from-minibuffer "Template: " template-orig)
+	             template-orig))
 	 (text (buffer-substring-no-properties beg end)))
-    (kill-region beg end)
     (ellama-stream
      (format template text)
-     :point beg)))
+     :point beg
+     :replace-beg beg
+     :replace-end end)))
 
 ;;;###autoload
 (defun ellama-improve-grammar (&optional edit-template)
@@ -2536,14 +2561,15 @@ prefix (\\[universal-argument]), prompt the user to amend the template."
 		  (region-end)
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
-    (kill-region beg end)
     (ellama-stream
      (format
       ellama-code-edit-prompt-template
       change text)
      :provider ellama-coding-provider
      :filter #'ellama--code-filter
-     :point beg)))
+     :point beg
+     :replace-beg beg
+     :replace-end end)))
 
 ;;;###autoload
 (defun ellama-code-improve ()
@@ -2556,14 +2582,15 @@ prefix (\\[universal-argument]), prompt the user to amend the template."
 		  (region-end)
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
-    (kill-region beg end)
     (ellama-stream
      (format
       ellama-code-improve-prompt-template
       text)
      :provider ellama-coding-provider
      :filter #'ellama--code-filter
-     :point beg)))
+     :point beg
+     :replace-beg beg
+     :replace-end end)))
 
 ;;;###autoload
 (defun ellama-code-complete ()
@@ -2638,12 +2665,13 @@ generation."
 		  (region-end)
 		(point-max)))
 	 (text (buffer-substring-no-properties beg end)))
-    (kill-region beg end)
     (ellama-stream
      (format
       ellama-make-format-prompt-template
       needed-format text)
-     :point beg)))
+     :point beg
+     :replace-beg beg
+     :replace-end end)))
 
 ;;;###autoload
 (defun ellama-make-list ()
