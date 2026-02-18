@@ -38,10 +38,10 @@
   :group 'ellama)
 
 (defcustom ellama-community-prompts-file (expand-file-name
-					  "community-prompts.csv"
-					  (file-name-concat
-					   user-emacs-directory
-					   "ellama"))
+                                          "community-prompts.csv"
+                                          (file-name-concat
+                                           user-emacs-directory
+                                           "ellama"))
   "Path to the CSV file containing community prompts.
 This file is expected to be located inside an `ellama' subdirectory
 within your `user-emacs-directory'."
@@ -57,15 +57,15 @@ not already exist."
       (unless (file-directory-p directory)
         (make-directory directory t))
       (let ((response (plz 'get ellama-community-prompts-url
-                            :as 'file
-                            :then (lambda (filename)
-                                    (rename-file filename
-                                                 ellama-community-prompts-file
-                                                 t))
-                            :else (lambda (error)
-                                    (message
-                                     "Failed to download community prompts: %s"
-                                     error)))))
+                           :as 'file
+                           :then (lambda (filename)
+                                   (rename-file filename
+                                                ellama-community-prompts-file
+                                                t))
+                           :else (lambda (error)
+                                   (message
+                                    "Failed to download community prompts: %s"
+                                    error)))))
         (when response
           (message "Community prompts file downloaded successfully."))))))
 
@@ -83,25 +83,25 @@ LINE is the string to be parsed."
           (cond
            ;; Opening quote (start of field)
            ((and (eq char ?\") (not inside-quotes))
-	    (setq inside-quotes t)
-	    (cl-incf i))
+            (setq inside-quotes t)
+            (cl-incf i))
            ;; Closing quote (end of field or escaped quote)
            ((and (eq char ?\") inside-quotes)
-	    (if (and (< (1+ i) len) (eq (aref line (1+ i)) ?\"))
+            (if (and (< (1+ i) len) (eq (aref line (1+ i)) ?\"))
                 (progn  ; Escaped quote: add single quote, skip next character
                   (setq current-field (concat current-field "\""))
                   (cl-incf i 2))
-	      (setq inside-quotes nil)  ; End of quoted field
-	      (cl-incf i)))
+              (setq inside-quotes nil)  ; End of quoted field
+              (cl-incf i)))
            ;; Comma separator (outside quotes)
            ((and (eq char ?,) (not inside-quotes))
-	    (push current-field fields)
-	    (setq current-field "")
-	    (cl-incf i))
+            (push current-field fields)
+            (setq current-field "")
+            (cl-incf i))
            ;; Regular character
            (t
-	    (setq current-field (concat current-field (string char)))
-	    (cl-incf i))))
+            (setq current-field (concat current-field (string char)))
+            (cl-incf i))))
      ;; Add the last field after loop ends
      finally return (nreverse (cons current-field fields)))))
 
@@ -110,8 +110,8 @@ LINE is the string to be parsed."
 PARSED-LINE is expected to be a list with three elements: :act,
 :prompt, and :for-devs."
   (let ((act (cl-first parsed-line))
-	(prompt (cl-second parsed-line))
-	(for-devs (string= "TRUE" (cl-third parsed-line))))
+        (prompt (cl-second parsed-line))
+        (for-devs (string= "TRUE" (cl-third parsed-line))))
     `(:act ,act :prompt ,prompt :for-devs ,for-devs)))
 
 (defvar ellama-community-prompts-collection nil
@@ -129,16 +129,16 @@ Returns the collection of community prompts."
   (ellama-community-prompts-ensure-file)
   (unless ellama-community-prompts-collection
     (setq ellama-community-prompts-collection
-	  (let ((buf (find-file-noselect ellama-community-prompts-file)))
-	    (with-current-buffer buf
-	      (mapcar (lambda (line)
-			(ellama-community-prompts-convert-to-plist
-			 (ellama-community-prompts-parse-csv-line
-			  line)))
-		      (cdr (string-lines
-			    (buffer-substring-no-properties
-			     (point-min) (point-max))
-			    t)))))))
+          (let ((buf (find-file-noselect ellama-community-prompts-file)))
+            (with-current-buffer buf
+              (mapcar (lambda (line)
+                        (ellama-community-prompts-convert-to-plist
+                         (ellama-community-prompts-parse-csv-line
+                          line)))
+                      (cdr (string-lines
+                            (buffer-substring-no-properties
+                             (point-min) (point-max))
+                            t)))))))
   ellama-community-prompts-collection)
 
 ;;;###autoload

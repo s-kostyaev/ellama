@@ -66,7 +66,7 @@ Otherwise, prompt the user to enter a system message."
   "Set system message from current buffer."
   (interactive)
   (setq ellama-global-system (buffer-substring-no-properties
-			      (point-min) (point-max))))
+                              (point-min) (point-max))))
 
 (transient-define-suffix ellama-transient-set-ollama-model ()
   "Set ollama model name."
@@ -94,11 +94,11 @@ Otherwise, prompt the user to enter a system message."
   (setq ellama-transient-port (read-number "Enter port: ")))
 
 (defvar ellama-provider-list '(ellama-provider
-			       ellama-coding-provider
-			       ellama-translation-provider
-			       ellama-extraction-provider
-			       ellama-summarization-provider
-			       ellama-naming-provider)
+                               ellama-coding-provider
+                               ellama-translation-provider
+                               ellama-extraction-provider
+                               ellama-summarization-provider
+                               ellama-naming-provider)
   "List of ollama providers.")
 
 (transient-define-suffix ellama-transient-model-get-from-provider ()
@@ -106,8 +106,8 @@ Otherwise, prompt the user to enter a system message."
   (interactive)
   (ellama-fill-transient-ollama-model
    (eval (read
-	  (completing-read "Select provider: "
-			   (mapcar #'prin1-to-string ellama-provider-list))))))
+          (completing-read "Select provider: "
+                           (mapcar #'prin1-to-string ellama-provider-list))))))
 
 (transient-define-suffix ellama-transient-model-get-from-current-session ()
   "Fill transient model from current session."
@@ -121,10 +121,10 @@ Otherwise, prompt the user to enter a system message."
   "Set transient model to provider."
   (interactive)
   (let ((provider (read
-		   (completing-read "Select provider: "
-				    (mapcar #'prin1-to-string ellama-provider-list)))))
+                   (completing-read "Select provider: "
+                                    (mapcar #'prin1-to-string ellama-provider-list)))))
     (set provider
-	 (ellama-construct-ollama-provider-from-transient))
+         (ellama-construct-ollama-provider-from-transient))
     ;; if you change `ellama-provider' you probably want to start new chat session
     (when (equal provider 'ellama-provider)
       (setq ellama--current-session-id nil))))
@@ -154,13 +154,13 @@ Otherwise, prompt the user to enter a system message."
     ("h" "Set Host" ellama-transient-set-host
      :transient t
      :description (lambda () (if ellama-transient-host
-				 (format "Host (%s)" ellama-transient-host)
-			       "Host")))
+                                 (format "Host (%s)" ellama-transient-host)
+                               "Host")))
     ("p" "Set Port" ellama-transient-set-port
      :transient t
      :description (lambda () (if ellama-transient-port
-				 (format "Port (%s)" ellama-transient-port)
-			       "Port")))]
+                                 (format "Port (%s)" ellama-transient-port)
+                               "Port")))]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 (defun ellama-fill-transient-ollama-model (provider)
@@ -178,10 +178,10 @@ Otherwise, prompt the user to enter a system message."
     (setq ellama-transient-host (llm-ollama-host provider))
     (setq ellama-transient-port (llm-ollama-port provider))
     (let* ((other-params (llm-ollama-default-chat-non-standard-params provider))
-	   (ctx-len (when other-params (alist-get
-					"num_ctx"
-					(seq--into-list other-params)
-					nil nil #'string=))))
+           (ctx-len (when other-params (alist-get
+                                        "num_ctx"
+                                        (seq--into-list other-params)
+                                        nil nil #'string=))))
       (setq ellama-transient-context-length (or ctx-len 4096)))))
 
 (defun ellama-construct-ollama-provider-from-transient ()
@@ -385,8 +385,8 @@ ARGS used for transient arguments."
    ("-e" "Use Ephemeral Context" "--ephemeral")]
   ["Context Commands"
    :description (lambda ()
-		  (ellama-context-update-buffer)
-		  (format "Current context:
+                  (ellama-context-update-buffer)
+                  (format "Current context:
 %s" (with-current-buffer ellama-context-buffer
       (buffer-substring (point-min) (point-max)))))
    ["Add"

@@ -104,18 +104,18 @@ Make reasoning models more useful for many cases."
 (defcustom ellama-providers nil
   "LLM provider list for fast switching."
   :type '(alist :key-type string
-		:value-type (sexp :validate llm-standard-provider-p)))
+                :value-type (sexp :validate llm-standard-provider-p)))
 
 (defvar spinner-types)
 
 (defcustom ellama-spinner-type 'progress-bar
   "Spinner type for ellama."
   :type `(choice ,@(if (boundp 'spinner-types)
-		       (mapcar
-			(lambda (type)
-			  `(const ,(car type)))
-			spinner-types)
-		     '(const progress-bar))))
+                       (mapcar
+                        (lambda (type)
+                          `(const ,(car type)))
+                        spinner-types)
+                     '(const progress-bar))))
 
 (defcustom ellama-spinner-enabled nil
   "Enable spinner during text generation."
@@ -190,9 +190,9 @@ Make reasoning models more useful for many cases."
   "Key sequence for Ellama Commands."
   :type 'string
   :set (lambda (symbol value)
-	 (custom-set-default symbol value)
-	 (when value
-	   (ellama-setup-keymap))))
+         (custom-set-default symbol value)
+         (when value
+           (ellama-setup-keymap))))
 
 (defcustom ellama-auto-scroll nil
   "If enabled ellama buffer will scroll automatically during generation."
@@ -223,8 +223,8 @@ PROMPT is a prompt string."
   :type `(choice
           (const :tag "By first N words of prompt" ellama-generate-name-by-words)
           (const :tag "By current time" ellama-generate-name-by-time)
-	  (const :tag "By generating name with LLM based on prompt." ellama-generate-name-by-llm)
-	  (const :tag "By generating name with reasoning LLM based on prompt." ellama-generate-name-by-reasoning-llm)
+          (const :tag "By generating name with LLM based on prompt." ellama-generate-name-by-llm)
+          (const :tag "By generating name with reasoning LLM based on prompt." ellama-generate-name-by-reasoning-llm)
           (function :tag "By custom function")))
 
 (defcustom ellama-response-process-method 'streaming
@@ -232,9 +232,9 @@ PROMPT is a prompt string."
 If the default streaming method is too resource-heavy, you can try other
 options."
   :type `(choice
-	  (const :tag "Streaming" streaming)
-	  (const :tag "Async" async)
-	  (integer :tag "Skip every N messages before process one")))
+          (const :tag "Streaming" streaming)
+          (const :tag "Async" async)
+          (integer :tag "Skip every N messages before process one")))
 
 (defcustom ellama-define-word-prompt-template "Define %s"
   "Prompt template for `ellama-define-word'."
@@ -469,9 +469,9 @@ It should be a function with single argument generated text string."
   :type 'boolean)
 
 (defcustom ellama-sessions-directory (file-truename
-				      (file-name-concat
-				       user-emacs-directory
-				       "ellama-sessions"))
+                                      (file-name-concat
+                                       user-emacs-directory
+                                       "ellama-sessions"))
   "Directory for saved ellama sessions."
   :type 'string)
 
@@ -552,10 +552,10 @@ It should be a function with single argument generated text string."
   "Fill long lines only in TEXT."
   (if ellama-fill-paragraphs
       (with-temp-buffer
-	(insert (propertize text 'hard t))
-	(let ((use-hard-newlines t))
-	  (fill-region (point-min) (point-max) nil t t))
-	(buffer-substring-no-properties (point-min) (point-max)))
+        (insert (propertize text 'hard t))
+        (let ((use-hard-newlines t))
+          (fill-region (point-min) (point-max) nil t t))
+        (buffer-substring-no-properties (point-min) (point-max)))
     text))
 
 (defun ellama--replace-first-begin-src (text)
@@ -617,14 +617,14 @@ It should be a function with single argument generated text string."
   "Replace FROM to TO in region BEG END."
   (goto-char beg)
   (while (and
-	  (> end beg)
-	  (re-search-forward from end t))
+          (> end beg)
+          (re-search-forward from end t))
     (replace-match to)))
 
 (defun ellama--apply-transformations (beg end)
   "Apply md to org transformations for region BEG END."
   (let ((beg-pos (make-marker))
-	(end-pos (make-marker)))
+        (end-pos (make-marker)))
     (set-marker-insertion-type beg-pos t)
     (set-marker-insertion-type end-pos t)
     (set-marker beg-pos beg)
@@ -663,7 +663,7 @@ It should be a function with single argument generated text string."
     (set-hard-newline-properties beg-pos end-pos)
     (when ellama-fill-paragraphs
       (let* ((use-hard-newlines t))
-	(fill-region beg end-pos nil t t)))))
+        (fill-region beg end-pos nil t t)))))
 
 (defun ellama--replace-outside-of-code-blocks (text)
   "Replace markdown elements in TEXT with org equivalents.
@@ -672,43 +672,43 @@ Skip code blocks and math environments."
     (insert (propertize text 'hard t))
     (goto-char (point-min))
     (let ((block-start (make-marker))
-	  (block-end (make-marker))
-	  (prev-point (point-min)))
+          (block-end (make-marker))
+          (prev-point (point-min)))
       (set-marker-insertion-type block-start t)
       (set-marker-insertion-type block-end t)
       ;; Process regions outside of blocks
       (while (re-search-forward "\\(#\\+BEGIN_SRC\\|\\$\\$\\|\\$\\|`\\)" nil t)
         (set-marker block-start (match-beginning 0))
-	(goto-char block-start)
+        (goto-char block-start)
         (let ((block-type (cond ((looking-at "#\\+BEGIN_SRC") 'src)
                                 ((looking-at "\\$\\$") 'math-display)
                                 ((looking-at "\\$") 'math-inline)
-				((looking-at "`") 'code-inline))))
+                                ((looking-at "`") 'code-inline))))
           ;; Apply transformations to text before the block
           (ellama--apply-transformations prev-point block-start)
           ;; Skip over the block content
           (goto-char block-start)
           (set-marker block-end
-		      (cond
-		       ((eq block-type 'src)
-			(if (re-search-forward "#\\+END_SRC" nil t) (point) (point-max)))
-		       ((eq block-type 'math-display)
-			(if (re-search-forward "\\$\\$.+?\\$\\$" nil t) (point) (point-max)))
-		       ((eq block-type 'math-inline)
-			(if (re-search-forward "\\$.+?\\$" nil t) (point) (point-max)))
-		       ((eq block-type 'code-inline)
-			(if (re-search-forward "`\\([^`]+\\)`" nil t)
-			    (progn
-			      (replace-match "~\\1~")
-			      (point))
-			  (point-max)))))
+                      (cond
+                       ((eq block-type 'src)
+                        (if (re-search-forward "#\\+END_SRC" nil t) (point) (point-max)))
+                       ((eq block-type 'math-display)
+                        (if (re-search-forward "\\$\\$.+?\\$\\$" nil t) (point) (point-max)))
+                       ((eq block-type 'math-inline)
+                        (if (re-search-forward "\\$.+?\\$" nil t) (point) (point-max)))
+                       ((eq block-type 'code-inline)
+                        (if (re-search-forward "`\\([^`]+\\)`" nil t)
+                            (progn
+                              (replace-match "~\\1~")
+                              (point))
+                          (point-max)))))
           (when block-end
-	    (goto-char block-end))
-	  (setq prev-point (point))))
+            (goto-char block-end))
+          (setq prev-point (point))))
       ;; Process any remaining text after the last block
       (ellama--apply-transformations prev-point (point-max)))
     (prog1
-	(buffer-substring-no-properties (point-min) (point-max))
+        (buffer-substring-no-properties (point-min) (point-max))
       (kill-buffer (current-buffer)))))
 
 (defun ellama--translate-markdown-to-org-filter (text)
@@ -733,11 +733,11 @@ This filter contains only subset of markdown syntax to be good enough."
   "Enable or disable Ellama keymap."
   :type 'boolean
   :set (lambda (symbol value)
-	 (custom-set-default symbol value)
-	 (if value
-	     (ellama-setup-keymap)
-	   ;; If ellama-enable-keymap is nil, remove the key bindings
-	   (define-key global-map (kbd ellama-keymap-prefix) nil))))
+         (custom-set-default symbol value)
+         (if value
+             (ellama-setup-keymap)
+           ;; If ellama-enable-keymap is nil, remove the key bindings
+           (define-key global-map (kbd ellama-keymap-prefix) nil))))
 
 (defcustom ellama-naming-provider nil
   "LLM provider for generating names."
@@ -789,7 +789,7 @@ This filter contains only subset of markdown syntax to be good enough."
     (let ((element '(:eval (ellama-session-line))))
       (if ellama-session-header-line-mode
           (add-to-list 'header-line-format element t)
-	(setq header-line-format (delete element header-line-format))))))
+        (setq header-line-format (delete element header-line-format))))))
 
 (defun ellama-session-update-mode-line ()
   "Update mode line for ellama session mode line mode."
@@ -814,7 +814,7 @@ PROMPT is a variable contains last prompt in this session.
 
 CONTEXT will be ignored.  Use global context instead.
 
-EXTRA contains additional information."
+  EXTRA contains additional information."
   id provider file prompt context extra)
 
 (defun ellama-get-session-buffer (id)
@@ -837,50 +837,50 @@ EXTRA contains additional information."
     (string-join
      (flatten-tree
       (list (split-string (format "%s" action) "-")
-	    (seq-take prompt-words ellama-name-prompt-words-count)
-	    (if (> (length prompt-words) ellama-name-prompt-words-count)
-		"..."
-	      nil)
-	    (format "(%s)" (llm-name provider))))
+            (seq-take prompt-words ellama-name-prompt-words-count)
+            (if (> (length prompt-words) ellama-name-prompt-words-count)
+                "..."
+              nil)
+            (format "(%s)" (llm-name provider))))
      " ")))
 
 (defun ellama-get-name (prompt)
   "Generate session name by LLM based on PROMPT."
   (let ((provider (or ellama-naming-provider
-		      ellama-provider
-		      (ellama-get-first-ollama-chat-model))))
+                      ellama-provider
+                      (ellama-get-first-ollama-chat-model))))
     (string-trim-right
      (string-trim
       (seq-first
        (split-string
-	(llm-chat provider (llm-make-simple-chat-prompt
-			    (format ellama-get-name-template prompt)))
-	"\n")))
+        (llm-chat provider (llm-make-simple-chat-prompt
+                            (format ellama-get-name-template prompt)))
+        "\n")))
      "\\.")))
 
 (defun ellama-remove-reasoning (text)
   "Remove R1-like reasoning from TEXT."
   (string-trim (replace-regexp-in-string
-		"<think>\\(.\\|\n\\)*</think>"
-		""
-		text)))
+                "<think>\\(.\\|\n\\)*</think>"
+                ""
+                text)))
 
 (defun ellama-generate-name-by-llm (provider _action prompt)
   "Generate name for ellama ACTION by PROVIDER and PROMPT by LLM."
   (format "%s (%s)"
-	  (ellama-get-name prompt)
-	  (llm-name provider)))
+          (ellama-get-name prompt)
+          (llm-name provider)))
 
 (defun ellama-generate-name-by-reasoning-llm (provider _action prompt)
   "Generate name for ellama ACTION by PROVIDER and PROMPT by LLM."
   (format "%s (%s)"
-	  (ellama-remove-reasoning
-	   (llm-chat (or ellama-naming-provider
-			 ellama-provider
-			 (ellama-get-first-ollama-chat-model))
-		     (llm-make-simple-chat-prompt
-		      (format ellama-get-name-template prompt))))
-	  (llm-name provider)))
+          (ellama-remove-reasoning
+           (llm-chat (or ellama-naming-provider
+                         ellama-provider
+                         (ellama-get-first-ollama-chat-model))
+                     (llm-make-simple-chat-prompt
+                      (format ellama-get-name-template prompt))))
+          (llm-name provider)))
 
 (defun ellama-get-current-time ()
   "Return string representation of current time."
@@ -1041,34 +1041,34 @@ REQUEST-CONTEXT is a request context."
 (defun ellama--get-session-file-name (file-name)
   "Get ellama session file name for FILE-NAME."
   (let* ((base-name (file-name-nondirectory file-name))
-	 (dir (file-name-directory file-name))
-	 (session-file-name
-	  (file-name-concat
-	   dir
-	   (concat "." base-name ".session.el"))))
+         (dir (file-name-directory file-name))
+         (session-file-name
+          (file-name-concat
+           dir
+           (concat "." base-name ".session.el"))))
     session-file-name))
 
 (defun ellama--get-translation-file-name (file-name)
   "Get ellama translation file name for FILE-NAME."
   (let* ((base-name (file-name-base file-name))
-	 (ext (file-name-extension file-name))
-	 (dir (file-name-directory file-name))
-	 (translation-file-name
-	  (file-name-concat
-	   dir
-	   (concat base-name ".translation"
-		   (when ext
-		     (concat "." ext))))))
+         (ext (file-name-extension file-name))
+         (dir (file-name-directory file-name))
+         (translation-file-name
+          (file-name-concat
+           dir
+           (concat base-name ".translation"
+                   (when ext
+                     (concat "." ext))))))
     translation-file-name))
 
 (defun ellama--save-session ()
   "Save current ellama session."
   (when ellama--current-session
     (let* ((session ellama--current-session)
-	   (file-name (or (ellama-session-file session) buffer-file-name))
-	   (session-file-name (ellama--get-session-file-name file-name)))
+           (file-name (or (ellama-session-file session) buffer-file-name))
+           (session-file-name (ellama--get-session-file-name file-name)))
       (with-temp-file session-file-name
-	(insert (prin1-to-string session))))))
+        (insert (prin1-to-string session))))))
 
 ;;;###autoload
 (defun ellama-load-session ()
@@ -1167,11 +1167,11 @@ REQUEST-CONTEXT is a request context."
     (mapc
      (lambda (buf)
        (when (and
-	      translation-file
-	      (buffer-file-name buf)
-	      (file-equal-p (buffer-file-name buf)
-			    translation-file))
-	 (kill-buffer buf)))
+              translation-file
+              (buffer-file-name buf)
+              (file-equal-p (buffer-file-name buf)
+                            translation-file))
+         (kill-buffer buf)))
      (buffer-list))
     (when (and translation-file (file-exists-p translation-file))
       (delete-file translation-file t))))
@@ -1190,7 +1190,7 @@ REQUEST-CONTEXT is a request context."
 	 (buffer (ellama-get-session-buffer id)))
     (ellama-activate-session id)
     (display-buffer buffer (when ellama-chat-display-action-function
-			     `((ignore . (,ellama-chat-display-action-function)))))))
+                             `((ignore . (,ellama-chat-display-action-function)))))))
 
 ;;;###autoload
 (defun ellama-session-kill ()
@@ -1225,9 +1225,9 @@ REQUEST-CONTEXT is a request context."
 	 (new-session-file-name
 	  (when new-file-name (ellama--get-session-file-name new-file-name))))
     (when new-file-name (with-current-buffer buffer
-			  (set-visited-file-name new-file-name)))
+                          (set-visited-file-name new-file-name)))
     (when buffer (with-current-buffer buffer
-		   (rename-buffer (or new-file-name new-id))))
+                   (rename-buffer (or new-file-name new-id))))
     (when (and file-name (file-exists-p file-name))
       (rename-file file-name new-file-name))
     (when (and session-file-name (file-exists-p session-file-name))
@@ -1239,7 +1239,7 @@ REQUEST-CONTEXT is a request context."
     (puthash new-id buffer ellama--active-sessions)
     (when (and buffer ellama-session-auto-save)
       (with-current-buffer buffer
-	(save-buffer)))))
+        (save-buffer)))))
 
 (defface ellama-face '((t (:inherit shadow)))
   "Base face for all ellama things.")
@@ -1276,7 +1276,7 @@ Then kill current buffer."
     s
     :context
     (format ellama-translation-template
-	    ellama-language))))
+            ellama-language))))
 
 (defun ellama-chat-buffer-p (buffer)
   "Return non-nil if BUFFER is an ellama chat buffer."
@@ -1309,11 +1309,11 @@ Otherwire return current active session."
   (declare-function org-hide-block-toggle "ext:org-compat")
   (when (derived-mode-p 'org-mode)
     (progn (save-excursion
-	     (goto-char (point-min))
-	     (org-element-map (org-element-parse-buffer) 'quote-block
-	       (lambda (block)
-		 (goto-char (org-element-property :begin block))
-		 (org-hide-block-toggle 't)))))))
+             (goto-char (point-min))
+             (org-element-map (org-element-parse-buffer) 'quote-block
+                              (lambda (block)
+                                (goto-char (org-element-property :begin block))
+                                (org-hide-block-toggle 't)))))))
 
 (defun ellama-hide-quotes ()
   "Hide quotes in current session buffer if needed."
@@ -1330,14 +1330,14 @@ Otherwire return current active session."
 Returns the full path to AGENTS.md if found, or nil if not found."
   (let* ((current-dir (file-name-directory (expand-file-name default-directory)))
          (project-root (or (and (ellama-tools-project-root-tool)
-				(file-name-directory (expand-file-name
-						      (ellama-tools-project-root-tool))))
-			   current-dir))
+                                (file-name-directory (expand-file-name
+                                                      (ellama-tools-project-root-tool))))
+                           current-dir))
          found-path)
     ;; Walk up from current directory to project root
     (while (and (not found-path)
-		(or (string= current-dir project-root)
-		    (string> current-dir project-root)))
+                (or (string= current-dir project-root)
+                    (string> current-dir project-root)))
       (let ((agents-path (expand-file-name "AGENTS.md" current-dir)))
         (when (file-exists-p agents-path)
           (setq found-path agents-path)))
@@ -1348,19 +1348,19 @@ Returns the full path to AGENTS.md if found, or nil if not found."
 (defun ellama-get-agents-md ()
   "Return current project or subproject AGENTS.md content."
   (or (when-let ((path (ellama-get-agents-md-path)))
-	(concat
-	 "\n"
-	 (with-temp-buffer
-	   (insert-file-contents path)
-	   (buffer-string))))
+        (concat
+         "\n"
+         (with-temp-buffer
+           (insert-file-contents path)
+           (buffer-string))))
       ""))
 
 (defun ellama-get-system-message (&optional msg)
   "Return the effective system message, including dynamically scanned skills.
 MSG is a text that will be included in the resulting system message."
   (let ((msg (concat (or msg ellama-global-system "")
-		     (ellama-get-agents-md)
-		     (ellama-skills-generate-prompt))))
+                     (ellama-get-agents-md)
+                     (ellama-skills-generate-prompt))))
     (when (not (string= msg ""))
       msg)))
 
@@ -1374,8 +1374,8 @@ EVENT is an argument for mweel scroll."
   (with-current-buffer
       (window-buffer
        (if (windowp (caadar event))
-	   (caadar event)
-	 (mwheel-event-window event)))
+           (caadar event)
+         (mwheel-event-window event)))
     (setq ellama--stop-scroll t)))
 
 ;;;###autoload
@@ -1396,7 +1396,7 @@ EVENT is an argument for mweel scroll."
   "Remove last two lines from string S."
   (string-join
    (reverse (cddr (reverse (string-lines
-			    s))))
+                            s))))
    "\n"))
 
 (defun ellama--insert (buffer point filter)
@@ -1410,86 +1410,86 @@ FILTER is a function for text transformation."
       buffer
     (let* ((end-marker (copy-marker (or point (point)) t))
            (beg-marker (copy-marker end-marker nil))
-	   (previous-filtered-text "")
-	   (safe-common-prefix ""))
+           (previous-filtered-text "")
+           (safe-common-prefix ""))
       (lambda
-	(text)
-	(when ellama-debug
-	  (with-current-buffer (get-buffer-create "*ellama-debug*")
-	    (goto-char (point-max))
-	    (insert "\n=======================================\n"
-		    text)))
-	(when (not (string-empty-p text))
-	  (with-current-buffer buffer
-	    (save-excursion
-	      (goto-char end-marker)
-	      (let* ((filtered-text
-		      (funcall filter text))
-		     (use-hard-newlines t)
-		     (common-prefix (concat
-				     safe-common-prefix
-				     (ellama-max-common-prefix
-				      (string-remove-prefix
-				       safe-common-prefix
-				       filtered-text)
-				      (string-remove-prefix
-				       safe-common-prefix
-				       previous-filtered-text))))
-		     (wrong-chars-cnt (- (length previous-filtered-text)
-					 (length common-prefix)))
-		     (delta (string-remove-prefix common-prefix filtered-text)))
-		(if (> wrong-chars-cnt 0)
-		    ;; shortcut works
-		    (progn
-		      (delete-char (- wrong-chars-cnt))
-		      (when delta (insert (propertize delta 'hard t))
-			    (when (and
-				   ellama-fill-paragraphs
-				   (pcase ellama-fill-paragraphs
-				     ((cl-type function) (funcall ellama-fill-paragraphs))
-				     ((cl-type boolean) ellama-fill-paragraphs)
-				     ((cl-type list) (and (apply #'derived-mode-p
-								 ellama-fill-paragraphs)))))
-			      (if (not (derived-mode-p 'org-mode))
-				  (fill-paragraph)
-				(when (not (save-excursion
-					     (re-search-backward
-					      "#\\+BEGIN_SRC"
-					      beg-marker t)))
-				  (org-fill-paragraph))))
-			    (set-marker end-marker (point))
-			    (when (and ellama-auto-scroll (not ellama--stop-scroll))
-			      (ellama--scroll buffer end-marker))
-			    (setq safe-common-prefix (ellama--string-without-last-two-lines common-prefix))
-			    (setq previous-filtered-text filtered-text)))
-		  ;; shortcut doesn't work -> heavy computations
-		  (let* ((common-prefix (ellama-max-common-prefix
-					 filtered-text
-					 previous-filtered-text))
-			 (wrong-chars-cnt (- (length previous-filtered-text)
-					     (length common-prefix)))
-			 (delta (string-remove-prefix common-prefix filtered-text)))
-		    (delete-char (- wrong-chars-cnt))
-		    (when delta (insert (propertize delta 'hard t))
-			  (when (and
-				 ellama-fill-paragraphs
-				 (pcase ellama-fill-paragraphs
-				   ((cl-type function) (funcall ellama-fill-paragraphs))
-				   ((cl-type boolean) ellama-fill-paragraphs)
-				   ((cl-type list) (and (apply #'derived-mode-p
-							       ellama-fill-paragraphs)))))
-			    (if (not (derived-mode-p 'org-mode))
-				(fill-paragraph)
-			      (when (not (save-excursion
-					   (re-search-backward
-					    "#\\+BEGIN_SRC"
-					    beg-marker t)))
-				(org-fill-paragraph))))
-			  (set-marker end-marker (point))
-			  (when (and ellama-auto-scroll (not ellama--stop-scroll))
-			    (ellama--scroll buffer end-marker))
-			  (setq safe-common-prefix (ellama--string-without-last-two-lines common-prefix))
-			  (setq previous-filtered-text filtered-text))))))))))))
+        (text)
+        (when ellama-debug
+          (with-current-buffer (get-buffer-create "*ellama-debug*")
+            (goto-char (point-max))
+            (insert "\n=======================================\n"
+                    text)))
+        (when (not (string-empty-p text))
+          (with-current-buffer buffer
+            (save-excursion
+              (goto-char end-marker)
+              (let* ((filtered-text
+                      (funcall filter text))
+                     (use-hard-newlines t)
+                     (common-prefix (concat
+                                     safe-common-prefix
+                                     (ellama-max-common-prefix
+                                      (string-remove-prefix
+                                       safe-common-prefix
+                                       filtered-text)
+                                      (string-remove-prefix
+                                       safe-common-prefix
+                                       previous-filtered-text))))
+                     (wrong-chars-cnt (- (length previous-filtered-text)
+                                         (length common-prefix)))
+                     (delta (string-remove-prefix common-prefix filtered-text)))
+                (if (> wrong-chars-cnt 0)
+                    ;; shortcut works
+                    (progn
+                      (delete-char (- wrong-chars-cnt))
+                      (when delta (insert (propertize delta 'hard t))
+                            (when (and
+                                   ellama-fill-paragraphs
+                                   (pcase ellama-fill-paragraphs
+                                     ((cl-type function) (funcall ellama-fill-paragraphs))
+                                     ((cl-type boolean) ellama-fill-paragraphs)
+                                     ((cl-type list) (and (apply #'derived-mode-p
+                                                                 ellama-fill-paragraphs)))))
+                              (if (not (derived-mode-p 'org-mode))
+                                  (fill-paragraph)
+                                (when (not (save-excursion
+                                             (re-search-backward
+                                              "#\\+BEGIN_SRC"
+                                              beg-marker t)))
+                                  (org-fill-paragraph))))
+                            (set-marker end-marker (point))
+                            (when (and ellama-auto-scroll (not ellama--stop-scroll))
+                              (ellama--scroll buffer end-marker))
+                            (setq safe-common-prefix (ellama--string-without-last-two-lines common-prefix))
+                            (setq previous-filtered-text filtered-text)))
+                  ;; shortcut doesn't work -> heavy computations
+                  (let* ((common-prefix (ellama-max-common-prefix
+                                         filtered-text
+                                         previous-filtered-text))
+                         (wrong-chars-cnt (- (length previous-filtered-text)
+                                             (length common-prefix)))
+                         (delta (string-remove-prefix common-prefix filtered-text)))
+                    (delete-char (- wrong-chars-cnt))
+                    (when delta (insert (propertize delta 'hard t))
+                          (when (and
+                                 ellama-fill-paragraphs
+                                 (pcase ellama-fill-paragraphs
+                                   ((cl-type function) (funcall ellama-fill-paragraphs))
+                                   ((cl-type boolean) ellama-fill-paragraphs)
+                                   ((cl-type list) (and (apply #'derived-mode-p
+                                                               ellama-fill-paragraphs)))))
+                            (if (not (derived-mode-p 'org-mode))
+                                (fill-paragraph)
+                              (when (not (save-excursion
+                                           (re-search-backward
+                                            "#\\+BEGIN_SRC"
+                                            beg-marker t)))
+                                (org-fill-paragraph))))
+                          (set-marker end-marker (point))
+                          (when (and ellama-auto-scroll (not ellama--stop-scroll))
+                            (ellama--scroll buffer end-marker))
+                          (setq safe-common-prefix (ellama--string-without-last-two-lines common-prefix))
+                          (setq previous-filtered-text filtered-text))))))))))))
 
 (defun ellama--handle-partial (insert-text insert-reasoning reasoning-buffer)
   "Handle partial LLM callback.
@@ -1498,36 +1498,36 @@ INSERT-REASONING is a function for reasoning insertion.
 REASONING-BUFFER is a buffer for reasoning."
   (lambda (response)
     (let ((text (plist-get response :text))
-	  (reasoning (plist-get response :reasoning))
-	  (tool-results (plist-get response :tool-results)))
+          (reasoning (plist-get response :reasoning))
+          (tool-results (plist-get response :tool-results)))
       (funcall
        insert-text
        (concat
-	(when reasoning
-	  (if
-	      (or (not ellama-output-remove-reasoning)
-		  ellama--current-session)
-	      (concat "<think>\n" reasoning "\n</think>\n")
-	    (progn
-	      (with-current-buffer reasoning-buffer
-		(funcall insert-reasoning reasoning)
-		(when ellama-show-reasoning
-		  (display-buffer
-		   reasoning-buffer
-		   (when ellama-reasoning-display-action-function
-		     `((ignore . (,ellama-reasoning-display-action-function)))))))
-	      nil)))
-	(when tool-results
-	  (format "\n<think>\n%s\n</think>\n"
-		  tool-results))
-	(when text
-	  (string-trim text)))))))
+        (when reasoning
+          (if
+              (or (not ellama-output-remove-reasoning)
+                  ellama--current-session)
+              (concat "<think>\n" reasoning "\n</think>\n")
+            (progn
+              (with-current-buffer reasoning-buffer
+                (funcall insert-reasoning reasoning)
+                (when ellama-show-reasoning
+                  (display-buffer
+                   reasoning-buffer
+                   (when ellama-reasoning-display-action-function
+                     `((ignore . (,ellama-reasoning-display-action-function)))))))
+              nil)))
+        (when tool-results
+          (format "\n<think>\n%s\n</think>\n"
+                  tool-results))
+        (when text
+          (string-trim text)))))))
 
 (defun ellama--tool-call-error-p (err-type)
   "Return non-nil when ERR-TYPE indicates a tool call error."
   (and err-type
        (memq 'llm-tool-call-error
-	     (get err-type 'error-conditions))))
+             (get err-type 'error-conditions))))
 
 (defun ellama--append-tool-error-to-prompt (prompt msg)
   "Append tool call error MSG to PROMPT."
@@ -1535,12 +1535,12 @@ REASONING-BUFFER is a buffer for reasoning."
     (llm-chat-prompt-append-response
      prompt
      (if (stringp msg)
-	 msg
+         msg
        (format "%s" (or msg "Unknown tool call error")))
      'system)))
 
 (defun ellama--error-handler (buffer errcb &optional prompt
-				     retry-fn request-context)
+                                     retry-fn request-context)
   "Error handler function.
 BUFFER is the current ellama buffer.
 ERRCB is an error callback.
@@ -1550,20 +1550,20 @@ REQUEST-CONTEXT is request context."
   (lambda (err-type msg)
     (with-current-buffer buffer
       (if (and retry-fn
-	       prompt
-	       (ellama--tool-call-error-p err-type))
-	  (progn
-	    (ellama--append-tool-error-to-prompt prompt msg)
-	    (funcall retry-fn))
-	(cancel-change-group ellama--change-group)
-	(when ellama-spinner-enabled
-	  (spinner-stop))
-	(funcall errcb msg)
-	(ellama--deactivate-current-request request-context)))))
+               prompt
+               (ellama--tool-call-error-p err-type))
+          (progn
+            (ellama--append-tool-error-to-prompt prompt msg)
+            (funcall retry-fn))
+        (cancel-change-group ellama--change-group)
+        (when ellama-spinner-enabled
+          (spinner-stop))
+        (funcall errcb msg)
+        (ellama--deactivate-current-request request-context)))))
 
 (defun ellama--response-handler (result-handler reasoning-buffer buffer donecb
-						errcb provider llm-prompt async filter
-						&optional request-context)
+                                                errcb provider llm-prompt async filter
+                                                &optional request-context)
   "Response handler function.
 RESULT-HANDLER handles text insertion.
 REASONING-BUFFER used for reasoning output.
@@ -1633,7 +1633,7 @@ inserted into the BUFFER."
                                     request-context)
                                    error-handler
                                    t)
-				(llm-chat-streaming
+                                (llm-chat-streaming
                                  provider
                                  llm-prompt
                                  (if (integerp ellama-response-process-method)
@@ -1732,25 +1732,25 @@ failure (with BUFFER current).
 	 (session-tools (and session
                              (ellama-session-extra session)
                              (plist-get (ellama-session-extra session) :tools)))
-	 (tools (or session-tools
-		    (plist-get args :tools)
-		    ellama-tools-enabled))
-	 (llm-prompt (if session
-			 (if (llm-chat-prompt-p (ellama-session-prompt session))
-			     (progn
-			       (llm-chat-prompt-append-response
-				(ellama-session-prompt session)
-				prompt-with-ctx)
-			       (setf (llm-chat-prompt-tools (ellama-session-prompt session))
-				     tools)
-			       ;; System message is part of prompt context and should not be
-			       ;; appended on each interaction.
-			       (ellama-session-prompt session))
-			   (setf (ellama-session-prompt session)
-				 (llm-make-chat-prompt prompt-with-ctx :context system
-						       :tools tools)))
-		       (llm-make-chat-prompt prompt-with-ctx :context system
-					     :tools tools))))
+         (tools (or session-tools
+                    (plist-get args :tools)
+                    ellama-tools-enabled))
+         (llm-prompt (if session
+                         (if (llm-chat-prompt-p (ellama-session-prompt session))
+                             (progn
+                               (llm-chat-prompt-append-response
+                                (ellama-session-prompt session)
+                                prompt-with-ctx)
+                               (setf (llm-chat-prompt-tools (ellama-session-prompt session))
+                                     tools)
+                               ;; System message is part of prompt context and should not be
+                               ;; appended on each interaction.
+                               (ellama-session-prompt session))
+                           (setf (ellama-session-prompt session)
+                                 (llm-make-chat-prompt prompt-with-ctx :context system
+                                                       :tools tools)))
+                       (llm-make-chat-prompt prompt-with-ctx :context system
+                                             :tools tools))))
     (when (not (eq (null replace-beg) (null replace-end)))
       (error "Specify both :replace-beg and :replace-end"))
     (with-current-buffer reasoning-buffer
@@ -1886,23 +1886,23 @@ last step only.
     (with-current-buffer buf
       (funcall ellama-major-mode))
     (if chat
-	(ellama-chat
-	 prompt
-	 nil
-	 :provider provider
-	 :on-done (lambda (res)
-		    (when tl
-		      (ellama-chain res tl (cons res acc)))))
+        (ellama-chat
+         prompt
+         nil
+         :provider provider
+         :on-done (lambda (res)
+                    (when tl
+                      (ellama-chain res tl (cons res acc)))))
       (ellama-stream
        prompt
        :provider provider
        :buffer buf
        :session session
        :filter (when (derived-mode-p 'org-mode)
-		 #'ellama--translate-markdown-to-org-filter)
+                 #'ellama--translate-markdown-to-org-filter)
        :on-done (lambda (res)
-		  (when tl
-		    (ellama-chain res tl (cons res acc))))))))
+                  (when tl
+                    (ellama-chain res tl (cons res acc))))))))
 
 ;;;###autoload
 (defun ellama-solve-reasoning-problem (problem)
@@ -1912,21 +1912,21 @@ Problem will be solved with the chain of questions to LLM."
   (ellama-chain
    problem
    '((:chat t
-	    :transform (lambda (problem _)
-			 (format "Problem:
+            :transform (lambda (problem _)
+                         (format "Problem:
 %s
 
 Let's think logically and provide abstract higher order plan how to solve this kind
 of problems. Don't dive into small details only provide high-level plan." problem)))
      (:chat t
-	    :transform (lambda (_ _)
-			 "Provide more detailed plan. On what details should we pay attention?"))
+            :transform (lambda (_ _)
+                         "Provide more detailed plan. On what details should we pay attention?"))
      (:chat t
-	    :transform (lambda (_ _)
-			 "Now revise the plan and provide the final solution."))
+            :transform (lambda (_ _)
+                         "Now revise the plan and provide the final solution."))
      (:chat t
-	    :transform (lambda (_ _)
-			 "Provide short final answer based on final solution.")))))
+            :transform (lambda (_ _)
+                         "Provide short final answer based on final solution.")))))
 
 ;;;###autoload
 (defun ellama-solve-domain-specific-problem (problem)
@@ -1935,29 +1935,29 @@ of problems. Don't dive into small details only provide high-level plan." proble
   (ellama-chain
    problem
    `((:transform (lambda (problem _)
-		   (format "Problem:
+                   (format "Problem:
 %s
 
 Which specialist suits better for solving this kind of problems?"
-			   problem)))
+                           problem)))
      (:transform (lambda (res _)
-		   (format "Message:
+                   (format "Message:
 %s
 
 Extract profession from this message. Be short and concise."
-			   res)))
+                           res)))
      (:chat t
-	    :transform (lambda (profession _)
-			 (format
-			  "You are professional %s. Do your best and create detailed plan how to solve this problem:
+            :transform (lambda (profession _)
+                         (format
+                          "You are professional %s. Do your best and create detailed plan how to solve this problem:
 %s"
-			  (string-trim profession) ,problem)))
+                          (string-trim profession) ,problem)))
      (:chat t
-	    :transform (lambda (_ _)
-			 "Now revise the plan and provide the final solution."))
+            :transform (lambda (_ _)
+                         "Now revise the plan and provide the final solution."))
      (:chat t
-	    :transform (lambda (_ _)
-			 "Provide short final answer based on final solution.")))))
+            :transform (lambda (_ _)
+                         "Provide short final answer based on final solution.")))))
 
 (declare-function org-export-to-buffer "ox")
 (defvar org-export-show-temporary-export-buffer)
@@ -1967,36 +1967,36 @@ Extract profession from this message. Be short and concise."
   (require 'ox)
   (require 'ox-md)
   (let ((buf (make-temp-name "ellama-"))
-	(org-export-show-temporary-export-buffer nil))
+        (org-export-show-temporary-export-buffer nil))
     (with-temp-buffer
       (insert "#+OPTIONS: toc:nil broken-links:mark\n" text)
       (org-export-to-buffer 'md buf
-	nil nil t t nil (lambda () (text-mode))))
+                            nil nil t t nil (lambda () (text-mode))))
     (with-current-buffer buf
       (prog1
-	  (string-trim (buffer-substring-no-properties (point-min) (point-max)))
-	(kill-buffer buf)))))
+          (string-trim (buffer-substring-no-properties (point-min) (point-max)))
+        (kill-buffer buf)))))
 
 (defun ellama-get-last-user-message ()
   "Return last not sent user message in current session buffer."
   (when ellama--current-session
     (save-excursion
       (save-match-data
-	(goto-char (point-max))
-	(and (search-backward (concat (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n") nil t)
-	     (search-forward (concat (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n") nil t)
-	     (buffer-substring-no-properties (point) (point-max)))))))
+        (goto-char (point-max))
+        (and (search-backward (concat (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n") nil t)
+             (search-forward (concat (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n") nil t)
+             (buffer-substring-no-properties (point) (point-max)))))))
 
 (defun ellama--scroll (&optional buffer point)
   "Scroll within BUFFER.
 Go to POINT before start scrolling if provided.  A function for
 programmatically scrolling the buffer during text generation."
   (when-let ((ellama-auto-scroll)
-	     (buf (or buffer (current-buffer)))
-	     (window (get-buffer-window buf)))
+             (buf (or buffer (current-buffer)))
+             (window (get-buffer-window buf)))
     (with-selected-window window
       (when (ellama-chat-buffer-p buf)
-	(goto-char (point-max)))
+        (goto-char (point-max)))
       (when point (goto-char point))
       (recenter -1))))
 
@@ -2007,7 +2007,7 @@ Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
     (goto-char (point-max))
     (insert "\n\n" (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n")
     (when (and ellama-session-auto-save
-	       buffer-file-name)
+               buffer-file-name)
       (save-buffer)))
   (ellama--scroll)
   (when ellama-chat-done-callback
@@ -2020,20 +2020,20 @@ Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
   (lambda (generated)
     (ellama-chat-done generated)
     (display-buffer translation-buffer (when ellama-chat-display-action-function
-					 `((ignore . (,ellama-chat-display-action-function)))))
+                                         `((ignore . (,ellama-chat-display-action-function)))))
     (with-current-buffer translation-buffer
       (save-excursion
-	(goto-char (point-max))
-	(ellama-stream generated
-		       :system
-		       (format ellama-translation-template
-			       ellama-language)
-		       :provider (or ellama-translation-provider
-				     ellama-provider
-				     (ellama-get-first-ollama-chat-model))
-		       :on-done #'ellama-chat-done
-		       :filter (when (derived-mode-p 'org-mode)
-				 #'ellama--translate-markdown-to-org-filter))))))
+        (goto-char (point-max))
+        (ellama-stream generated
+                       :system
+                       (format ellama-translation-template
+                               ellama-language)
+                       :provider (or ellama-translation-provider
+                                     ellama-provider
+                                     (ellama-get-first-ollama-chat-model))
+                       :on-done #'ellama-chat-done
+                       :filter (when (derived-mode-p 'org-mode)
+                                 #'ellama--translate-markdown-to-org-filter))))))
 
 (defun ellama--call-llm-with-translated-prompt (buffer session translation-buffer)
   "Call LLM with translated text in BUFFER with SESSION from TRANSLATION-BUFFER."
@@ -2045,40 +2045,40 @@ Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
       (delete-char -2)
       (delete-char (- (length result))))
     (display-buffer buffer (when ellama-chat-display-action-function
-			     `((ignore . (,ellama-chat-display-action-function)))))
+                             `((ignore . (,ellama-chat-display-action-function)))))
     (with-current-buffer buffer
       (save-excursion
-	(goto-char (point-max))
-	(insert (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n"
-		(ellama-context-format session) result "\n\n"
-		(ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
-	(ellama-stream result
-		       :session session
-		       :on-done (ellama--translate-generated-text-on-done translation-buffer)
-		       :filter (when (derived-mode-p 'org-mode)
-				 #'ellama--translate-markdown-to-org-filter))))))
+        (goto-char (point-max))
+        (insert (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n"
+                (ellama-context-format session) result "\n\n"
+                (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
+        (ellama-stream result
+                       :session session
+                       :on-done (ellama--translate-generated-text-on-done translation-buffer)
+                       :filter (when (derived-mode-p 'org-mode)
+                                 #'ellama--translate-markdown-to-org-filter))))))
 
 (defun ellama--translate-interaction (prompt translation-buffer buffer session)
   "Translate chat PROMPT in TRANSLATION-BUFFER for BUFFER with SESSION."
   (display-buffer translation-buffer (when ellama-chat-display-action-function
-				       `((ignore . (,ellama-chat-display-action-function)))))
+                                       `((ignore . (,ellama-chat-display-action-function)))))
   (with-current-buffer translation-buffer
     (save-excursion
       (goto-char (point-max))
       (insert (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n"
-	      (ellama-context-format session) prompt "\n\n"
-	      (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
+              (ellama-context-format session) prompt "\n\n"
+              (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
       (ellama-stream prompt
-		     :system
-		     (format ellama-translation-template
-			     "english")
-		     :provider (or ellama-translation-provider
-				   ellama-provider
-				   (ellama-get-first-ollama-chat-model))
-		     :filter (when (derived-mode-p 'org-mode)
-			       #'ellama--translate-markdown-to-org-filter)
-		     :on-done
-		     (ellama--call-llm-with-translated-prompt buffer session translation-buffer)))))
+                     :system
+                     (format ellama-translation-template
+                             "english")
+                     :provider (or ellama-translation-provider
+                                   ellama-provider
+                                   (ellama-get-first-ollama-chat-model))
+                     :filter (when (derived-mode-p 'org-mode)
+                               #'ellama--translate-markdown-to-org-filter)
+                     :on-done
+                     (ellama--call-llm-with-translated-prompt buffer session translation-buffer)))))
 
 ;;;###autoload
 (defun ellama-chat (prompt &optional create-session &rest args)
@@ -2153,35 +2153,35 @@ the full response text when the request completes (with BUFFER current)."
                        (member #'ellama-chat-send-last-message org-ctrl-c-ctrl-c-hook))))
         (add-hook 'org-ctrl-c-ctrl-c-hook #'ellama-chat-send-last-message 10 t)))
     (if ellama-chat-translation-enabled
-	(ellama--translate-interaction prompt translation-buffer buffer session)
+        (ellama--translate-interaction prompt translation-buffer buffer session)
       (display-buffer buffer (when ellama-chat-display-action-function
-			       `((ignore . (,ellama-chat-display-action-function)))))
+                               `((ignore . (,ellama-chat-display-action-function)))))
       (with-current-buffer buffer
-	(save-excursion
-	  (goto-char (point-max))
-	  (if (equal (point-min) (point-max)) ;; empty buffer
-	      (insert (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n"
-		      (ellama-context-format session) (ellama--fill-long-lines prompt) "\n\n"
-		      (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
-	    (insert (ellama-context-format session) (ellama--fill-long-lines prompt) "\n\n"
-		    (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n"))
-	  (ellama-stream prompt
-			 :session session
-			 :system system
-			 :on-done (if donecb (list 'ellama-chat-done donecb)
-				    'ellama-chat-done)
-			 :filter (when (derived-mode-p 'org-mode)
-				   #'ellama--translate-markdown-to-org-filter)))))))
+        (save-excursion
+          (goto-char (point-max))
+          (if (equal (point-min) (point-max)) ;; empty buffer
+              (insert (ellama-get-nick-prefix-for-mode) " " ellama-user-nick ":\n"
+                      (ellama-context-format session) (ellama--fill-long-lines prompt) "\n\n"
+                      (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
+            (insert (ellama-context-format session) (ellama--fill-long-lines prompt) "\n\n"
+                    (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n"))
+          (ellama-stream prompt
+                         :session session
+                         :system system
+                         :on-done (if donecb (list 'ellama-chat-done donecb)
+                                    'ellama-chat-done)
+                         :filter (when (derived-mode-p 'org-mode)
+                                   #'ellama--translate-markdown-to-org-filter)))))))
 
 ;;;###autoload
 (defun ellama-chat-with-system-from-buffer ()
   "Start a new chat session with a system message created from the current buffer."
   (interactive)
   (let* ((prompt (read-string "Prompt: "))
-	 (content (buffer-substring-no-properties (point-min) (point-max)))
-	 (system (if (derived-mode-p 'org-mode)
-		     (ellama-convert-org-to-md content)
-		   content)))
+         (content (buffer-substring-no-properties (point-min) (point-max)))
+         (system (if (derived-mode-p 'org-mode)
+                     (ellama-convert-org-to-md content)
+                   content)))
     (ellama-chat
      prompt
      t
@@ -2194,21 +2194,21 @@ the full response text when the request completes (with BUFFER current)."
   "Send last user message extracted from current ellama chat buffer."
   (interactive)
   (when-let* ((session ellama--current-session)
-	      (message (ellama-get-last-user-message))
-	      ((length> message 0))
-	      (text (if (derived-mode-p 'org-mode)
-			(ellama-convert-org-to-md message)
-		      message)))
+              (message (ellama-get-last-user-message))
+              ((length> message 0))
+              (text (if (derived-mode-p 'org-mode)
+                        (ellama-convert-org-to-md message)
+                      message)))
     (goto-char (point-max))
     (insert "\n\n")
     (when ellama-context-global
       (insert (ellama-context-format session)))
     (insert (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
     (ellama-stream text
-		   :session session
-		   :on-done #'ellama-chat-done
-		   :filter (when (derived-mode-p 'org-mode)
-			     #'ellama--translate-markdown-to-org-filter))))
+                   :session session
+                   :on-done #'ellama-chat-done
+                   :filter (when (derived-mode-p 'org-mode)
+                             #'ellama--translate-markdown-to-org-filter))))
 
 ;;;###autoload
 (defun ellama-ask-about (&optional create-session &rest args)
@@ -2223,9 +2223,9 @@ ARGS contains keys for fine control.
   (declare-function ellama-context-add-selection "ellama-context")
   (declare-function ellama-context-add-buffer "ellama-context")
   (let ((input (read-string "Ask ellama about this text: "))
-	(ephemeral (plist-get args :ephemeral)))
+        (ephemeral (plist-get args :ephemeral)))
     (if (region-active-p)
-	(ellama-context-add-selection t)
+        (ellama-context-add-selection t)
       (ellama-context-add-buffer (buffer-name (current-buffer)) t))
     (ellama-chat input create-session :ephemeral ephemeral)))
 
@@ -2240,9 +2240,9 @@ ARGS contains keys for fine control.
 :ephemeral BOOL -- create an ephemeral session if set."
   (interactive)
   (let ((text (if (region-active-p)
-		  (buffer-substring-no-properties (region-beginning) (region-end))
-		(buffer-substring-no-properties (point-min) (point-max))))
-	(ephemeral (plist-get args :ephemeral)))
+                  (buffer-substring-no-properties (region-beginning) (region-end))
+                (buffer-substring-no-properties (point-min) (point-max))))
+        (ephemeral (plist-get args :ephemeral)))
     (ellama-chat text create-session :ephemeral ephemeral)))
 
 (defcustom ellama-complete-prompt-template "You're providing text completion. Complete the text. Do not aknowledge, reply with completion only."
@@ -2254,25 +2254,25 @@ ARGS contains keys for fine control.
   "Complete text in current buffer."
   (interactive)
   (let* ((beg (if (region-active-p)
-		  (region-beginning)
-		(point-min)))
-	 (end (if (region-active-p)
-		  (region-end)
-		(point)))
-	 (text (buffer-substring-no-properties beg end))
-	 (line (car (reverse (string-lines text))))
-	 (word (car (reverse (string-split line " ")))))
+                  (region-beginning)
+                (point-min)))
+         (end (if (region-active-p)
+                  (region-end)
+                (point)))
+         (text (buffer-substring-no-properties beg end))
+         (line (car (reverse (string-lines text))))
+         (word (car (reverse (string-split line " ")))))
     (ellama-stream text
-		   :system ellama-complete-prompt-template
-		   :provider ellama-completion-provider
-		   :filter (lambda (s)
-			     (let ((noprefix (string-trim-left s (rx (or (literal text)
-									 (literal line)
-									 (literal word))))))
-			       (if (string= s noprefix)
-				   (concat " " s)
-				 noprefix)))
-		   :on-done #'ellama-fix-parens)))
+                   :system ellama-complete-prompt-template
+                   :provider ellama-completion-provider
+                   :filter (lambda (s)
+                             (let ((noprefix (string-trim-left s (rx (or (literal text)
+                                                                         (literal line)
+                                                                         (literal word))))))
+                               (if (string= s noprefix)
+                                   (concat " " s)
+                                 noprefix)))
+                   :on-done #'ellama-fix-parens)))
 
 (defvar vc-git-diff-switches)
 (declare-function vc-diff-internal "vc")
@@ -2282,42 +2282,42 @@ ARGS contains keys for fine control.
   "Diff staged."
   (require 'vc)
   (let* ((default-directory
-	  (if (string= ".git"
-		       (car (reverse
-			     (cl-remove
-			      ""
-			      (file-name-split default-directory)
-			      :test #'string=))))
-	      (file-name-parent-directory default-directory)
-	    default-directory))
-	 (vc-git-diff-switches "--cached")
-	 (diff (with-temp-buffer
-		 (vc-diff-internal
-		  nil (vc-deduce-fileset t) nil nil nil (current-buffer))
-		 (buffer-substring-no-properties (point-min) (point-max)))))
+          (if (string= ".git"
+                       (car (reverse
+                             (cl-remove
+                              ""
+                              (file-name-split default-directory)
+                              :test #'string=))))
+              (file-name-parent-directory default-directory)
+            default-directory))
+         (vc-git-diff-switches "--cached")
+         (diff (with-temp-buffer
+                 (vc-diff-internal
+                  nil (vc-deduce-fileset t) nil nil nil (current-buffer))
+                 (buffer-substring-no-properties (point-min) (point-max)))))
     (if (string-empty-p diff)
-	nil
+        nil
       diff)))
 
 (defun ellama--diff ()
   "Diff unstaged."
   (require 'vc)
   (let* ((default-directory
-	  (if (string= ".git"
-		       (car (reverse
-			     (cl-remove
-			      ""
-			      (file-name-split default-directory)
-			      :test #'string=))))
-	      (file-name-parent-directory default-directory)
-	    default-directory))
-	 (vc-git-diff-switches t)
-	 (diff (with-temp-buffer
-		 (vc-diff-internal
-		  nil (vc-deduce-fileset t) nil nil nil (current-buffer))
-		 (buffer-substring-no-properties (point-min) (point-max)))))
+          (if (string= ".git"
+                       (car (reverse
+                             (cl-remove
+                              ""
+                              (file-name-split default-directory)
+                              :test #'string=))))
+              (file-name-parent-directory default-directory)
+            default-directory))
+         (vc-git-diff-switches t)
+         (diff (with-temp-buffer
+                 (vc-diff-internal
+                  nil (vc-deduce-fileset t) nil nil nil (current-buffer))
+                 (buffer-substring-no-properties (point-min) (point-max)))))
     (if (string-empty-p diff)
-	nil
+        nil
       diff)))
 
 ;;;###autoload
@@ -2326,16 +2326,16 @@ ARGS contains keys for fine control.
   (interactive)
   (save-window-excursion
     (when-let* ((default-directory
-		 (if (string= ".git"
-			      (car (reverse
-				    (cl-remove
-				     ""
-				     (file-name-split default-directory)
-				     :test #'string=))))
-		     (file-name-parent-directory default-directory)
-		   default-directory))
-		(diff (or (ellama--diff-cached)
-			  (ellama--diff))))
+                 (if (string= ".git"
+                              (car (reverse
+                                    (cl-remove
+                                     ""
+                                     (file-name-split default-directory)
+                                     :test #'string=))))
+                     (file-name-parent-directory default-directory)
+                   default-directory))
+                (diff (or (ellama--diff-cached)
+                          (ellama--diff))))
       (ellama-stream
        (format ellama-generate-commit-message-template diff)
        :provider ellama-coding-provider))))
@@ -2351,7 +2351,7 @@ ARGS contains keys for fine control.
 :ephemeral BOOL -- create an ephemeral session if set."
   (interactive)
   (let* ((text (thing-at-point 'line))
-	 (ephemeral (plist-get args :ephemeral)))
+         (ephemeral (plist-get args :ephemeral)))
     (ellama-chat text create-session :ephemeral ephemeral)))
 
 (defun ellama-instant (prompt &rest args)
@@ -2366,53 +2366,53 @@ ARGS contains keys for fine control.
 :on-done ON-DONE -- ON-DONE a function or list of functions that's called with
  the full response text when the request completes (with BUFFER current)."
   (let* ((provider (or (plist-get args :provider)
-		       ellama-provider
-		       (ellama-get-first-ollama-chat-model)))
-	 (buffer-name (ellama-generate-name provider real-this-command prompt))
-	 (buffer (get-buffer-create (if (get-buffer buffer-name)
-					(make-temp-name (concat buffer-name " "))
-				      buffer-name)))
-	 (system (plist-get args :system))
-	 (donecb (lambda (text)
-		   (let ((callback (plist-get args :on-done)))
-		     (display-buffer buffer
-				     (when ellama-instant-display-action-function
-				       `((ignore . (,ellama-instant-display-action-function)))))
-		     (when callback
-		       (if (and (listp callback)
-				(functionp (car callback)))
-			   (mapc (lambda (fn) (funcall fn text))
-				 callback)
-			 (funcall callback text))))))
-	 filter)
+                       ellama-provider
+                       (ellama-get-first-ollama-chat-model)))
+         (buffer-name (ellama-generate-name provider real-this-command prompt))
+         (buffer (get-buffer-create (if (get-buffer buffer-name)
+                                        (make-temp-name (concat buffer-name " "))
+                                      buffer-name)))
+         (system (plist-get args :system))
+         (donecb (lambda (text)
+                   (let ((callback (plist-get args :on-done)))
+                     (display-buffer buffer
+                                     (when ellama-instant-display-action-function
+                                       `((ignore . (,ellama-instant-display-action-function)))))
+                     (when callback
+                       (if (and (listp callback)
+                                (functionp (car callback)))
+                           (mapc (lambda (fn) (funcall fn text))
+                                 callback)
+                         (funcall callback text))))))
+         filter)
     (with-current-buffer buffer
       (funcall ellama-major-mode)
       (when (derived-mode-p 'org-mode)
-	(setq filter 'ellama--translate-markdown-to-org-filter)))
+        (setq filter 'ellama--translate-markdown-to-org-filter)))
     (display-buffer buffer (when ellama-instant-display-action-function
-			     `((ignore . (,ellama-instant-display-action-function)))))
+                             `((ignore . (,ellama-instant-display-action-function)))))
     (ellama-stream prompt
-		   :system system
-		   :buffer buffer
-		   :filter filter
-		   :provider provider
-		   :on-done donecb)))
+                   :system system
+                   :buffer buffer
+                   :filter filter
+                   :provider provider
+                   :on-done donecb)))
 
 ;;;###autoload
 (defun ellama-translate ()
   "Ask ellama to translate selected region or word at point."
   (interactive)
   (let* ((content (if (region-active-p)
-		      (buffer-substring-no-properties (region-beginning) (region-end))
-		    (thing-at-point 'word)))
-	 (text (if (derived-mode-p 'org-mode)
-		   (ellama-convert-org-to-md content)
-		 content)))
+                      (buffer-substring-no-properties (region-beginning) (region-end))
+                    (thing-at-point 'word)))
+         (text (if (derived-mode-p 'org-mode)
+                   (ellama-convert-org-to-md content)
+                 content)))
     (ellama-instant
      text
      :system
      (format ellama-translation-template
-	     ellama-language)
+             ellama-language)
      :provider ellama-translation-provider)))
 
 ;;;###autoload
@@ -2420,14 +2420,14 @@ ARGS contains keys for fine control.
   "Ask ellama to translate current buffer."
   (interactive)
   (let* ((content (buffer-substring-no-properties (point-min) (point-max)))
-	 (text (if (derived-mode-p 'org-mode)
-		   (ellama-convert-org-to-md content)
-		 content)))
+         (text (if (derived-mode-p 'org-mode)
+                   (ellama-convert-org-to-md content)
+                 content)))
     (ellama-instant
      text
      :system
      (format ellama-translation-template
-	     ellama-language)
+             ellama-language)
      :provider ellama-translation-provider)))
 
 ;;;###autoload
@@ -2435,21 +2435,21 @@ ARGS contains keys for fine control.
   "Find definition of current word."
   (interactive)
   (ellama-instant (format ellama-define-word-prompt-template
-			  (thing-at-point 'word))))
+                          (thing-at-point 'word))))
 
 ;;;###autoload
 (defun ellama-summarize ()
   "Summarize selected region or current buffer."
   (interactive)
   (let ((text (if (region-active-p)
-		  (buffer-substring-no-properties (region-beginning) (region-end))
-		(buffer-substring-no-properties (point-min) (point-max)))))
+                  (buffer-substring-no-properties (region-beginning) (region-end))
+                (buffer-substring-no-properties (point-min) (point-max)))))
     (ellama-instant text
-		    :system
-		    ellama-summarize-prompt-template
-		    :provider (or ellama-summarization-provider
-				  ellama-provider
-				  (ellama-get-first-ollama-chat-model)))))
+                    :system
+                    ellama-summarize-prompt-template
+                    :provider (or ellama-summarization-provider
+                                  ellama-provider
+                                  (ellama-get-first-ollama-chat-model)))))
 
 ;;;###autoload
 (defun ellama-summarize-killring ()
@@ -2459,11 +2459,11 @@ ARGS contains keys for fine control.
     (if (string-empty-p text)
         (message "No text in the kill ring to summarize.")
       (ellama-instant text
-		      :system
-		      ellama-summarize-prompt-template
-		      :provider (or ellama-summarization-provider
-				    ellama-provider
-				    (ellama-get-first-ollama-chat-model))))))
+                      :system
+                      ellama-summarize-prompt-template
+                      :provider (or ellama-summarization-provider
+                                    ellama-provider
+                                    (ellama-get-first-ollama-chat-model))))))
 
 ;;;###autoload
 (defun ellama-code-review (&optional create-session &rest args)
@@ -2491,9 +2491,9 @@ ARGS contains keys for fine control.
   (when (region-active-p)
     (ellama-context-add-selection t))
   (ellama-stream (format ellama-write-prompt-template instruction)
-		 :point (point)
-		 :filter (when (derived-mode-p 'org-mode)
-			   #'ellama--translate-markdown-to-org-filter)))
+                 :point (point)
+                 :filter (when (derived-mode-p 'org-mode)
+                           #'ellama--translate-markdown-to-org-filter)))
 
 ;;;###autoload
 (defun ellama-change (change &optional edit-template)
@@ -2502,16 +2502,16 @@ When the value of EDIT-TEMPLATE is 4, or with one `universal-argument' as
 prefix (\\[universal-argument]), prompt the user to amend the template."
   (interactive "sWhat needs to be changed: \np")
   (let* ((beg (if (region-active-p)
-		  (region-beginning)
-		(point-min)))
-	 (end (if (region-active-p)
-		  (region-end)
-		(point-max)))
+                  (region-beginning)
+                (point-min)))
+         (end (if (region-active-p)
+                  (region-end)
+                (point-max)))
          (template-orig (format ellama-change-prompt-template change "%s"))
-	 (template (if (eq edit-template 4)
-	               (read-from-minibuffer "Template: " template-orig)
-	             template-orig))
-	 (text (buffer-substring-no-properties beg end)))
+         (template (if (eq edit-template 4)
+                       (read-from-minibuffer "Template: " template-orig)
+                     template-orig))
+         (text (buffer-substring-no-properties beg end)))
     (ellama-stream
      (format template text)
      :point beg
@@ -2555,12 +2555,12 @@ prefix (\\[universal-argument]), prompt the user to amend the template."
   "Change selected code or code in current buffer according to provided CHANGE."
   (interactive "sWhat needs to be changed in this code: ")
   (let* ((beg (if (region-active-p)
-		  (region-beginning)
-		(point-min)))
-	 (end (if (region-active-p)
-		  (region-end)
-		(point-max)))
-	 (text (buffer-substring-no-properties beg end)))
+                  (region-beginning)
+                (point-min)))
+         (end (if (region-active-p)
+                  (region-end)
+                (point-max)))
+         (text (buffer-substring-no-properties beg end)))
     (ellama-stream
      (format
       ellama-code-edit-prompt-template
@@ -2576,12 +2576,12 @@ prefix (\\[universal-argument]), prompt the user to amend the template."
   "Change selected code or code in current buffer according to provided CHANGE."
   (interactive)
   (let* ((beg (if (region-active-p)
-		  (region-beginning)
-		(point-min)))
-	 (end (if (region-active-p)
-		  (region-end)
-		(point-max)))
-	 (text (buffer-substring-no-properties beg end)))
+                  (region-beginning)
+                (point-min)))
+         (end (if (region-active-p)
+                  (region-end)
+                (point-max)))
+         (text (buffer-substring-no-properties beg end)))
     (ellama-stream
      (format
       ellama-code-improve-prompt-template
@@ -2597,34 +2597,34 @@ prefix (\\[universal-argument]), prompt the user to amend the template."
   "Complete selected code or code in current buffer."
   (interactive)
   (let* ((beg (if (region-active-p)
-		  (region-beginning)
-		(point-min)))
-	 (end (if (region-active-p)
-		  (region-end)
-		(point)))
-	 (text (buffer-substring-no-properties beg end))
-	 (line (car (reverse (cl-remove-if (lambda (s)
-					     (string-match-p (rx
-							      line-start
-							      (* (any space))
-							      line-end)
-							     s))
-					   (string-lines text)))))
-	 (word (car (reverse (string-split line " ")))))
+                  (region-beginning)
+                (point-min)))
+         (end (if (region-active-p)
+                  (region-end)
+                (point)))
+         (text (buffer-substring-no-properties beg end))
+         (line (car (reverse (cl-remove-if (lambda (s)
+                                             (string-match-p (rx
+                                                              line-start
+                                                              (* (any space))
+                                                              line-end)
+                                                             s))
+                                           (string-lines text)))))
+         (word (car (reverse (string-split line " ")))))
     (ellama-stream
      (format
       ellama-code-complete-prompt-template
       text)
      :provider ellama-coding-provider
      :filter (lambda (s)
-	       (string-trim
-		(string-trim-left
-		 (ellama--code-filter s)
-		 (rx
-		  (* (any space))
-		  (or (literal text)
-		      (literal line)
-		      (literal word))))))
+               (string-trim
+                (string-trim-left
+                 (ellama--code-filter s)
+                 (rx
+                  (* (any space))
+                  (or (literal text)
+                      (literal line)
+                      (literal word))))))
      :on-done #'ellama-fix-parens
      :point end)))
 
@@ -2632,10 +2632,10 @@ prefix (\\[universal-argument]), prompt the user to amend the template."
   "Remove unnessessary parens if needed."
   (interactive)
   (while (condition-case nil
-	     (check-parens)
-	   (error (progn
-		    (delete-char -1)
-		    t)))))
+             (check-parens)
+           (error (progn
+                    (delete-char -1)
+                    t)))))
 
 ;;;###autoload
 (defun ellama-code-add (description)
@@ -2659,12 +2659,12 @@ generation."
   "Render selected text or text in current buffer as NEEDED-FORMAT."
   (interactive "sSpecify required format: ")
   (let* ((beg (if (region-active-p)
-		  (region-beginning)
-		(point-min)))
-	 (end (if (region-active-p)
-		  (region-end)
-		(point-max)))
-	 (text (buffer-substring-no-properties beg end)))
+                  (region-beginning)
+                (point-min)))
+         (end (if (region-active-p)
+                  (region-end)
+                (point-max)))
+         (text (buffer-substring-no-properties beg end)))
     (ellama-stream
      (format
       ellama-make-format-prompt-template
@@ -2721,14 +2721,14 @@ otherwise prompt user for URL to summarize."
      (json-parse-string
       (llm-chat
        (or ellama-extraction-provider
-	   ellama-provider
-	   (ellama-get-first-ollama-chat-model))
+           ellama-provider
+           (ellama-get-first-ollama-chat-model))
        (llm-make-chat-prompt
-	(format ellama-semantic-identity-reasoning-template context text1 text2)
-	:response-format '(:type object :properties
-				 (:think (:type string)
-					 :same (:type boolean))
-				 :required ["think" "same"])))
+        (format ellama-semantic-identity-reasoning-template context text1 text2)
+        :response-format '(:type object :properties
+                                 (:think (:type string)
+                                         :same (:type boolean))
+                                 :required ["think" "same"])))
       :object-type 'plist
       :false-object nil)
      :same)))
@@ -2739,14 +2739,14 @@ otherwise prompt user for URL to summarize."
    (json-parse-string
     (llm-chat
      (or ellama-extraction-provider
-	 ellama-provider
-	 (ellama-get-first-ollama-chat-model))
+         ellama-provider
+         (ellama-get-first-ollama-chat-model))
      (llm-make-chat-prompt
       (format ellama-semantic-identity-template text1 text2)
       :response-format '(:type object :properties
-			       (:think (:type string)
-				       :same (:type boolean))
-			       :required ["think" "same"])))
+                               (:think (:type string)
+                                       :same (:type boolean))
+                               :required ["think" "same"])))
     :object-type 'plist
     :false-object nil)
    :same))
@@ -2757,8 +2757,8 @@ otherwise prompt user for URL to summarize."
    input
    :context (format ellama-extract-string-list-template elements)
    :response-format '(:type object :properties
-			    (:data (:type array :items (:type string)))
-			    :required (data))))
+                            (:data (:type array :items (:type string)))
+                            :required (data))))
 
 (defun ellama-extract-string-list (elements input &rest args)
   "Extract list of ELEMENTS from INPUT syncronously.
@@ -2766,16 +2766,16 @@ Return list of strings.  ARGS contains keys for fine control.
 
 :provider PROVIDER -- PROVIDER is an LLM provider for generation."
   (let ((provider (or (plist-get args :provider)
-		      ellama-extraction-provider
-		      ellama-provider
-		      (ellama-get-first-ollama-chat-model))))
+                      ellama-extraction-provider
+                      ellama-provider
+                      (ellama-get-first-ollama-chat-model))))
     (plist-get (json-parse-string
-		(llm-chat
-		 provider
-		 (ellama--make-extract-string-list-prompt elements input))
-		:object-type 'plist
-		:array-type 'list)
-	       :data)))
+                (llm-chat
+                 provider
+                 (ellama--make-extract-string-list-prompt elements input))
+                :object-type 'plist
+                :array-type 'list)
+               :data)))
 
 (defun ellama-extract-string-list-async (elements callback input &rest args)
   "Extract list of ELEMENTS from INPUT asyncronously.
@@ -2783,19 +2783,19 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 
 :provider PROVIDER -- PROVIDER is an LLM provider for generation."
   (let ((provider (or (plist-get args :provider)
-		      ellama-extraction-provider
-		      ellama-provider
-		      (ellama-get-first-ollama-chat-model))))
+                      ellama-extraction-provider
+                      ellama-provider
+                      (ellama-get-first-ollama-chat-model))))
     (llm-chat-async
      provider
      (ellama--make-extract-string-list-prompt elements input)
      (lambda (res)
        (funcall callback
-		(plist-get (json-parse-string
-			    res
-			    :object-type 'plist
-			    :array-type 'list)
-			   :data)))
+                (plist-get (json-parse-string
+                            res
+                            :object-type 'plist
+                            :array-type 'list)
+                           :data)))
      (lambda (err)
        (user-error err)))))
 
@@ -2804,7 +2804,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
   "Get ollama model names."
   (require 'llm-ollama)
   (llm-models (or ellama-provider
-		  (make-llm-ollama))))
+                  (make-llm-ollama))))
 
 (defun ellama-embedding-model-p (name)
   "Check if NAME is an embedding model."
@@ -2842,13 +2842,13 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
   (declare-function llm-ollama-port "ext:llm-ollama")
   (require 'llm-ollama)
   (let ((model-name (ellama-get-ollama-model-name))
-	(host (when (llm-ollama-p ellama-provider)
-		(llm-ollama-host ellama-provider)))
-	(port (when (llm-ollama-p ellama-provider)
-		(llm-ollama-port ellama-provider))))
+        (host (when (llm-ollama-p ellama-provider)
+                (llm-ollama-host ellama-provider)))
+        (port (when (llm-ollama-p ellama-provider)
+                (llm-ollama-port ellama-provider))))
     (if host
-	(make-llm-ollama
-	 :chat-model model-name :embedding-model model-name :host host :port port)
+        (make-llm-ollama
+         :chat-model model-name :embedding-model model-name :host host :port port)
       (make-llm-ollama
        :chat-model model-name :embedding-model model-name))))
 
@@ -2858,9 +2858,9 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
   (interactive)
   (let* ((providers (append
                      `(("default model" . ellama-provider)
-		       ("ollama model" . (ellama-get-ollama-local-model)))
+                       ("ollama model" . (ellama-get-ollama-local-model)))
                      ellama-providers))
-	 (variants (mapcar #'car providers)))
+         (variants (mapcar #'car providers)))
     (setq ellama-provider
 	  (eval (alist-get
 		 (completing-read "Select model: " variants)

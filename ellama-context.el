@@ -82,13 +82,13 @@
 (defun ellama-context--element-remove-by-name (name)
   "Remove all context element that matches by NAME."
   (setq ellama-context-global
-	(cl-remove-if (lambda (el)
-			(string= name (ellama-context-element-display el)))
-		      ellama-context-global))
+        (cl-remove-if (lambda (el)
+                        (string= name (ellama-context-element-display el)))
+                      ellama-context-global))
   (setq ellama-context-ephemeral
-	(cl-remove-if (lambda (el)
-			(string= name (ellama-context-element-display el)))
-		      ellama-context-ephemeral)))
+        (cl-remove-if (lambda (el)
+                        (string= name (ellama-context-element-display el)))
+                      ellama-context-ephemeral)))
 
 ;;;###autoload
 (defun ellama-context-element-remove-by-name ()
@@ -102,7 +102,7 @@ the context."
    (completing-read
     "Remove context element: "
     (seq-uniq (mapcar #'ellama-context-element-display (append ellama-context-global
-							       ellama-context-ephemeral)))))
+                                                               ellama-context-ephemeral)))))
   (ellama-context-update-show))
 
 (defun ellama-context-update-show ()
@@ -112,25 +112,25 @@ the context."
   (with-current-buffer (get-buffer-create ellama--context-buffer)
     (erase-buffer)
     (if (or ellama-context-global
-	    ellama-context-ephemeral)
-	(insert (format
-		 " ellama ctx: %s"
-		 (string-join
-		  (mapcar
-		   (lambda (el)
-		     (ellama-context-element-display el))
-		   (append ellama-context-global
-			   ellama-context-ephemeral))
-		  "  ")))
+            ellama-context-ephemeral)
+        (insert (format
+                 " ellama ctx: %s"
+                 (string-join
+                  (mapcar
+                   (lambda (el)
+                     (ellama-context-element-display el))
+                   (append ellama-context-global
+                           ellama-context-ephemeral))
+                  "  ")))
       (insert " ellama ctx")))
   (when ellama-context-posframe-enabled
     (require 'posframe)
     (if (or ellama-context-global
-	    ellama-context-ephemeral)
-	(posframe-show
-	 ellama--context-buffer
-	 :poshandler ellama-context-poshandler
-	 :internal-border-width ellama-context-border-width)
+            ellama-context-ephemeral)
+        (posframe-show
+         ellama--context-buffer
+         :poshandler ellama-context-poshandler
+         :internal-border-width ellama-context-border-width)
       (posframe-hide ellama--context-buffer)))
   (ellama-context-update-header-line))
 
@@ -139,15 +139,15 @@ the context."
 (defun ellama-context-line ()
   "Return current global context line."
   (propertize (with-current-buffer ellama--context-buffer
-		(buffer-substring-no-properties
-		 (point-min) (point-max)))
-	      'help-echo "mouse-1: manage ellama context"
-	      'mouse-face 'header-line-format
-	      'face 'ellama-context-line-face
-	      'keymap (let ((m (make-sparse-keymap)))
-			(define-key m [header-line mouse-1] #'ellama-transient-context-menu)
-			(define-key m [mode-line mouse-1] #'ellama-transient-context-menu)
-			m)))
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))
+              'help-echo "mouse-1: manage ellama context"
+              'mouse-face 'header-line-format
+              'face 'ellama-context-line-face
+              'keymap (let ((m (make-sparse-keymap)))
+                        (define-key m [header-line mouse-1] #'ellama-transient-context-menu)
+                        (define-key m [mode-line mouse-1] #'ellama-transient-context-menu)
+                        m)))
 
 ;;;###autoload
 (define-minor-mode ellama-context-header-line-mode
@@ -170,10 +170,10 @@ the context."
   "Update and display context information in the header line."
   (when (listp header-line-format)
     (if (and ellama-context-header-line-mode
-	     (or ellama-context-line-always-visible
-		 ellama-context-global
-		 ellama-context-ephemeral))
-	(add-to-list 'header-line-format '(:eval (ellama-context-line)) t)
+             (or ellama-context-line-always-visible
+                 ellama-context-global
+                 ellama-context-ephemeral))
+        (add-to-list 'header-line-format '(:eval (ellama-context-line)) t)
       (setq header-line-format (delete '(:eval (ellama-context-line)) header-line-format)))))
 
 ;;;###autoload
@@ -195,9 +195,9 @@ the context."
 (defun ellama-context-update-mode-line ()
   "Update and display context information in the mode line."
   (if (and ellama-context-mode-line-mode
-	   (or ellama-context-line-always-visible
-	       ellama-context-global
-	       ellama-context-ephemeral))
+           (or ellama-context-line-always-visible
+               ellama-context-global
+               ellama-context-ephemeral))
       (add-to-list 'mode-line-format '(:eval (ellama-context-line)) t)
     (setq mode-line-format (delete '(:eval (ellama-context-line)) mode-line-format))))
 
@@ -228,16 +228,16 @@ the context."
 (defun ellama-context-update-buffer ()
   "Update ellama context buffer."
   (let* ((buf (get-buffer-create ellama-context-buffer))
-	 (inhibit-read-only t))
+         (inhibit-read-only t))
     (with-current-buffer buf
       (read-only-mode +1)
       (ellama-context-mode)
       (erase-buffer)
       (dolist (el (append ellama-context-global
-			  ellama-context-ephemeral))
-	(insert (ellama-context-element-display el))
-	(put-text-property (pos-bol) (pos-eol) 'context-element el)
-	(insert "\n"))
+                          ellama-context-ephemeral))
+        (insert (ellama-context-element-display el))
+        (put-text-property (pos-bol) (pos-eol) 'context-element el)
+        (insert "\n"))
       (goto-char (point-min)))))
 
 ;;;###autoload
@@ -261,10 +261,10 @@ the context."
   :keymap ellama-context-preview-mode-map
   :group 'ellama
   (setq header-line-format
-	(concat (propertize (substitute-command-keys
-			     "`\\[ellama-kill-current-buffer]'")
-			    'face 'ellama-key-face)
-		" to quit")))
+        (concat (propertize (substitute-command-keys
+                             "`\\[ellama-kill-current-buffer]'")
+                            'face 'ellama-key-face)
+                " to quit")))
 
 (defcustom ellama-context-preview-element-display-action-function nil
   "Display action function for `ellama-context-preview-element'."
@@ -274,12 +274,12 @@ the context."
 (defun ellama-context-preview-element (element)
   "Preview context ELEMENT content."
   (let* ((name
-	  (concat (make-temp-name
-		   (concat " *ellama-context-"
-			   (ellama-context-element-display element)
-			   "-"))
-		  "*"))
-	 (buf (get-buffer-create name)))
+          (concat (make-temp-name
+                   (concat " *ellama-context-"
+                           (ellama-context-element-display element)
+                           "-"))
+                  "*"))
+         (buf (get-buffer-create name)))
     (with-current-buffer buf
       (insert (ellama-context-element-extract element))
       (read-only-mode +1)
@@ -287,14 +287,14 @@ the context."
       (display-buffer
        buf
        (when ellama-context-preview-element-display-action-function
-	 `((ignore . (,ellama-context-preview-element-display-action-function))))))))
+         `((ignore . (,ellama-context-preview-element-display-action-function))))))))
 
 (defun ellama-context-remove-element (element)
   "Remove context ELEMENT from global context."
   (setf ellama-context-global
-	(cl-remove element ellama-context-global :test #'equal-including-properties))
+        (cl-remove element ellama-context-global :test #'equal-including-properties))
   (setf ellama-context-ephemeral
-	(cl-remove element ellama-context-ephemeral :test #'equal-including-properties)))
+        (cl-remove element ellama-context-ephemeral :test #'equal-including-properties)))
 
 ;;;###autoload
 (defun ellama-context-preview-element-at-point ()
@@ -339,7 +339,7 @@ the context."
   "Add the ELEMENT to the Ellama context."
   (setf ellama-context-global (nreverse ellama-context-global))
   (cl-pushnew element ellama-context-global
-	      :test #'equal-including-properties)
+              :test #'equal-including-properties)
   (setf ellama-context-global (nreverse ellama-context-global))
   (get-buffer-create ellama--context-buffer t)
   (ellama-context-update-show))
@@ -348,7 +348,7 @@ the context."
   "Add the ephemeral ELEMENT to the Ellama context."
   (setf ellama-context-ephemeral (nreverse ellama-context-ephemeral))
   (cl-pushnew element ellama-context-ephemeral
-	      :test #'equal-including-properties)
+              :test #'equal-including-properties)
   (setf ellama-context-ephemeral (nreverse ellama-context-ephemeral))
   (get-buffer-create ellama--context-buffer t)
   (ellama-context-update-show))
@@ -369,10 +369,10 @@ the context."
   (with-slots (name) element
     (with-current-buffer name
       (let* ((data (buffer-substring-no-properties (point-min) (point-max)))
-	     (content (if (derived-mode-p 'org-mode)
-			  (ellama-convert-org-to-md data)
-			data)))
-	content))))
+             (content (if (derived-mode-p 'org-mode)
+                          (ellama-convert-org-to-md data)
+                        data)))
+        content))))
 
 (cl-defmethod ellama-context-element-display
   ((element ellama-context-element-buffer))
@@ -417,11 +417,11 @@ the context."
   (ignore mode)
   (with-slots (name content) element
     (if ellama-show-quotes
-	(format "[%s](%s):\n%s\n\n"
-		name name
-		(ellama-context--md-quote content))
+        (format "[%s](%s):\n%s\n\n"
+                name name
+                (ellama-context--md-quote content))
       (format "[%s](%s):\n```emacs-lisp\n(display-buffer \"%s\")"
-	      name name (ellama-context--quote-buffer content)))))
+              name name (ellama-context--quote-buffer content)))))
 
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-buffer-quote) (mode (eql 'org-mode)))
@@ -429,10 +429,10 @@ the context."
   (ignore mode)
   (with-slots (name content) element
     (if ellama-show-quotes
-	(format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n"
-		name name (ellama-context--org-quote content))
+        (format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n"
+                name name (ellama-context--org-quote content))
       (format "[[%s][%s]] [[elisp:(display-buffer \"%s\")][show]]"
-	      name name (ellama-context--quote-buffer content)))))
+              name name (ellama-context--quote-buffer content)))))
 
 (cl-defmethod ellama-context-element-quote-p
   ((_element ellama-context-element-buffer-quote))
@@ -452,10 +452,10 @@ the context."
     (with-temp-buffer
       (insert-file-contents name)
       (let* ((data (buffer-substring-no-properties (point-min) (point-max)))
-	     (ext (file-name-extension name)))
-	(if (string= ext "org")
-	    (ellama-convert-org-to-md data)
-	  data)))))
+             (ext (file-name-extension name)))
+        (if (string= ext "org")
+            (ellama-convert-org-to-md data)
+          data)))))
 
 (cl-defmethod ellama-context-element-display
   ((element ellama-context-element-file))
@@ -510,12 +510,12 @@ the context."
   (ignore mode)
   (with-slots (name) element
     (format "[[%s][%s]]"
-	    (replace-regexp-in-string
-	     "(\\(.?*\\)) \\(.*\\)" "info:\\1#\\2" name)
-	    (if (and ellama-chat-translation-enabled
-		     (not ellama--current-session))
-		(ellama--translate-string name)
-	      name))))
+            (replace-regexp-in-string
+             "(\\(.?*\\)) \\(.*\\)" "info:\\1#\\2" name)
+            (if (and ellama-chat-translation-enabled
+                     (not ellama--current-session))
+                (ellama--translate-string name)
+              name))))
 
 ;; Text context element
 
@@ -538,10 +538,10 @@ the context."
   "Display the context ELEMENT."
   (with-slots (content) element
     (format "\"%s\"" (concat
-		      (string-limit
-		       content
-		       ellama-text-display-limit)
-		      "..."))))
+                      (string-limit
+                       content
+                       ellama-text-display-limit)
+                      "..."))))
 
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-text) (mode (eql 'markdown-mode)))
@@ -583,10 +583,10 @@ the context."
 (defun ellama-context--quote-buffer (quote)
   "Return buffer name for QUOTE."
   (let* ((buf-name (concat (make-temp-name "*ellama-quote-") "*"))
-	 (buf (get-buffer-create buf-name t)))
+         (buf (get-buffer-create buf-name t)))
     (with-current-buffer buf
       (with-silent-modifications
-	(insert quote)))
+        (insert quote)))
     buf-name))
 
 (cl-defmethod ellama-context-element-format
@@ -595,9 +595,9 @@ the context."
   (ignore mode)
   (with-slots (name url content) element
     (if ellama-show-quotes
-	(format "[%s](%s):\n%s\n\n"
-		name url
-		(ellama-context--md-quote content))
+        (format "[%s](%s):\n%s\n\n"
+                name url
+                (ellama-context--md-quote content))
       (format
        "[%s](%s):\n```emacs-lisp\n(display-buffer \"%s\")\n```\n"
        name url (ellama-context--quote-buffer content)))))
@@ -607,9 +607,9 @@ the context."
   (with-temp-buffer
     (insert (propertize content 'hard t))
     (let ((fill-prefix "> ")
-	  (use-hard-newlines t)
-	  (comment-start ">")
-	  (comment-empty-lines t))
+          (use-hard-newlines t)
+          (comment-start ">")
+          (comment-empty-lines t))
       (comment-region (point-min) (point-max) ">")
       (fill-region (point-min) (point-max) nil t t))
     (buffer-substring-no-properties (point-min) (point-max))))
@@ -624,10 +624,10 @@ the context."
   (ignore mode)
   (with-slots (name url content) element
     (if ellama-show-quotes
-	(format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n"
-		url name (ellama-context--org-quote content))
+        (format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n"
+                url name (ellama-context--org-quote content))
       (format "[[%s][%s]] [[elisp:(display-buffer \"%s\")][show]]"
-	      url name (ellama-context--quote-buffer content)))))
+              url name (ellama-context--quote-buffer content)))))
 
 (cl-defmethod ellama-context-element-quote-p
   ((_element ellama-context-element-webpage-quote))
@@ -658,9 +658,9 @@ the context."
   (ignore mode)
   (with-slots (name content) element
     (if ellama-show-quotes
-	(format "```emacs-lisp\n(info \"%s\")\n```\n%s\n\n"
-		name
-		(ellama-context--md-quote content))
+        (format "```emacs-lisp\n(info \"%s\")\n```\n%s\n\n"
+                name
+                (ellama-context--md-quote content))
       (format "```emacs-lisp\n(info \"%s\")\n```\nshow:\n```emacs-lisp\n(display-buffer \"%s\")\n```\n" name (ellama-context--quote-buffer content)))))
 
 (cl-defmethod ellama-context-element-format
@@ -669,22 +669,22 @@ the context."
   (ignore mode)
   (with-slots (name content) element
     (if ellama-show-quotes
-	(format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n"
-		(replace-regexp-in-string
-		 "(\\(.?*\\)) \\(.*\\)" "info:\\1#\\2" name)
-		(if (and ellama-chat-translation-enabled
-			 (not ellama--current-session))
-		    (ellama--translate-string name)
-		  name)
-		(ellama-context--org-quote content))
+        (format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n"
+                (replace-regexp-in-string
+                 "(\\(.?*\\)) \\(.*\\)" "info:\\1#\\2" name)
+                (if (and ellama-chat-translation-enabled
+                         (not ellama--current-session))
+                    (ellama--translate-string name)
+                  name)
+                (ellama-context--org-quote content))
       (format "[[%s][%s]] [[elisp:(display-buffer \"%s\")][show]]"
-	      (replace-regexp-in-string
-	       "(\\(.?*\\)) \\(.*\\)" "info:\\1#\\2" name)
-	      (if (and ellama-chat-translation-enabled
-		       (not ellama--current-session))
-		  (ellama--translate-string name)
-		name)
-	      (ellama-context--quote-buffer content)))))
+              (replace-regexp-in-string
+               "(\\(.?*\\)) \\(.*\\)" "info:\\1#\\2" name)
+              (if (and ellama-chat-translation-enabled
+                       (not ellama--current-session))
+                  (ellama--translate-string name)
+                name)
+              (ellama-context--quote-buffer content)))))
 
 (cl-defmethod ellama-context-element-quote-p
   ((_element ellama-context-element-info-node-quote))
@@ -715,11 +715,11 @@ the context."
   (ignore mode)
   (with-slots (path content) element
     (if ellama-show-quotes
-	(format "[%s](%s):\n%s\n\n"
-		path path
-		(ellama-context--md-quote content))
+        (format "[%s](%s):\n%s\n\n"
+                path path
+                (ellama-context--md-quote content))
       (format "[%s](%s):\n```emacs-lisp\n(display-buffer \"%s\")"
-	      path path (ellama-context--quote-buffer content)))))
+              path path (ellama-context--quote-buffer content)))))
 
 (cl-defmethod ellama-context-element-format
   ((element ellama-context-element-file-quote) (mode (eql 'org-mode)))
@@ -727,10 +727,10 @@ the context."
   (ignore mode)
   (with-slots (path content) element
     (if ellama-show-quotes
-	(format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n"
-		path path (ellama-context--org-quote content))
+        (format "[[%s][%s]]:\n#+BEGIN_QUOTE\n%s\n#+END_QUOTE\n"
+                path path (ellama-context--org-quote content))
       (format "[[%s][%s]] [[elisp:(display-buffer \"%s\")][show]]"
-	      path path (ellama-context--quote-buffer content)))))
+              path path (ellama-context--quote-buffer content)))))
 
 (cl-defmethod ellama-context-element-quote-p
   ((_element ellama-context-element-file-quote))
@@ -743,18 +743,18 @@ the context."
 For one request only if EPHEMERAL."
   (interactive)
   (let* ((file-name (read-file-name "Select file: " nil nil t))
-	 (element (ellama-context-element-file :name file-name)))
+         (element (ellama-context-element-file :name file-name)))
     (if ephemeral
-	(ellama-context-ephemeral-element-add element)
+        (ellama-context-ephemeral-element-add element)
       (ellama-context-element-add element))))
 
 (defun ellama-context-add-file-quote-noninteractive (path content &optional ephemeral)
   "Add file with PATH quote CONTENT to context.
 For one request only if EPHEMERAL."
   (let ((element (ellama-context-element-file-quote
-		  :path path :content content)))
+                  :path path :content content)))
     (if ephemeral
-	(ellama-context-ephemeral-element-add element)
+        (ellama-context-ephemeral-element-add element)
       (ellama-context-element-add element))))
 
 ;;;###autoload
@@ -763,15 +763,15 @@ For one request only if EPHEMERAL."
 For one request only if EPHEMERAL."
   (interactive)
   (let ((path (buffer-file-name (current-buffer)))
-	(content (if (region-active-p)
-		     (buffer-substring-no-properties
-		      (region-beginning)
-		      (region-end))
-		   (buffer-substring-no-properties
-		    (point-min)
-		    (point-max)))))
+        (content (if (region-active-p)
+                     (buffer-substring-no-properties
+                      (region-beginning)
+                      (region-end))
+                   (buffer-substring-no-properties
+                    (point-min)
+                    (point-max)))))
     (if (not path)
-	(warn "should be called from buffer associated with file")
+        (warn "should be called from buffer associated with file")
       (ellama-context-add-file-quote-noninteractive path content ephemeral))))
 
 ;;;###autoload
@@ -780,11 +780,11 @@ For one request only if EPHEMERAL."
 For one request only if EPHEMERAL."
   (interactive "bSelect buffer: ")
   (let* ((buffer-name (if (stringp buf)
-			  buf
-			(buffer-name buf)))
-	 (element (ellama-context-element-buffer :name buffer-name)))
+                          buf
+                        (buffer-name buf)))
+         (element (ellama-context-element-buffer :name buffer-name)))
     (if ephemeral
-	(ellama-context-ephemeral-element-add element)
+        (ellama-context-ephemeral-element-add element)
       (ellama-context-element-add element))))
 
 ;;;###autoload
@@ -795,9 +795,9 @@ For one request only if EPHEMERAL."
   (dolist (file-name (directory-files dir t "^[^\.].*"))
     (unless (file-directory-p file-name)
       (let ((element (ellama-context-element-file :name file-name)))
-	(if ephemeral
-	    (ellama-context-ephemeral-element-add element)
-	  (ellama-context-element-add element))))))
+        (if ephemeral
+            (ellama-context-ephemeral-element-add element)
+          (ellama-context-element-add element))))))
 
 ;;;###autoload
 (defun ellama-context-add-selection (&optional ephemeral)
@@ -806,18 +806,18 @@ For one request only if EPHEMERAL."
   (interactive)
   (if (region-active-p)
       (let* ((data (buffer-substring-no-properties (region-beginning) (region-end)))
-	     (content (if (derived-mode-p 'org-mode)
-			  (ellama-convert-org-to-md data)
-			data))
-	     (file-name (buffer-file-name))
-	     (buffer-name (buffer-name (current-buffer)))
-	     (element (if file-name
-			  (ellama-context-element-file-quote :path file-name
-							     :content content)
-			(ellama-context-element-buffer-quote :name buffer-name :content content))))
-	(if ephemeral
-	    (ellama-context-ephemeral-element-add element)
-	  (ellama-context-element-add element)))
+             (content (if (derived-mode-p 'org-mode)
+                          (ellama-convert-org-to-md data)
+                        data))
+             (file-name (buffer-file-name))
+             (buffer-name (buffer-name (current-buffer)))
+             (element (if file-name
+                          (ellama-context-element-file-quote :path file-name
+                                                             :content content)
+                        (ellama-context-element-buffer-quote :name buffer-name :content content))))
+        (if ephemeral
+            (ellama-context-ephemeral-element-add element)
+          (ellama-context-element-add element)))
     (warn "No active region")))
 
 (defun ellama-context-add-text (text &optional ephemeral)
@@ -825,7 +825,7 @@ For one request only if EPHEMERAL."
 For one request only if EPHEMERAL."
   (let ((element (ellama-context-element-text :content text)))
     (if ephemeral
-	(ellama-context-ephemeral-element-add element)
+        (ellama-context-ephemeral-element-add element)
       (ellama-context-element-add element))))
 
 (declare-function Info-copy-current-node-name "info")
@@ -837,16 +837,16 @@ For one request only if EPHEMERAL."
   (interactive (list (Info-copy-current-node-name)))
   (let ((element (ellama-context-element-info-node :name node)))
     (if ephemeral
-	(ellama-context-ephemeral-element-add element)
+        (ellama-context-ephemeral-element-add element)
       (ellama-context-element-add element))))
 
 (defun ellama-context-add-info-node-quote-noninteractive (name content &optional ephemeral)
   "Add info node with NAME quote CONTENT to context.
 For one request only if EPHEMERAL."
   (let ((element (ellama-context-element-info-node-quote
-		  :name name :content content)))
+                  :name name :content content)))
     (if ephemeral
-	(ellama-context-ephemeral-element-add element)
+        (ellama-context-ephemeral-element-add element)
       (ellama-context-element-add element))))
 
 ;;;###autoload
@@ -855,24 +855,24 @@ For one request only if EPHEMERAL."
 For one request only if EPHEMERAL."
   (interactive)
   (let ((name (Info-copy-current-node-name))
-	(content (if (region-active-p)
-		     (buffer-substring-no-properties
-		      (region-beginning)
-		      (region-end))
-		   (buffer-substring-no-properties
-		    (point-min)
-		    (point-max)))))
+        (content (if (region-active-p)
+                     (buffer-substring-no-properties
+                      (region-beginning)
+                      (region-end))
+                   (buffer-substring-no-properties
+                    (point-min)
+                    (point-max)))))
     (if (not name)
-	(warn "should be called from `info' buffer")
+        (warn "should be called from `info' buffer")
       (ellama-context-add-info-node-quote-noninteractive name content ephemeral))))
 
 (defun ellama-context-add-webpage-quote-noninteractive (name url content &optional ephemeral)
   "Add webpage with NAME and URL quote CONTENT to context.
 For one request only if EPHEMERAL."
   (let ((element (ellama-context-element-webpage-quote
-		  :name name :url url :content content)))
+                  :name name :url url :content content)))
     (if ephemeral
-	(ellama-context-ephemeral-element-add element)
+        (ellama-context-ephemeral-element-add element)
       (ellama-context-element-add element))))
 
 ;;;###autoload
@@ -884,15 +884,15 @@ For one request only if EPHEMERAL."
   (declare-function eww-current-url "eww")
   (if (eq major-mode 'eww-mode)
       (let* ((name (plist-get eww-data :title))
-	     (url (eww-current-url))
-	     (content (if (region-active-p)
-			  (buffer-substring-no-properties
-			   (region-beginning)
-			   (region-end))
-			(buffer-substring-no-properties
-			 (point-min)
-			 (point-max)))))
-	(ellama-context-add-webpage-quote-noninteractive name url content ephemeral))
+             (url (eww-current-url))
+             (content (if (region-active-p)
+                          (buffer-substring-no-properties
+                           (region-beginning)
+                           (region-end))
+                        (buffer-substring-no-properties
+                         (point-min)
+                         (point-max)))))
+        (ellama-context-add-webpage-quote-noninteractive name url content ephemeral))
     (warn "Should be called from `eww'.")))
 
 ;;;###autoload
@@ -900,30 +900,30 @@ For one request only if EPHEMERAL."
   "Format context for chat buffer."
   (let ((mode (if (derived-mode-p 'org-mode) 'org-mode 'markdown-mode)))
     (if-let* ((context (append ellama-context-global
-			       ellama-context-ephemeral)))
-	(concat (string-join
-		 (cons "Context:"
-		       (mapcar (lambda (elt)
-				 (ellama-context-element-format elt mode))
-			       context))
-		 "\n")
-		"\n\n")
+                               ellama-context-ephemeral)))
+        (concat (string-join
+                 (cons "Context:"
+                       (mapcar (lambda (elt)
+                                 (ellama-context-element-format elt mode))
+                               context))
+                 "\n")
+                "\n\n")
       "")))
 
 ;;;###autoload
 (defun ellama-context-prompt-with-context (prompt)
   "Add context to PROMPT for sending to llm."
   (let* ((context (append ellama-context-global
-			  ellama-context-ephemeral)))
+                          ellama-context-ephemeral)))
     (if context
-	(prog1
-	    (concat (string-join
-		     (cons "Context:"
-			   (mapcar #'ellama-context-element-extract context))
-		     "\n")
-		    "\n\n"
-		    prompt)
-	  (setq ellama-context-ephemeral nil))
+        (prog1
+            (concat (string-join
+                     (cons "Context:"
+                           (mapcar #'ellama-context-element-extract context))
+                     "\n")
+                    "\n\n"
+                    prompt)
+          (setq ellama-context-ephemeral nil))
       prompt)))
 
 (provide 'ellama-context)

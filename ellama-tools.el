@@ -91,13 +91,13 @@ Tools from this list will work without user confirmation."
     ("explorer"
      :system "Explore, inspect, and report findings. Do not modify files."
      :tools ("read_file" "directory_tree" "grep" "grep_in_file"
-	     "count_lines" "lines_range" "project_root" "shell_command"))
+             "count_lines" "lines_range" "project_root" "shell_command"))
 
     ("coder"
      :system "You are an expert software developer. Make precise changes."
      :tools ("read_file" "write_file" "edit_file" "append_file" "prepend_file"
-	     "move_file" "apply_patch" "grep" "grep_in_file" "project_root"
-	     "directory_tree" "count_lines" "lines_range" "shell_command")
+             "move_file" "apply_patch" "grep" "grep_in_file" "project_root"
+             "directory_tree" "count_lines" "lines_range" "shell_command")
      :provider 'ellama-coding-provider)
 
     ("bash"
@@ -112,7 +112,7 @@ Tools from this list will work without user confirmation."
 (defun ellama-tools--for-role (role)
   "Resolve tools allowed for ROLE."
   (let* ((cfg (cdr (assoc role ellama-tools-subagent-roles)))
-	 (tools (plist-get cfg :tools)))
+         (tools (plist-get cfg :tools)))
     (cond
      ((eq tools :all)
       (cl-remove-if
@@ -150,8 +150,8 @@ approved, \"Forbidden by the user\" otherwise."
     (cond
      ;; If user has approved all calls, just execute the function
      ((or confirmation
-	  ellama-tools-allow-all
-	  (cl-find function ellama-tools-allowed))
+          ellama-tools-allow-all
+          (cl-find function ellama-tools-allowed))
       (let* ((result (apply function args))
              (result-str (if (stringp result)
                              result
@@ -167,20 +167,20 @@ approved, \"Forbidden by the user\" otherwise."
      (t
       ;; Generate prompt with truncated string arguments
       (save-window-excursion
-	(let* ((args-display
-		(mapcar (lambda (arg)
-			  (cond
-			   ((stringp arg)
-			    (string-truncate-left
-			     arg
-			     ellama-tools-argument-max-length))
-			   (t
-			    (format "%S" arg))))
-			(cl-remove-if (lambda (arg) (functionp arg)) args)))
-	       (prompt (format "Allow calling %s with arguments: %s?"
-			       function-name
-			       (mapconcat #'identity args-display ", ")))
-	       result)
+        (let* ((args-display
+                (mapcar (lambda (arg)
+                          (cond
+                           ((stringp arg)
+                            (string-truncate-left
+                             arg
+                             ellama-tools-argument-max-length))
+                           (t
+                            (format "%S" arg))))
+                        (cl-remove-if (lambda (arg) (functionp arg)) args)))
+               (prompt (format "Allow calling %s with arguments: %s?"
+                               function-name
+                               (mapconcat #'identity args-display ", ")))
+               result)
           (while
               (let ((answer (read-char-choice
                              (format "%s (y)es, (a)lways, (n)o, (r)eply, (v)iew: " prompt)
@@ -239,31 +239,31 @@ approved, \"Forbidden by the user\" otherwise."
 (defun ellama-tools-confirm (function &rest args)
   "Ask user for confirmation before calling FUNCTION with ARGS."
   (apply #'ellama-tools--confirm-call
-	 function
-	 (if (symbolp function)
-	     (symbol-name function)
-	   "anonymous-function")
-	 args))
+         function
+         (if (symbolp function)
+             (symbol-name function)
+           "anonymous-function")
+         args))
 
 (defun ellama-tools-confirm-with-name (function name &rest args)
   "Ask user for confirmation before calling FUNCTION with ARGS.
 NAME is fallback label used when FUNCTION has no symbol name."
   (apply #'ellama-tools--confirm-call
-	 function
-	 (if (symbolp function)
-	     (symbol-name function)
-	   (cond
-	    ((stringp name) name)
-	    ((symbolp name) (symbol-name name))
-	    (t "anonymous-function")))
-	 args))
+         function
+         (if (symbolp function)
+             (symbol-name function)
+           (cond
+            ((stringp name) name)
+            ((symbolp name) (symbol-name name))
+            (t "anonymous-function")))
+         args))
 
 (defun ellama-tools--make-confirm-wrapper (func name)
   "Make confirmation wrapper for FUNC.
 NAME is fallback label used when FUNC has no symbol name."
   (if (symbolp func)
       (lambda (&rest args)
-	(apply #'ellama-tools-confirm func args))
+        (apply #'ellama-tools-confirm func args))
     (lambda (&rest args)
       (apply #'ellama-tools-confirm-with-name func name args))))
 
@@ -592,40 +592,40 @@ Replace OLDCONTENT with NEWCONTENT."
 CALLBACK – function called once with the result string."
   (condition-case err
       (let ((buf (get-buffer-create
-		  (concat (make-temp-name " *ellama shell command") "*"))))
-	(set-process-sentinel
-	 (start-process
-	  "*ellama-shell-command*" buf shell-file-name shell-command-switch cmd)
-	 (lambda (process _)
-	   (when (not (process-live-p process))
-	     (let* ((raw-output
-		     ;; trim trailing newline to reduce noisy tool output
-		     (string-trim-right
-		      (with-current-buffer buf (buffer-string))
-		      "\n"))
-		    (output
-		     (ellama-tools--sanitize-tool-text-output
-		      raw-output
-		      "Command output"))
-		    (exit-code (process-exit-status process))
-		    (result
-		     (cond
-		      ((and (string= output "") (zerop exit-code))
-		       "Command completed successfully with no output.")
-		      ((string= output "")
-		       (format "Command failed with exit code %d and no output."
-			       exit-code))
-		      ((zerop exit-code)
-		       output)
-		      (t
-		       (format "Command failed with exit code %d.\n%s"
-			       exit-code output)))))
-	       (funcall callback result)
-	       (kill-buffer buf))))))
+                  (concat (make-temp-name " *ellama shell command") "*"))))
+        (set-process-sentinel
+         (start-process
+          "*ellama-shell-command*" buf shell-file-name shell-command-switch cmd)
+         (lambda (process _)
+           (when (not (process-live-p process))
+             (let* ((raw-output
+                     ;; trim trailing newline to reduce noisy tool output
+                     (string-trim-right
+                      (with-current-buffer buf (buffer-string))
+                      "\n"))
+                    (output
+                     (ellama-tools--sanitize-tool-text-output
+                      raw-output
+                      "Command output"))
+                    (exit-code (process-exit-status process))
+                    (result
+                     (cond
+                      ((and (string= output "") (zerop exit-code))
+                       "Command completed successfully with no output.")
+                      ((string= output "")
+                       (format "Command failed with exit code %d and no output."
+                               exit-code))
+                      ((zerop exit-code)
+                       output)
+                      (t
+                       (format "Command failed with exit code %d.\n%s"
+                               exit-code output)))))
+               (funcall callback result)
+               (kill-buffer buf))))))
     (error
      (funcall callback
-	      (format "Failed to start shell command: %s"
-		      (error-message-string err)))))
+              (format "Failed to start shell command: %s"
+                      (error-message-string err)))))
   ;; async tool should always return nil
   ;; to work properly with the llm library
   nil)

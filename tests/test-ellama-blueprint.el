@@ -165,7 +165,7 @@
 
 (ert-deftest test-ellama-blueprint-run-fills-variables-and-sends-buffer ()
   (let ((ellama-blueprints '((:act "welcome"
-                              :prompt "Hello {name} from {city}.")))
+                                   :prompt "Hello {name} from {city}.")))
         (sent nil))
     (cl-letf (((symbol-function 'ellama-community-prompts-ensure)
                (lambda () nil))

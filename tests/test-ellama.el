@@ -50,7 +50,7 @@
      chunks)))
 
 (defun ellama-test--run-with-fake-streaming (response prompt-regexp fn
-						      &optional style)
+                                                      &optional style)
   "Run FN with fake streaming RESPONSE and assert PROMPT-REGEXP.
 STYLE controls partial message shape.  Default value is `word-leading'."
   (let* ((provider
@@ -63,7 +63,7 @@ STYLE controls partial message shape.  Default value is `word-leading'."
          (partial-style (or style 'word-leading)))
     (cl-letf (((symbol-function 'llm-chat-streaming)
                (lambda (stream-provider prompt partial-callback
-                        response-callback _error-callback _multi-output)
+                                        response-callback _error-callback _multi-output)
                  (should (string-match-p prompt-regexp
                                          (llm-chat-prompt-to-text prompt)))
                  (let ((response-plist (llm-chat stream-provider prompt t)))
@@ -365,7 +365,7 @@ STYLE controls partial message shape.  Default value is `word-leading'."
       (insert original)
       (cl-letf (((symbol-function 'llm-chat-streaming)
                  (lambda (_provider _prompt _partial-callback _response-callback
-                          error-callback _multi-output)
+                                    error-callback _multi-output)
                    (funcall error-callback 'error "network failed")
                    'request)))
         (should-error
@@ -418,7 +418,7 @@ voluptate velit esse cillum dolore eu fugiat nulla pariatur.")
 
 (ert-deftest test-ellama-sieve-of-eratosthenes ()
   (let* ((fill-column 80)
-	 (raw "Sure! Let's go through the **Sieve of Eratosthenes** step by step — it's an ancient and elegant algorithm used to find all **prime numbers** up to a given limit.
+         (raw "Sure! Let's go through the **Sieve of Eratosthenes** step by step — it's an ancient and elegant algorithm used to find all **prime numbers** up to a given limit.
 
 ---
 
@@ -454,7 +454,7 @@ We’ll go through them one by one.
 #### Step 2: Start with the first prime — 2
 
 - 2 is the first prime number.
-- Eliminate all multiples of 2 (except 2 itself):  
+- Eliminate all multiples of 2 (except 2 itself):
   → 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30
 
 Now our list looks like this (only numbers not crossed out):
@@ -470,7 +470,7 @@ Now our list looks like this (only numbers not crossed out):
 #### Step 3: Move to the next uneliminated number — 3
 
 - 3 is the next prime.
-- Eliminate all multiples of 3 (except 3 itself):  
+- Eliminate all multiples of 3 (except 3 itself):
   → 9, 15, 21, 27
 
 Now remove those from the list:
@@ -486,7 +486,7 @@ Now remove those from the list:
 #### Step 4: Next uneliminated number — 5
 
 - 5 is next prime.
-- Eliminate multiples of 5:  
+- Eliminate multiples of 5:
   → 25 (since 5×5=25)
 
 Remove 25:
@@ -548,17 +548,17 @@ All the remaining numbers are **prime**:
 ```python
 def sieve_of_eratosthenes(n):
     if n < 2:
-	return []
+        return []
 
     # Create a boolean array \"is_prime[0..n]\" and initialize all entries as True
     is_prime = [True] * (n + 1)
     is_prime[0] = is_prime[1] = False  # 0 and 1 are not prime
 
     for i in range(2, int(n**0.5) + 1):
-	if is_prime[i]:
-	    # Mark all multiples of i (starting from i*i) as not prime
-	    for j in range(i * i, n + 1, i):
-		is_prime[j] = False
+        if is_prime[i]:
+            # Mark all multiples of i (starting from i*i) as not prime
+            for j in range(i * i, n + 1, i):
+                is_prime[j] = False
 
     # Collect all prime numbers
     primes = [i for i in range(2, n + 1) if is_prime[i]]
@@ -587,7 +587,7 @@ Eratosthenes was not only a mathematician but also a geographer, astronomer, and
 
 Let me know if you'd like to see a visual version, or try it with a different number! 😊
 ")
-	 (expected "Sure! Let's go through the *Sieve of Eratosthenes* step by step — it's an
+         (expected "Sure! Let's go through the *Sieve of Eratosthenes* step by step — it's an
 ancient and elegant algorithm used to find all *prime numbers* up to a given
 limit.
 
@@ -628,7 +628,7 @@ We’ll go through them one by one.
 **** Step 2: Start with the first prime — 2
 
 - 2 is the first prime number.
-- Eliminate all multiples of 2 (except 2 itself):  
+- Eliminate all multiples of 2 (except 2 itself):
   → 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30
 
 Now our list looks like this (only numbers not crossed out):
@@ -643,7 +643,7 @@ Now our list looks like this (only numbers not crossed out):
 **** Step 3: Move to the next uneliminated number — 3
 
 - 3 is the next prime.
-- Eliminate all multiples of 3 (except 3 itself):  
+- Eliminate all multiples of 3 (except 3 itself):
   → 9, 15, 21, 27
 
 Now remove those from the list:
@@ -658,7 +658,7 @@ Now remove those from the list:
 **** Step 4: Next uneliminated number — 5
 
 - 5 is next prime.
-- Eliminate multiples of 5:  
+- Eliminate multiples of 5:
   → 25 (since 5×5=25)
 
 Remove 25:
@@ -723,17 +723,17 @@ number > √N).
 #+BEGIN_SRC python
 def sieve_of_eratosthenes(n):
     if n < 2:
-	return []
+        return []
 
     # Create a boolean array \"is_prime[0..n]\" and initialize all entries as True
     is_prime = [True] * (n + 1)
     is_prime[0] = is_prime[1] = False  # 0 and 1 are not prime
 
     for i in range(2, int(n**0.5) + 1):
-	if is_prime[i]:
-	    # Mark all multiples of i (starting from i*i) as not prime
-	    for j in range(i * i, n + 1, i):
-		is_prime[j] = False
+        if is_prime[i]:
+            # Mark all multiples of i (starting from i*i) as not prime
+            for j in range(i * i, n + 1, i):
+                is_prime[j] = False
 
     # Collect all prime numbers
     primes = [i for i in range(2, n + 1) if is_prime[i]]
@@ -764,7 +764,7 @@ circumference with remarkable accuracy!
 
 Let me know if you'd like to see a visual version, or try it with a different
 number! 😊")
-	 )
+         )
     (with-temp-buffer
       (org-mode)
       (ellama-test--run-with-fake-streaming
@@ -779,19 +779,19 @@ number! 😊")
 
 (ert-deftest test-ellama-duplicate-strings ()
   (let ((fill-column 80)
-	(raw "Great question! Whether you should start with **\"Natural Language Processing with Transformers\"** (O’Reilly) or wait for **\"Build a Large Language Model (From Scratch)\"** depends on your **goals, background, and learning style**. Here’s a detailed comparison to help
+        (raw "Great question! Whether you should start with **\"Natural Language Processing with Transformers\"** (O’Reilly) or wait for **\"Build a Large Language Model (From Scratch)\"** depends on your **goals, background, and learning style**. Here’s a detailed comparison to help
 you decide:
 
 ---
 
 ")
-	(expected "Great question! Whether you should start with *\"Natural Language Processing with
+        (expected "Great question! Whether you should start with *\"Natural Language Processing with
 Transformers\"* (O’Reilly) or wait for *\"Build a Large Language Model (From
 Scratch)\"* depends on your *goals, background, and learning style*. Here’s a
 detailed comparison to help you decide:
 
 ---")
-	)
+        )
     (with-temp-buffer
       (org-mode)
       (ellama-test--run-with-fake-streaming
@@ -835,8 +835,8 @@ detailed comparison to help you decide:
          (done-text nil)
          (_ (unless (get 'ellama-test-tool-call-error 'error-conditions)
               (define-error 'ellama-test-tool-call-error
-                "Tool call error used in tests"
-                'llm-tool-call-error)))
+                            "Tool call error used in tests"
+                            'llm-tool-call-error)))
          (ellama-provider
           (make-llm-fake
            :chat-action-func
@@ -850,7 +850,7 @@ detailed comparison to help you decide:
          (ellama-fill-paragraphs nil))
     (cl-letf (((symbol-function 'llm-chat-async)
                (lambda (provider prompt response-callback error-callback
-                        &optional _multi-output)
+                                 &optional _multi-output)
                  (condition-case err
                      (funcall response-callback (llm-chat provider prompt t))
                    (t (funcall error-callback (car err) (cdr err))))
@@ -873,12 +873,12 @@ detailed comparison to help you decide:
          (ellama-spinner-enabled nil)
          (_ (unless (get 'ellama-test-tool-call-error-4 'error-conditions)
               (define-error 'ellama-test-tool-call-error-4
-                "Tool call error used in retry request test"
-                'llm-tool-call-error))))
+                            "Tool call error used in retry request test"
+                            'llm-tool-call-error))))
     (with-temp-buffer
       (cl-letf (((symbol-function 'llm-chat-streaming)
                  (lambda (_provider _prompt _partial-callback _response-callback
-                          error-callback _multi-output)
+                                    error-callback _multi-output)
                    (setq call-count (1+ call-count))
                    (if (= call-count 1)
                        (progn
@@ -1064,8 +1064,7 @@ That's it."))))
   (let ((result (ellama--translate-markdown-to-org-filter "Sure! ```emacs-lisp
 (message \"ok\")
 ```")))
-    (should (string-equal result "Sure! 
-#+BEGIN_SRC emacs-lisp
+    (should (string-equal result "Sure! \n#+BEGIN_SRC emacs-lisp
 (message \"ok\")
 #+END_SRC"))))
 
@@ -1119,7 +1118,7 @@ $P_\\theta$
 
 (ert-deftest test-ellama-md-to-org-code-snake-case ()
   (let* ((fill-column 70)
-	 (result (ellama--translate-markdown-to-org-filter "```python
+         (result (ellama--translate-markdown-to-org-filter "```python
 # Example of snake case variables and functions
 
 # Variable names using snake_case
@@ -1150,8 +1149,8 @@ Snake case helps improve readability, especially in languages that are sensitive
 
 (ert-deftest test-ellama--fix-file-name ()
   (should (string=
-	   (ellama--fix-file-name "a/\\?%*:|\"<>.;=")
-	   "a_____________")))
+           (ellama--fix-file-name "a/\\?%*:|\"<>.;=")
+           "a_____________")))
 
 (ert-deftest test-ellama-md-to-org-code-inline-code ()
   (let ((result (ellama--translate-markdown-to-org-filter "_some italic_
