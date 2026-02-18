@@ -24,6 +24,8 @@
 
 ;;; Code:
 
+(add-to-list 'load-path default-directory)
+
 (require 'cl-lib)
 (require 'ellama)
 (require 'ellama-context)
@@ -113,6 +115,7 @@
   (let ((ellama-provider :default-provider)
         (ellama-coding-provider :coding-provider)
         (ellama--current-session-id "session-1")
+        (ellama--current-session-uid "uid-1")
         (providers '("ellama-provider" "ellama-coding-provider"))
         (values '(:new-default :new-coding)))
     (cl-letf (((symbol-function 'completing-read)
@@ -126,40 +129,38 @@
       (ellama-transient-set-provider)
       (should (eq ellama-provider :new-default))
       (should-not ellama--current-session-id)
+      (should-not ellama--current-session-uid)
       (setq ellama--current-session-id "session-2")
+      (setq ellama--current-session-uid "uid-2")
       (ellama-transient-set-provider)
       (should (eq ellama-coding-provider :new-coding))
-      (should (equal ellama--current-session-id "session-2")))))
+      (should (equal ellama--current-session-id "session-2"))
+      (should (equal ellama--current-session-uid "uid-2")))))
 
 (ert-deftest
     test-ellama-transient-model-get-from-current-session-guard-and-provider-flow
-  ()
+    ()
   (let ((called 0))
-    (cl-letf (((symbol-function 'ellama-fill-transient-ollama-model)
+    (cl-letf (((symbol-function 'ellama-get-current-session)
+               (lambda () nil))
+              ((symbol-function 'ellama-fill-transient-ollama-model)
                (lambda (&rest _args)
                  (cl-incf called))))
-      (let ((ellama--current-session-id nil))
-        (ellama-transient-model-get-from-current-session))
+      (ellama-transient-model-get-from-current-session)
       (should (= called 0))))
-  (let ((buffer (generate-new-buffer " *ellama-transient-test-session*"))
-        (ellama--current-session-id "session-id")
-        (ellama--current-session
-         (make-ellama-session :provider :session-provider))
-        provided-id
+  (let ((session (make-ellama-session :provider :session-provider))
+        provided-session
         provided-provider)
-    (unwind-protect
-        (cl-letf (((symbol-function 'ellama-get-session-buffer)
-                   (lambda (id)
-                     (setq provided-id id)
-                     buffer))
-                  ((symbol-function 'ellama-fill-transient-ollama-model)
-                   (lambda (provider)
-                     (setq provided-provider provider))))
-          (ellama-transient-model-get-from-current-session)
-          (should (equal provided-id "session-id"))
-          (should (eq provided-provider :session-provider)))
-      (when (buffer-live-p buffer)
-        (kill-buffer buffer)))))
+    (cl-letf (((symbol-function 'ellama-get-current-session)
+               (lambda ()
+                 (setq provided-session session)
+                 session))
+              ((symbol-function 'ellama-fill-transient-ollama-model)
+               (lambda (provider)
+                 (setq provided-provider provider))))
+      (ellama-transient-model-get-from-current-session)
+      (should (eq provided-session session))
+      (should (eq provided-provider :session-provider)))))
 
 (ert-deftest test-ellama-transient-set-system-region-and-prompt-paths ()
   (let ((ellama-global-system "old"))

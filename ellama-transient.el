@@ -43,6 +43,7 @@
 (defvar ellama-transient-context-length 4096)
 (defvar ellama-transient-host "localhost")
 (defvar ellama-transient-port 11434)
+(defvar ellama--current-session-uid)
 
 (defun ellama-transient-system-show ()
   "Show transient system message."
@@ -112,10 +113,9 @@ Otherwise, prompt the user to enter a system message."
 (transient-define-suffix ellama-transient-model-get-from-current-session ()
   "Fill transient model from current session."
   (interactive)
-  (when ellama--current-session-id
+  (when-let ((session (ellama-get-current-session)))
     (ellama-fill-transient-ollama-model
-     (with-current-buffer (ellama-get-session-buffer ellama--current-session-id)
-       (ellama-session-provider ellama--current-session)))))
+     (ellama-session-provider session))))
 
 (transient-define-suffix ellama-transient-set-provider ()
   "Set transient model to provider."
@@ -127,7 +127,8 @@ Otherwise, prompt the user to enter a system message."
          (ellama-construct-ollama-provider-from-transient))
     ;; if you change `ellama-provider' you probably want to start new chat session
     (when (equal provider 'ellama-provider)
-      (setq ellama--current-session-id nil))))
+      (setq ellama--current-session-id nil
+            ellama--current-session-uid nil))))
 
 ;;;###autoload (autoload 'ellama-select-ollama-model "ellama-transient" nil t)
 (transient-define-prefix ellama-select-ollama-model ()
@@ -228,9 +229,7 @@ Otherwise, prompt the user to enter a system message."
   "Summarise session and context for transient menus."
   (format "%s %s %s %s"
           (propertize "Session:" 'face 'ellama-key-face)
-     	  (if ellama--current-session
-	      (ellama-session-id ellama--current-session)
-	    ellama--current-session-id)
+          (ellama-get-current-session-id)
           (propertize "Context: " 'face 'ellama-key-face)
           (ellama--context-summary)))
 

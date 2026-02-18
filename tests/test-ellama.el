@@ -24,6 +24,8 @@
 
 ;;; Code:
 
+(add-to-list 'load-path default-directory)
+
 (require 'cl-lib)
 (require 'ellama)
 (require 'ellama-transient)
@@ -1298,6 +1300,81 @@ region, season, or type)! 🍎🍊"))))
         (ellama-nick-prefix-depth 2))
     (should (equal (ellama-get-nick-prefix-for-mode) "##"))
     (should (equal (ellama-get-session-file-extension) "md"))))
+
+(ert-deftest test-ellama-chat-rehydrate-after-revert ()
+  (let* ((provider (make-llm-fake :chat-action-func (lambda () "ok")))
+         (ellama-provider provider)
+         (ellama-coding-provider provider)
+         (ellama-major-mode 'text-mode)
+         (ellama-session-auto-save t)
+         (ellama-spinner-enabled nil)
+         (ellama-response-process-method 'sync)
+         (ellama-sessions-directory (make-temp-file "ellama-test-" t))
+         (session (ellama-new-session provider "initial prompt"))
+         (uid (ellama--session-uid session))
+         (buffer (ellama-get-session-buffer uid))
+         file-name)
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer
+            (save-buffer)
+            (setq file-name (buffer-file-name)))
+          (with-temp-file file-name
+            (insert "External update\n"))
+          (with-current-buffer buffer
+            (revert-buffer :ignore-auto :noconfirm)
+            (should (ellama-session-p (ellama--resolve-session nil uid))))
+          (cl-letf (((symbol-function 'ellama-stream)
+                     (lambda (&rest _args) :stubbed)))
+            (ellama-chat "repro prompt"))
+          (with-current-buffer buffer
+            (should ellama-session-mode)
+            (should (ellama-session-p ellama--current-session)))
+          (should (equal ellama--current-session-uid uid))
+          (should (equal ellama--current-session-id
+                         (ellama-session-id session))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest test-ellama-read-legacy-session-adds-uid ()
+  (let* ((file-name (make-temp-file "ellama-session-" nil ".el"))
+         (legacy-session (make-ellama-session
+                          :id "legacy"
+                          :provider :provider
+                          :prompt "prompt"
+                          :extra '(:dir "/tmp"))))
+    (unwind-protect
+        (progn
+          (with-temp-file file-name
+            (insert (prin1-to-string legacy-session)))
+          (let ((session (ellama--read-session-from-file file-name)))
+            (should (ellama-session-p session))
+            (should (equal (ellama-session-id session) "legacy"))
+            (should (equal (ellama--session-uid session) "legacy"))))
+      (delete-file file-name t))))
+
+(ert-deftest test-ellama-session-rename-keep-uid ()
+  (let* ((provider (make-llm-fake :chat-action-func (lambda () "ok")))
+         (ellama-provider provider)
+         (ellama-coding-provider provider)
+         (ellama-major-mode 'text-mode)
+         (ellama-session-auto-save nil)
+         (session (ellama-new-session provider "initial prompt" t))
+         (uid (ellama--session-uid session))
+         (buffer (ellama-get-session-buffer uid)))
+    (unwind-protect
+        (with-current-buffer buffer
+          (cl-letf (((symbol-function 'read-string)
+                     (lambda (&rest _args) "renamed-session")))
+            (ellama-session-rename))
+          (should (equal (ellama-session-id ellama--current-session)
+                         "renamed-session"))
+          (should (equal (ellama--session-uid ellama--current-session) uid))
+          (should (eq (gethash uid ellama--active-session-states)
+                      ellama--current-session))
+          (should (equal ellama--current-session-id "renamed-session")))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
 
 (provide 'test-ellama)
 
