@@ -237,12 +237,13 @@ File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Top
    • ‘ellama-write’: This command allows you to generate text using an
      LLM.  When called interactively, it prompts for an instruction that
      is then used to generate text based on the context.  If a region is
-     active, the selected text is added to the context before generating
-     the response.
+     active, the selected text is added to ephemeral context before
+     generating the response.
    • ‘ellama-chat-send-last-message’: Send last user message extracted
      from current ellama chat buffer.
    • ‘ellama-ask-about’: Ask Ellama about a selected region or the
-     current buffer.
+     current buffer.  Automatically adds selected region or current
+     buffer to ephemeral context for one request.
    • ‘ellama-ask-selection’: Send selected region or current buffer to
      ellama chat.
    • ‘ellama-ask-line’: Send current line to ellama chat.
@@ -256,7 +257,8 @@ File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Top
      buffer using Ellama.
    • ‘ellama-summarize-killring’: Summarize text from the kill ring.
    • ‘ellama-code-review’: Review code in a selected region or the
-     current buffer using Ellama.
+     current buffer using Ellama.  Automatically adds selected region or
+     current buffer to ephemeral context for one request.
    • ‘ellama-change’: Change text in a selected region or the current
      buffer according to a provided change.
    • ‘ellama-make-list’: Create a markdown list from the active region
@@ -271,7 +273,7 @@ File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Top
    • ‘ellama-code-add’: Generate and insert new code based on
      description.  This function prompts the user to describe the code
      they want to generate.  If a region is active, it includes the
-     selected text as context for code generation.
+     selected text in ephemeral context for code generation.
    • ‘ellama-code-edit’: Change selected code or code in the current
      buffer according to a provided change using Ellama.
    • ‘ellama-code-improve’: Change selected code or code in the current
@@ -545,6 +547,10 @@ accessible to the LLM when responding to prompts.  This global context
 is prepended to your prompt before transmission to the LLM.
 Additionally, Ellama supports an "ephemeral context," which is temporary
 and only available for a single request.
+
+Some commands add context automatically as ephemeral context:
+‘ellama-ask-about’, ‘ellama-code-review’, ‘ellama-write’, and
+‘ellama-code-add’.
 
 * Menu:
 
@@ -1578,39 +1584,39 @@ Tag Table:
 Node: Top1379
 Node: Installation3748
 Node: Commands8762
-Node: Keymap15839
-Node: Configuration18673
-Node: Context Management25874
-Node: Transient Menus for Context Management26782
-Node: Managing the Context28396
-Node: Considerations29171
-Node: Minor modes29764
-Node: ellama-context-header-line-mode31752
-Node: ellama-context-header-line-global-mode32577
-Node: ellama-context-mode-line-mode33297
-Node: ellama-context-mode-line-global-mode34145
-Node: Ellama Session Header Line Mode34849
-Node: Enabling and Disabling35418
-Node: Customization35865
-Node: Ellama Session Mode Line Mode36153
-Node: Enabling and Disabling (1)36738
-Node: Customization (1)37185
-Node: Using Blueprints37479
-Node: Key Components of Ellama Blueprints38119
-Node: Creating and Managing Blueprints38726
-Node: Blueprints files39704
-Node: Variable Management40125
-Node: Keymap and Mode40578
-Node: Transient Menus41514
-Node: Running Blueprints programmatically42060
-Node: MCP Integration42647
-Node: Agent Skills43669
-Node: Directory Structure44032
-Node: Creating a Skill45059
-Node: How it works45434
-Node: Acknowledgments45825
-Node: Contributions46536
-Node: GNU Free Documentation License46922
+Node: Keymap16049
+Node: Configuration18883
+Node: Context Management26084
+Node: Transient Menus for Context Management27152
+Node: Managing the Context28766
+Node: Considerations29541
+Node: Minor modes30134
+Node: ellama-context-header-line-mode32122
+Node: ellama-context-header-line-global-mode32947
+Node: ellama-context-mode-line-mode33667
+Node: ellama-context-mode-line-global-mode34515
+Node: Ellama Session Header Line Mode35219
+Node: Enabling and Disabling35788
+Node: Customization36235
+Node: Ellama Session Mode Line Mode36523
+Node: Enabling and Disabling (1)37108
+Node: Customization (1)37555
+Node: Using Blueprints37849
+Node: Key Components of Ellama Blueprints38489
+Node: Creating and Managing Blueprints39096
+Node: Blueprints files40074
+Node: Variable Management40495
+Node: Keymap and Mode40948
+Node: Transient Menus41884
+Node: Running Blueprints programmatically42430
+Node: MCP Integration43017
+Node: Agent Skills44039
+Node: Directory Structure44402
+Node: Creating a Skill45429
+Node: How it works45804
+Node: Acknowledgments46195
+Node: Contributions46906
+Node: GNU Free Documentation License47292
 
 End Tag Table
 
