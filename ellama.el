@@ -2093,8 +2093,8 @@ ARGS contains keys for fine control.
   (let ((input (read-string "Ask ellama about this text: "))
 	(ephemeral (plist-get args :ephemeral)))
     (if (region-active-p)
-	(ellama-context-add-selection)
-      (ellama-context-add-buffer (buffer-name (current-buffer))))
+	(ellama-context-add-selection t)
+      (ellama-context-add-buffer (buffer-name (current-buffer)) t))
     (ellama-chat input create-session :ephemeral ephemeral)))
 
 ;;;###autoload
@@ -2344,8 +2344,8 @@ ARGS contains keys for fine control.
   (interactive)
   (let ((ephemeral (plist-get args :ephemeral)))
     (if (region-active-p)
-        (ellama-context-add-selection)
-      (ellama-context-add-buffer (current-buffer)))
+        (ellama-context-add-selection t)
+      (ellama-context-add-buffer (current-buffer) t))
     (ellama-chat
      ellama-code-review-prompt-template
      create-session
@@ -2357,7 +2357,7 @@ ARGS contains keys for fine control.
   "Write text based on context and INSTRUCTION at point."
   (interactive "sInstruction: ")
   (when (region-active-p)
-    (ellama-context-add-selection))
+    (ellama-context-add-selection t))
   (ellama-stream (format ellama-write-prompt-template instruction)
 		 :point (point)
 		 :filter (when (derived-mode-p 'org-mode)
@@ -2510,7 +2510,7 @@ If a region is active, it includes the selected text as context for code
 generation."
   (interactive "sDescribe the code to be generated: ")
   (when (region-active-p)
-    (ellama-context-add-selection))
+    (ellama-context-add-selection t))
   (ellama-stream
    (format
     ellama-code-add-prompt-template
