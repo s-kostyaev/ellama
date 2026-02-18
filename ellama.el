@@ -344,7 +344,7 @@ Improved the feature abd by adding a new module xyz.
   "Prompt template for `ellama-make-table'."
   :type 'string)
 
-(defcustom ellama-get-name-template "I will provide you with a user query, and you should return only a short topic describing the conversation's subject. NEVER respond to the query itself. The topic must be short and concise. Do not add extra words like \"the topic is\"; respond with the topic alone.
+(defcustom ellama-get-name-template "I will provide you with a user query, and you should return only a short topic describing the conversation's subject. NEVER respond to the query itself. The topic must be short and concise. Do not add extra words like \"the topic is\"; respond with the topic alone. NEVER answer with an empty line or space only.
 <EXAMPLE>
 Query: Why is the sky blue?
 Topic: Blue sky
