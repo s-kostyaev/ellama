@@ -75,6 +75,155 @@ STYLE controls partial message shape.  Default value is `word-leading'."
                    (funcall response-callback response-plist)))))
       (funcall fn))))
 
+(ert-deftest test-ellama-request-mode-binds-c-g-to-cancel ()
+  (with-temp-buffer
+    (ellama-request-mode +1)
+    (should (eq (key-binding (kbd "C-g") t)
+                #'ellama--cancel-current-request-and-quit))))
+
+(ert-deftest test-ellama-request-mode-c-g-cancels-current-request ()
+  (let ((cancelled-request nil)
+        (ellama-spinner-enabled nil))
+    (with-temp-buffer
+      (setq-local ellama--current-request 'request)
+      (ellama-request-mode +1)
+      (cl-letf (((symbol-function 'llm-cancel-request)
+                 (lambda (request)
+                   (setq cancelled-request request))))
+        (let ((cancel-command (key-binding (kbd "C-g") t)))
+          (should (eq cancel-command
+                      #'ellama--cancel-current-request-and-quit))
+          (condition-case nil
+              (call-interactively cancel-command)
+            (quit nil))))
+      (should (eq cancelled-request 'request))
+      (should (null ellama--current-request))
+      (should-not ellama-request-mode))))
+
+(ert-deftest test-ellama-request-mode-c-g-cancels-from-reasoning-buffer ()
+  (let ((cancelled-request nil)
+        (ellama-spinner-enabled nil)
+        (reasoning-buffer (generate-new-buffer " *ellama-reasoning-test*")))
+    (unwind-protect
+        (with-temp-buffer
+          (let ((main-buffer (current-buffer)))
+            (ellama--set-current-request
+             'request
+             (list main-buffer reasoning-buffer))
+            (cl-letf (((symbol-function 'llm-cancel-request)
+                       (lambda (request)
+                         (setq cancelled-request request))))
+              (with-current-buffer reasoning-buffer
+                (let ((cancel-command (key-binding (kbd "C-g") t)))
+                  (should (eq cancel-command
+                              #'ellama--cancel-current-request-and-quit))
+                  (condition-case nil
+                      (call-interactively cancel-command)
+                    (quit nil)))))
+            (should (eq cancelled-request 'request))
+            (should-not ellama-request-mode)
+            (with-current-buffer reasoning-buffer
+              (should-not ellama-request-mode))))
+      (when (buffer-live-p reasoning-buffer)
+        (kill-buffer reasoning-buffer)))))
+
+(ert-deftest test-ellama-cancel-does-not-affect-other-request-buffers ()
+  (let* ((cancelled-request nil)
+         (ellama-spinner-enabled nil)
+         (main-a (generate-new-buffer " *ellama-main-a*"))
+         (reasoning-a (generate-new-buffer " *ellama-reasoning-a*"))
+         (main-b (generate-new-buffer " *ellama-main-b*"))
+         (reasoning-b (generate-new-buffer " *ellama-reasoning-b*"))
+         request-context-a
+         request-context-b)
+    (unwind-protect
+        (progn
+          (setq request-context-a
+                (with-current-buffer main-a
+                  (ellama--set-current-request
+                   'request-a
+                   (list main-a reasoning-a))))
+          (setq request-context-b
+                (with-current-buffer main-b
+                  (ellama--set-current-request
+                   'request-b
+                   (list main-b reasoning-b))))
+          (cl-letf (((symbol-function 'llm-cancel-request)
+                     (lambda (request)
+                       (setq cancelled-request request))))
+            (with-current-buffer main-a
+              (let ((cancel-command (key-binding (kbd "C-g") t)))
+                (condition-case nil
+                    (call-interactively cancel-command)
+                  (quit nil)))))
+          (should (eq cancelled-request 'request-a))
+          (with-current-buffer main-a
+            (should-not ellama-request-mode))
+          (with-current-buffer reasoning-a
+            (should-not ellama-request-mode))
+          (with-current-buffer main-b
+            (should ellama-request-mode)
+            (should (eq ellama--current-request 'request-b)))
+          (with-current-buffer reasoning-b
+            (should ellama-request-mode)
+            (should (eq ellama--current-request 'request-b))))
+      (when (buffer-live-p main-a)
+        (with-current-buffer main-a
+          (ellama--deactivate-current-request request-context-a)))
+      (when (buffer-live-p main-b)
+        (with-current-buffer main-b
+          (ellama--deactivate-current-request request-context-b)))
+      (when (buffer-live-p reasoning-a)
+        (kill-buffer reasoning-a))
+      (when (buffer-live-p reasoning-b)
+        (kill-buffer reasoning-b))
+      (when (buffer-live-p main-a)
+        (kill-buffer main-a))
+      (when (buffer-live-p main-b)
+        (kill-buffer main-b)))))
+
+(ert-deftest test-ellama-response-handler-refresh-request-on-tool-call ()
+  (let* ((main-buffer (generate-new-buffer " *ellama-main-test*"))
+         (reasoning-buffer (generate-new-buffer " *ellama-reasoning-test*"))
+         (ellama-response-process-method 'streaming)
+         (ellama-spinner-enabled nil)
+         request-context)
+    (unwind-protect
+        (progn
+          (with-current-buffer main-buffer
+            (setq request-context
+                  (ellama--set-current-request
+                   'request-1
+                   (list main-buffer reasoning-buffer)))
+            (cl-letf (((symbol-function 'ellama--insert)
+                       (lambda (&rest _args) #'ignore))
+                      ((symbol-function 'ellama--handle-partial)
+                       (lambda (&rest _args) #'ignore))
+                      ((symbol-function 'llm-chat-streaming)
+                       (lambda (&rest _args) 'request-2)))
+              (funcall
+               (ellama--response-handler
+                #'ignore
+                reasoning-buffer
+                main-buffer
+                #'ignore
+                #'ignore
+                'provider
+                'prompt
+                nil
+                #'identity)
+               '(:tool-results "tool"))))
+          (with-current-buffer main-buffer
+            (should (eq ellama--current-request 'request-2)))
+          (with-current-buffer reasoning-buffer
+            (should (eq ellama--current-request 'request-2))))
+      (when (buffer-live-p main-buffer)
+        (with-current-buffer main-buffer
+          (ellama--deactivate-current-request request-context))
+        (kill-buffer main-buffer))
+      (when (buffer-live-p reasoning-buffer)
+        (kill-buffer reasoning-buffer)))))
+
 (ert-deftest test-ellama-ask-about-add-selection-ephemeral ()
   (let (captured-ephemeral)
     (with-temp-buffer
@@ -665,6 +814,45 @@ detailed comparison to help you decide:
         (should (null error-captured))
         (should (equal done-text "Recovered answer"))
         (should (equal (buffer-string) "Recovered answer"))))))
+
+(ert-deftest test-ellama-stream-retry-tracks-latest-request-for-cancel ()
+  (let* ((call-count 0)
+         (cancelled-request nil)
+         (ellama-response-process-method 'streaming)
+         (ellama-spinner-enabled nil)
+         (_ (unless (get 'ellama-test-tool-call-error-4 'error-conditions)
+              (define-error 'ellama-test-tool-call-error-4
+                "Tool call error used in retry request test"
+                'llm-tool-call-error))))
+    (with-temp-buffer
+      (cl-letf (((symbol-function 'llm-chat-streaming)
+                 (lambda (_provider _prompt _partial-callback _response-callback
+                          error-callback _multi-output)
+                   (setq call-count (1+ call-count))
+                   (if (= call-count 1)
+                       (progn
+                         (funcall error-callback
+                                  'ellama-test-tool-call-error-4
+                                  "Temporary tool failure")
+                         'request-1)
+                     'request-2)))
+                ((symbol-function 'llm-cancel-request)
+                 (lambda (request)
+                   (setq cancelled-request request))))
+        (ellama-stream "retry request tracking test"
+                       :provider 'test-provider
+                       :buffer (current-buffer)
+                       :on-error (lambda (_msg)
+                                   (ert-fail "Unexpected on-error call"))
+                       :on-done (lambda (_text)
+                                  (ert-fail "Unexpected on-done call")))
+        (should (= call-count 2))
+        (should (eq ellama--current-request 'request-2))
+        (condition-case nil
+            (call-interactively (key-binding (kbd "C-g") t))
+          (quit nil))
+        (should (eq cancelled-request 'request-2))
+        (should-not ellama-request-mode)))))
 
 
 (ert-deftest test-ellama-md-to-org-code-simple ()
