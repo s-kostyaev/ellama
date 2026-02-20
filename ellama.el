@@ -2233,9 +2233,13 @@ the full response text when the request completes (with BUFFER current)."
                          ellama-provider
                          (ellama-get-first-ollama-chat-model))))
          (ephemeral (plist-get args :ephemeral))
-         (explicit-session (ellama--resolve-session
-                            (plist-get args :session)
-                            (plist-get args :session-id)))
+         (explicit-session-arg (plist-get args :session))
+         (explicit-session-id (plist-get args :session-id))
+         (explicit-session (when (or explicit-session-arg
+                                     explicit-session-id)
+                             (ellama--resolve-session
+                              explicit-session-arg
+                              explicit-session-id)))
          (current-session (or explicit-session
                               (ellama--resolve-session nil ellama--current-session-id)))
          (need-new-session (and (not explicit-session)

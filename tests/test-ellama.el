@@ -1282,6 +1282,35 @@ region, season, or type)! 🍎🍊"))))
       (should (equal global-callback-text "final"))
       (should (equal local-callback-text "final")))))
 
+(ert-deftest test-ellama-chat-create-session-flag-forces-new-session ()
+  (let* ((provider (make-llm-fake :chat-action-func (lambda () "ok")))
+         (ellama-provider provider)
+         (ellama-coding-provider provider)
+         (ellama-major-mode 'text-mode)
+         (ellama-session-auto-save nil)
+         (ellama-chat-translation-enabled nil)
+         (session-1 (ellama-new-session provider "initial prompt" t))
+         (uid-1 (ellama--session-uid session-1))
+         (buffer-1 (ellama-get-session-buffer uid-1))
+         uid-2
+         buffer-2)
+    (unwind-protect
+        (progn
+          (cl-letf (((symbol-function 'ellama-stream)
+                     (lambda (&rest _args) :stubbed)))
+            (ellama-chat "next prompt" t))
+          (setq uid-2 ellama--current-session-uid
+                buffer-2 (ellama-get-session-buffer uid-2))
+          (should uid-2)
+          (should (not (equal uid-1 uid-2)))
+          (should (buffer-live-p buffer-2)))
+      (when (buffer-live-p buffer-1)
+        (kill-buffer buffer-1))
+      (when (and buffer-2
+                 (buffer-live-p buffer-2)
+                 (not (eq buffer-2 buffer-1)))
+        (kill-buffer buffer-2)))))
+
 
 (ert-deftest test-ellama-remove-reasoning ()
   (should (equal
