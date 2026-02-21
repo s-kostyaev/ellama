@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.12.16
+;; Version: 1.12.17
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -2233,9 +2233,13 @@ the full response text when the request completes (with BUFFER current)."
                          ellama-provider
                          (ellama-get-first-ollama-chat-model))))
          (ephemeral (plist-get args :ephemeral))
-         (explicit-session (ellama--resolve-session
-                            (plist-get args :session)
-                            (plist-get args :session-id)))
+         (explicit-session-arg (plist-get args :session))
+         (explicit-session-id (plist-get args :session-id))
+         (explicit-session (when (or explicit-session-arg
+                                     explicit-session-id)
+                             (ellama--resolve-session
+                              explicit-session-arg
+                              explicit-session-id)))
          (current-session (or explicit-session
                               (ellama--resolve-session nil ellama--current-session-id)))
          (need-new-session (and (not explicit-session)
