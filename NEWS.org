@@ -1,24 +1,29 @@
+* Version 1.12.17
+- Improved new session handling in ~ellama-chat~ by refactoring session
+  resolution logic to conditionally create new sessions when the create-session
+  flag is set.
+- Added test to verify that using the create-session flag forces creation of a
+  new session independent of existing sessions.
 * Version 1.12.16
 - Improve ephemeral context behavior for interactive commands.
   ~ellama-ask-about~, ~ellama-code-review~, ~ellama-write~, and
   ~ellama-code-add~ now explicitly add region/buffer context as ephemeral for
   one request.
-- Add safer region replacement flow for editing commands.
-  ~ellama-stream~ now accepts ~:replace-beg~ and ~:replace-end~ to replace text
-  in place, and restore buffer content on request errors.  ~ellama-change~,
+- Add safer region replacement flow for editing commands.  ~ellama-stream~ now
+  accepts ~:replace-beg~ and ~:replace-end~ to replace text in place, and
+  restore buffer content on request errors.  ~ellama-change~,
   ~ellama-code-edit~, ~ellama-code-improve~, and ~ellama-make-format~ now use
   this path.
-- Improve request cancellation handling across related buffers.
-  Request state is now tracked as a shared request context, so cancellation
-  through ~C-g~ works consistently from both main and reasoning buffers and
-  does not affect unrelated active requests.
-- Fix chat session recovery after buffer revert.
-  Session resolution now uses stable runtime UIDs and restores session state
-  after ~revert-buffer~, improving robustness across renames and legacy session
-  files.
-- Add development helper targets to the Makefile.
-  New targets: ~make format-elisp~ for formatting project Elisp files and
-  ~make test-detailed~ for running tests with detailed ERT failure output.
+- Improve request cancellation handling across related buffers.  Request state
+  is now tracked as a shared request context, so cancellation through ~C-g~
+  works consistently from both main and reasoning buffers and does not affect
+  unrelated active requests.
+- Fix chat session recovery after buffer revert.  Session resolution now uses
+  stable runtime UIDs and restores session state after ~revert-buffer~,
+  improving robustness across renames and legacy session files.
+- Add development helper targets to the Makefile.  New targets: ~make
+  format-elisp~ for formatting project Elisp files and ~make test-detailed~ for
+  running tests with detailed ERT failure output.
 * Version 1.12.15
 - Fix compilation warnings. This change resolves compilation warnings found
   during building.
