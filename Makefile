@@ -1,6 +1,6 @@
 # Makefile for ellama project
 
-.PHONY: build test test-detailed check-compile-warnings manual format-elisp refill-news
+.PHONY: build test test-detailed check-compile-warnings manual format-elisp refill-news refill-readme
 
 # This order is based on the packages dependency graph.
 ELLAMA_COMPILE_ORDER = \
@@ -57,3 +57,6 @@ format-elisp:
 
 refill-news:
 	emacs -batch --eval "(with-current-buffer (find-file-noselect \"./NEWS.org\") (setq fill-column 80) (fill-region (point-min) (point-max)) (save-buffer))"
+
+refill-readme:
+	emacs -batch --eval "(with-current-buffer (find-file-noselect \"./README.org\") (setq fill-column 80) (fill-region (point-min) (point-max)) (save-buffer))"

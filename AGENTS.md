@@ -8,6 +8,7 @@
 3. **Check native compilation warnings**: `make check-compile-warnings`
 4. **Format Elisp files**: `make format-elisp`
 5. **Export manual**: `make manual`
+6. **Refill readme**: `make refill-readme`
 
 ## Code Style Guidelines
 
