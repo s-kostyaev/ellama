@@ -1,3 +1,14 @@
+* Version 1.12.18
+- Add refill-readme target. Updated AGENTS.md to include a new “Refill readme”
+  step in the build instructions. Modified Makefile to add the target to the
+  `.PHONY` list and to define the `refill-readme` rule, which runs Emacs in
+  batch mode to format the `README.org` file.
+- Refactor org filling for README and NEWS. Introduce a reusable `refill-org`
+  macro that uses `org-element` to fill paragraphs to 80 columns, replacing the
+  previous `fill-region` approach. Update `refill-news` and `refill-readme`
+  targets to use this macro, simplifying the Makefile and ensuring consistent
+  formatting across org files.
+- Update readme formatting. Minor formatting tweaks.
 * Version 1.12.17
 - Improved new session handling in ~ellama-chat~ by refactoring session
   resolution logic to conditionally create new sessions when the create-session
