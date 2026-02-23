@@ -1,6 +1,6 @@
 # Makefile for ellama project
 
-.PHONY: build test test-detailed check-compile-warnings manual format-elisp refill-news
+.PHONY: build test test-detailed check-compile-warnings manual format-elisp refill-news refill-readme
 
 # This order is based on the packages dependency graph.
 ELLAMA_COMPILE_ORDER = \
@@ -55,5 +55,10 @@ manual:
 format-elisp:
 	emacs -batch --eval "(let ((files (append (file-expand-wildcards \"ellama*.el\") (file-expand-wildcards \"tests/*.el\")))) (package-initialize) (require 'transient) (dolist (file files) (with-current-buffer (find-file-noselect file) (emacs-lisp-mode) (indent-region (point-min) (point-max)) (untabify (point-min) (point-max)) (delete-trailing-whitespace) (save-buffer))))"
 
+refill-org := "(with-current-buffer (find-file-noselect \"FILE\") (package-initialize) (require (quote org)) (require (quote org-element)) (setq fill-column 80) (save-excursion (org-with-wide-buffer (cl-loop for el in (reverse (org-element-map (org-element-parse-buffer) (quote (paragraph quote-block item)) (quote identity))) do (goto-char (org-element-property :contents-begin el)) (org-fill-paragraph)))) (save-buffer))"
+
 refill-news:
-	emacs -batch --eval "(with-current-buffer (find-file-noselect \"./NEWS.org\") (setq fill-column 80) (fill-region (point-min) (point-max)) (save-buffer))"
+	emacs -batch --eval $(subst FILE,./NEWS.org,$(refill-org))
+
+refill-readme:
+	emacs -batch --eval $(subst FILE,./README.org,$(refill-org))

@@ -3,12 +3,12 @@
 [[https://stable.melpa.org/#/ellama][file:https://stable.melpa.org/packages/ellama-badge.svg]]
 [[https://elpa.gnu.org/packages/ellama.html][file:https://elpa.gnu.org/packages/ellama.svg]]
 
-Ellama is a tool for interacting with large language models from
-Emacs. It allows you to ask questions and receive responses from the
-LLMs. Ellama can perform various tasks such as translation, code
-review, summarization, enhancing grammar/spelling or wording and
-more through the Emacs interface. Ellama natively supports streaming
-output, making it effortless to use with your preferred text editor.
+Ellama is a tool for interacting with large language models from Emacs. It
+allows you to ask questions and receive responses from the LLMs. Ellama can
+perform various tasks such as translation, code review, summarization, enhancing
+grammar/spelling or wording and more through the Emacs interface. Ellama
+natively supports streaming output, making it effortless to use with your
+preferred text editor.
 
 The name "ellama" is derived from "Emacs Large LAnguage Model
 Assistant". Previous sentence was written by Ellama itself.
@@ -16,18 +16,19 @@ Assistant". Previous sentence was written by Ellama itself.
 
 * Installation
 
-Just ~M-x~ ~package-install~ @@html:<kbd>@@Enter@@html:</kbd>@@
-~ellama~ @@html:<kbd>@@Enter@@html:</kbd>@@. By default it uses [[https://github.com/jmorganca/ollama][ollama]]
-provider. If you are OK with it, you need to install [[https://github.com/jmorganca/ollama][ollama]] and pull
+Just ~M-x~ ~package-install~ @@html:<kbd>@@Enter@@html:</kbd>@@ ~ellama~
+@@html:<kbd>@@Enter@@html:</kbd>@@. By default it uses
+[[https://github.com/jmorganca/ollama][ollama]] provider. If you are OK with it,
+you need to install [[https://github.com/jmorganca/ollama][ollama]] and pull
 [[https://ollama.com/models][any ollama model]] like this:
 
 #+BEGIN_SRC shell
   ollama pull qwen2.5:3b
 #+END_SRC
 
-You can use ~ellama~ with other models or another LLM provider.
-Without any configuration, the first available ollama model will be used.
-You can customize ellama configuration like this:
+You can use ~ellama~ with other models or another LLM provider.  Without any
+configuration, the first available ollama model will be used.  You can customize
+ellama configuration like this:
 
 #+BEGIN_SRC  emacs-lisp
   (use-package ellama
@@ -124,63 +125,61 @@ More sophisticated configuration example:
 * Commands
 
 - ~ellama~: This is the entry point for Ellama. It displays the main transient
-    menu, allowing you to access all other Ellama commands from here.
+  menu, allowing you to access all other Ellama commands from here.
 - ~ellama-chat~: Ask Ellama about something by entering a prompt in an
-    interactive buffer and continue conversation. If called with universal
-    argument (~C-u~) will start new session with llm model interactive
-    selection.
+  interactive buffer and continue conversation. If called with universal
+  argument (~C-u~) will start new session with llm model interactive selection.
 - ~ellama-write~: This command allows you to generate text using an LLM. When
-    called interactively, it prompts for an instruction that is then used to
-    generate text based on the context. If a region is active, the selected text
-    is added to ephemeral context before generating the response.
-- ~ellama-chat-send-last-message~: Send last user message extracted from
-    current ellama chat buffer.
+  called interactively, it prompts for an instruction that is then used to
+  generate text based on the context. If a region is active, the selected text
+  is added to ephemeral context before generating the response.
+- ~ellama-chat-send-last-message~: Send last user message extracted from current
+  ellama chat buffer.
 - ~ellama-ask-about~: Ask Ellama about a selected region or the current
-    buffer. Automatically adds selected region or current buffer to ephemeral
-    context for one request.
-- ~ellama-ask-selection~: Send selected region or current buffer to ellama
-    chat.
+  buffer. Automatically adds selected region or current buffer to ephemeral
+  context for one request.
+- ~ellama-ask-selection~: Send selected region or current buffer to ellama chat.
 - ~ellama-ask-line~: Send current line to ellama chat.
 - ~ellama-complete~: Complete text in current buffer with ellama.
 - ~ellama-translate~: Ask Ellama to translate a selected region or word at the
-    point.
+  point.
 - ~ellama-translate-buffer~: Translate current buffer.
 - ~ellama-define-word~: Find the definition of the current word using Ellama.
 - ~ellama-summarize~: Summarize a selected region or the current buffer using
-    Ellama.
+  Ellama.
 - ~ellama-summarize-killring~: Summarize text from the kill ring.
 - ~ellama-code-review~: Review code in a selected region or the current buffer
-    using Ellama. Automatically adds selected region or current buffer to
-    ephemeral context for one request.
+  using Ellama. Automatically adds selected region or current buffer to
+  ephemeral context for one request.
 - ~ellama-change~: Change text in a selected region or the current buffer
-    according to a provided change.
+  according to a provided change.
 - ~ellama-make-list~: Create a markdown list from the active region or the
-    current buffer using Ellama.
+  current buffer using Ellama.
 - ~ellama-make-table~: Create a markdown table from the active region or the
-    current buffer using Ellama.
+  current buffer using Ellama.
 - ~ellama-summarize-webpage~: Summarize a webpage fetched from a URL using
-    Ellama.
+  Ellama.
 - ~ellama-provider-select~: Select ellama provider.
 - ~ellama-code-complete~: Complete selected code or code in the current buffer
-    according to a provided change using Ellama.
+  according to a provided change using Ellama.
 - ~ellama-code-add~: Generate and insert new code based on description. This
-    function prompts the user to describe the code they want to generate. If a
-    region is active, it includes the selected text in ephemeral context for
-    code generation.
+  function prompts the user to describe the code they want to generate. If a
+  region is active, it includes the selected text in ephemeral context for code
+  generation.
 - ~ellama-code-edit~: Change selected code or code in the current buffer
-    according to a provided change using Ellama.
+  according to a provided change using Ellama.
 - ~ellama-code-improve~: Change selected code or code in the current buffer
-    according to a provided change using Ellama.
+  according to a provided change using Ellama.
 - ~ellama-generate-commit-message~: Generate commit message based on diff.
 - ~ellama-proofread~: Proofread selected text.
-- ~ellama-improve-wording~: Enhance the wording in the currently selected
-    region or buffer using Ellama.
+- ~ellama-improve-wording~: Enhance the wording in the currently selected region
+  or buffer using Ellama.
 - ~ellama-improve-grammar~: Enhance the grammar and spelling in the currently
-    selected region or buffer using Ellama.
+  selected region or buffer using Ellama.
 - ~ellama-improve-conciseness~: Make the text of the currently selected region
-    or buffer concise and simple using Ellama.
+  or buffer concise and simple using Ellama.
 - ~ellama-make-format~: Render the currently selected text or the text in the
-    current buffer as a specified format using Ellama.
+  current buffer as a specified format using Ellama.
 - ~ellama-load-session~: Load ellama session from file.
 - ~ellama-session-delete~: Delete ellama session.
 - ~ellama-session-switch~: Change current active session.
@@ -192,9 +191,9 @@ More sophisticated configuration example:
 - ~ellama-context-add-selection~: Add selected region to context.
 - ~ellama-context-add-info-node~: Add info node to context.
 - ~ellama-context-reset~: Clear global context.
-- ~ellama-context-manage~: Manage the global context. Inside context
-    management buffer you can see ellama context elements. Available actions
-    with key bindings:
+- ~ellama-context-manage~: Manage the global context. Inside context management
+  buffer you can see ellama context elements. Available actions with key
+  bindings:
     - ~n~: Move to the next line.
     - ~p~: Move to the previous line.
     - ~q~: Quit the window.
@@ -203,45 +202,43 @@ More sophisticated configuration example:
     - ~d~: Remove the context element at the current point.
     - ~RET~: Preview the context element at the current point.
 - ~ellama-context-preview-element-at-point~: Preview ellama context element at
-    point. Works inside ellama context management buffer.
+  point. Works inside ellama context management buffer.
 - ~ellama-context-remove-element-at-point~: Remove ellama context element at
-    point from global context. Works inside ellama context management buffer.
+  point from global context. Works inside ellama context management buffer.
 - ~ellama-chat-translation-enable~: Enable chat translation.
 - ~ellama-chat-translation-disable~: Disable chat translation.
-- ~ellama-solve-reasoning-problem~: Solve reasoning problem with Abstraction
-    of Thought technique. It uses a chain of multiple messages to an LLM and helps
-    it to provide much better answers on reasoning problems. Even small LLMs
-    like phi3-mini provide much better results on reasoning tasks using AoT.
+- ~ellama-solve-reasoning-problem~: Solve reasoning problem with Abstraction of
+  Thought technique. It uses a chain of multiple messages to an LLM and helps it
+  to provide much better answers on reasoning problems. Even small LLMs like
+  phi3-mini provide much better results on reasoning tasks using AoT.
 - ~ellama-solve-domain-specific-problem~: Solve domain specific problem with
-    simple chain. It makes LLMs act like a professional and adds a planning
-    step.
+  simple chain. It makes LLMs act like a professional and adds a planning step.
 - ~ellama-community-prompts-select-blueprint~: Select a prompt from the
-    community prompt collection. The user is prompted to choose a role, and then
-    a corresponding prompt is inserted into a blueprint buffer.
-- ~ellama-blueprint-fill-variables~: Prompt user for values of variables
-    found in current blueprint buffer and update them.
-- ~ellama-tools-enable-by-name~: Enable a specific tool by its name. Use
-    this command to activate individual tools. Requires the tool name as input.
+  community prompt collection. The user is prompted to choose a role, and then a
+  corresponding prompt is inserted into a blueprint buffer.
+- ~ellama-blueprint-fill-variables~: Prompt user for values of variables found
+  in current blueprint buffer and update them.
+- ~ellama-tools-enable-by-name~: Enable a specific tool by its name. Use this
+  command to activate individual tools. Requires the tool name as input.
 - ~ellama-tools-enable-all~: Enable all available tools at once. Use this
-    command to activate every tool in the system for comprehensive functionality
-    without manual selection.
-- ~ellama-tools-disable-by-name~: Disable a specific tool by its name. Use
-    this command to deactivate individual tools when their functionality is no
-    longer needed.
-- ~ellama-tools-disable-all~: Disable all enabled tools simultaneously. Use
-    this command to reset the system to a minimal state, ensuring no tools are
-    active.
+  command to activate every tool in the system for comprehensive functionality
+  without manual selection.
+- ~ellama-tools-disable-by-name~: Disable a specific tool by its name. Use this
+  command to deactivate individual tools when their functionality is no longer
+  needed.
+- ~ellama-tools-disable-all~: Disable all enabled tools simultaneously. Use this
+  command to reset the system to a minimal state, ensuring no tools are active.
 
 * Keymap
 
 It's better to use a transient menu (~M-x ellama~) instead of a keymap. It
 offers a better user experience.
 
-In any buffer where there is active ellama streaming, you can press
-~C-g~ and it will cancel current stream.
+In any buffer where there is active ellama streaming, you can press ~C-g~ and it
+will cancel current stream.
 
-Here is a table of keybindings and their associated functions in
-Ellama, using the ~ellama-keymap-prefix~ prefix (not set by default):
+Here is a table of keybindings and their associated functions in Ellama, using
+the ~ellama-keymap-prefix~ prefix (not set by default):
 
 | Keymap | Function                        | Description                  |
 |--------+---------------------------------+------------------------------|
@@ -296,47 +293,45 @@ The following variables can be customized for the Ellama client:
 language is english.
 - ~ellama-provider~: llm provider for ellama.
 There are many supported providers: ~ollama~, ~open ai~, ~vertex~,
-~GPT4All~. For more information see [[https://elpa.gnu.org/packages/llm.html][llm documentation]].
-- ~ellama-providers~: association list of model llm providers with
-  name as key.
+~GPT4All~. For more information see
+[[https://elpa.gnu.org/packages/llm.html][llm documentation]].
+- ~ellama-providers~: association list of model llm providers with name as key.
 - ~ellama-spinner-enabled~: Enable spinner during text generation.
 - ~ellama-spinner-type~: Spinner type for ellama. Default type is
   ~progress-bar~.
-- ~ellama-auto-scroll~: If enabled ellama buffer will scroll
-  automatically during generation. Disabled by default.
-- ~ellama-fill-paragraphs~: Option to customize ellama paragraphs
-  filling behaviour.
-- ~ellama-response-process-method~: Configure how LLM responses are
-  processed.  Options include streaming for real-time output, async for
-  asynchronous processing, or skipping every N messages to reduce resource
-  usage.
-- ~ellama-name-prompt-words-count~: Count of words in prompt to
-  generate name.
+- ~ellama-auto-scroll~: If enabled ellama buffer will scroll automatically
+  during generation. Disabled by default.
+- ~ellama-fill-paragraphs~: Option to customize ellama paragraphs filling
+  behaviour.
+- ~ellama-response-process-method~: Configure how LLM responses are processed.
+  Options include streaming for real-time output, async for asynchronous
+  processing, or skipping every N messages to reduce resource usage.
+- ~ellama-name-prompt-words-count~: Count of words in prompt to generate name.
 - Prompt templates for every command.
 - ~ellama-chat-done-callback~: Callback that will be called on ellama
-chat response generation done. It should be a function with single
-argument generated text string.
-- ~ellama-nick-prefix-depth~: User and assistant nick prefix depth.
-  Default value is 2.
+chat response generation done. It should be a function with single argument
+generated text string.
+- ~ellama-nick-prefix-depth~: User and assistant nick prefix depth.  Default
+  value is 2.
 - ~ellama-sessions-directory~: Directory for saved ellama sessions.
-- ~ellama-major-mode~: Major mode for ellama commands. Org mode by
-  default.
-- ~ellama-session-auto-save~: Automatically save ellama sessions if
-  set. Enabled by default.
+- ~ellama-major-mode~: Major mode for ellama commands. Org mode by default.
+- ~ellama-session-auto-save~: Automatically save ellama sessions if set. Enabled
+  by default.
 - ~ellama-naming-scheme~: How to name new sessions.
-- ~ellama-naming-provider~: LLM provider for generating session names
-  by LLM. If not set ~ellama-provider~ will be used.
+- ~ellama-naming-provider~: LLM provider for generating session names by LLM. If
+  not set ~ellama-provider~ will be used.
 - ~ellama-chat-translation-enabled~: Enable chat translations if set.
-- ~ellama-translation-provider~: LLM translation provider.
-  ~ellama-provider~ will be used if not set.
-- ~ellama-coding-provider~: LLM coding tasks provider.
-  ~ellama-provider~ will be used if not set.
+- ~ellama-translation-provider~: LLM translation provider.  ~ellama-provider~
+  will be used if not set.
+- ~ellama-coding-provider~: LLM coding tasks provider.  ~ellama-provider~ will
+  be used if not set.
 - ~ellama-summarization-provider~: LLM summarization provider.
   ~ellama-provider~ will be used if not set.
-- ~ellama-show-quotes~: Show quotes content in chat buffer. Disabled
-  by default.
-- ~ellama-chat-display-action-function~: Display action function for ~ellama-chat~.
-- ~ellama-instant-display-action-function~: Display action function for ~ellama-instant~.
+- ~ellama-show-quotes~: Show quotes content in chat buffer. Disabled by default.
+- ~ellama-chat-display-action-function~: Display action function for
+  ~ellama-chat~.
+- ~ellama-instant-display-action-function~: Display action function for
+  ~ellama-instant~.
 - ~ellama-translate-italic~: Translate italic during markdown to org
   transformations. Enabled by default.
 - ~ellama-extraction-provider~: LLM provider for data extraction.
@@ -344,32 +339,34 @@ argument generated text string.
 - ~ellama-context-poshandler~: Position handler for displaying context buffer.
   ~posframe-poshandler-frame-top-center~ will be used if not set.
 - ~ellama-context-border-width~: Border width for the context buffer.
-- ~ellama-session-remove-reasoning~: Remove internal reasoning from
-  the session after ellama provide an answer. This can improve
-  long-term communication with reasoning models. Enabled by default.
-- ~ellama-session-hide-org-quotes~: Hide org quotes in the Ellama
-  session buffer. From now on, think tags will be replaced with
-  quote blocks. If this flag is enabled, reasoning steps will be collapsed
-  after generation and upon session loading. Enabled by default.
-- ~ellama-output-remove-reasoning~: Eliminate internal reasoning from
-  ellama output to enhance the versatility of reasoning models across
-  diverse applications.
-- ~ellama-context-posframe-enabled~: Enable showing posframe with
-  ellama context.
-- ~ellama-context-manage-display-action-function~: Display action
-  function for ~ellama-context-manage~. Default value
-  ~display-buffer-same-window~.
-- ~ellama-context-preview-element-display-action-function~: Display
-  action function for ~ellama-context-preview-element~.
+- ~ellama-session-remove-reasoning~: Remove internal reasoning from the session
+  after ellama provide an answer. This can improve long-term communication with
+  reasoning models. Enabled by default.
+- ~ellama-session-hide-org-quotes~: Hide org quotes in the Ellama session
+  buffer. From now on, think tags will be replaced with quote blocks. If this
+  flag is enabled, reasoning steps will be collapsed after generation and upon
+  session loading. Enabled by default.
+- ~ellama-output-remove-reasoning~: Eliminate internal reasoning from ellama
+  output to enhance the versatility of reasoning models across diverse
+  applications.
+- ~ellama-context-posframe-enabled~: Enable showing posframe with ellama
+  context.
+- ~ellama-context-manage-display-action-function~: Display action function for
+  ~ellama-context-manage~. Default value ~display-buffer-same-window~.
+- ~ellama-context-preview-element-display-action-function~: Display action
+  function for ~ellama-context-preview-element~.
 - ~ellama-context-line-always-visible~: Make context header or mode line always
   visible, even with empty context.
 - ~ellama-community-prompts-url~: The URL of the community prompts collection.
-- ~ellama-community-prompts-file~: Path to the CSV file containing community prompts.
-  This file is expected to be located inside an ~ellama~ subdirectory
+- ~ellama-community-prompts-file~: Path to the CSV file containing community
+  prompts.  This file is expected to be located inside an ~ellama~ subdirectory
   within your ~user-emacs-directory~.
-- ~ellama-show-reasoning~: Show reasoning in separate buffer if enabled. Enabled by default.
-- ~ellama-reasoning-display-action-function~: Display action function for reasoning.
-- ~ellama-session-line-template~: Template for formatting the current session line.
+- ~ellama-show-reasoning~: Show reasoning in separate buffer if enabled. Enabled
+  by default.
+- ~ellama-reasoning-display-action-function~: Display action function for
+  reasoning.
+- ~ellama-session-line-template~: Template for formatting the current session
+  line.
 - ~ellama-debug~: Enable debug. When enabled, generated text is now logged to a
   ~*ellama-debug*~ buffer with a separator for easier tracking of debug
   information. The debug output includes the raw text being processed and is
@@ -411,8 +408,7 @@ supports an "ephemeral context," which is temporary and only available for a
 single request.
 
 Some commands add context automatically as ephemeral context:
-~ellama-ask-about~, ~ellama-code-review~, ~ellama-write~, and
-~ellama-code-add~.
+~ellama-ask-about~, ~ellama-code-review~, ~ellama-write~, and ~ellama-code-add~.
 
 ** Transient Menus for Context Management
 
@@ -441,7 +437,7 @@ Context Commands:
     - “r” "Context reset" ~ellama-context-reset~ - Clears the entire global
       context.
 - Quit: (“q” "Quit" ~transient-quit-one~) - Closes the context commands
-    transient menu.
+  transient menu.
 
 ** Managing the Context
 
@@ -480,15 +476,15 @@ Key features include:
   particularly useful for keeping track of what information is currently in
   context.
 - Context Mode Line Modes: Similarly, ~ellama-context-mode-line-mode~ and
-  ~ellama-context-mode-line-global-mode~ provide information about the
-  current global context directly within the mode line, ensuring that users
-  always have relevant information at a glance.
+  ~ellama-context-mode-line-global-mode~ provide information about the current
+  global context directly within the mode line, ensuring that users always have
+  relevant information at a glance.
 - Session Header Line Mode: ~ellama-session-header-line-mode~ and its global
   version display the current Ellama session ID in the header line, helping
   users manage multiple sessions efficiently.
 - Session Mode Line Mode: ~ellama-session-mode-line-mode~ and its global
-  counterpart offer an additional way to track session IDs by displaying them
-  in the mode line.
+  counterpart offer an additional way to track session IDs by displaying them in
+  the mode line.
 
 These minor modes are easily toggled on or off using specific commands,
 providing flexibility for users who may want to enable these features globally
@@ -496,44 +492,41 @@ across all buffers or selectively within individual buffers.
 
 ** ellama-context-header-line-mode
 
-Description:
-Toggle the Ellama Context header line mode. This minor mode updates the header line to display
-context-specific information.
+Description: Toggle the Ellama Context header line mode. This minor mode updates
+the header line to display context-specific information.
 
-Usage:
-To enable or disable ~ellama-context-header-line-mode~, use the command:
+Usage: To enable or disable ~ellama-context-header-line-mode~, use the command:
 
     M-x ellama-context-header-line-mode
 
-When enabled, this mode adds a hook to ~window-state-change-hook~ to update the header line whenever
-the window state changes. It also calls ~ellama-context-update-header-line~ to initialize the header
-line with context-specific information.
+When enabled, this mode adds a hook to ~window-state-change-hook~ to update the
+header line whenever the window state changes. It also calls
+~ellama-context-update-header-line~ to initialize the header line with
+context-specific information.
 
 When disabled, it removes the evaluation of ~(:eval (ellama-context-line))~ from
 ~header-line-format~.
 
 ** ellama-context-header-line-global-mode
 
-Description:
-Globalized version of ~ellama-context-header-line-mode~. This mode ensures that
-~ellama-context-header-line-mode~ is enabled in all buffers.
+Description: Globalized version of ~ellama-context-header-line-mode~. This mode
+ensures that ~ellama-context-header-line-mode~ is enabled in all buffers.
 
-Usage:
-To enable or disable ~ellama-context-header-line-global-mode~, use the command:
+Usage: To enable or disable ~ellama-context-header-line-global-mode~, use the
+command:
 
     M-x ellama-context-header-line-global-mode
 
-This globalized minor mode provides a convenient way to ensure that context-specific header line
-information is always available, regardless of the buffer being edited.
+This globalized minor mode provides a convenient way to ensure that
+context-specific header line information is always available, regardless of the
+buffer being edited.
 
 ** ellama-context-mode-line-mode
 
-Description:
-Toggle the Ellama Context mode line mode. This minor mode updates the mode line
-to display context-specific information.
+Description: Toggle the Ellama Context mode line mode. This minor mode updates
+the mode line to display context-specific information.
 
-Usage:
-To enable or disable ~ellama-context-mode-line-mode~, use the command:
+Usage: To enable or disable ~ellama-context-mode-line-mode~, use the command:
 
     M-x ellama-context-mode-line-mode
 
@@ -547,12 +540,11 @@ When disabled, it removes the evaluation of ~(:eval (ellama-context-line))~ from
 
 ** ellama-context-mode-line-global-mode
 
-Description:
-Globalized version of ~ellama-context-mode-line-mode~. This mode ensures that
-~ellama-context-mode-line-mode~ is enabled in all buffers.
+Description: Globalized version of ~ellama-context-mode-line-mode~. This mode
+ensures that ~ellama-context-mode-line-mode~ is enabled in all buffers.
 
-Usage:
-To enable or disable ~ellama-context-mode-line-global-mode~, use the command:
+Usage: To enable or disable ~ellama-context-mode-line-global-mode~, use the
+command:
 
     M-x ellama-context-mode-line-global-mode
 
@@ -632,16 +624,16 @@ developers.
 Ellama provides several functions to create, select, and manage blueprints:
 
 - ~ellama-blueprint-create~: This function allows users to create a new
-   blueprint from the current buffer. It prompts for a name and whether the
-   blueprint is for developers, then saves the content of the current buffer as
-   the prompt.
+  blueprint from the current buffer. It prompts for a name and whether the
+  blueprint is for developers, then saves the content of the current buffer as
+  the prompt.
 
 - ~ellama-blueprint-new~: This function creates a new buffer for a blueprint,
-   optionally inserting the content of the current region if active.
+  optionally inserting the content of the current region if active.
 
-- ~ellama-blueprint-select~: This function allows users to select a prompt
-   from the collection of blueprints. It filters prompts based on whether they
-   are for developers and their source (user-defined, community, or all).
+- ~ellama-blueprint-select~: This function allows users to select a prompt from
+  the collection of blueprints. It filters prompts based on whether they are for
+  developers and their source (user-defined, community, or all).
 
 ** Blueprints files
 
@@ -655,7 +647,7 @@ Blueprints can include variables that need to be filled before running the chat
 session. Ellama provides command to fill these variables:
 
 - ~ellama-blueprint-fill-variables~: Prompts the user to enter values for
-   variables found in the current buffer and fills them.
+  variables found in the current buffer and fills them.
 
 ** Keymap and Mode
 
@@ -772,31 +764,32 @@ To extract text from a PDF...
 ** How it works
 
 *Auto-Discovery*: Ellama scans skill directories automatically whenever a chat
- starts.
-*Context*: Skill metadata (name, description, location) is injected into the
- system prompt.
-*Activation*: The LLM uses the read_file tool to load the SKILL.md content when
- needed.
+ starts.  *Context*: Skill metadata (name, description, location) is injected
+ into the system prompt.  *Activation*: The LLM uses the read_file tool to load
+ the SKILL.md content when needed.
 
 * Acknowledgments
 
-Thanks [[https://github.com/jmorganca][Jeffrey Morgan]] for excellent project [[https://github.com/jmorganca/ollama][ollama]]. This project
-cannot exist without it.
+Thanks [[https://github.com/jmorganca][Jeffrey Morgan]] for excellent project
+[[https://github.com/jmorganca/ollama][ollama]]. This project cannot exist
+without it.
 
-Thanks [[https://github.com/zweifisch][zweifisch]] - I got some ideas from [[https://github.com/zweifisch/ollama][ollama.el]] what ollama client
-in Emacs can do.
+Thanks [[https://github.com/zweifisch][zweifisch]] - I got some ideas from
+[[https://github.com/zweifisch/ollama][ollama.el]] what ollama client in Emacs
+can do.
 
-Thanks [[https://github.com/David-Kunz][Dr. David A. Kunz]] - I got more ideas from [[https://github.com/David-Kunz/gen.nvim][gen.nvim]].
+Thanks [[https://github.com/David-Kunz][Dr. David A. Kunz]] - I got more ideas
+from [[https://github.com/David-Kunz/gen.nvim][gen.nvim]].
 
-Thanks [[https://github.com/ahyatt][Andrew Hyatt]] for ~llm~ library. Without it only ~ollama~ would
-be supported.
+Thanks [[https://github.com/ahyatt][Andrew Hyatt]] for ~llm~ library. Without it
+only ~ollama~ would be supported.
 
 * Contributions
 
-To contribute, submit a pull request or report a bug. This library is
-part of GNU ELPA; major contributions must be from someone with FSF
-papers. Alternatively, you can write a module and share it on a
-different archive like MELPA.
+To contribute, submit a pull request or report a bug. This library is part of
+GNU ELPA; major contributions must be from someone with FSF
+papers. Alternatively, you can write a module and share it on a different
+archive like MELPA.
 
 * GNU Free Documentation License
 :PROPERTIES:
