@@ -73,6 +73,23 @@ Tools from this list will work without user confirmation."
   :type 'integer
   :group 'ellama)
 
+(defcustom ellama-tools-use-srt nil
+  "Run shell-based tools via `srt'.
+When non-nil, `shell_command', `grep' and `grep_in_file' run inside the
+configured sandbox runtime."
+  :type 'boolean
+  :group 'ellama)
+
+(defcustom ellama-tools-srt-program "srt"
+  "Sandbox runtime executable used when `ellama-tools-use-srt' is non-nil."
+  :type 'string
+  :group 'ellama)
+
+(defcustom ellama-tools-srt-args nil
+  "Extra arguments passed to `srt' before the wrapped command."
+  :type '(repeat string)
+  :group 'ellama)
+
 (defcustom ellama-tools-subagent-default-max-steps 30
   "Default maximum number of auto-continue steps for a sub-agent."
   :type 'integer
@@ -375,6 +392,27 @@ LABEL is used to identify the source in the warning."
               "text is a bad idea for this tool.")
     text))
 
+(defun ellama-tools--command-argv (program &rest args)
+  "Return argv for PROGRAM and ARGS.
+Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
+  (if (not ellama-tools-use-srt)
+      (cons program args)
+    (let ((srt-path (executable-find ellama-tools-srt-program)))
+      (unless srt-path
+        (user-error
+         (concat
+          "Cannot find `srt' executable `%s'.  Install sandbox-runtime "
+          "or disable `ellama-tools-use-srt'")
+         ellama-tools-srt-program))
+      (append (list srt-path) ellama-tools-srt-args (cons program args)))))
+
+(defun ellama-tools--call-command-to-string (program &rest args)
+  "Run PROGRAM with ARGS and return stdout as a string."
+  (let ((argv (apply #'ellama-tools--command-argv program args)))
+    (with-temp-buffer
+      (apply #'call-process (car argv) nil t nil (cdr argv))
+      (buffer-string))))
+
 (defun ellama-tools-read-file-tool (file-name)
   "Read the file FILE-NAME."
   (json-encode (if (not (file-exists-p file-name))
@@ -590,12 +628,15 @@ Replace OLDCONTENT with NEWCONTENT."
 (defun ellama-tools-shell-command-tool (callback cmd)
   "Execute shell command CMD.
 CALLBACK – function called once with the result string."
-  (condition-case err
-      (let ((buf (get-buffer-create
-                  (concat (make-temp-name " *ellama shell command") "*"))))
+  (let ((argv (ellama-tools--command-argv
+               shell-file-name shell-command-switch cmd)))
+    (condition-case err
+        (let ((buf (get-buffer-create
+                    (concat (make-temp-name " *ellama shell command") "*"))))
         (set-process-sentinel
-         (start-process
-          "*ellama-shell-command*" buf shell-file-name shell-command-switch cmd)
+         (apply #'start-process
+                "*ellama-shell-command*" buf
+                (car argv) (cdr argv))
          (lambda (process _)
            (when (not (process-live-p process))
              (let* ((raw-output
@@ -622,10 +663,10 @@ CALLBACK – function called once with the result string."
                                exit-code output)))))
                (funcall callback result)
                (kill-buffer buf))))))
-    (error
-     (funcall callback
-              (format "Failed to start shell command: %s"
-                      (error-message-string err)))))
+      (error
+       (funcall callback
+                (format "Failed to start shell command: %s"
+                        (error-message-string err))))))
   ;; async tool should always return nil
   ;; to work properly with the llm library
   nil)
@@ -650,8 +691,11 @@ CALLBACK – function called once with the result string."
   "Grep SEARCH-STRING in DIR files."
   (let ((default-directory dir))
     (json-encode
-     (shell-command-to-string
-      (format "find . -type f -exec grep --color=never -nH -e %s \\{\\} +" (shell-quote-argument search-string))))))
+     (string-trim-right
+      (ellama-tools--call-command-to-string
+       "find" "." "-type" "f" "-exec"
+       "grep" "--color=never" "-nH" "-e" search-string "{}" "+")
+      "\n"))))
 
 (ellama-tools-define-tool
  '(:function
@@ -677,11 +721,8 @@ CALLBACK – function called once with the result string."
 (defun ellama-tools-grep-in-file-tool (search-string file)
   "Grep SEARCH-STRING in FILE."
   (json-encode
-   (with-output-to-string
-     (call-process
-      "grep"
-      nil standard-output nil
-      "--color=never" "-nh" search-string (file-truename file)))))
+   (ellama-tools--call-command-to-string
+    "grep" "--color=never" "-nh" search-string (file-truename file))))
 
 (ellama-tools-define-tool
  '(:function

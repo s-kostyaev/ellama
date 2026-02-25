@@ -106,7 +106,8 @@
     (should spinner-stop-called)))
 (defun ellama-test--ensure-local-ellama-tools ()
   "Ensure tests use local `ellama-tools.el' from project root."
-  (unless (fboundp 'ellama-tools--sanitize-tool-text-output)
+  (unless (and (fboundp 'ellama-tools--sanitize-tool-text-output)
+               (fboundp 'ellama-tools--command-argv))
     (load-file (expand-file-name "ellama-tools.el" ellama-test-root))))
 
 (defun ellama-test--wait-shell-command-result (cmd)
@@ -185,6 +186,68 @@ Return list with result and prompt."
     "binary data"
     (ellama-test--wait-shell-command-result
      "awk 'BEGIN { printf \"%c\", 0 }'"))))
+
+(ert-deftest test-ellama-tools-command-argv-wraps-with-srt ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-use-srt t)
+        (ellama-tools-srt-program "srt")
+        (ellama-tools-srt-args '("--debug")))
+    (cl-letf (((symbol-function 'executable-find)
+               (lambda (_program) "/tmp/fake-srt")))
+      (should
+       (equal
+        (ellama-tools--command-argv "sh" "-c" "printf ok")
+        '("/tmp/fake-srt" "--debug" "sh" "-c" "printf ok"))))))
+
+(ert-deftest test-ellama-shell-command-tool-errors-when-srt-missing ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-use-srt t)
+        (ellama-tools-srt-program "srt")
+        callback-called)
+    (cl-letf (((symbol-function 'executable-find)
+               (lambda (_program) nil)))
+      (should-error
+       (ellama-tools-shell-command-tool
+        (lambda (_result)
+          (setq callback-called t))
+        "printf ok")
+       :type 'user-error))
+    (should-not callback-called)))
+
+(ert-deftest test-ellama-tools-grep-tool-uses-shared-command-helper ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let (captured)
+    (cl-letf (((symbol-function 'ellama-tools--call-command-to-string)
+               (lambda (&rest args)
+                 (setq captured args)
+                 "a:1:match\n")))
+      (should (equal (ellama-tools-grep-tool default-directory "match")
+                     "\"a:1:match\"")))
+    (should (equal captured
+                   '("find" "." "-type" "f" "-exec"
+                     "grep" "--color=never" "-nH" "-e" "match" "{}" "+")))))
+
+(ert-deftest test-ellama-tools-grep-in-file-tool-uses-shared-command-helper ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-grep-in-file-"))
+        truename
+        captured)
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "hello\n"))
+          (setq truename (file-truename file))
+          (cl-letf (((symbol-function 'ellama-tools--call-command-to-string)
+                     (lambda (&rest args)
+                       (setq captured args)
+                       "1:hello\n")))
+            (should (equal (ellama-tools-grep-in-file-tool "hello" file)
+                           "\"1:hello\\n\""))))
+      (when (file-exists-p file)
+        (delete-file file)))
+    (should (equal captured
+                   (list "grep" "--color=never" "-nh"
+                         "hello" truename)))))
 
 (ert-deftest test-ellama-read-file-tool-rejects-binary-content ()
   (ellama-test--ensure-local-ellama-tools)
