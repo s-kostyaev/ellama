@@ -377,6 +377,13 @@ generated text string.
   will work without user confirmation.
 - ~ellama-tools-argument-max-length~: Max length of function argument in the
   confirmation prompt. Default value 50.
+- ~ellama-tools-use-srt~: Run shell-based tools (~shell_command~, ~grep~ and
+  ~grep_in_file~) via the external ~srt~ sandbox runtime. Disabled by default.
+  If enabled and ~srt~ is not installed, the tool call signals a user error.
+- ~ellama-tools-srt-program~: Sandbox runtime executable name/path used when
+  ~ellama-tools-use-srt~ is enabled. Default value is ~"srt"~.
+- ~ellama-tools-srt-args~: Extra arguments passed to ~srt~ before the wrapped
+  command (for example ~--settings /path/to/settings.json~).
 - ~ellama-blueprint-global-dir~: Global directory for storing blueprint files.
 - ~ellama-blueprint-local-dir~: Local directory name for project-specific
   blueprints.
