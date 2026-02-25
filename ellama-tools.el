@@ -113,8 +113,8 @@ configured sandbox runtime."
     ("coder"
      :system "You are an expert software developer. Make precise changes."
      :tools ("read_file" "write_file" "edit_file" "append_file" "prepend_file"
-             "move_file" "apply_patch" "grep" "grep_in_file" "project_root"
-             "directory_tree" "count_lines" "lines_range" "shell_command")
+             "move_file" "grep" "grep_in_file" "project_root" "directory_tree"
+             "count_lines" "lines_range" "shell_command")
      :provider 'ellama-coding-provider)
 
     ("bash"
@@ -855,54 +855,6 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
      "Ending line number."))
    :description
    "Return content of file FILE_NAME lines in range FROM TO."))
-
-(defun ellama-tools-apply-patch-tool (file-name patch)
-  "Apply PATCH to file FILE-NAME.
-PATCH is a string containing the patch data.
-Returns the output of the patch command or an error message."
-  (cond ((not file-name)
-         "file-name is required")
-        ((not (file-exists-p file-name))
-         (format "file %s doesn't exists" file-name))
-        ((not patch)
-         "patch is required")
-        (t
-         (let* ((dir (file-name-directory (file-truename file-name)))
-                (tmp (make-temp-file "ellama-patch-"))
-                (patch-file (file-truename (concat tmp ".patch"))))
-           (unwind-protect
-               (progn
-                 (with-temp-buffer
-                   (insert patch)
-                   (write-region (point-min) (point-max) patch-file))
-                 (with-output-to-string
-                   (call-process
-                    "patch"
-                    nil standard-output nil
-                    "-p0" "-d" dir "-i" patch-file)))
-             (when (file-exists-p patch-file)
-               (delete-file patch-file)))))))
-
-(ellama-tools-define-tool
- '(:function
-   ellama-tools-apply-patch-tool
-   :name
-   "apply_patch"
-   :args
-   ((:name
-     "file_name"
-     :type
-     string
-     :description
-     "Name of the file to apply patch to.")
-    (:name
-     "patch"
-     :type
-     string
-     :description
-     "Patch data to apply."))
-   :description
-   "Apply a patch to the file FILE_NAME."))
 
 (defun ellama-tools--make-report-result-tool (callback session)
   "Make report_result tool dynamically for SESSION.

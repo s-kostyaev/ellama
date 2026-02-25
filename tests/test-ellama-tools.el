@@ -512,19 +512,6 @@ Return list with result and prompt."
       (when (file-exists-p file)
         (delete-file file)))))
 
-(ert-deftest test-ellama-tools-apply-patch-validation-branches ()
-  (ellama-test--ensure-local-ellama-tools)
-  (should (equal (ellama-tools-apply-patch-tool nil "patch")
-                 "file-name is required"))
-  (should (equal (ellama-tools-apply-patch-tool "missing-file" nil)
-                 "file missing-file doesn't exists"))
-  (let ((file (make-temp-file "ellama-patch-validate-")))
-    (unwind-protect
-        (should (equal (ellama-tools-apply-patch-tool file nil)
-                       "patch is required"))
-      (when (file-exists-p file)
-        (delete-file file)))))
-
 (ert-deftest test-ellama-tools-role-and-provider-resolution ()
   (ellama-test--ensure-local-ellama-tools)
   (let* ((ellama-provider 'default-provider)
