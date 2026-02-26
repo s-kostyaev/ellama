@@ -372,6 +372,13 @@ When COUNT is non-nil, return at most COUNT incidents."
   (cond
    ((stringp value)
     (ellama-tools-dlp--sanitize-log-string value))
+   ;; Do not recurse into closures.  Emacs 28 can error when incident logging
+   ;; later `copy-tree's sanitized events that still contain anonymous
+   ;; function objects.
+   ((functionp value)
+    (if (byte-code-function-p value)
+        'compiled-function
+      'function))
    ((consp value)
     (mapcar #'ellama-tools-dlp--sanitize-incident-value value))
    ((vectorp value)
