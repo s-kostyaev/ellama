@@ -389,10 +389,9 @@ generated text string.
 - ~ellama-tools-srt-program~: Sandbox runtime executable name/path used when
   ~ellama-tools-use-srt~ is enabled. Default value is ~"srt"~.
 - ~ellama-tools-srt-args~: Extra arguments passed to ~srt~ before the wrapped
-  command (for example ~--settings /path/to/settings.json~).  The same
-  arguments are also used to resolve the settings file path for local non-shell
-  filesystem checks (default =~/.srt-settings.json= if no ~--settings~/~-s~ is
-  provided).
+  command (for example ~--settings /path/to/settings.json~).  The same arguments
+  are also used to resolve the settings file path for local non-shell filesystem
+  checks (default =~/.srt-settings.json= if no ~--settings~/~-s~ is provided).
 - ~ellama-blueprint-global-dir~: Global directory for storing blueprint files.
 - ~ellama-blueprint-local-dir~: Local directory name for project-specific
   blueprints.
@@ -408,6 +407,68 @@ generated text string.
   auto-continue steps for a sub-agent. Default value is 30.
 - ~ellama-tools-subagent-roles~: Subagent roles with provider, system prompt and
   allowed tools. Configuration of subagents for the ~task~ tool.
+
+** SRT Filesystem Policy for Tools
+
+When ~ellama-tools-use-srt~ is non-nil, the ~srt~ settings file is the source of
+truth for tool filesystem policy:
+
+- shell-based tools (~shell_command~, ~grep~, ~grep_in_file~) are enforced by
+  the external ~srt~ runtime
+- non-shell file tools (~read_file~, ~write_file~, ~append_file~,
+  ~prepend_file~, ~edit_file~, ~directory_tree~, ~move_file~, ~count_lines~,
+  ~lines_range~) apply local checks derived from the same ~srt~ settings file
+
+Supported local filesystem subset (current):
+
+- ~filesystem.denyRead~
+- ~filesystem.allowWrite~
+- ~filesystem.denyWrite~ (takes precedence over ~allowWrite~)
+
+Local checks intentionally ignore unrelated ~srt~ keys (for example
+~network.*~).  If the ~filesystem~ section is missing, local checks use the same
+defaults as ~srt~ for filesystem access: reads are allowed by default and writes
+are denied unless allowed by ~allowWrite~.
+
+Path matching notes for local checks:
+
+- relative paths in ~srt~ rules are resolved against Emacs ~default-directory~
+- ~~ expands to the current user home directory
+- literal paths, directory-prefix rules, and glob patterns are supported
+- malformed/unsupported patterns signal a ~user-error~ (fail closed)
+
+The local checks fail closed when ~ellama-tools-use-srt~ is enabled and:
+
+- ~srt~ is not installed
+- the resolved settings file is missing
+- the settings file is malformed JSON
+- relevant ~filesystem~ keys have an invalid shape
+
+Example ~srt~ config for a project sandbox:
+
+#+BEGIN_SRC json
+{
+  "filesystem": {
+    "denyRead": ["~/.ssh/", "./secrets/"],
+    "allowWrite": ["./scratch/", "./notes.md"],
+    "denyWrite": ["./scratch/immutable.txt"]
+  }
+}
+#+END_SRC
+
+Example Emacs configuration:
+
+#+BEGIN_SRC emacs-lisp
+  (setopt ellama-tools-use-srt t)
+  (setopt ellama-tools-srt-args
+          '("--settings" "/path/to/.srt-settings.json"))
+#+END_SRC
+
+Parity tests (real ~srt~ runtime vs local ~ellama~ checks):
+
+- ~make test-srt-integration~: Run host parity tests (requires ~srt~ installed)
+- ~make test-srt-integration-linux~: Run parity tests in Docker on Linux
+  semantics.  Requires Docker and runs a privileged container (~--privileged~).
 
 * Context Management
 
