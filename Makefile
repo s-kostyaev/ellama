@@ -8,6 +8,7 @@ SRT_PARITY_DOCKER_RUN_FLAGS ?= --rm --privileged
 
 # This order is based on the packages dependency graph.
 ELLAMA_COMPILE_ORDER = \
+	ellama-tools-dlp.el \
 	ellama-tools.el \
 	ellama-skills.el \
 	ellama.el \
@@ -33,6 +34,7 @@ test:
 		-l tests/test-ellama.el \
 		-l tests/test-ellama-context.el \
 		-l tests/test-ellama-tools.el \
+		-l tests/test-ellama-tools-dlp.el \
 		-l tests/test-ellama-skills.el \
 		-l tests/test-ellama-transient.el \
 		-l tests/test-ellama-blueprint.el \
@@ -49,6 +51,7 @@ test-detailed:
 		-l tests/test-ellama.el \
 		-l tests/test-ellama-context.el \
 		-l tests/test-ellama-tools.el \
+		-l tests/test-ellama-tools-dlp.el \
 		-l tests/test-ellama-skills.el \
 		-l tests/test-ellama-transient.el \
 		-l tests/test-ellama-blueprint.el \

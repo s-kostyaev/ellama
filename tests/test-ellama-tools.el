@@ -253,7 +253,7 @@ Return list with result and prompt."
 (ert-deftest test-ellama-tools-srt-settings-file-errors-on-missing-value ()
   (ellama-test--ensure-local-ellama-tools)
   (should-error
-  (let ((ellama-tools-srt-args '("-s")))
+   (let ((ellama-tools-srt-args '("-s")))
      (ellama-tools--srt-settings-file))
    :type 'user-error)
   (should-error
@@ -264,18 +264,18 @@ Return list with result and prompt."
 (ert-deftest test-ellama-tools-srt-policy-load-invalid-json ()
   (ellama-test--ensure-local-ellama-tools)
   (ellama-test--with-temp-srt-settings
-      "{not-json"
-    (let ((ellama-tools-srt-args (list "--settings" settings-file)))
-      (should-error (ellama-tools--srt-policy-current)
-                    :type 'user-error))))
+   "{not-json"
+   (let ((ellama-tools-srt-args (list "--settings" settings-file)))
+     (should-error (ellama-tools--srt-policy-current)
+                   :type 'user-error))))
 
 (ert-deftest test-ellama-tools-srt-policy-load-malformed-filesystem-shape ()
   (ellama-test--ensure-local-ellama-tools)
   (ellama-test--with-temp-srt-settings
-      "{\"filesystem\":{\"denyRead\":\"/tmp/x\"}}"
-    (let ((ellama-tools-srt-args (list "--settings" settings-file)))
-      (should-error (ellama-tools--srt-policy-current)
-                    :type 'user-error))))
+   "{\"filesystem\":{\"denyRead\":\"/tmp/x\"}}"
+   (let ((ellama-tools-srt-args (list "--settings" settings-file)))
+     (should-error (ellama-tools--srt-policy-current)
+                   :type 'user-error))))
 
 (ert-deftest test-ellama-tools-srt-check-access-read-write-and-precedence ()
   (ellama-test--ensure-local-ellama-tools)
@@ -290,20 +290,20 @@ Return list with result and prompt."
           (with-temp-file secret (insert "secret"))
           (with-temp-file blocked-file (insert "blocked"))
           (ellama-test--with-temp-srt-settings
-              (format
-               "{\"filesystem\":{\"denyRead\":[%S],\"allowWrite\":[%S],\"denyWrite\":[%S]}}"
-               secret work-dir blocked-file)
-            (let ((default-directory dir)
-                  (ellama-tools-use-srt t)
-                  (ellama-tools-srt-args (list "--settings" settings-file)))
-              (should (string-match-p "denyRead"
-                                      (ellama-tools--srt-check-access
-                                       secret 'read)))
-              (should-not (ellama-tools--srt-check-access
-                           allowed-file 'write))
-              (should (string-match-p "denyWrite"
-                                      (ellama-tools--srt-check-access
-                                       blocked-file 'write))))))
+           (format
+            "{\"filesystem\":{\"denyRead\":[%S],\"allowWrite\":[%S],\"denyWrite\":[%S]}}"
+            secret work-dir blocked-file)
+           (let ((default-directory dir)
+                 (ellama-tools-use-srt t)
+                 (ellama-tools-srt-args (list "--settings" settings-file)))
+             (should (string-match-p "denyRead"
+                                     (ellama-tools--srt-check-access
+                                      secret 'read)))
+             (should-not (ellama-tools--srt-check-access
+                          allowed-file 'write))
+             (should (string-match-p "denyWrite"
+                                     (ellama-tools--srt-check-access
+                                      blocked-file 'write))))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -317,21 +317,21 @@ Return list with result and prompt."
         (progn
           (make-directory work-dir)
           (ellama-test--with-temp-srt-settings
-              (format
-               "{\"filesystem\":{\"allowWrite\":[%S],\"denyWrite\":[%S]}}"
-               work-dir blocked-file)
-            (let ((default-directory dir)
-                  (ellama-tools-use-srt t)
-                  (ellama-tools-srt-args (list "--settings" settings-file)))
-              (should-not (file-exists-p blocked-file))
-              ;; Parity note: behavior differs by platform.
-              (if (eq system-type 'darwin)
-                  (should-not (ellama-tools--srt-check-access
-                               blocked-file 'write))
-                (should (string-match-p
-                         "denyWrite"
-                         (ellama-tools--srt-check-access
-                          blocked-file 'write)))))))
+           (format
+            "{\"filesystem\":{\"allowWrite\":[%S],\"denyWrite\":[%S]}}"
+            work-dir blocked-file)
+           (let ((default-directory dir)
+                 (ellama-tools-use-srt t)
+                 (ellama-tools-srt-args (list "--settings" settings-file)))
+             (should-not (file-exists-p blocked-file))
+             ;; Parity note: behavior differs by platform.
+             (if (eq system-type 'darwin)
+                 (should-not (ellama-tools--srt-check-access
+                              blocked-file 'write))
+               (should (string-match-p
+                        "denyWrite"
+                        (ellama-tools--srt-check-access
+                         blocked-file 'write)))))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -340,14 +340,14 @@ Return list with result and prompt."
   (let ((dir (make-temp-file "ellama-srt-defaults-" t)))
     (unwind-protect
         (ellama-test--with-temp-srt-settings
-            "{}"
-          (let ((default-directory dir)
-                (ellama-tools-use-srt t)
-                (ellama-tools-srt-args (list "--settings" settings-file)))
-            (should-not (ellama-tools--srt-check-access "missing.txt" 'read))
-            (should (string-match-p
-                     "allowWrite"
-                     (ellama-tools--srt-check-access "missing.txt" 'write)))))
+         "{}"
+         (let ((default-directory dir)
+               (ellama-tools-use-srt t)
+               (ellama-tools-srt-args (list "--settings" settings-file)))
+           (should-not (ellama-tools--srt-check-access "missing.txt" 'read))
+           (should (string-match-p
+                    "allowWrite"
+                    (ellama-tools--srt-check-access "missing.txt" 'write)))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -359,13 +359,13 @@ Return list with result and prompt."
         (progn
           (with-temp-file file (insert "x"))
           (ellama-test--with-temp-srt-settings
-              "{\"filesystem\":{\"denyRead\":[\"secret.txt\"]}}"
-            (let ((default-directory dir)
-                  (ellama-tools-use-srt t)
-                  (ellama-tools-srt-args (list "--settings" settings-file)))
-              (should (string-match-p "denyRead"
-                                      (ellama-tools--srt-check-access
-                                       file 'read))))))
+           "{\"filesystem\":{\"denyRead\":[\"secret.txt\"]}}"
+           (let ((default-directory dir)
+                 (ellama-tools-use-srt t)
+                 (ellama-tools-srt-args (list "--settings" settings-file)))
+             (should (string-match-p "denyRead"
+                                     (ellama-tools--srt-check-access
+                                      file 'read))))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -378,12 +378,12 @@ Return list with result and prompt."
         (progn
           (make-directory out-dir)
           (ellama-test--with-temp-srt-settings
-              (format "{\"filesystem\":{\"allowWrite\":[%S]}}" out-dir)
-            (let ((default-directory dir)
-                  (ellama-tools-use-srt t)
-                  (ellama-tools-srt-args (list "--settings" settings-file)))
-              (should-not (file-exists-p target))
-              (should-not (ellama-tools--srt-check-access target 'write)))))
+           (format "{\"filesystem\":{\"allowWrite\":[%S]}}" out-dir)
+           (let ((default-directory dir)
+                 (ellama-tools-use-srt t)
+                 (ellama-tools-srt-args (list "--settings" settings-file)))
+             (should-not (file-exists-p target))
+             (should-not (ellama-tools--srt-check-access target 'write)))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -397,12 +397,12 @@ Return list with result and prompt."
         (progn
           (make-directory out-dir)
           (ellama-test--with-temp-srt-settings
-              (format "{\"filesystem\":{\"allowWrite\":[%S]}}" target)
-            (let ((default-directory dir)
-                  (ellama-tools-use-srt t)
-                  (ellama-tools-srt-args (list "--settings" settings-file)))
-              (should-not (file-exists-p target))
-              (should-not (ellama-tools--srt-check-access target 'write)))))
+           (format "{\"filesystem\":{\"allowWrite\":[%S]}}" target)
+           (let ((default-directory dir)
+                 (ellama-tools-use-srt t)
+                 (ellama-tools-srt-args (list "--settings" settings-file)))
+             (should-not (file-exists-p target))
+             (should-not (ellama-tools--srt-check-access target 'write)))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -415,25 +415,19 @@ Return list with result and prompt."
         (progn
           (make-directory dir)
           (with-temp-file file (insert "x"))
-          (let* ((orig-expand (symbol-function 'expand-file-name))
-                 (tilde-rule (concat "~/" (file-relative-name file fake-home))))
-            (cl-letf (((symbol-function 'expand-file-name)
-                       (lambda (name &optional base)
-                         (if (and (stringp name)
-                                  (string-prefix-p "~/" name))
-                             (funcall orig-expand
-                                      (concat fake-home "/" (substring name 2))
-                                      base)
-                           (funcall orig-expand name base)))))
-              (ellama-test--with-temp-srt-settings
-                  (format "{\"filesystem\":{\"denyRead\":[%S]}}" tilde-rule)
-                (let ((default-directory temporary-file-directory)
-                      (ellama-tools-use-srt t)
-                      (ellama-tools-srt-args
-                       (list "--settings" settings-file)))
-                  (should (string-match-p "denyRead"
-                                          (ellama-tools--srt-check-access
-                                           file 'read))))))))
+          (let ((tilde-rule (concat "~/" (file-relative-name file fake-home))))
+            (ellama-test--with-temp-srt-settings
+             (format "{\"filesystem\":{\"denyRead\":[%S]}}" tilde-rule)
+             (let ((default-directory temporary-file-directory)
+                   (ellama-tools-use-srt t)
+                   (ellama-tools-srt-args
+                    (list "--settings" settings-file))
+                   (process-environment
+                    (copy-sequence process-environment)))
+               (setenv "HOME" fake-home)
+               (should (string-match-p "denyRead"
+                                       (ellama-tools--srt-check-access
+                                        file 'read)))))))
       (when (file-exists-p fake-home)
         (delete-directory fake-home t)))))
 
@@ -452,21 +446,21 @@ Return list with result and prompt."
              (ert-skip (format "Cannot create symlink: %s"
                                (error-message-string err)))))
           (ellama-test--with-temp-srt-settings
-              (format "{\"filesystem\":{\"denyRead\":[%S]}}" link)
-            (let ((default-directory dir)
-                  (ellama-tools-use-srt t)
-                  (ellama-tools-srt-args (list "--settings" settings-file)))
-              ;; Observed host parity on macOS: exact symlink-path denyRead
-              ;; rules may not deny reads through the symlink path.
-              (let ((system-type 'darwin))
-                (should-not (ellama-tools--srt-check-access link 'read))))
-            (let ((default-directory dir)
-                  (ellama-tools-use-srt t)
-                  (ellama-tools-srt-args (list "--settings" settings-file)))
-              (let ((system-type 'gnu/linux))
-                (should (string-match-p
-                         "denyRead"
-                         (ellama-tools--srt-check-access link 'read)))))))
+           (format "{\"filesystem\":{\"denyRead\":[%S]}}" link)
+           (let ((default-directory dir)
+                 (ellama-tools-use-srt t)
+                 (ellama-tools-srt-args (list "--settings" settings-file)))
+             ;; Observed host parity on macOS: exact symlink-path denyRead
+             ;; rules may not deny reads through the symlink path.
+             (let ((system-type 'darwin))
+               (should-not (ellama-tools--srt-check-access link 'read))))
+           (let ((default-directory dir)
+                 (ellama-tools-use-srt t)
+                 (ellama-tools-srt-args (list "--settings" settings-file)))
+             (let ((system-type 'gnu/linux))
+               (should (string-match-p
+                        "denyRead"
+                        (ellama-tools--srt-check-access link 'read)))))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -478,15 +472,15 @@ Return list with result and prompt."
         (progn
           (with-temp-file file (insert "secret"))
           (ellama-test--with-temp-srt-settings
-              (format "{\"filesystem\":{\"denyRead\":[%S]}}" file)
-            (let ((default-directory dir)
-                  (ellama-tools-use-srt t)
-                  (ellama-tools-srt-args (list "--settings" settings-file)))
-              (let ((msg (ellama-tools-read-file-tool file)))
-                (should (stringp msg))
-                (should (string-match-p "srt policy denied read access" msg))
-                (should (string-match-p (regexp-quote file) msg))
-                (should (string-match-p "filesystem\\.denyRead" msg))))))
+           (format "{\"filesystem\":{\"denyRead\":[%S]}}" file)
+           (let ((default-directory dir)
+                 (ellama-tools-use-srt t)
+                 (ellama-tools-srt-args (list "--settings" settings-file)))
+             (let ((msg (ellama-tools-read-file-tool file)))
+               (should (stringp msg))
+               (should (string-match-p "srt policy denied read access" msg))
+               (should (string-match-p (regexp-quote file) msg))
+               (should (string-match-p "filesystem\\.denyRead" msg))))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -495,15 +489,15 @@ Return list with result and prompt."
   (let ((dir (make-temp-file "ellama-srt-write-tool-" t)))
     (unwind-protect
         (ellama-test--with-temp-srt-settings
-            "{}"
-          (let ((default-directory dir)
-                (ellama-tools-use-srt t)
-                (ellama-tools-srt-args (list "--settings" settings-file)))
-            (let ((msg (ellama-tools-write-file-tool
-                        (expand-file-name "x.txt" dir) "x")))
-              (should (stringp msg))
-              (should (string-match-p "srt policy denied write access" msg))
-              (should (string-match-p "filesystem\\.allowWrite" msg)))))
+         "{}"
+         (let ((default-directory dir)
+               (ellama-tools-use-srt t)
+               (ellama-tools-srt-args (list "--settings" settings-file)))
+           (let ((msg (ellama-tools-write-file-tool
+                       (expand-file-name "x.txt" dir) "x")))
+             (should (stringp msg))
+             (should (string-match-p "srt policy denied write access" msg))
+             (should (string-match-p "filesystem\\.allowWrite" msg)))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -512,15 +506,15 @@ Return list with result and prompt."
   (let ((dir (make-temp-file "ellama-srt-tree-tool-" t)))
     (unwind-protect
         (ellama-test--with-temp-srt-settings
-            (format "{\"filesystem\":{\"denyRead\":[%S]}}" dir)
-          (let ((default-directory temporary-file-directory)
-                (ellama-tools-use-srt t)
-                (ellama-tools-srt-args (list "--settings" settings-file)))
-            (let ((msg (ellama-tools-directory-tree-tool dir)))
-              (should (stringp msg))
-              (should (string-match-p "srt policy denied list access" msg))
-              (should (string-match-p (regexp-quote dir) msg))
-              (should (string-match-p "filesystem\\.denyRead" msg)))))
+         (format "{\"filesystem\":{\"denyRead\":[%S]}}" dir)
+         (let ((default-directory temporary-file-directory)
+               (ellama-tools-use-srt t)
+               (ellama-tools-srt-args (list "--settings" settings-file)))
+           (let ((msg (ellama-tools-directory-tree-tool dir)))
+             (should (stringp msg))
+             (should (string-match-p "srt policy denied list access" msg))
+             (should (string-match-p (regexp-quote dir) msg))
+             (should (string-match-p "filesystem\\.denyRead" msg)))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -538,16 +532,16 @@ Return list with result and prompt."
           (make-directory dst-dir)
           (with-temp-file src (insert "x"))
           (ellama-test--with-temp-srt-settings
-              (format "{\"filesystem\":{\"allowWrite\":[%S]}}" src-dir)
-            (let ((default-directory dir)
-                  (ellama-tools-use-srt t)
-                  (ellama-tools-srt-args (list "--settings" settings-file)))
-              (setq err-msg (ellama-tools-move-file-tool src dst))
-              (should (stringp err-msg))
-              (should (string-match-p "srt policy denied write access"
-                                      err-msg))
-              (should (string-match-p (regexp-quote dst) err-msg))
-              (should (string-match-p "filesystem\\.allowWrite" err-msg)))))
+           (format "{\"filesystem\":{\"allowWrite\":[%S]}}" src-dir)
+           (let ((default-directory dir)
+                 (ellama-tools-use-srt t)
+                 (ellama-tools-srt-args (list "--settings" settings-file)))
+             (setq err-msg (ellama-tools-move-file-tool src dst))
+             (should (stringp err-msg))
+             (should (string-match-p "srt policy denied write access"
+                                     err-msg))
+             (should (string-match-p (regexp-quote dst) err-msg))
+             (should (string-match-p "filesystem\\.allowWrite" err-msg)))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -564,21 +558,21 @@ Return list with result and prompt."
           (make-directory src-dir)
           (with-temp-file src (insert "x"))
           (ellama-test--with-temp-srt-settings
-              (format
-               "{\"filesystem\":{\"allowWrite\":[%S,%S]}}"
-               src dst)
-            (let ((default-directory dir)
-                  (ellama-tools-use-srt t)
-                  (ellama-tools-srt-args (list "--settings" settings-file)))
-              (setq err-sym
-                    (car (should-error
-                          (ellama-tools-move-file-tool src dst))))
-              ;; Missing destination directories should fail in rename-file,
-              ;; not in local SRT policy checks.
-              (should (memq 'file-error
-                            (get err-sym 'error-conditions)))
-              (should-not (memq 'user-error
-                                (get err-sym 'error-conditions))))))
+           (format
+            "{\"filesystem\":{\"allowWrite\":[%S,%S]}}"
+            src dst)
+           (let ((default-directory dir)
+                 (ellama-tools-use-srt t)
+                 (ellama-tools-srt-args (list "--settings" settings-file)))
+             (setq err-sym
+                   (car (should-error
+                         (ellama-tools-move-file-tool src dst))))
+             ;; Missing destination directories should fail in rename-file,
+             ;; not in local SRT policy checks.
+             (should (memq 'file-error
+                           (get err-sym 'error-conditions)))
+             (should-not (memq 'user-error
+                               (get err-sym 'error-conditions))))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -740,6 +734,503 @@ Return list with result and prompt."
          (types (mapcar (lambda (arg) (plist-get arg :type))
                         (plist-get wrapped :args))))
     (should (equal types '(string number)))))
+
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-dlp-input-block-prevents-call ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-input-default-action 'block)
+        (ellama-tools-dlp-regex-rules '((:id "token"
+                                             :pattern "SECRET"
+                                             :directions (input))))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all nil)
+        (ellama-tools-allowed nil)
+        prompt-called
+        tool-called)
+    (let* ((tool-plist `(:function ,(lambda (_arg)
+                                      (setq tool-called t)
+                                      "ok")
+                                   :name "mcp_tool"
+                                   :args ((:name "arg" :type string))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function)))
+      (cl-letf (((symbol-function 'read-char-choice)
+                 (lambda (_prompt _choices)
+                   (setq prompt-called t)
+                   ?y)))
+        (should (string-match-p "DLP block input"
+                                (funcall wrapped-func "SECRET"))))
+      (should-not tool-called)
+      (should-not prompt-called))))
+
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-dlp-input-warn-prompts-even-allow-all ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-input-default-action 'warn)
+        (ellama-tools-dlp-regex-rules '((:id "token"
+                                             :pattern "SECRET"
+                                             :directions (input))))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        (prompt-count 0)
+        tool-called)
+    (let* ((tool-plist `(:function ,(lambda (_arg)
+                                      (setq tool-called t)
+                                      "ok")
+                                   :name "mcp_tool"
+                                   :args ((:name "arg" :type string))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function))
+           (result nil))
+      (cl-letf (((symbol-function 'read-char-choice)
+                 (lambda (_prompt _choices)
+                   (setq prompt-count (1+ prompt-count))
+                   ?n)))
+        (setq result (funcall wrapped-func "SECRET")))
+      (should (string-match-p "DLP warning denied tool execution" result))
+      (should (= prompt-count 1))
+      (should-not tool-called))))
+
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-dlp-input-block-async-callback ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-input-default-action 'block)
+        (ellama-tools-dlp-regex-rules '((:id "token"
+                                             :pattern "SECRET"
+                                             :directions (input))))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        tool-called
+        callback-result)
+    (let* ((tool-plist `(:function ,(lambda (_callback _arg)
+                                      (setq tool-called t)
+                                      nil)
+                                   :name "async_tool"
+                                   :async t
+                                   :args ((:name "arg" :type string))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function)))
+      (should (equal (funcall wrapped-func
+                              (lambda (result)
+                                (setq callback-result result))
+                              "SECRET")
+                     nil))
+      (should (string-match-p "DLP block input" callback-result))
+      (should-not tool-called))))
+
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-dlp-input-warn-denied-async-callback ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-input-default-action 'warn)
+        (ellama-tools-dlp-regex-rules '((:id "token"
+                                             :pattern "SECRET"
+                                             :directions (input))))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        (prompt-count 0)
+        tool-called
+        callback-result)
+    (let* ((tool-plist `(:function ,(lambda (_callback _arg)
+                                      (setq tool-called t)
+                                      nil)
+                                   :name "async_tool"
+                                   :async t
+                                   :args ((:name "arg" :type string))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function)))
+      (cl-letf (((symbol-function 'read-char-choice)
+                 (lambda (_prompt _choices)
+                   (setq prompt-count (1+ prompt-count))
+                   ?n)))
+        (should (equal (funcall wrapped-func
+                                (lambda (result)
+                                  (setq callback-result result))
+                                "SECRET")
+                       nil)))
+      (should (= prompt-count 1))
+      (should (string-match-p "DLP warning denied tool execution"
+                              callback-result))
+      (should-not tool-called))))
+
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-dlp-input-blocks-nested-plist ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-input-default-action 'block)
+        (ellama-tools-dlp-regex-rules '((:id "token"
+                                             :pattern "SECRET"
+                                             :directions (input))))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        tool-called)
+    (let* ((tool-plist `(:function ,(lambda (_payload)
+                                      (setq tool-called t)
+                                      "ok")
+                                   :name "mcp_tool"
+                                   :args ((:name "payload" :type object))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function))
+           (result (funcall wrapped-func '(:user (:token "SECRET")))))
+      (should (string-match-p "DLP block input" result))
+      (should (string-match-p "arg payload.user.token" result))
+      (should-not tool-called))))
+
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-dlp-input-blocks-nested-alist ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-input-default-action 'block)
+        (ellama-tools-dlp-regex-rules '((:id "token"
+                                             :pattern "SECRET"
+                                             :directions (input))))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        tool-called)
+    (let* ((tool-plist `(:function ,(lambda (_payload)
+                                      (setq tool-called t)
+                                      "ok")
+                                   :name "mcp_tool"
+                                   :args ((:name "payload" :type object))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function))
+           (result (funcall wrapped-func
+                            '(("user" . (("token" . "SECRET")))))))
+      (should (string-match-p "DLP block input" result))
+      (should-not tool-called))))
+
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-dlp-input-blocks-nested-vector-list ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-input-default-action 'block)
+        (ellama-tools-dlp-regex-rules '((:id "token"
+                                             :pattern "SECRET"
+                                             :directions (input))))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        tool-called)
+    (let* ((tool-plist `(:function ,(lambda (_payload)
+                                      (setq tool-called t)
+                                      "ok")
+                                   :name "mcp_tool"
+                                   :args ((:name "payload" :type object))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function))
+           (result (funcall wrapped-func [1 ("ok" "SECRET")])))
+      (should (string-match-p "DLP block input" result))
+      (should-not tool-called))))
+
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-dlp-input-blocks-nested-hash-table ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-input-default-action 'block)
+        (ellama-tools-dlp-regex-rules '((:id "token"
+                                             :pattern "SECRET"
+                                             :directions (input))))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        tool-called)
+    (let ((user-ht (make-hash-table :test 'equal))
+          (payload-ht (make-hash-table :test 'equal)))
+      (puthash "token" "SECRET" user-ht)
+      (puthash "user" user-ht payload-ht)
+      (let* ((tool-plist `(:function ,(lambda (_payload)
+                                        (setq tool-called t)
+                                        "ok")
+                                     :name "mcp_tool"
+                                     :args ((:name "payload" :type object))))
+             (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+             (wrapped-func (plist-get wrapped :function))
+             (result (funcall wrapped-func payload-ht)))
+        (should (string-match-p "DLP block input" result))
+        (should-not tool-called)))))
+
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-dlp-input-warn-structured-prompts ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-input-default-action 'warn)
+        (ellama-tools-dlp-regex-rules '((:id "token"
+                                             :pattern "SECRET"
+                                             :directions (input))))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        (prompt-count 0)
+        tool-called)
+    (let* ((tool-plist `(:function ,(lambda (_payload)
+                                      (setq tool-called t)
+                                      "ok")
+                                   :name "mcp_tool"
+                                   :args ((:name "payload" :type object))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function))
+           result)
+      (cl-letf (((symbol-function 'read-char-choice)
+                 (lambda (_prompt _choices)
+                   (setq prompt-count (1+ prompt-count))
+                   ?n)))
+        (setq result (funcall wrapped-func '(:items ["SECRET"]))))
+      (should (string-match-p "DLP warning denied tool execution" result))
+      (should (= prompt-count 1))
+      (should-not tool-called))))
+
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-dlp-input-values-only-no-key-scan ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-input-default-action 'block)
+        (ellama-tools-dlp-regex-rules '((:id "token"
+                                             :pattern "SECRET"
+                                             :directions (input))))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        tool-called)
+    (let* ((tool-plist `(:function ,(lambda (_payload)
+                                      (setq tool-called t)
+                                      "ok")
+                                   :name "mcp_tool"
+                                   :args ((:name "payload" :type object))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function)))
+      (should (equal (funcall wrapped-func '(("SECRET" . 1)))
+                     "ok"))
+      (should tool-called))))
+
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-dlp-input-block-async-structured-callback ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-input-default-action 'block)
+        (ellama-tools-dlp-regex-rules '((:id "token"
+                                             :pattern "SECRET"
+                                             :directions (input))))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        tool-called
+        callback-result)
+    (let* ((tool-plist `(:function ,(lambda (_callback _payload)
+                                      (setq tool-called t)
+                                      nil)
+                                   :name "async_tool"
+                                   :async t
+                                   :args ((:name "payload" :type object))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function)))
+      (should (equal (funcall wrapped-func
+                              (lambda (result)
+                                (setq callback-result result))
+                              '(:user (:token "SECRET")))
+                     nil))
+      (should (string-match-p "DLP block input" callback-result))
+      (should-not tool-called))))
+
+(ert-deftest test-ellama-tools-wrap-with-confirm-dlp-output-redacts-sync ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-output-default-action 'redact)
+        (ellama-tools-dlp-regex-rules '((:id "token"
+                                             :pattern "SECRET"
+                                             :directions (output))))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil))
+    (let* ((tool-plist `(:function ,(lambda (_arg)
+                                      "xxSECRETyy")
+                                   :name "mcp_tool"
+                                   :args ((:name "arg" :type string))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function)))
+      (should (equal (funcall wrapped-func "ok")
+                     "xx[REDACTED:token]yy")))))
+
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-dlp-output-redacts-exact-env-secret ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((secret "sk-test-abcdefghijklmnopqrstuvwxyz123456")
+         (process-environment (list (concat "MY_API_KEY=" secret)))
+         (ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets t)
+         (ellama-tools-dlp-output-default-action 'redact)
+         (ellama-tools-dlp-regex-rules nil)
+         (ellama-tools-confirm-allowed (make-hash-table))
+         (ellama-tools-allow-all t)
+         (ellama-tools-allowed nil))
+    (ellama-tools-dlp--invalidate-exact-secret-cache)
+    (unwind-protect
+        (let* ((tool-plist `(:function ,(lambda (_arg)
+                                          (concat "xx" secret "yy"))
+                                       :name "mcp_tool"
+                                       :args ((:name "arg" :type string))))
+               (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+               (wrapped-func (plist-get wrapped :function)))
+          (should (equal (funcall wrapped-func "ok")
+                         "xx[REDACTED:env-exact-secret]yy")))
+      (ellama-tools-dlp--invalidate-exact-secret-cache))))
+
+(ert-deftest test-ellama-tools-wrap-with-confirm-dlp-output-blocks-sync ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-output-default-action 'block)
+        (ellama-tools-dlp-regex-rules '((:id "token"
+                                             :pattern "SECRET"
+                                             :directions (output))))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil))
+    (let* ((tool-plist `(:function ,(lambda (_arg)
+                                      "xxSECRETyy")
+                                   :name "mcp_tool"
+                                   :args ((:name "arg" :type string))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function))
+           (result (funcall wrapped-func "ok")))
+      (should (string-match-p "DLP block output" result))
+      (should-not (string-match-p "SECRET" result)))))
+
+(ert-deftest test-ellama-tools-wrap-with-confirm-dlp-output-warn-sync-v1-pass ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-output-default-action 'warn)
+        (ellama-tools-dlp-regex-rules '((:id "token"
+                                             :pattern "SECRET"
+                                             :directions (output))))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil))
+    (let* ((tool-plist `(:function ,(lambda (_arg)
+                                      "xxSECRETyy")
+                                   :name "mcp_tool"
+                                   :args ((:name "arg" :type string))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function)))
+      ;; v1 behavior keeps output content for `warn' and relies on telemetry.
+      (should (equal (funcall wrapped-func "ok")
+                     "xxSECRETyy")))))
+
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-dlp-output-redacts-async-callback ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-output-default-action 'redact)
+        (ellama-tools-dlp-regex-rules '((:id "token"
+                                             :pattern "SECRET"
+                                             :directions (output))))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        callback-result)
+    (let* ((tool-plist `(:function ,(lambda (callback cmd)
+                                      (funcall callback
+                                               (concat "out:" cmd ":SECRET"))
+                                      nil)
+                                   :name "async_tool"
+                                   :async t
+                                   :args ((:name "cmd" :type string))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function)))
+      (should (equal (funcall wrapped-func
+                              (lambda (result)
+                                (setq callback-result result))
+                              "go")
+                     nil))
+      (should (equal callback-result "out:go:[REDACTED:token]")))))
+
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-dlp-output-blocks-async-callback ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-output-default-action 'block)
+        (ellama-tools-dlp-regex-rules '((:id "token"
+                                             :pattern "SECRET"
+                                             :directions (output))))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        callback-result)
+    (let* ((tool-plist `(:function ,(lambda (callback cmd)
+                                      (funcall callback
+                                               (concat "out:" cmd ":SECRET"))
+                                      nil)
+                                   :name "async_tool"
+                                   :async t
+                                   :args ((:name "cmd" :type string))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function)))
+      (should (equal (funcall wrapped-func
+                              (lambda (result)
+                                (setq callback-result result))
+                              "go")
+                     nil))
+      (should (string-match-p "DLP block output" callback-result))
+      (should-not (string-match-p "SECRET" callback-result)))))
+
+(ert-deftest test-ellama-tools-wrap-with-confirm-dlp-disabled-baseline ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled nil)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-input-default-action 'block)
+        (ellama-tools-dlp-output-default-action 'block)
+        (ellama-tools-dlp-regex-rules '((:id "token" :pattern "SECRET")))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil))
+    (let* ((tool-plist `(:function ,(lambda (_arg)
+                                      "xxSECRETyy")
+                                   :name "mcp_tool"
+                                   :args ((:name "arg" :type string))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function)))
+      (should (equal (funcall wrapped-func "SECRET")
+                     "xxSECRETyy")))))
 
 (ert-deftest test-ellama-tools-edit-file-tool-replace-at-file-start ()
   (ellama-test--ensure-local-ellama-tools)

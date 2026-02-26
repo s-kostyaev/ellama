@@ -32,6 +32,7 @@
 (require 'project)
 (require 'json)
 (require 'llm)
+(require 'ellama-tools-dlp)
 
 (declare-function llm-standard-provider-p "llm-provider-utils" (provider))
 (declare-function ellama-new-session "ellama"
@@ -172,7 +173,9 @@ ARGS are passed to FUNCTION.
 Generates prompt automatically.  User can approve once (y), approve
 for all future calls (a), forbid (n), or view the details in a
 buffer (v) before deciding.  Returns the result of FUNCTION if
-approved, \"Forbidden by the user\" otherwise."
+approved, \"Forbidden by the user\" otherwise.
+For async tools (callback as first argument), pass string results to the
+callback and return nil."
   (let ((confirmation (gethash function ellama-tools-confirm-allowed nil)))
     (cond
      ;; If user has approved all calls, just execute the function
@@ -187,8 +190,11 @@ approved, \"Forbidden by the user\" otherwise."
              (cb (and args
                       (functionp (car args))
                       (car args))))
-        (if (and cb result-str)
-            (funcall cb result-str)
+        (if cb
+            (progn
+              (when result-str
+                (funcall cb result-str))
+              nil)
           (or result-str "done"))))
      ;; Otherwise, ask for confirmation
      (t
@@ -259,8 +265,11 @@ approved, \"Forbidden by the user\" otherwise."
                 (cb (and args
                          (functionp (car args))
                          (car args))))
-            (if (and cb result-str)
-                (funcall cb result-str)
+            (if cb
+                (progn
+                  (when result-str
+                    (funcall cb result-str))
+                  nil)
               (or result-str "done")))))))))
 
 (defun ellama-tools-confirm (function &rest args)
@@ -294,8 +303,343 @@ NAME is fallback label used when FUNC has no symbol name."
     (lambda (&rest args)
       (apply #'ellama-tools-confirm-with-name func name args))))
 
+(defun ellama-tools--dlp-make-scan-context
+    (direction tool-name &optional arg-name)
+  "Build DLP scan context for DIRECTION, TOOL-NAME and ARG-NAME."
+  (ellama-tools-dlp--make-scan-context
+   :direction direction
+   :tool-name tool-name
+   :arg-name arg-name
+   :payload-length 0
+   :truncated nil))
+
+(defun ellama-tools--dlp-handle-output-string (tool-name text)
+  "Scan output TEXT for TOOL-NAME and return filtered result.
+For output `warn', v1 keeps the original content and relies on logging."
+  (let* ((scan (ellama-tools-dlp--scan-text
+                text
+                (ellama-tools--dlp-make-scan-context 'output tool-name)))
+         (verdict (plist-get scan :verdict))
+         (action (plist-get verdict :action)))
+    (pcase action
+      ((or 'allow 'warn)
+       text)
+      ('block
+       (or (plist-get verdict :message)
+           (format "DLP blocked output for tool %s" tool-name)))
+      ('redact
+       (or (plist-get verdict :redacted-text)
+           (plist-get verdict :message)
+           (format "DLP blocked output for tool %s" tool-name)))
+      (_
+       text))))
+
+(defconst ellama-tools--dlp-input-max-walk-depth 24
+  "Maximum nested depth traversed when scanning structured tool inputs.")
+
+(defconst ellama-tools--dlp-input-max-walk-nodes 2000
+  "Maximum composite/string nodes traversed in one structured input scan.")
+
+(defun ellama-tools--dlp-arg-path-key-name (key)
+  "Return path segment name for KEY, or nil when KEY is unsupported."
+  (cond
+   ((keywordp key)
+    (substring (symbol-name key) 1))
+   ((symbolp key)
+    (symbol-name key))
+   ((stringp key)
+    key)
+   ((numberp key)
+    (format "%s" key))
+   (t
+    nil)))
+
+(defun ellama-tools--dlp-arg-path-append (path child)
+  "Return PATH with CHILD segment appended.
+CHILD may be a string key segment or an integer index."
+  (cond
+   ((integerp child)
+    (format "%s[%d]" path child))
+   ((and (stringp child) (> (length child) 0))
+    (format "%s.%s" path child))
+   ((stringp child)
+    (format "%s.?" path))
+   (t
+    path)))
+
+(defun ellama-tools--dlp-proper-list-length (value)
+  "Return proper list length for VALUE, or nil for dotted/circular lists."
+  (and (listp value)
+       (condition-case nil
+           (length value)
+         (error nil))))
+
+(defun ellama-tools--dlp-plist-like-p (value)
+  "Return non-nil when VALUE looks like a plist with symbol keys."
+  (let ((len (ellama-tools--dlp-proper-list-length value))
+        (rest value)
+        ok)
+    (setq ok (and len (zerop (% len 2))))
+    (while (and ok rest)
+      (let ((key (car rest)))
+        (unless (and (symbolp key) key)
+          (setq ok nil)))
+      (setq rest (cddr rest)))
+    ok))
+
+(defun ellama-tools--dlp-alist-like-p (value)
+  "Return non-nil when VALUE looks like an alist."
+  (let ((len (ellama-tools--dlp-proper-list-length value))
+        (ok t))
+    (when len
+      (dolist (entry value)
+        (let ((key (and (consp entry) (car entry))))
+          (unless (and (consp entry)
+                       (or (symbolp key)
+                           (stringp key)
+                           (numberp key)))
+            (setq ok nil)))))
+    (and len ok)))
+
+(defun ellama-tools--dlp-alist-entry-value (entry)
+  "Return logical value payload for alist ENTRY."
+  (if (and (consp (cdr entry))
+           (null (cddr entry)))
+      (cadr entry)
+    (cdr entry)))
+
+(defun ellama-tools--dlp-walk-strings-1
+    (node path callback seen node-count depth)
+  "Walk NODE and call CALLBACK for string leaves at PATH.
+SEEN tracks composite objects to avoid cycles.  NODE-COUNT is a one-slot
+vector used as a mutable traversal counter.  DEPTH is current nesting depth."
+  (when (and (<= depth ellama-tools--dlp-input-max-walk-depth)
+             (< (aref node-count 0) ellama-tools--dlp-input-max-walk-nodes))
+    (aset node-count 0 (1+ (aref node-count 0)))
+    (cond
+     ((stringp node)
+      (funcall callback node path))
+     ((consp node)
+      (unless (gethash node seen)
+        (puthash node t seen)
+        (cond
+         ((ellama-tools--dlp-plist-like-p node)
+          (let ((rest node)
+                (pair-index 0))
+            (while rest
+              (let* ((key-name
+                      (or (ellama-tools--dlp-arg-path-key-name (car rest))
+                          (format "key%d" pair-index)))
+                     (child-path
+                      (ellama-tools--dlp-arg-path-append path key-name)))
+                (ellama-tools--dlp-walk-strings-1
+                 (cadr rest) child-path callback seen node-count (1+ depth)))
+              (setq rest (cddr rest))
+              (setq pair-index (1+ pair-index)))))
+         ((ellama-tools--dlp-alist-like-p node)
+          (let ((entry-index 0))
+            (dolist (entry node)
+              (let* ((key-name
+                      (or (ellama-tools--dlp-arg-path-key-name (car entry))
+                          (format "item%d" entry-index)))
+                     (child-path
+                      (ellama-tools--dlp-arg-path-append path key-name)))
+                (ellama-tools--dlp-walk-strings-1
+                 (ellama-tools--dlp-alist-entry-value entry)
+                 child-path callback seen node-count (1+ depth)))
+              (setq entry-index (1+ entry-index)))))
+         ((ellama-tools--dlp-proper-list-length node)
+          (let ((index 0))
+            (dolist (item node)
+              (ellama-tools--dlp-walk-strings-1
+               item
+               (ellama-tools--dlp-arg-path-append path index)
+               callback seen node-count (1+ depth))
+              (setq index (1+ index)))))
+         (t
+          (ellama-tools--dlp-walk-strings-1
+           (car node)
+           (ellama-tools--dlp-arg-path-append path "car")
+           callback seen node-count (1+ depth))
+          (ellama-tools--dlp-walk-strings-1
+           (cdr node)
+           (ellama-tools--dlp-arg-path-append path "cdr")
+           callback seen node-count (1+ depth))))))
+     ((vectorp node)
+      (unless (gethash node seen)
+        (puthash node t seen)
+        (dotimes (index (length node))
+          (ellama-tools--dlp-walk-strings-1
+           (aref node index)
+           (ellama-tools--dlp-arg-path-append path index)
+           callback seen node-count (1+ depth)))))
+     ((hash-table-p node)
+      (unless (gethash node seen)
+        (puthash node t seen)
+        (let ((entry-index 0))
+          (maphash
+           (lambda (key item)
+             (let* ((key-name
+                     (or (ellama-tools--dlp-arg-path-key-name key)
+                         (format "key%d" entry-index)))
+                    (child-path
+                     (ellama-tools--dlp-arg-path-append path key-name)))
+               (ellama-tools--dlp-walk-strings-1
+                item child-path callback seen node-count (1+ depth))
+               (setq entry-index (1+ entry-index))))
+           node))))
+     (t
+      nil))))
+
+(defun ellama-tools--dlp-walk-strings (value root-path callback)
+  "Call CALLBACK for each string leaf in VALUE using ROOT-PATH.
+CALLBACK receives `(TEXT PATH)'.  Traverse lists, vectors and hash tables."
+  (ellama-tools--dlp-walk-strings-1
+   value root-path callback
+   (make-hash-table :test 'eq)
+   (vector 0)
+   0))
+
+(defun ellama-tools--dlp-scan-input-value (tool-name arg-name value)
+  "Scan VALUE for TOOL-NAME under ARG-NAME and return a decision plist."
+  (let (warn-message)
+    (catch 'done
+      (ellama-tools--dlp-walk-strings
+       value arg-name
+       (lambda (text path)
+         (let* ((scan (ellama-tools-dlp--scan-text
+                       text
+                       (ellama-tools--dlp-make-scan-context
+                        'input tool-name path)))
+                (verdict (plist-get scan :verdict))
+                (action (plist-get verdict :action))
+                (message (plist-get verdict :message)))
+           (cond
+            ((eq action 'block)
+             (throw 'done
+                    (list :action 'block
+                          :message (or message
+                                       (format "DLP blocked input for %s"
+                                               tool-name)))))
+            ((and (eq action 'warn) (not warn-message))
+             (setq warn-message
+                   (or message
+                       (format "DLP warned on input for tool %s"
+                               tool-name))))))))
+      (if warn-message
+          (list :action 'warn :message warn-message)
+        (list :action 'allow)))))
+
+(defun ellama-tools--dlp-input-decision (tool-plist call-args)
+  "Scan TOOL-PLIST CALL-ARGS and return decision plist.
+Return plist with keys `:action' and optional `:message'."
+  (let* ((tool-name (plist-get tool-plist :name))
+         (async (plist-get tool-plist :async))
+         (declared-args (plist-get tool-plist :args))
+         (values (if (and async call-args (functionp (car call-args)))
+                     (cdr call-args)
+                   call-args))
+         (specs declared-args)
+         (index 0)
+         warn-message)
+    (catch 'done
+      (while (and values specs)
+        (let* ((value (car values))
+               (spec (car specs))
+               (raw-name (or (plist-get spec :name)
+                             (format "arg%d" (1+ index))))
+               (arg-name (if (symbolp raw-name)
+                             (symbol-name raw-name)
+                           raw-name)))
+          (let* ((arg-decision
+                  (ellama-tools--dlp-scan-input-value tool-name arg-name value))
+                 (action (plist-get arg-decision :action))
+                 (message (plist-get arg-decision :message)))
+            (cond
+             ((eq action 'block)
+              (throw 'done arg-decision))
+             ((and (eq action 'warn) (not warn-message))
+              (setq warn-message message)))))
+        (setq values (cdr values))
+        (setq specs (cdr specs))
+        (setq index (1+ index)))
+      (if warn-message
+          (list :action 'warn :message warn-message)
+        (list :action 'allow)))))
+
+(defun ellama-tools--dlp-confirm-warn (tool-name message)
+  "Ask explicit confirmation for DLP `warn' on TOOL-NAME with MESSAGE."
+  (eq (read-char-choice
+       (format "%s. Proceed with tool %s? (y/n): "
+               (or message "DLP warning")
+               tool-name)
+       '(?y ?n))
+      ?y))
+
+(defun ellama-tools--dlp-wrap-output-callback (tool-name callback)
+  "Wrap CALLBACK to apply DLP output filtering for TOOL-NAME."
+  (lambda (result)
+    (funcall callback
+             (if (stringp result)
+                 (ellama-tools--dlp-handle-output-string tool-name result)
+               result))))
+
+(defun ellama-tools--dlp-return-message (async args message)
+  "Return MESSAGE while preserving async callback conventions.
+When ASYNC and ARGS start with a callback, send MESSAGE to the callback and
+return nil."
+  (let ((cb (and async args (functionp (car args)) (car args))))
+    (if cb
+        (progn
+          (funcall cb message)
+          nil)
+      message)))
+
+(defun ellama-tools--make-dlp-wrapper (func tool-plist)
+  "Make DLP wrapper for FUNC using TOOL-PLIST metadata."
+  (let ((tool-name (plist-get tool-plist :name))
+        (async (plist-get tool-plist :async)))
+    (lambda (&rest args)
+      (if (not ellama-tools-dlp-enabled)
+          (apply func args)
+        (let* ((decision (ellama-tools--dlp-input-decision tool-plist args))
+               (action (plist-get decision :action))
+               (message (plist-get decision :message)))
+          (pcase action
+            ('block
+             (ellama-tools--dlp-return-message
+              async args
+              (or message
+                  (format "DLP blocked input for tool %s" tool-name))))
+            ('warn
+             (if (not (ellama-tools--dlp-confirm-warn tool-name message))
+                 (ellama-tools--dlp-return-message
+                  async args
+                  (format "DLP warning denied tool execution for %s" tool-name))
+               (let* ((wrapped-args
+                       (if (and async args (functionp (car args)))
+                           (cons (ellama-tools--dlp-wrap-output-callback
+                                  tool-name (car args))
+                                 (cdr args))
+                         args))
+                      (result (apply func wrapped-args)))
+                 (if (and (not async) (stringp result))
+                     (ellama-tools--dlp-handle-output-string tool-name result)
+                   result))))
+            (_
+             (let* ((wrapped-args
+                     (if (and async args (functionp (car args)))
+                         (cons (ellama-tools--dlp-wrap-output-callback
+                                tool-name (car args))
+                               (cdr args))
+                       args))
+                    (result (apply func wrapped-args)))
+               (if (and (not async) (stringp result))
+                   (ellama-tools--dlp-handle-output-string tool-name result)
+                 result)))))))))
+
 (defun ellama-tools-wrap-with-confirm (tool-plist)
-  "Wrap a tool's function with automatic confirmation.
+  "Wrap a tool's function with automatic confirmation and DLP.
 TOOL-PLIST is a property list in the format expected by `llm-make-tool'.
 Returns a new tool definition with the :function wrapped."
   (let* ((func (plist-get tool-plist :function))
@@ -311,7 +655,9 @@ Returns a new tool definition with the :function wrapped."
                        (and type (intern type)))))
                (plist-put arg :type wrapped-type)))
            args))
-         (wrapped-func (ellama-tools--make-confirm-wrapper func name)))
+         (confirm-func (ellama-tools--make-confirm-wrapper func name))
+         (wrapped-func
+          (ellama-tools--make-dlp-wrapper confirm-func tool-plist)))
     ;; Return a new plist with the wrapped function
     (setq tool-plist (plist-put tool-plist :function wrapped-func))
     (plist-put tool-plist :args wrapped-args)))
@@ -456,20 +802,20 @@ Signal `user-error' when VALUE has an invalid shape."
   (unless (file-exists-p config-path)
     (user-error "Missing srt settings file: %s" config-path))
   (let* ((json (condition-case err
-                  (with-temp-buffer
-                    (insert-file-contents-literally config-path)
-                    (json-parse-buffer :object-type 'alist
-                                       :array-type 'array
-                                       :null-object :json-null
-                                       :false-object :json-false))
-                (json-parse-error
-                 (user-error "Invalid srt JSON config %s: %s"
-                             config-path
-                             (error-message-string err)))
-                (file-error
-                 (user-error "Cannot read srt settings file %s: %s"
-                             config-path
-                             (error-message-string err)))))
+                   (with-temp-buffer
+                     (insert-file-contents-literally config-path)
+                     (json-parse-buffer :object-type 'alist
+                                        :array-type 'array
+                                        :null-object :json-null
+                                        :false-object :json-false))
+                 (json-parse-error
+                  (user-error "Invalid srt JSON config %s: %s"
+                              config-path
+                              (error-message-string err)))
+                 (file-error
+                  (user-error "Cannot read srt settings file %s: %s"
+                              config-path
+                              (error-message-string err)))))
          (filesystem-pair (and (listp json) (assq 'filesystem json)))
          (filesystem (cdr filesystem-pair)))
     (unless (listp json)
@@ -978,36 +1324,36 @@ CALLBACK – function called once with the result string."
     (condition-case err
         (let ((buf (get-buffer-create
                     (concat (make-temp-name " *ellama shell command") "*"))))
-        (set-process-sentinel
-         (apply #'start-process
-                "*ellama-shell-command*" buf
-                (car argv) (cdr argv))
-         (lambda (process _)
-           (when (not (process-live-p process))
-             (let* ((raw-output
-                     ;; trim trailing newline to reduce noisy tool output
-                     (string-trim-right
-                      (with-current-buffer buf (buffer-string))
-                      "\n"))
-                    (output
-                     (ellama-tools--sanitize-tool-text-output
-                      raw-output
-                      "Command output"))
-                    (exit-code (process-exit-status process))
-                    (result
-                     (cond
-                      ((and (string= output "") (zerop exit-code))
-                       "Command completed successfully with no output.")
-                      ((string= output "")
-                       (format "Command failed with exit code %d and no output."
-                               exit-code))
-                      ((zerop exit-code)
-                       output)
-                      (t
-                       (format "Command failed with exit code %d.\n%s"
-                               exit-code output)))))
-               (funcall callback result)
-               (kill-buffer buf))))))
+          (set-process-sentinel
+           (apply #'start-process
+                  "*ellama-shell-command*" buf
+                  (car argv) (cdr argv))
+           (lambda (process _)
+             (when (not (process-live-p process))
+               (let* ((raw-output
+                       ;; trim trailing newline to reduce noisy tool output
+                       (string-trim-right
+                        (with-current-buffer buf (buffer-string))
+                        "\n"))
+                      (output
+                       (ellama-tools--sanitize-tool-text-output
+                        raw-output
+                        "Command output"))
+                      (exit-code (process-exit-status process))
+                      (result
+                       (cond
+                        ((and (string= output "") (zerop exit-code))
+                         "Command completed successfully with no output.")
+                        ((string= output "")
+                         (format "Command failed with exit code %d and no output."
+                                 exit-code))
+                        ((zerop exit-code)
+                         output)
+                        (t
+                         (format "Command failed with exit code %d.\n%s"
+                                 exit-code output)))))
+                 (funcall callback result)
+                 (kill-buffer buf))))))
       (error
        (funcall callback
                 (format "Failed to start shell command: %s"

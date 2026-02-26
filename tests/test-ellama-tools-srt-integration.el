@@ -96,15 +96,15 @@
   (let ((dir (make-temp-file "ellama-srt-preflight-" t)))
     (unwind-protect
         (ellama-test-srt-integration--with-settings
-            (ellama-test-srt-integration--minimal-settings-json)
-          (let* ((res (ellama-test-srt-integration--call
-                       dir settings-file "true"))
-                 (exit (plist-get res :exit))
-                 (stderr (plist-get res :stderr)))
-            (unless (and (integerp exit) (zerop exit))
-              (format "srt preflight failed (exit=%s): %s"
-                      exit
-                      (string-trim (or stderr ""))))))
+         (ellama-test-srt-integration--minimal-settings-json)
+         (let* ((res (ellama-test-srt-integration--call
+                      dir settings-file "true"))
+                (exit (plist-get res :exit))
+                (stderr (plist-get res :stderr)))
+           (unless (and (integerp exit) (zerop exit))
+             (format "srt preflight failed (exit=%s): %s"
+                     exit
+                     (string-trim (or stderr ""))))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -178,7 +178,7 @@ Return plist with `:exit', `:stdout', `:stderr'."
     (ert-info ((format "path=%s op=%S local=%S real=%S reason=%S exit=%S stderr=%s"
                        path op local real reason (plist-get res :exit)
                        (string-trim (or (plist-get res :stderr) ""))))
-      (should (eq local real)))))
+              (should (eq local real)))))
 
 (defun ellama-test-srt-integration--should-match-write-with-mkdir
     (cwd settings-file path)
@@ -202,7 +202,7 @@ avoid non-policy failures for non-existing destination parents."
     (ert-info ((format "path=%s op=write+mkdir local=%S real=%S reason=%S exit=%S stderr=%s"
                        path local real reason (plist-get res :exit)
                        (string-trim (or (plist-get res :stderr) ""))))
-      (should (eq local real)))))
+              (should (eq local real)))))
 
 (defun ellama-test-srt-integration--should-match-move
     (cwd settings-file src dst &optional allow-darwin-write-gap)
@@ -230,15 +230,15 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
                 "mv %s -> %s local=%S real=%S local-reasons=%S exit=%S stderr=%s"
                 src dst local real local-reasons (plist-get res :exit)
                 (string-trim (or (plist-get res :stderr) ""))))
-      (should
-       (or (eq local real)
-           (and allow-darwin-write-gap
-                (eq system-type 'darwin)
-                (not local)
-                real
-                (cl-every (lambda (reason)
-                            (memq reason '(src-write dst-write)))
-                          local-reasons)))))))
+              (should
+               (or (eq local real)
+                   (and allow-darwin-write-gap
+                        (eq system-type 'darwin)
+                        (not local)
+                        real
+                        (cl-every (lambda (reason)
+                                    (memq reason '(src-write dst-write)))
+                                  local-reasons)))))))
 
 (ert-deftest test-ellama-tools-srt-integration-denyread-literal-parity ()
   (ellama-test-srt-integration--ensure-local-tools)
@@ -251,16 +251,16 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
           (with-temp-file allowed (insert "ok"))
           (with-temp-file denied (insert "no"))
           (ellama-test-srt-integration--with-settings
-              (format
-               (concat
-                "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-                "\"filesystem\":{\"denyRead\":[%S],"
-                "\"allowWrite\":[],\"denyWrite\":[]}}")
-               denied)
-            (ellama-test-srt-integration--should-match
-             dir settings-file allowed 'read)
-            (ellama-test-srt-integration--should-match
-             dir settings-file denied 'read)))
+           (format
+            (concat
+             "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+             "\"filesystem\":{\"denyRead\":[%S],"
+             "\"allowWrite\":[],\"denyWrite\":[]}}")
+            denied)
+           (ellama-test-srt-integration--should-match
+            dir settings-file allowed 'read)
+           (ellama-test-srt-integration--should-match
+            dir settings-file denied 'read)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -276,16 +276,16 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
         (progn
           (make-directory work)
           (ellama-test-srt-integration--with-settings
-              (format
-               (concat
-                "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-                "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
-                "\"denyWrite\":[%S]}}")
-               work blocked)
-            (ellama-test-srt-integration--should-match
-             dir settings-file ok 'write)
-            (ellama-test-srt-integration--should-match
-             dir settings-file blocked 'write)))
+           (format
+            (concat
+             "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+             "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
+             "\"denyWrite\":[%S]}}")
+            work blocked)
+           (ellama-test-srt-integration--should-match
+            dir settings-file ok 'write)
+           (ellama-test-srt-integration--should-match
+            dir settings-file blocked 'write)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -298,12 +298,12 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
         (progn
           (with-temp-file file (insert "x"))
           (ellama-test-srt-integration--with-settings
-              (concat
-               "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-               "\"filesystem\":{\"denyRead\":[\"secret.txt\"],"
-               "\"allowWrite\":[],\"denyWrite\":[]}}")
-            (ellama-test-srt-integration--should-match
-             dir settings-file file 'read)))
+           (concat
+            "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+            "\"filesystem\":{\"denyRead\":[\"secret.txt\"],"
+            "\"allowWrite\":[],\"denyWrite\":[]}}")
+           (ellama-test-srt-integration--should-match
+            dir settings-file file 'read)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -318,14 +318,14 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
           (with-temp-file a (insert "a"))
           (with-temp-file b (insert "b"))
           (ellama-test-srt-integration--with-settings
-              (concat
-               "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-               "\"filesystem\":{\"denyRead\":[\"secret-*.txt\"],"
-               "\"allowWrite\":[],\"denyWrite\":[]}}")
-            (ellama-test-srt-integration--should-match
-             dir settings-file a 'read)
-            (ellama-test-srt-integration--should-match
-             dir settings-file b 'read)))
+           (concat
+            "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+            "\"filesystem\":{\"denyRead\":[\"secret-*.txt\"],"
+            "\"allowWrite\":[],\"denyWrite\":[]}}")
+           (ellama-test-srt-integration--should-match
+            dir settings-file a 'read)
+           (ellama-test-srt-integration--should-match
+            dir settings-file b 'read)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -345,14 +345,14 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
           (with-temp-file denied (insert "x"))
           (with-temp-file allowed (insert "x"))
           (ellama-test-srt-integration--with-settings
-              (concat
-               "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-               "\"filesystem\":{\"denyRead\":[\"sub/\"],"
-               "\"allowWrite\":[],\"denyWrite\":[]}}")
-            (ellama-test-srt-integration--should-match
-             dir settings-file denied 'read)
-            (ellama-test-srt-integration--should-match
-             dir settings-file allowed 'read)))
+           (concat
+            "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+            "\"filesystem\":{\"denyRead\":[\"sub/\"],"
+            "\"allowWrite\":[],\"denyWrite\":[]}}")
+           (ellama-test-srt-integration--should-match
+            dir settings-file denied 'read)
+           (ellama-test-srt-integration--should-match
+            dir settings-file allowed 'read)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -370,14 +370,14 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
           (make-directory dir)
           (with-temp-file secret (insert "x"))
           (ellama-test-srt-integration--with-settings
-              (format
-               (concat
-                "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-                "\"filesystem\":{\"denyRead\":[%S],"
-                "\"allowWrite\":[],\"denyWrite\":[]}}")
-               rule)
-            (ellama-test-srt-integration--should-match
-             dir settings-file secret 'read)))
+           (format
+            (concat
+             "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+             "\"filesystem\":{\"denyRead\":[%S],"
+             "\"allowWrite\":[],\"denyWrite\":[]}}")
+            rule)
+           (ellama-test-srt-integration--should-match
+            dir settings-file secret 'read)))
       (when (file-exists-p fake-home)
         (delete-directory fake-home t)))))
 
@@ -396,16 +396,16 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
              (ert-skip (format "Cannot create symlink: %s"
                                (error-message-string err)))))
           (ellama-test-srt-integration--with-settings
-              (format
-               (concat
-                "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-                "\"filesystem\":{\"denyRead\":[%S],"
-                "\"allowWrite\":[],\"denyWrite\":[]}}")
-               link)
-            (ellama-test-srt-integration--should-match
-             dir settings-file link 'read)
-            (ellama-test-srt-integration--should-match
-             dir settings-file real 'read)))
+           (format
+            (concat
+             "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+             "\"filesystem\":{\"denyRead\":[%S],"
+             "\"allowWrite\":[],\"denyWrite\":[]}}")
+            link)
+           (ellama-test-srt-integration--should-match
+            dir settings-file link 'read)
+           (ellama-test-srt-integration--should-match
+            dir settings-file real 'read)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -427,16 +427,16 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
              (ert-skip (format "Cannot create symlink: %s"
                                (error-message-string err)))))
           (ellama-test-srt-integration--with-settings
-              (format
-               (concat
-                "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-                "\"filesystem\":{\"denyRead\":[%S],"
-                "\"allowWrite\":[],\"denyWrite\":[]}}")
-               (concat link-dir "/"))
-            (ellama-test-srt-integration--should-match
-             dir settings-file link-file 'read)
-            (ellama-test-srt-integration--should-match
-             dir settings-file real-file 'read)))
+           (format
+            (concat
+             "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+             "\"filesystem\":{\"denyRead\":[%S],"
+             "\"allowWrite\":[],\"denyWrite\":[]}}")
+            (concat link-dir "/"))
+           (ellama-test-srt-integration--should-match
+            dir settings-file link-file 'read)
+           (ellama-test-srt-integration--should-match
+            dir settings-file real-file 'read)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -451,14 +451,14 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
         (progn
           (make-directory work)
           (ellama-test-srt-integration--with-settings
-              (format
-               (concat
-                "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-                "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
-                "\"denyWrite\":[]}}")
-               work)
-            (ellama-test-srt-integration--should-match-write-with-mkdir
-             dir settings-file target)))
+           (format
+            (concat
+             "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+             "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
+             "\"denyWrite\":[]}}")
+            work)
+           (ellama-test-srt-integration--should-match-write-with-mkdir
+            dir settings-file target)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -473,14 +473,14 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
         (progn
           (make-directory work)
           (ellama-test-srt-integration--with-settings
-              (format
-               (concat
-                "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-                "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
-                "\"denyWrite\":[%S]}}")
-               work target)
-            (ellama-test-srt-integration--should-match-write-with-mkdir
-             dir settings-file target)))
+           (format
+            (concat
+             "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+             "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
+             "\"denyWrite\":[%S]}}")
+            work target)
+           (ellama-test-srt-integration--should-match-write-with-mkdir
+            dir settings-file target)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -496,14 +496,14 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
           (make-directory work)
           (with-temp-file target (insert "old"))
           (ellama-test-srt-integration--with-settings
-              (format
-               (concat
-                "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-                "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
-                "\"denyWrite\":[]}}")
-               work)
-            (ellama-test-srt-integration--should-match
-             dir settings-file target 'write)))
+           (format
+            (concat
+             "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+             "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
+             "\"denyWrite\":[]}}")
+            work)
+           (ellama-test-srt-integration--should-match
+            dir settings-file target 'write)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -519,14 +519,14 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
           (make-directory work)
           (with-temp-file target (insert "old"))
           (ellama-test-srt-integration--with-settings
-              (format
-               (concat
-                "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-                "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
-                "\"denyWrite\":[%S]}}")
-               work target)
-            (ellama-test-srt-integration--should-match
-             dir settings-file target 'write)))
+           (format
+            (concat
+             "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+             "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
+             "\"denyWrite\":[%S]}}")
+            work target)
+           (ellama-test-srt-integration--should-match
+            dir settings-file target 'write)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -542,14 +542,14 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
           (make-directory work)
           (with-temp-file src (insert "x"))
           (ellama-test-srt-integration--with-settings
-              (format
-               (concat
-                "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-                "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
-                "\"denyWrite\":[]}}")
-               work)
-            (ellama-test-srt-integration--should-match-move
-             dir settings-file src dst t)))
+           (format
+            (concat
+             "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+             "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
+             "\"denyWrite\":[]}}")
+            work)
+           (ellama-test-srt-integration--should-match-move
+            dir settings-file src dst t)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -565,14 +565,14 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
           (make-directory work)
           (with-temp-file src (insert "x"))
           (ellama-test-srt-integration--with-settings
-              (format
-               (concat
-                "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-                "\"filesystem\":{\"denyRead\":[%S],\"allowWrite\":[%S],"
-                "\"denyWrite\":[]}}")
-               src work)
-            (ellama-test-srt-integration--should-match-move
-             dir settings-file src dst t)))
+           (format
+            (concat
+             "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+             "\"filesystem\":{\"denyRead\":[%S],\"allowWrite\":[%S],"
+             "\"denyWrite\":[]}}")
+            src work)
+           (ellama-test-srt-integration--should-match-move
+            dir settings-file src dst t)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -588,14 +588,14 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
           (make-directory work)
           (with-temp-file src (insert "x"))
           (ellama-test-srt-integration--with-settings
-              (format
-               (concat
-                "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-                "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
-                "\"denyWrite\":[%S]}}")
-               work dst)
-            (ellama-test-srt-integration--should-match-move
-             dir settings-file src dst t)))
+           (format
+            (concat
+             "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+             "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
+             "\"denyWrite\":[%S]}}")
+            work dst)
+           (ellama-test-srt-integration--should-match-move
+            dir settings-file src dst t)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -611,14 +611,14 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
           (make-directory work)
           (with-temp-file src (insert "x"))
           (ellama-test-srt-integration--with-settings
-              (format
-               (concat
-                "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-                "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
-                "\"denyWrite\":[%S]}}")
-               work src)
-            (ellama-test-srt-integration--should-match-move
-             dir settings-file src dst t)))
+           (format
+            (concat
+             "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+             "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
+             "\"denyWrite\":[%S]}}")
+            work src)
+           (ellama-test-srt-integration--should-match-move
+            dir settings-file src dst t)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -636,14 +636,14 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
           (make-directory dst-dir)
           (with-temp-file src (insert "x"))
           (ellama-test-srt-integration--with-settings
-              (format
-               (concat
-                "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-                "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S,%S],"
-                "\"denyWrite\":[]}}")
-               src-dir dst-dir)
-            (ellama-test-srt-integration--should-match-move
-             dir settings-file src dst t)))
+           (format
+            (concat
+             "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+             "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S,%S],"
+             "\"denyWrite\":[]}}")
+            src-dir dst-dir)
+           (ellama-test-srt-integration--should-match-move
+            dir settings-file src dst t)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -662,14 +662,14 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
           (make-directory dst-dir)
           (with-temp-file src (insert "x"))
           (ellama-test-srt-integration--with-settings
-              (format
-               (concat
-                "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-                "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
-                "\"denyWrite\":[]}}")
-               src-dir)
-            (ellama-test-srt-integration--should-match-move
-             dir settings-file src dst t)))
+           (format
+            (concat
+             "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+             "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
+             "\"denyWrite\":[]}}")
+            src-dir)
+           (ellama-test-srt-integration--should-match-move
+            dir settings-file src dst t)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -688,14 +688,14 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
           (make-directory dst-dir)
           (with-temp-file src (insert "x"))
           (ellama-test-srt-integration--with-settings
-              (format
-               (concat
-                "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-                "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
-                "\"denyWrite\":[]}}")
-               dst-dir)
-            (ellama-test-srt-integration--should-match-move
-             dir settings-file src dst t)))
+           (format
+            (concat
+             "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+             "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S],"
+             "\"denyWrite\":[]}}")
+            dst-dir)
+           (ellama-test-srt-integration--should-match-move
+            dir settings-file src dst t)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -714,14 +714,14 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
           (make-directory dst-dir)
           (with-temp-file src (insert "x"))
           (ellama-test-srt-integration--with-settings
-              (format
-               (concat
-                "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
-                "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S,%S],"
-                "\"denyWrite\":[%S]}}")
-               src-dir dst-dir (concat dst-dir "/"))
-            (ellama-test-srt-integration--should-match-move
-             dir settings-file src dst t)))
+           (format
+            (concat
+             "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
+             "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[%S,%S],"
+             "\"denyWrite\":[%S]}}")
+            src-dir dst-dir (concat dst-dir "/"))
+           (ellama-test-srt-integration--should-match-move
+            dir settings-file src dst t)))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
