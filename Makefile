@@ -21,7 +21,10 @@ build:
 	emacs -batch --eval "(package-initialize)" -f batch-byte-compile ellama*.el
 
 test:
-	emacs -batch --eval "(package-initialize)" \
+	emacs -Q -batch \
+		--eval "(package-initialize)" \
+		--eval "(require 'cl-lib)" \
+		--eval "(setq load-path (cl-remove-if (lambda (dir) (string-match-p \"/elpa/org-[^/]+/?$$\" dir)) load-path))" \
 		-l ellama.el \
 		-l tests/test-ellama.el \
 		-l tests/test-ellama-context.el \
@@ -34,7 +37,10 @@ test:
 		--eval "(ert t)"
 
 test-detailed:
-	emacs -batch --eval "(package-initialize)" \
+	emacs -Q -batch \
+		--eval "(package-initialize)" \
+		--eval "(require 'cl-lib)" \
+		--eval "(setq load-path (cl-remove-if (lambda (dir) (string-match-p \"/elpa/org-[^/]+/?$$\" dir)) load-path))" \
 		-l ellama.el \
 		-l tests/test-ellama.el \
 		-l tests/test-ellama-context.el \
