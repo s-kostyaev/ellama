@@ -408,6 +408,109 @@ generated text string.
 - ~ellama-tools-subagent-roles~: Subagent roles with provider, system prompt and
   allowed tools. Configuration of subagents for the ~task~ tool.
 
+** DLP for Tool Input/Output
+
+Ellama includes an optional DLP (Data Loss Prevention) layer for tool calls.  It
+can scan:
+
+- tool input (arguments sent from the model to tools)
+- tool output (strings returned from tools back to the model)
+
+The DLP layer supports regex-based rules and exact secret detection derived from
+environment variables (including common encoded variants such as
+base64/base64url and hex).
+
+Recommended initial rollout:
+
+- enable DLP
+- keep mode in ~monitor~
+- review incidents before switching selected paths to ~enforce~
+
+Example minimal setup:
+
+#+BEGIN_SRC emacs-lisp
+  (setopt ellama-tools-dlp-enabled t)
+  (setopt ellama-tools-dlp-mode 'monitor)
+  (setopt ellama-tools-dlp-log-targets '(memory))
+#+END_SRC
+
+Key settings:
+
+- ~ellama-tools-dlp-enabled~: Enable DLP scanning for tool input/output.
+- ~ellama-tools-dlp-mode~: Rollout mode. Use ~monitor~ for detect+log only, or
+  ~enforce~ to apply actions.
+- ~ellama-tools-dlp-regex-rules~: Regex detector rules (IDs, patterns,
+  direction/tool/arg scoping, enable/disable, case folding).
+- ~ellama-tools-dlp-scan-env-exact-secrets~: Enable exact-secret detection from
+  environment variables (enabled by default).
+- ~ellama-tools-dlp-max-scan-size~: Maximum bytes scanned per input/output
+  payload (default 5 MB; larger payloads are truncated for scanning).
+- ~ellama-tools-dlp-input-default-action~: Default action for input findings in
+  ~enforce~ mode (~allow~, ~warn~, ~block~).
+- ~ellama-tools-dlp-output-default-action~: Default action for output findings
+  in ~enforce~ mode (~allow~, ~warn~, ~block~, ~redact~).
+- ~ellama-tools-dlp-policy-overrides~: Per-tool/per-arg overrides and
+  exceptions.  For structured input args, nested string values are scanned with
+  path-like arg names (for example ~payload.items[0].token~).  Override ~:arg~
+  matches exact names and nested path prefixes (for example ~"payload"~ matches
+  ~payload.items[0].token~).
+- ~ellama-tools-dlp-log-targets~: Incident log targets (~memory~, ~message~).
+- ~ellama-tools-dlp-incident-log-max~: Maximum in-memory incidents retained.
+- ~ellama-tools-dlp-input-fail-open~ / ~ellama-tools-dlp-output-fail-open~:
+  Behavior when DLP itself errors internally.
+
+Enforcement behavior (v1):
+
+- input ~block~ prevents tool execution
+- input ~warn~ asks for explicit confirmation before execution
+- output ~block~ returns a safe denial string
+- output ~redact~ replaces detected fragments with placeholders
+- output ~warn~ logs a warning and currently passes content through
+
+Example regex rules:
+
+#+BEGIN_SRC emacs-lisp
+  (setopt ellama-tools-dlp-regex-rules
+          '((:id "openai-key"
+             :pattern "sk-[[:alnum:]-]+"
+            :directions (input output))
+            (:id "pem-header"
+             :pattern "-----BEGIN [A-Z ]+-----"
+             :directions (output)
+             :enabled t)))
+#+END_SRC
+
+Example scoped override (ignore noisy shell command input):
+
+#+BEGIN_SRC emacs-lisp
+  (setopt ellama-tools-dlp-policy-overrides
+          '((:tool "shell_command"
+             :direction input
+             :arg "cmd"
+             :except t)))
+#+END_SRC
+
+Example override for structured input payloads (top-level arg prefix match):
+
+#+BEGIN_SRC emacs-lisp
+  (setopt ellama-tools-dlp-policy-overrides
+          '((:tool "write_file"
+             :direction input
+             :arg "content"
+             :action warn)))
+#+END_SRC
+
+Tuning helpers:
+
+- ~M-x ellama-tools-dlp-reset-runtime-state~
+- ~M-x ellama-tools-dlp-show-incident-stats~
+- ~(ellama-tools-dlp-recent-incidents)~
+- ~(ellama-tools-dlp-incident-stats)~
+- ~(ellama-tools-dlp-incident-stats-report)~
+
+For a longer rollout/tuning walkthrough and more override examples, see
+~docs/dlp_rollout_guide.md~.
+
 ** SRT Filesystem Policy for Tools
 
 When ~ellama-tools-use-srt~ is non-nil, the ~srt~ settings file is the source of
