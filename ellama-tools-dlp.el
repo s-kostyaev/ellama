@@ -177,7 +177,7 @@ or a plist with `:score' and/or `:reject'."
   (or (null value) (eq value t)))
 
 (defun ellama-tools-dlp--plist-key-present-p (plist key)
-  "Return non-nil when PLIST contains KEY."
+  "Return non-nil when PLIST contain KEY."
   (not (null (plist-member plist key))))
 
 (defun ellama-tools-dlp--nonnegative-integer-p (value)
@@ -215,7 +215,12 @@ or a plist with `:score' and/or `:reject'."
 
 (cl-defun ellama-tools-dlp--make-scan-context
     (&key direction tool-name arg-name payload-length truncated)
-  "Build a DLP scan context plist."
+  "Build a DLP scan context plist.
+DIRECTION must contain `input'/'output'.
+TOOL-NAME is a tool name.
+ARG-NAME is a name of an argument.
+PAYLOAD-LENGTH is a length of a payload.
+TRUNCATED is a flag show that payload was truncated."
   (ellama-tools-dlp--validate-scan-context
    (list :direction direction
          :tool-name tool-name
@@ -271,7 +276,11 @@ or a plist with `:score' and/or `:reject'."
 
 (cl-defun ellama-tools-dlp--make-finding
     (&key rule-id detector severity match-start match-end)
-  "Build a DLP finding plist."
+  "Build a DLP finding plist.
+RULE-ID is an identificator of a rule.
+DETECTOR is a name of a detector.
+SEVERITY can be nil, a symbol or a string.
+MATCH-START and MATCH-END is a match boundaries."
   (ellama-tools-dlp--validate-finding
    (list :rule-id rule-id
          :detector detector
@@ -318,7 +327,11 @@ or a plist with `:score' and/or `:reject'."
 
 (cl-defun ellama-tools-dlp--make-verdict
     (&key action message findings redacted-text)
-  "Build a DLP verdict plist."
+  "Build a DLP verdict plist.
+ACTION is an action.
+MESSAGE is a string message.
+FINDINGS contains current findings.
+REDACTED-TEXT is a redacted text to prevent secrets leakage."
   (ellama-tools-dlp--validate-verdict
    (list :action action
          :message message
@@ -525,7 +538,7 @@ Include scoping fields because cached entries store the normalized rule plist."
       (eq (plist-get rule :enabled) t)))
 
 (defun ellama-tools-dlp--regex-rule-applies-p (rule context)
-  "Return non-nil when regex RULE applies to scan CONTEXT."
+  "Return non-nil when regex RULE is applied to scan CONTEXT."
   (let ((direction (plist-get context :direction))
         (tool-name (plist-get context :tool-name))
         (arg-name (plist-get context :arg-name))
@@ -690,7 +703,7 @@ When RULES is nil, use `ellama-tools-dlp-regex-rules'."
     nil)))
 
 (defun ellama-tools-dlp--env-secret-stage-name-signal (env-name _env-value)
-  "Score ENV-NAME when it looks security-sensitive."
+  "Score ENV-NAME when it look security-sensitive."
   (when (string-match-p
          (concat
           "\\(TOKEN\\|SECRET\\|KEY\\|PASS\\|PWD\\|AUTH\\|COOKIE\\|"
@@ -849,7 +862,7 @@ Variants include raw, base64, base64url (padded and unpadded), and hex."
                  :variants nil)))))
 
 (defun ellama-tools-dlp--exact-secret-cache-current ()
-  "Return current env exact-secret cache, refreshing when environment changes."
+  "Return current env exact-secret cache, refreshing when environment change."
   (let ((signature (copy-sequence process-environment)))
     (if (and (listp ellama-tools-dlp--exact-secret-cache)
              (equal (plist-get ellama-tools-dlp--exact-secret-cache :signature)
@@ -962,7 +975,7 @@ SCANNED-BYTES is the truncated payload byte length."
          :truncated t)))
 
 (defun ellama-tools-dlp--truncate-payload (text context)
-  "Apply scan-size limit to TEXT and return payload/context plist.
+  "Apply scan-size limit to TEXT and return payload/CONTEXT plist.
 Return plist with keys `:text' and `:context'."
   (ellama-tools-dlp--validate-scan-context context)
   (unless (stringp text)
@@ -982,7 +995,7 @@ Return plist with keys `:text' and `:context'."
         (list :text truncated :context context*)))))
 
 (defun ellama-tools-dlp--prepare-payload (text context)
-  "Prepare TEXT for scanning and return payload/context plist.
+  "Prepare TEXT for scanning and return payload/CONTEXT plist.
 This runs truncation before normalization and normalizes once."
   (let* ((truncated (ellama-tools-dlp--truncate-payload text context))
          (truncated-text (plist-get truncated :text))
@@ -1009,7 +1022,7 @@ This runs truncation before normalization and normalizes once."
      (t nil))))
 
 (defun ellama-tools-dlp--policy-arg-match-p (configured-arg actual-arg)
-  "Return non-nil when CONFIGURED-ARG applies to ACTUAL-ARG path.
+  "Return non-nil when CONFIGURED-ARG is applied to ACTUAL-ARG path.
 Match exact arg names and nested path prefixes like `arg.', `arg[0]'."
   (or (equal configured-arg actual-arg)
       (and (stringp configured-arg)
@@ -1019,7 +1032,7 @@ Match exact arg names and nested path prefixes like `arg.', `arg[0]'."
            (memq (aref actual-arg (length configured-arg)) '(?. ?\[)))))
 
 (defun ellama-tools-dlp--policy-override-match-p (override context)
-  "Return non-nil when policy OVERRIDE applies to scan CONTEXT."
+  "Return non-nil when policy OVERRIDE is applied to scan CONTEXT."
   (let ((tool (ellama-tools-dlp--policy-name-string (plist-get override :tool)))
         (arg (ellama-tools-dlp--policy-name-string (plist-get override :arg))))
     (and tool
@@ -1231,7 +1244,8 @@ CONFIGURED-ACTION is the policy action before rollout mode adjustment."
 
 (defun ellama-tools-dlp--log-scan-decision
     (context findings verdict configured-action)
-  "Record a sanitized DLP decision incident."
+  "Record a sanitized DLP decision incident.
+CONTEXT, FINDINGS, VERDICT and CONFIGURED-ACTION will be recorded."
   (ellama-tools-dlp--record-incident
    (list :type 'scan-decision
          :timestamp (format-time-string "%FT%T%z")

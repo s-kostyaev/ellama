@@ -375,7 +375,7 @@ CHILD may be a string key segment or an integer index."
          (error nil))))
 
 (defun ellama-tools--dlp-plist-like-p (value)
-  "Return non-nil when VALUE looks like a plist with symbol keys."
+  "Return non-nil when VALUE look like a plist with symbol keys."
   (let ((len (ellama-tools--dlp-proper-list-length value))
         (rest value)
         ok)
@@ -388,7 +388,7 @@ CHILD may be a string key segment or an integer index."
     ok))
 
 (defun ellama-tools--dlp-alist-like-p (value)
-  "Return non-nil when VALUE looks like an alist."
+  "Return non-nil when VALUE look like an alist."
   (let ((len (ellama-tools--dlp-proper-list-length value))
         (ok t))
     (when len
@@ -410,7 +410,7 @@ CHILD may be a string key segment or an integer index."
 
 (defun ellama-tools--dlp-walk-strings-1
     (node path callback seen node-count depth)
-  "Walk NODE and call CALLBACK for string leaves at PATH.
+  "Walk NODE and call CALLBACK for string leave at PATH.
 SEEN tracks composite objects to avoid cycles.  NODE-COUNT is a one-slot
 vector used as a mutable traversal counter.  DEPTH is current nesting depth."
   (when (and (<= depth ellama-tools--dlp-input-max-walk-depth)
