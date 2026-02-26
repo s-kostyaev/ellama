@@ -482,8 +482,11 @@ Return list with result and prompt."
             (let ((default-directory dir)
                   (ellama-tools-use-srt t)
                   (ellama-tools-srt-args (list "--settings" settings-file)))
-              (should-error (ellama-tools-read-file-tool file)
-                            :type 'user-error))))
+              (let ((msg (ellama-tools-read-file-tool file)))
+                (should (stringp msg))
+                (should (string-match-p "srt policy denied read access" msg))
+                (should (string-match-p (regexp-quote file) msg))
+                (should (string-match-p "filesystem\\.denyRead" msg))))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -496,10 +499,11 @@ Return list with result and prompt."
           (let ((default-directory dir)
                 (ellama-tools-use-srt t)
                 (ellama-tools-srt-args (list "--settings" settings-file)))
-            (should-error
-             (ellama-tools-write-file-tool
-              (expand-file-name "x.txt" dir) "x")
-             :type 'user-error)))
+            (let ((msg (ellama-tools-write-file-tool
+                        (expand-file-name "x.txt" dir) "x")))
+              (should (stringp msg))
+              (should (string-match-p "srt policy denied write access" msg))
+              (should (string-match-p "filesystem\\.allowWrite" msg)))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -512,8 +516,11 @@ Return list with result and prompt."
           (let ((default-directory temporary-file-directory)
                 (ellama-tools-use-srt t)
                 (ellama-tools-srt-args (list "--settings" settings-file)))
-            (should-error (ellama-tools-directory-tree-tool dir)
-                          :type 'user-error)))
+            (let ((msg (ellama-tools-directory-tree-tool dir)))
+              (should (stringp msg))
+              (should (string-match-p "srt policy denied list access" msg))
+              (should (string-match-p (regexp-quote dir) msg))
+              (should (string-match-p "filesystem\\.denyRead" msg)))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -535,14 +542,12 @@ Return list with result and prompt."
             (let ((default-directory dir)
                   (ellama-tools-use-srt t)
                   (ellama-tools-srt-args (list "--settings" settings-file)))
-              (setq err-msg
-                    (condition-case err
-                        (progn
-                          (ellama-tools-move-file-tool src dst)
-                          nil)
-                      (user-error (error-message-string err))))
+              (setq err-msg (ellama-tools-move-file-tool src dst))
               (should (stringp err-msg))
-              (should (string-match-p (regexp-quote dst) err-msg)))))
+              (should (string-match-p "srt policy denied write access"
+                                      err-msg))
+              (should (string-match-p (regexp-quote dst) err-msg))
+              (should (string-match-p "filesystem\\.allowWrite" err-msg)))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 

@@ -717,15 +717,15 @@ directory."
 
 (defun ellama-tools--tool-check-file-access (path op)
   "Check local `srt' filesystem policy for PATH and OP.
-Signal `user-error' on denial when `ellama-tools-use-srt' is non-nil."
+Return error message on denial when `ellama-tools-use-srt' is non-nil."
   (when ellama-tools-use-srt
     (let ((reason (ellama-tools--srt-check-access path op)))
       (when reason
         (let* ((policy (ellama-tools--srt-policy-current))
                (config-path (plist-get policy :config-path))
                (target (ellama-tools--srt-normalize-target-path path op)))
-          (user-error "srt policy denied %s access to %s (target %s) using %s: %s"
-                      op path target config-path reason))))))
+          (format "srt policy denied %s access to %s (target %s) using %s: %s"
+                  op path target config-path reason))))))
 
 (defun ellama-tools--command-argv (program &rest args)
   "Return argv for PROGRAM and ARGS.
@@ -750,15 +750,15 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
 
 (defun ellama-tools-read-file-tool (file-name)
   "Read the file FILE-NAME."
-  (ellama-tools--tool-check-file-access file-name 'read)
-  (json-encode (if (not (file-exists-p file-name))
-                   (format "File %s doesn't exists." file-name)
-                 (let ((content (with-temp-buffer
-                                  (insert-file-contents file-name)
-                                  (buffer-string))))
-                   (ellama-tools--sanitize-tool-text-output
-                    content
-                    (format "File %s" file-name))))))
+  (or (ellama-tools--tool-check-file-access file-name 'read)
+      (json-encode (if (not (file-exists-p file-name))
+                       (format "File %s doesn't exists." file-name)
+                     (let ((content (with-temp-buffer
+                                      (insert-file-contents file-name)
+                                      (buffer-string))))
+                       (ellama-tools--sanitize-tool-text-output
+                        content
+                        (format "File %s" file-name)))))))
 
 (ellama-tools-define-tool
  '(:function
@@ -777,8 +777,8 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
 
 (defun ellama-tools-write-file-tool (file-name content)
   "Write CONTENT to the file FILE-NAME."
-  (ellama-tools--tool-check-file-access file-name 'write)
-  (write-region content nil file-name nil 'silent))
+  (or (ellama-tools--tool-check-file-access file-name 'write)
+      (write-region content nil file-name nil 'silent)))
 
 (ellama-tools-define-tool
  '(:function
@@ -803,11 +803,11 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
 
 (defun ellama-tools-append-file-tool (file-name content)
   "Append CONTENT to the file FILE-NAME."
-  (ellama-tools--tool-check-file-access file-name 'write)
-  (with-current-buffer (find-file-noselect file-name)
-    (goto-char (point-max))
-    (insert content)
-    (save-buffer)))
+  (or (ellama-tools--tool-check-file-access file-name 'write)
+      (with-current-buffer (find-file-noselect file-name)
+        (goto-char (point-max))
+        (insert content)
+        (save-buffer))))
 
 (ellama-tools-define-tool
  '(:function
@@ -832,11 +832,11 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
 
 (defun ellama-tools-prepend-file-tool (file-name content)
   "Prepend CONTENT to the file FILE-NAME."
-  (ellama-tools--tool-check-file-access file-name 'write)
-  (with-current-buffer (find-file-noselect file-name)
-    (goto-char (point-min))
-    (insert content)
-    (save-buffer)))
+  (or (ellama-tools--tool-check-file-access file-name 'write)
+      (with-current-buffer (find-file-noselect file-name)
+        (goto-char (point-min))
+        (insert content)
+        (save-buffer))))
 
 (ellama-tools-define-tool
  '(:function
@@ -862,25 +862,25 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
 (defun ellama-tools-directory-tree-tool (dir &optional depth)
   "Return a string representing the directory tree under DIR.
 DEPTH is the current recursion depth, used internally."
-  (ellama-tools--tool-check-file-access dir 'list)
-  (if (not (file-exists-p dir))
-      (format "Directory %s doesn't exists" dir)
-    (let ((indent (make-string (* (or depth 0) 2) ? ))
-          (tree ""))
-      (dolist (f (sort (cl-remove-if
-                        (lambda (f)
-                          (string-prefix-p "." f))
-                        (directory-files dir))
-                       #'string-lessp))
-        (let* ((full   (expand-file-name f dir))
-               (name   (file-name-nondirectory f))
-               (type   (if (file-directory-p full) "|-" "`-"))
-               (line   (concat indent type name "\n")))
-          (setq tree (concat tree line))
-          (when (file-directory-p full)
-            (setq tree (concat tree
-                               (ellama-tools-directory-tree-tool full (+ (or depth 0) 1)))))))
-      tree)))
+  (or (ellama-tools--tool-check-file-access dir 'list)
+      (if (not (file-exists-p dir))
+          (format "Directory %s doesn't exists" dir)
+        (let ((indent (make-string (* (or depth 0) 2) ? ))
+              (tree ""))
+          (dolist (f (sort (cl-remove-if
+                            (lambda (f)
+                              (string-prefix-p "." f))
+                            (directory-files dir))
+                           #'string-lessp))
+            (let* ((full   (expand-file-name f dir))
+                   (name   (file-name-nondirectory f))
+                   (type   (if (file-directory-p full) "|-" "`-"))
+                   (line   (concat indent type name "\n")))
+              (setq tree (concat tree line))
+              (when (file-directory-p full)
+                (setq tree (concat tree
+                                   (ellama-tools-directory-tree-tool full (+ (or depth 0) 1)))))))
+          tree))))
 
 (ellama-tools-define-tool
  '(:function
@@ -899,14 +899,14 @@ DEPTH is the current recursion depth, used internally."
 
 (defun ellama-tools-move-file-tool (file-name new-file-name)
   "Move the file from the specified FILE-NAME to the NEW-FILE-NAME."
-  (ellama-tools--tool-check-file-access file-name 'read)
-  (ellama-tools--tool-check-file-access file-name 'write)
-  (ellama-tools--tool-check-file-access new-file-name 'write)
-  (if (and (file-exists-p file-name)
-           (not (file-exists-p new-file-name)))
-      (progn
-        (rename-file file-name new-file-name))
-    (error "Cannot move file: source file does not exist or destination already exists")))
+  (or (ellama-tools--tool-check-file-access file-name 'read)
+      (ellama-tools--tool-check-file-access file-name 'write)
+      (ellama-tools--tool-check-file-access new-file-name 'write)
+      (if (and (file-exists-p file-name)
+               (not (file-exists-p new-file-name)))
+          (progn
+            (rename-file file-name new-file-name))
+        (error "Cannot move file: source file does not exist or destination already exists"))))
 
 (ellama-tools-define-tool
  '(:function
@@ -932,16 +932,16 @@ DEPTH is the current recursion depth, used internally."
 (defun ellama-tools-edit-file-tool (file-name oldcontent newcontent)
   "Edit file FILE-NAME.
 Replace OLDCONTENT with NEWCONTENT."
-  (ellama-tools--tool-check-file-access file-name 'read)
-  (ellama-tools--tool-check-file-access file-name 'write)
-  (let ((content (with-temp-buffer
-                   (insert-file-contents-literally file-name)
-                   (buffer-string)))
-        (coding-system-for-write 'raw-text))
-    (when (string-match (regexp-quote oldcontent) content)
-      (with-temp-buffer
-        (insert (replace-match newcontent t t content))
-        (write-region (point-min) (point-max) file-name)))))
+  (or (ellama-tools--tool-check-file-access file-name 'read)
+      (ellama-tools--tool-check-file-access file-name 'write)
+      (let ((content (with-temp-buffer
+                       (insert-file-contents-literally file-name)
+                       (buffer-string)))
+            (coding-system-for-write 'raw-text))
+        (when (string-match (regexp-quote oldcontent) content)
+          (with-temp-buffer
+            (insert (replace-match newcontent t t content))
+            (write-region (point-min) (point-max) file-name))))))
 
 (ellama-tools-define-tool
  '(:function
@@ -1138,9 +1138,9 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
 
 (defun ellama-tools-count-lines-tool (file-name)
   "Count lines in file FILE-NAME."
-  (ellama-tools--tool-check-file-access file-name 'read)
-  (with-current-buffer (find-file-noselect file-name)
-    (count-lines (point-min) (point-max))))
+  (or (ellama-tools--tool-check-file-access file-name 'read)
+      (with-current-buffer (find-file-noselect file-name)
+        (count-lines (point-min) (point-max)))))
 
 (ellama-tools-define-tool
  '(:function
@@ -1159,22 +1159,22 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
 
 (defun ellama-tools-lines-range-tool (file-name from to)
   "Return content of file FILE-NAME lines in range FROM TO."
-  (ellama-tools--tool-check-file-access file-name 'read)
-  (json-encode (with-current-buffer (find-file-noselect file-name)
-                 (save-excursion
-                   (let ((start (progn
-                                  (goto-char (point-min))
-                                  (forward-line (1- from))
-                                  (beginning-of-line)
-                                  (point)))
-                         (end (progn
-                                (goto-char (point-min))
-                                (forward-line (1- to))
-                                (end-of-line)
-                                (point))))
-                     (ellama-tools--sanitize-tool-text-output
-                      (buffer-substring-no-properties start end)
-                      (format "File %s" file-name)))))))
+  (or (ellama-tools--tool-check-file-access file-name 'read)
+      (json-encode (with-current-buffer (find-file-noselect file-name)
+                     (save-excursion
+                       (let ((start (progn
+                                      (goto-char (point-min))
+                                      (forward-line (1- from))
+                                      (beginning-of-line)
+                                      (point)))
+                             (end (progn
+                                    (goto-char (point-min))
+                                    (forward-line (1- to))
+                                    (end-of-line)
+                                    (point))))
+                         (ellama-tools--sanitize-tool-text-output
+                          (buffer-substring-no-properties start end)
+                          (format "File %s" file-name))))))))
 
 (ellama-tools-define-tool
  '(:function
