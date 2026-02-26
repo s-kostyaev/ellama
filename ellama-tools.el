@@ -591,7 +591,7 @@ existing ancestor with `file-truename'."
       (ellama-tools--srt-normalize-nonexisting-target-path expanded))))
 
 (defun ellama-tools--srt-path-has-glob-p (path)
-  "Return non-nil when PATH looks like a glob pattern."
+  "Return non-nil when PATH look like a glob pattern."
   (string-match-p "[*?\\[]" path))
 
 (defun ellama-tools--srt-platform-glob-support-p ()
@@ -668,7 +668,7 @@ existing directory prefix when possible."
     nil))
 
 (defun ellama-tools--srt-literal-file-rule-p (rule)
-  "Return non-nil when RULE looks like a literal file path rule."
+  "Return non-nil when RULE look like a literal file path rule."
   (let* ((globp (ellama-tools--srt-path-has-glob-p rule))
          (expanded (expand-file-name rule)))
     (and (not globp)
