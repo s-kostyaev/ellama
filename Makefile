@@ -18,7 +18,11 @@ ELLAMA_COMPILE_ORDER = \
 	ellama-manual.el
 
 build:
-	emacs -batch --eval "(package-initialize)" -f batch-byte-compile ellama*.el
+	emacs -batch \
+		--eval "(package-initialize)" \
+		--eval "(require 'cl-lib)" \
+		--eval "(setq load-path (cl-remove-if (lambda (dir) (string-match-p \"/elpa/org-[^/]+/?$$\" dir)) (cons (expand-file-name \".\") load-path)))" \
+		-f batch-byte-compile ellama*.el
 
 test:
 	emacs -Q -batch \
@@ -74,6 +78,8 @@ check-compile-warnings:
 manual:
 	emacs -batch --eval "(package-initialize)" \
 		--eval "(require 'project)" \
+		--eval "(require 'cl-lib)" \
+		--eval "(setq load-path (cl-remove-if (lambda (dir) (string-match-p \"/elpa/org-[^/]+/?$$\" dir)) load-path))" \
 		-l ellama-manual.el \
 		--eval "(ellama-manual-export)"
 
