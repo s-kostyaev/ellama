@@ -387,6 +387,25 @@ Return list with result and prompt."
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
+(ert-deftest
+    test-ellama-tools-srt-check-access-keeps-missing-parent-segments ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-srt-nested-write-" t))
+         (out-dir (expand-file-name "out" dir))
+         (target (expand-file-name "deep/path/new.txt" out-dir)))
+    (unwind-protect
+        (progn
+          (make-directory out-dir)
+          (ellama-test--with-temp-srt-settings
+              (format "{\"filesystem\":{\"allowWrite\":[%S]}}" target)
+            (let ((default-directory dir)
+                  (ellama-tools-use-srt t)
+                  (ellama-tools-srt-args (list "--settings" settings-file)))
+              (should-not (file-exists-p target))
+              (should-not (ellama-tools--srt-check-access target 'write)))))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
 (ert-deftest test-ellama-tools-srt-check-access-expands-tilde ()
   (ellama-test--ensure-local-ellama-tools)
   (let* ((fake-home (make-temp-file "ellama-srt-fake-home-" t))
@@ -417,6 +436,39 @@ Return list with result and prompt."
                                            file 'read))))))))
       (when (file-exists-p fake-home)
         (delete-directory fake-home t)))))
+
+(ert-deftest
+    test-ellama-tools-srt-check-access-darwin-symlink-rule-parity ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-srt-symlink-rule-" t))
+         (real (expand-file-name "real.txt" dir))
+         (link (expand-file-name "link.txt" dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file real (insert "x"))
+          (condition-case err
+              (make-symbolic-link real link)
+            (file-error
+             (ert-skip (format "Cannot create symlink: %s"
+                               (error-message-string err)))))
+          (ellama-test--with-temp-srt-settings
+              (format "{\"filesystem\":{\"denyRead\":[%S]}}" link)
+            (let ((default-directory dir)
+                  (ellama-tools-use-srt t)
+                  (ellama-tools-srt-args (list "--settings" settings-file)))
+              ;; Observed host parity on macOS: exact symlink-path denyRead
+              ;; rules may not deny reads through the symlink path.
+              (let ((system-type 'darwin))
+                (should-not (ellama-tools--srt-check-access link 'read))))
+            (let ((default-directory dir)
+                  (ellama-tools-use-srt t)
+                  (ellama-tools-srt-args (list "--settings" settings-file)))
+              (let ((system-type 'gnu/linux))
+                (should (string-match-p
+                         "denyRead"
+                         (ellama-tools--srt-check-access link 'read)))))))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
 
 (ert-deftest test-ellama-tools-read-file-tool-denied-by-srt-policy ()
   (ellama-test--ensure-local-ellama-tools)
@@ -491,6 +543,37 @@ Return list with result and prompt."
                       (user-error (error-message-string err))))
               (should (stringp err-msg))
               (should (string-match-p (regexp-quote dst) err-msg)))))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest
+    test-ellama-tools-move-file-tool-nested-destination-policy-allows ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-srt-move-nested-" t))
+         (src-dir (expand-file-name "src" dir))
+         (src (expand-file-name "a.txt" src-dir))
+         (dst (expand-file-name "deep/path/b.txt" dir))
+         err-sym)
+    (unwind-protect
+        (progn
+          (make-directory src-dir)
+          (with-temp-file src (insert "x"))
+          (ellama-test--with-temp-srt-settings
+              (format
+               "{\"filesystem\":{\"allowWrite\":[%S,%S]}}"
+               src dst)
+            (let ((default-directory dir)
+                  (ellama-tools-use-srt t)
+                  (ellama-tools-srt-args (list "--settings" settings-file)))
+              (setq err-sym
+                    (car (should-error
+                          (ellama-tools-move-file-tool src dst))))
+              ;; Missing destination directories should fail in rename-file,
+              ;; not in local SRT policy checks.
+              (should (memq 'file-error
+                            (get err-sym 'error-conditions)))
+              (should-not (memq 'user-error
+                                (get err-sym 'error-conditions))))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 

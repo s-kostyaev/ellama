@@ -76,7 +76,11 @@ Tools from this list will work without user confirmation."
 (defcustom ellama-tools-use-srt nil
   "Run shell-based tools via `srt'.
 When non-nil, `shell_command', `grep' and `grep_in_file' run inside the
-configured sandbox runtime."
+configured sandbox runtime.
+Non-shell file tools also apply local filesystem checks derived from the same
+`srt' settings file (`denyRead', `allowWrite', `denyWrite') to reduce policy
+drift.  Missing `srt', missing settings, or malformed settings signal a
+`user-error' (fail closed)."
   :type 'boolean
   :group 'ellama)
 
@@ -86,7 +90,9 @@ configured sandbox runtime."
   :group 'ellama)
 
 (defcustom ellama-tools-srt-args nil
-  "Extra arguments passed to `srt' before the wrapped command."
+  "Extra arguments passed to `srt' before the wrapped command.
+`--settings'/`-s' in this list also select the config used by local non-shell
+filesystem checks.  If not provided, `~/.srt-settings.json' is used."
   :type '(repeat string)
   :group 'ellama)
 
@@ -529,6 +535,19 @@ Signal `user-error' when VALUE has an invalid shape."
    (or (ellama-tools--srt-truename-if-possible path)
        (expand-file-name path))))
 
+(defun ellama-tools--srt-normalize-rule-literal-path (path)
+  "Return normalized literal rule PATH for policy comparisons.
+On macOS, keep the lexical path for exact symlink rules to match observed
+`srt' behavior for `denyRead' symlink-path entries."
+  (let* ((expanded (expand-file-name path))
+         (probe (ellama-tools--srt-strip-trailing-slashes expanded)))
+    (ellama-tools--srt-strip-trailing-slashes
+     (if (and (eq system-type 'darwin)
+              (file-symlink-p probe))
+         expanded
+       (or (ellama-tools--srt-truename-if-possible expanded)
+           expanded)))))
+
 (defun ellama-tools--srt-nearest-existing-dir (dir)
   "Return nearest existing ancestor directory for DIR."
   (let ((current (expand-file-name dir)))
@@ -542,6 +561,26 @@ Signal `user-error' when VALUE has an invalid shape."
                 parent))))
     current))
 
+(defun ellama-tools--srt-normalize-nonexisting-target-path (path)
+  "Return normalized PATH for a non-existing write target.
+Preserve missing intermediate path segments after resolving the nearest
+existing ancestor with `file-truename'."
+  (let* ((expanded (expand-file-name path))
+         (anchor (ellama-tools--srt-nearest-existing-dir
+                  (file-name-directory expanded))))
+    (if (not anchor)
+        (ellama-tools--srt-strip-trailing-slashes expanded)
+      (let* ((anchor-expanded (file-name-as-directory
+                               (expand-file-name anchor)))
+             (anchor-normalized (file-name-as-directory
+                                 (ellama-tools--srt-strip-trailing-slashes
+                                  (or (ellama-tools--srt-truename-if-possible
+                                       anchor)
+                                      anchor-expanded))))
+             (suffix (file-relative-name expanded anchor-expanded)))
+        (ellama-tools--srt-strip-trailing-slashes
+         (expand-file-name suffix anchor-normalized))))))
+
 (defun ellama-tools--srt-normalize-target-path (path op)
   "Return normalized target PATH for OP policy check."
   (let ((expanded (expand-file-name path)))
@@ -549,18 +588,7 @@ Signal `user-error' when VALUE has an invalid shape."
             (file-exists-p expanded)
             (file-directory-p expanded))
         (ellama-tools--srt-normalize-literal-path expanded)
-      (let* ((base (file-name-nondirectory expanded))
-             (parent (file-name-directory expanded))
-             (existing-parent (ellama-tools--srt-nearest-existing-dir parent))
-             (normalized-parent
-              (ellama-tools--srt-strip-trailing-slashes
-               (or (and existing-parent
-                        (ellama-tools--srt-truename-if-possible existing-parent))
-                   (expand-file-name parent)))))
-        (ellama-tools--srt-strip-trailing-slashes
-         (if (string= base "")
-             normalized-parent
-           (concat normalized-parent "/" base)))))))
+      (ellama-tools--srt-normalize-nonexisting-target-path expanded))))
 
 (defun ellama-tools--srt-path-has-glob-p (path)
   "Return non-nil when PATH looks like a glob pattern."
@@ -624,11 +652,11 @@ existing directory prefix when possible."
         nil))
      (dirp
       (ellama-tools--srt-dir-prefix-match-p
-       (ellama-tools--srt-normalize-literal-path expanded)
+       (ellama-tools--srt-normalize-rule-literal-path expanded)
        target))
      (t
       (string=
-       (ellama-tools--srt-normalize-literal-path expanded)
+       (ellama-tools--srt-normalize-rule-literal-path expanded)
        target)))))
 
 (defun ellama-tools--srt-rule-match-any-p (target rules)
