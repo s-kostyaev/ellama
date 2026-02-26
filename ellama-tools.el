@@ -90,6 +90,10 @@ configured sandbox runtime."
   :type '(repeat string)
   :group 'ellama)
 
+(defvar ellama-tools--srt-policy-cache nil
+  "Cached parsed `srt' filesystem policy.
+Plist with keys `:path', `:mtime' and `:policy'.")
+
 (defcustom ellama-tools-subagent-default-max-steps 30
   "Default maximum number of auto-continue steps for a sub-agent."
   :type 'integer
@@ -392,6 +396,309 @@ LABEL is used to identify the source in the warning."
               "text is a bad idea for this tool.")
     text))
 
+(defun ellama-tools--srt-policy-clear-cache ()
+  "Clear cached parsed `srt' policy."
+  (setq ellama-tools--srt-policy-cache nil))
+
+(defun ellama-tools--srt-settings-file ()
+  "Return resolved `srt' settings file path."
+  (let ((args ellama-tools-srt-args)
+        settings)
+    (while args
+      (let ((arg (pop args)))
+        (cond
+         ((member arg '("--settings" "-s"))
+          (unless args
+            (user-error "Missing value after `%s' in `ellama-tools-srt-args'"
+                        arg))
+          (setq settings (pop args)))
+         ((string-prefix-p "--settings=" arg)
+          (setq settings (substring arg (length "--settings=")))))))
+    (expand-file-name (or settings "~/.srt-settings.json"))))
+
+(defun ellama-tools--srt-file-mtime (path)
+  "Return modification time for PATH as a float."
+  (unless (file-exists-p path)
+    (user-error "Missing srt settings file: %s" path))
+  (float-time
+   (file-attribute-modification-time
+    (file-attributes path 'integer))))
+
+(defun ellama-tools--srt-array-to-list (value)
+  "Convert JSON array VALUE to a list or return nil."
+  (cond
+   ((null value) nil)
+   ((vectorp value) (append value nil))
+   ((listp value) value)
+   (t value)))
+
+(defun ellama-tools--srt-string-list (value key config-path)
+  "Return VALUE as a list of strings for KEY from CONFIG-PATH.
+Signal `user-error' when VALUE has an invalid shape."
+  (setq value (ellama-tools--srt-array-to-list value))
+  (unless (or (null value) (listp value))
+    (user-error "Malformed srt config %s: `filesystem.%s' must be a list"
+                config-path key))
+  (dolist (item value)
+    (unless (stringp item)
+      (user-error "Malformed srt config %s: `filesystem.%s' must contain strings"
+                  config-path key)))
+  value)
+
+(defun ellama-tools--srt-policy-load (config-path)
+  "Read and parse `srt' settings from CONFIG-PATH."
+  (unless (file-exists-p config-path)
+    (user-error "Missing srt settings file: %s" config-path))
+  (let* ((json (condition-case err
+                  (with-temp-buffer
+                    (insert-file-contents-literally config-path)
+                    (json-parse-buffer :object-type 'alist
+                                       :array-type 'array
+                                       :null-object :json-null
+                                       :false-object :json-false))
+                (json-parse-error
+                 (user-error "Invalid srt JSON config %s: %s"
+                             config-path
+                             (error-message-string err)))
+                (file-error
+                 (user-error "Cannot read srt settings file %s: %s"
+                             config-path
+                             (error-message-string err)))))
+         (filesystem-pair (and (listp json) (assq 'filesystem json)))
+         (filesystem (cdr filesystem-pair)))
+    (unless (listp json)
+      (user-error "Malformed srt config %s: top-level JSON object is required"
+                  config-path))
+    (when filesystem-pair
+      (unless (and (listp filesystem)
+                   (not (eq filesystem :json-null)))
+        (user-error "Malformed srt config %s: `filesystem' must be an object"
+                    config-path)))
+    (list :config-path config-path
+          :deny-read
+          (if filesystem-pair
+              (ellama-tools--srt-string-list
+               (alist-get 'denyRead filesystem) "denyRead" config-path)
+            nil)
+          :allow-write
+          (if filesystem-pair
+              (ellama-tools--srt-string-list
+               (alist-get 'allowWrite filesystem) "allowWrite" config-path)
+            nil)
+          :deny-write
+          (if filesystem-pair
+              (ellama-tools--srt-string-list
+               (alist-get 'denyWrite filesystem) "denyWrite" config-path)
+            nil))))
+
+(defun ellama-tools--srt-policy-current ()
+  "Return current parsed `srt' filesystem policy, using a small cache."
+  (let* ((config-path (ellama-tools--srt-settings-file))
+         (mtime (ellama-tools--srt-file-mtime config-path))
+         (cache ellama-tools--srt-policy-cache))
+    (if (and cache
+             (equal (plist-get cache :path) config-path)
+             (equal (plist-get cache :mtime) mtime))
+        (plist-get cache :policy)
+      (let ((policy (ellama-tools--srt-policy-load config-path)))
+        (setq ellama-tools--srt-policy-cache
+              (list :path config-path :mtime mtime :policy policy))
+        policy))))
+
+(defun ellama-tools--srt-strip-trailing-slashes (path)
+  "Return PATH without trailing slashes, except for root."
+  (if (string-match-p "\\`/+\\'" path)
+      "/"
+    (replace-regexp-in-string "/+\\'" "" path)))
+
+(defun ellama-tools--srt-truename-if-possible (path)
+  "Return `file-truename' for PATH when possible, else nil."
+  (condition-case nil
+      (file-truename path)
+    (file-error nil)))
+
+(defun ellama-tools--srt-path-exists-p (path)
+  "Return non-nil when PATH exists or is a symlink."
+  (let ((expanded (expand-file-name path)))
+    (or (file-exists-p expanded)
+        (file-symlink-p expanded))))
+
+(defun ellama-tools--srt-normalize-literal-path (path)
+  "Return normalized literal PATH for policy comparisons."
+  (ellama-tools--srt-strip-trailing-slashes
+   (or (ellama-tools--srt-truename-if-possible path)
+       (expand-file-name path))))
+
+(defun ellama-tools--srt-nearest-existing-dir (dir)
+  "Return nearest existing ancestor directory for DIR."
+  (let ((current (expand-file-name dir)))
+    (while (and current (not (file-directory-p current)))
+      (let* ((trimmed (directory-file-name current))
+             (parent (file-name-directory trimmed)))
+        (setq current
+              (unless (or (null parent)
+                          (equal (expand-file-name parent)
+                                 (expand-file-name current)))
+                parent))))
+    current))
+
+(defun ellama-tools--srt-normalize-target-path (path op)
+  "Return normalized target PATH for OP policy check."
+  (let ((expanded (expand-file-name path)))
+    (if (or (memq op '(read list))
+            (file-exists-p expanded)
+            (file-directory-p expanded))
+        (ellama-tools--srt-normalize-literal-path expanded)
+      (let* ((base (file-name-nondirectory expanded))
+             (parent (file-name-directory expanded))
+             (existing-parent (ellama-tools--srt-nearest-existing-dir parent))
+             (normalized-parent
+              (ellama-tools--srt-strip-trailing-slashes
+               (or (and existing-parent
+                        (ellama-tools--srt-truename-if-possible existing-parent))
+                   (expand-file-name parent)))))
+        (ellama-tools--srt-strip-trailing-slashes
+         (if (string= base "")
+             normalized-parent
+           (concat normalized-parent "/" base)))))))
+
+(defun ellama-tools--srt-path-has-glob-p (path)
+  "Return non-nil when PATH looks like a glob pattern."
+  (string-match-p "[*?\\[]" path))
+
+(defun ellama-tools--srt-platform-glob-support-p ()
+  "Return non-nil when local matcher should treat patterns as globs."
+  t)
+
+(defun ellama-tools--srt-glob-pattern-candidates (rule)
+  "Return glob pattern candidates for RULE.
+On macOS, a path may be referenced via `/var' while `file-truename'
+resolves to `/private/var'.  Add a candidate with a normalized
+existing directory prefix when possible."
+  (let* ((expanded (expand-file-name rule))
+         (pattern (if (string-suffix-p "/" rule)
+                      (concat expanded "*")
+                    expanded))
+         (candidates (list pattern))
+         (dir (file-name-directory pattern))
+         (tail (file-name-nondirectory pattern)))
+    (when (and dir (not (ellama-tools--srt-path-has-glob-p dir)))
+      (let ((true-dir (ellama-tools--srt-truename-if-possible dir)))
+        (when true-dir
+          (let ((alt (concat (file-name-as-directory
+                              (ellama-tools--srt-strip-trailing-slashes
+                               true-dir))
+                             tail)))
+            (unless (member alt candidates)
+              (push alt candidates))))))
+    (nreverse candidates)))
+
+(defun ellama-tools--srt-dir-prefix-match-p (dir target)
+  "Return non-nil when TARGET is DIR or inside DIR."
+  (let ((dir (ellama-tools--srt-strip-trailing-slashes dir))
+        (target (ellama-tools--srt-strip-trailing-slashes target)))
+    (or (string= dir target)
+        (string-prefix-p (concat dir "/") target))))
+
+(defun ellama-tools--srt-rule-match-p (target rule)
+  "Return non-nil when normalized TARGET matches filesystem RULE."
+  (let* ((raw rule)
+         (globp (and (ellama-tools--srt-platform-glob-support-p)
+                     (ellama-tools--srt-path-has-glob-p raw)))
+         (dir-marked-p (string-suffix-p "/" raw))
+         (expanded (expand-file-name raw))
+         (dirp (or dir-marked-p
+                   (and (not globp) (file-directory-p expanded)))))
+    (cond
+     (globp
+      (catch 'matched
+        (dolist (pattern (ellama-tools--srt-glob-pattern-candidates raw))
+          (let ((regex (condition-case err
+                           (wildcard-to-regexp pattern)
+                         (invalid-regexp
+                          (user-error "Unsupported srt filesystem pattern `%s': %s"
+                                      raw
+                                      (error-message-string err))))))
+            (when (string-match-p regex target)
+              (throw 'matched t))))
+        nil))
+     (dirp
+      (ellama-tools--srt-dir-prefix-match-p
+       (ellama-tools--srt-normalize-literal-path expanded)
+       target))
+     (t
+      (string=
+       (ellama-tools--srt-normalize-literal-path expanded)
+       target)))))
+
+(defun ellama-tools--srt-rule-match-any-p (target rules)
+  "Return non-nil when normalized TARGET matches one of RULES."
+  (catch 'matched
+    (dolist (rule rules)
+      (when (ellama-tools--srt-rule-match-p target rule)
+        (throw 'matched t)))
+    nil))
+
+(defun ellama-tools--srt-literal-file-rule-p (rule)
+  "Return non-nil when RULE looks like a literal file path rule."
+  (let* ((globp (ellama-tools--srt-path-has-glob-p rule))
+         (expanded (expand-file-name rule)))
+    (and (not globp)
+         (not (string-suffix-p "/" rule))
+         (not (file-directory-p expanded)))))
+
+(defun ellama-tools--srt-deny-write-match-any-p (target rules target-exists)
+  "Return non-nil when deny-write RULES should block TARGET.
+When TARGET-EXISTS is nil, skip exact literal file deny rules to match
+observed `srt' behavior on macOS for new file creation under an allowed
+directory."
+  (catch 'matched
+    (dolist (rule rules)
+      (when (and (ellama-tools--srt-rule-match-p target rule)
+                 (or target-exists
+                     ;; Current observed parity:
+                     ;; macOS may allow creation despite exact file denyWrite.
+                     ;; Linux denies it.
+                     (not (and (eq system-type 'darwin)
+                               (ellama-tools--srt-literal-file-rule-p rule)))))
+        (throw 'matched t)))
+    nil))
+
+(defun ellama-tools--srt-check-access (path op)
+  "Return nil when PATH is allowed for OP, else a deny reason string."
+  (let* ((policy (ellama-tools--srt-policy-current))
+         (target-exists (ellama-tools--srt-path-exists-p path))
+         (target (ellama-tools--srt-normalize-target-path path op))
+         (deny-read (plist-get policy :deny-read))
+         (allow-write (plist-get policy :allow-write))
+         (deny-write (plist-get policy :deny-write)))
+    (pcase op
+      ((or 'read 'list)
+       (when (ellama-tools--srt-rule-match-any-p target deny-read)
+         "Denied by `filesystem.denyRead'"))
+      ('write
+       (cond
+        ((ellama-tools--srt-deny-write-match-any-p
+          target deny-write target-exists)
+         "Denied by `filesystem.denyWrite'")
+        ((not (ellama-tools--srt-rule-match-any-p target allow-write))
+         "Denied because write access is not allowed by `filesystem.allowWrite'")
+        (t nil)))
+      (_
+       (error "Unsupported srt access operation: %S" op)))))
+
+(defun ellama-tools--tool-check-file-access (path op)
+  "Check local `srt' filesystem policy for PATH and OP.
+Signal `user-error' on denial when `ellama-tools-use-srt' is non-nil."
+  (when ellama-tools-use-srt
+    (let ((reason (ellama-tools--srt-check-access path op)))
+      (when reason
+        (let* ((policy (ellama-tools--srt-policy-current))
+               (config-path (plist-get policy :config-path))
+               (target (ellama-tools--srt-normalize-target-path path op)))
+          (user-error "srt policy denied %s access to %s (target %s) using %s: %s"
+                      op path target config-path reason))))))
+
 (defun ellama-tools--command-argv (program &rest args)
   "Return argv for PROGRAM and ARGS.
 Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
@@ -415,6 +722,7 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
 
 (defun ellama-tools-read-file-tool (file-name)
   "Read the file FILE-NAME."
+  (ellama-tools--tool-check-file-access file-name 'read)
   (json-encode (if (not (file-exists-p file-name))
                    (format "File %s doesn't exists." file-name)
                  (let ((content (with-temp-buffer
@@ -441,6 +749,7 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
 
 (defun ellama-tools-write-file-tool (file-name content)
   "Write CONTENT to the file FILE-NAME."
+  (ellama-tools--tool-check-file-access file-name 'write)
   (write-region content nil file-name nil 'silent))
 
 (ellama-tools-define-tool
@@ -466,6 +775,7 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
 
 (defun ellama-tools-append-file-tool (file-name content)
   "Append CONTENT to the file FILE-NAME."
+  (ellama-tools--tool-check-file-access file-name 'write)
   (with-current-buffer (find-file-noselect file-name)
     (goto-char (point-max))
     (insert content)
@@ -494,6 +804,7 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
 
 (defun ellama-tools-prepend-file-tool (file-name content)
   "Prepend CONTENT to the file FILE-NAME."
+  (ellama-tools--tool-check-file-access file-name 'write)
   (with-current-buffer (find-file-noselect file-name)
     (goto-char (point-min))
     (insert content)
@@ -523,6 +834,7 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
 (defun ellama-tools-directory-tree-tool (dir &optional depth)
   "Return a string representing the directory tree under DIR.
 DEPTH is the current recursion depth, used internally."
+  (ellama-tools--tool-check-file-access dir 'list)
   (if (not (file-exists-p dir))
       (format "Directory %s doesn't exists" dir)
     (let ((indent (make-string (* (or depth 0) 2) ? ))
@@ -559,6 +871,9 @@ DEPTH is the current recursion depth, used internally."
 
 (defun ellama-tools-move-file-tool (file-name new-file-name)
   "Move the file from the specified FILE-NAME to the NEW-FILE-NAME."
+  (ellama-tools--tool-check-file-access file-name 'read)
+  (ellama-tools--tool-check-file-access file-name 'write)
+  (ellama-tools--tool-check-file-access new-file-name 'write)
   (if (and (file-exists-p file-name)
            (not (file-exists-p new-file-name)))
       (progn
@@ -589,6 +904,8 @@ DEPTH is the current recursion depth, used internally."
 (defun ellama-tools-edit-file-tool (file-name oldcontent newcontent)
   "Edit file FILE-NAME.
 Replace OLDCONTENT with NEWCONTENT."
+  (ellama-tools--tool-check-file-access file-name 'read)
+  (ellama-tools--tool-check-file-access file-name 'write)
   (let ((content (with-temp-buffer
                    (insert-file-contents-literally file-name)
                    (buffer-string)))
@@ -793,6 +1110,7 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
 
 (defun ellama-tools-count-lines-tool (file-name)
   "Count lines in file FILE-NAME."
+  (ellama-tools--tool-check-file-access file-name 'read)
   (with-current-buffer (find-file-noselect file-name)
     (count-lines (point-min) (point-max))))
 
@@ -813,6 +1131,7 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
 
 (defun ellama-tools-lines-range-tool (file-name from to)
   "Return content of file FILE-NAME lines in range FROM TO."
+  (ellama-tools--tool-check-file-access file-name 'read)
   (json-encode (with-current-buffer (find-file-noselect file-name)
                  (save-excursion
                    (let ((start (progn

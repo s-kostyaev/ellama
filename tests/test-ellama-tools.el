@@ -110,6 +110,27 @@
                (fboundp 'ellama-tools--command-argv))
     (load-file (expand-file-name "ellama-tools.el" ellama-test-root))))
 
+(defun ellama-test--clear-srt-policy-cache ()
+  "Clear local `srt' policy cache used by tool tests."
+  (ellama-test--ensure-local-ellama-tools)
+  (if (fboundp 'ellama-tools--srt-policy-clear-cache)
+      (ellama-tools--srt-policy-clear-cache)
+    (setq ellama-tools--srt-policy-cache nil)))
+
+(defmacro ellama-test--with-temp-srt-settings (json &rest body)
+  "Run BODY with SETTINGS-FILE bound to a temp `srt' config JSON string."
+  (declare (indent 1))
+  `(let ((settings-file (make-temp-file "ellama-srt-settings-" nil ".json")))
+     (unwind-protect
+         (progn
+           (with-temp-file settings-file
+             (insert ,json))
+           (ellama-test--clear-srt-policy-cache)
+           ,@body)
+       (ellama-test--clear-srt-policy-cache)
+       (when (file-exists-p settings-file)
+         (delete-file settings-file)))))
+
 (defun ellama-test--wait-shell-command-result (cmd)
   "Run shell tool CMD and wait for a result string."
   (ellama-test--ensure-local-ellama-tools)
@@ -213,6 +234,265 @@ Return list with result and prompt."
         "printf ok")
        :type 'user-error))
     (should-not callback-called)))
+
+(ert-deftest test-ellama-tools-srt-settings-file-resolution ()
+  (ellama-test--ensure-local-ellama-tools)
+  (should (equal (let ((ellama-tools-srt-args nil))
+                   (ellama-tools--srt-settings-file))
+                 (expand-file-name "~/.srt-settings.json")))
+  (should (equal (let ((ellama-tools-srt-args '("--settings" "/tmp/a.json")))
+                   (ellama-tools--srt-settings-file))
+                 "/tmp/a.json"))
+  (should (equal (let ((ellama-tools-srt-args '("-s" "/tmp/b.json")))
+                   (ellama-tools--srt-settings-file))
+                 "/tmp/b.json"))
+  (should (equal (let ((ellama-tools-srt-args '("--settings=/tmp/c.json")))
+                   (ellama-tools--srt-settings-file))
+                 "/tmp/c.json")))
+
+(ert-deftest test-ellama-tools-srt-settings-file-errors-on-missing-value ()
+  (ellama-test--ensure-local-ellama-tools)
+  (should-error
+  (let ((ellama-tools-srt-args '("-s")))
+     (ellama-tools--srt-settings-file))
+   :type 'user-error)
+  (should-error
+   (let ((ellama-tools-srt-args '("--settings")))
+     (ellama-tools--srt-settings-file))
+   :type 'user-error))
+
+(ert-deftest test-ellama-tools-srt-policy-load-invalid-json ()
+  (ellama-test--ensure-local-ellama-tools)
+  (ellama-test--with-temp-srt-settings
+      "{not-json"
+    (let ((ellama-tools-srt-args (list "--settings" settings-file)))
+      (should-error (ellama-tools--srt-policy-current)
+                    :type 'user-error))))
+
+(ert-deftest test-ellama-tools-srt-policy-load-malformed-filesystem-shape ()
+  (ellama-test--ensure-local-ellama-tools)
+  (ellama-test--with-temp-srt-settings
+      "{\"filesystem\":{\"denyRead\":\"/tmp/x\"}}"
+    (let ((ellama-tools-srt-args (list "--settings" settings-file)))
+      (should-error (ellama-tools--srt-policy-current)
+                    :type 'user-error))))
+
+(ert-deftest test-ellama-tools-srt-check-access-read-write-and-precedence ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-srt-policy-" t))
+         (secret (expand-file-name "secret.txt" dir))
+         (work-dir (expand-file-name "work" dir))
+         (allowed-file (expand-file-name "note.txt" work-dir))
+         (blocked-file (expand-file-name "blocked.txt" work-dir)))
+    (unwind-protect
+        (progn
+          (make-directory work-dir)
+          (with-temp-file secret (insert "secret"))
+          (with-temp-file blocked-file (insert "blocked"))
+          (ellama-test--with-temp-srt-settings
+              (format
+               "{\"filesystem\":{\"denyRead\":[%S],\"allowWrite\":[%S],\"denyWrite\":[%S]}}"
+               secret work-dir blocked-file)
+            (let ((default-directory dir)
+                  (ellama-tools-use-srt t)
+                  (ellama-tools-srt-args (list "--settings" settings-file)))
+              (should (string-match-p "denyRead"
+                                      (ellama-tools--srt-check-access
+                                       secret 'read)))
+              (should-not (ellama-tools--srt-check-access
+                           allowed-file 'write))
+              (should (string-match-p "denyWrite"
+                                      (ellama-tools--srt-check-access
+                                       blocked-file 'write))))))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest
+    test-ellama-tools-srt-check-access-denywrite-literal-new-file-parity ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-srt-denywrite-new-" t))
+         (work-dir (expand-file-name "work" dir))
+         (blocked-file (expand-file-name "blocked.txt" work-dir)))
+    (unwind-protect
+        (progn
+          (make-directory work-dir)
+          (ellama-test--with-temp-srt-settings
+              (format
+               "{\"filesystem\":{\"allowWrite\":[%S],\"denyWrite\":[%S]}}"
+               work-dir blocked-file)
+            (let ((default-directory dir)
+                  (ellama-tools-use-srt t)
+                  (ellama-tools-srt-args (list "--settings" settings-file)))
+              (should-not (file-exists-p blocked-file))
+              ;; Parity note: behavior differs by platform.
+              (if (eq system-type 'darwin)
+                  (should-not (ellama-tools--srt-check-access
+                               blocked-file 'write))
+                (should (string-match-p
+                         "denyWrite"
+                         (ellama-tools--srt-check-access
+                          blocked-file 'write)))))))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest test-ellama-tools-srt-check-access-default-write-deny ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((dir (make-temp-file "ellama-srt-defaults-" t)))
+    (unwind-protect
+        (ellama-test--with-temp-srt-settings
+            "{}"
+          (let ((default-directory dir)
+                (ellama-tools-use-srt t)
+                (ellama-tools-srt-args (list "--settings" settings-file)))
+            (should-not (ellama-tools--srt-check-access "missing.txt" 'read))
+            (should (string-match-p
+                     "allowWrite"
+                     (ellama-tools--srt-check-access "missing.txt" 'write)))))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest test-ellama-tools-srt-check-access-resolves-relative-rules ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-srt-relative-" t))
+         (file (expand-file-name "secret.txt" dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file file (insert "x"))
+          (ellama-test--with-temp-srt-settings
+              "{\"filesystem\":{\"denyRead\":[\"secret.txt\"]}}"
+            (let ((default-directory dir)
+                  (ellama-tools-use-srt t)
+                  (ellama-tools-srt-args (list "--settings" settings-file)))
+              (should (string-match-p "denyRead"
+                                      (ellama-tools--srt-check-access
+                                       file 'read))))))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest test-ellama-tools-srt-check-access-normalizes-new-write-path ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-srt-new-write-" t))
+         (out-dir (expand-file-name "out" dir))
+         (target (expand-file-name "new.txt" out-dir)))
+    (unwind-protect
+        (progn
+          (make-directory out-dir)
+          (ellama-test--with-temp-srt-settings
+              (format "{\"filesystem\":{\"allowWrite\":[%S]}}" out-dir)
+            (let ((default-directory dir)
+                  (ellama-tools-use-srt t)
+                  (ellama-tools-srt-args (list "--settings" settings-file)))
+              (should-not (file-exists-p target))
+              (should-not (ellama-tools--srt-check-access target 'write)))))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest test-ellama-tools-srt-check-access-expands-tilde ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((fake-home (make-temp-file "ellama-srt-fake-home-" t))
+         (dir (expand-file-name "project" fake-home))
+         (file (expand-file-name "secret.txt" dir)))
+    (unwind-protect
+        (progn
+          (make-directory dir)
+          (with-temp-file file (insert "x"))
+          (let* ((orig-expand (symbol-function 'expand-file-name))
+                 (tilde-rule (concat "~/" (file-relative-name file fake-home))))
+            (cl-letf (((symbol-function 'expand-file-name)
+                       (lambda (name &optional base)
+                         (if (and (stringp name)
+                                  (string-prefix-p "~/" name))
+                             (funcall orig-expand
+                                      (concat fake-home "/" (substring name 2))
+                                      base)
+                           (funcall orig-expand name base)))))
+              (ellama-test--with-temp-srt-settings
+                  (format "{\"filesystem\":{\"denyRead\":[%S]}}" tilde-rule)
+                (let ((default-directory temporary-file-directory)
+                      (ellama-tools-use-srt t)
+                      (ellama-tools-srt-args
+                       (list "--settings" settings-file)))
+                  (should (string-match-p "denyRead"
+                                          (ellama-tools--srt-check-access
+                                           file 'read))))))))
+      (when (file-exists-p fake-home)
+        (delete-directory fake-home t)))))
+
+(ert-deftest test-ellama-tools-read-file-tool-denied-by-srt-policy ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-srt-read-tool-" t))
+         (file (expand-file-name "secret.txt" dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file file (insert "secret"))
+          (ellama-test--with-temp-srt-settings
+              (format "{\"filesystem\":{\"denyRead\":[%S]}}" file)
+            (let ((default-directory dir)
+                  (ellama-tools-use-srt t)
+                  (ellama-tools-srt-args (list "--settings" settings-file)))
+              (should-error (ellama-tools-read-file-tool file)
+                            :type 'user-error))))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest test-ellama-tools-write-file-tool-denied-by-srt-defaults ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((dir (make-temp-file "ellama-srt-write-tool-" t)))
+    (unwind-protect
+        (ellama-test--with-temp-srt-settings
+            "{}"
+          (let ((default-directory dir)
+                (ellama-tools-use-srt t)
+                (ellama-tools-srt-args (list "--settings" settings-file)))
+            (should-error
+             (ellama-tools-write-file-tool
+              (expand-file-name "x.txt" dir) "x")
+             :type 'user-error)))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest test-ellama-tools-directory-tree-tool-denied-by-srt-policy ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((dir (make-temp-file "ellama-srt-tree-tool-" t)))
+    (unwind-protect
+        (ellama-test--with-temp-srt-settings
+            (format "{\"filesystem\":{\"denyRead\":[%S]}}" dir)
+          (let ((default-directory temporary-file-directory)
+                (ellama-tools-use-srt t)
+                (ellama-tools-srt-args (list "--settings" settings-file)))
+            (should-error (ellama-tools-directory-tree-tool dir)
+                          :type 'user-error)))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest test-ellama-tools-move-file-tool-denies-destination-write ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-srt-move-tool-" t))
+         (src-dir (expand-file-name "src" dir))
+         (dst-dir (expand-file-name "dst" dir))
+         (src (expand-file-name "a.txt" src-dir))
+         (dst (expand-file-name "b.txt" dst-dir))
+         err-msg)
+    (unwind-protect
+        (progn
+          (make-directory src-dir)
+          (make-directory dst-dir)
+          (with-temp-file src (insert "x"))
+          (ellama-test--with-temp-srt-settings
+              (format "{\"filesystem\":{\"allowWrite\":[%S]}}" src-dir)
+            (let ((default-directory dir)
+                  (ellama-tools-use-srt t)
+                  (ellama-tools-srt-args (list "--settings" settings-file)))
+              (setq err-msg
+                    (condition-case err
+                        (progn
+                          (ellama-tools-move-file-tool src dst)
+                          nil)
+                      (user-error (error-message-string err))))
+              (should (stringp err-msg))
+              (should (string-match-p (regexp-quote dst) err-msg)))))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
 
 (ert-deftest test-ellama-tools-grep-tool-uses-shared-command-helper ()
   (ellama-test--ensure-local-ellama-tools)

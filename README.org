@@ -379,11 +379,20 @@ generated text string.
   confirmation prompt. Default value 50.
 - ~ellama-tools-use-srt~: Run shell-based tools (~shell_command~, ~grep~ and
   ~grep_in_file~) via the external ~srt~ sandbox runtime. Disabled by default.
-  If enabled and ~srt~ is not installed, the tool call signals a user error.
+  If enabled, non-shell file tools also perform local filesystem checks derived
+  from the same ~srt~ settings file to keep behavior aligned.  The local checks
+  currently enforce the filesystem subset ~denyRead~, ~allowWrite~ and
+  ~denyWrite~ for tools such as ~read_file~, ~write_file~, ~edit_file~,
+  ~directory_tree~, ~move_file~, ~count_lines~ and ~lines_range~.  If enabled
+  and ~srt~ is not installed, or the relevant ~srt~ settings file is missing or
+  malformed, the tool call signals a user error (fail closed).
 - ~ellama-tools-srt-program~: Sandbox runtime executable name/path used when
   ~ellama-tools-use-srt~ is enabled. Default value is ~"srt"~.
 - ~ellama-tools-srt-args~: Extra arguments passed to ~srt~ before the wrapped
-  command (for example ~--settings /path/to/settings.json~).
+  command (for example ~--settings /path/to/settings.json~).  The same
+  arguments are also used to resolve the settings file path for local non-shell
+  filesystem checks (default =~/.srt-settings.json= if no ~--settings~/~-s~ is
+  provided).
 - ~ellama-blueprint-global-dir~: Global directory for storing blueprint files.
 - ~ellama-blueprint-local-dir~: Local directory name for project-specific
   blueprints.
