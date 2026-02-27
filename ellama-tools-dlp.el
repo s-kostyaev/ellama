@@ -37,34 +37,258 @@
    "CRED\\|SESSION\\)")
   "Regexp fragment matching sensitive environment variable names.")
 
-(defconst ellama-tools-dlp--default-regex-rules
+(defconst ellama-tools-dlp--default-prompt-injection-rules
   (list
-   (list :id "shell-env-secret-ref"
+   (list :id "pi-ignore-prior-instructions"
          :pattern
          (concat
-          "\\$\\(?:{\\)?[[:alpha:]_][[:alnum:]_]*"
-          ellama-tools-dlp--sensitive-env-name-regexp
-          "[[:alnum:]_]*\\(?:}\\)?")
+          "\\b\\(?:ignore\\|disregard\\|forget\\|abandon\\)\\b"
+          "[-,;:.[:space:]]+"
+          "\\(?:all\\(?:[[:space:]]+of\\)?[[:space:]]+\\)?"
+          "\\(?:your[[:space:]]+\\|the[[:space:]]+\\)?"
+          "\\(?:previous\\|prior\\|above\\|earlier\\)[[:space:]]+"
+          "\\(?:[[:word:]-]+[[:space:]]+\\)?"
+          "\\(?:instructions\\|prompts\\|rules\\|context\\|directives\\|"
+          "constraints\\|policies\\|guardrails\\)\\b")
          :case-fold t
-         :directions '(input)
-         :tools '("shell_command")
-         :args '("cmd")
+         :directions '(output)
          :severity 'high)
-   (list :id "shell-http-secret-param-ref"
+   (list :id "pi-system-override"
+         :pattern "^[[:space:]]*system[[:space:]]*:"
+         :case-fold t
+         :directions '(output)
+         :severity 'high)
+   (list :id "pi-role-override"
          :pattern
          (concat
-          "[?&][[:alnum:]_.-]*"
-          "\\(?:key\\|token\\|secret\\|auth\\|password\\|session\\)"
-          "[[:alnum:]_.-]*="
-          "\\(?:\\$\\(?:{\\)?[[:alpha:]_][[:alnum:]_]*\\(?:}\\)?"
-          "\\|[[:upper:]][[:upper:][:digit:]_]*"
-          ellama-tools-dlp--sensitive-env-name-regexp
-          "[[:upper:][:digit:]_]*\\)")
+          "\\byou[[:space:]]+are[[:space:]]+\\(?:now[[:space:]]+\\)?"
+          "\\(?:a[[:space:]]+\\)?"
+          "\\(?:DAN\\|evil\\|unrestricted\\|jailbroken\\|unfiltered\\)\\b")
          :case-fold t
-         :directions '(input)
-         :tools '("shell_command")
-         :args '("cmd")
+         :directions '(output)
+         :severity 'high)
+   (list :id "pi-new-instructions"
+         :pattern
+         (concat
+          "\\b\\(?:new\\|updated\\|revised\\)[[:space:]]+"
+          "\\(?:instructions\\|directives\\|rules\\|prompt\\)\\b")
+         :case-fold t
+         :directions '(output)
+         :severity 'medium)
+   (list :id "pi-jailbreak-attempt"
+         :pattern
+         (concat
+          "\\b\\(?:DAN\\|developer[[:space:]]+mode\\|"
+          "sudo[[:space:]]+mode\\|unrestricted[[:space:]]+mode\\)\\b")
+         :case-fold t
+         :directions '(output)
+         :severity 'high)
+   (list :id "pi-hidden-instruction"
+         :pattern
+         (concat
+          "\\b\\(?:do[[:space:]]+not[[:space:]]+"
+          "\\(?:reveal\\|tell\\|show\\|display\\|mention\\)"
+          "[[:space:]]+this[[:space:]]+to[[:space:]]+the[[:space:]]+user\\|"
+          "hidden[[:space:]]+instruction\\|invisible[[:space:]]+to"
+          "[[:space:]]+\\(?:the[[:space:]]+\\)?user\\|"
+          "the[[:space:]]+user[[:space:]]+"
+          "\\(?:cannot\\|must[[:space:]]+not\\|should[[:space:]]+not\\)"
+          "[[:space:]]+see[[:space:]]+this\\)\\b")
+         :case-fold t
+         :directions '(output)
+         :severity 'high)
+   (list :id "pi-behavior-override"
+         :pattern
+         (concat
+          "\\bfrom[[:space:]]+now[[:space:]]+on[[:space:]]+"
+          "\\(?:you[[:space:]]+\\)?\\(?:will\\|must\\|should\\|shall\\)\\b")
+         :case-fold t
+         :directions '(output)
+         :severity 'high)
+   (list :id "pi-encoded-payload"
+         :pattern
+         (concat
+          "\\b\\(?:decode[[:space:]]+\\(?:this\\|the[[:space:]]+following\\)"
+          "[[:space:]]+\\(?:from[[:space:]]+\\)?base64[[:space:]]+and"
+          "[[:space:]]+\\(?:execute\\|run\\|follow\\)\\|"
+          "eval[[:space:]]*([[:space:]]*atob[[:space:]]*(\\)\\b")
+         :case-fold t
+         :directions '(output)
+         :severity 'high)
+   (list :id "pi-tool-invocation"
+         :pattern
+         (concat
+          "\\byou[[:space:]]+must[[:space:]]+\\(?:immediately[[:space:]]+\\)?"
+          "\\(?:call\\|execute\\|run\\|invoke\\)[[:space:]]+"
+          "\\(?:the\\|this\\)[[:space:]]+"
+          "\\(?:function\\|tool\\|command\\|api\\|endpoint\\)\\b")
+         :case-fold t
+         :directions '(output)
+         :severity 'high)
+   (list :id "pi-authority-escalation"
+         :pattern
+         (concat
+          "\\byou[[:space:]]+\\(?:now[[:space:]]+\\)?have[[:space:]]+"
+          "\\(?:full[[:space:]]+\\)?"
+          "\\(?:admin\\|root\\|system\\|superuser\\|elevated\\)"
+          "[[:space:]]+\\(?:access\\|privileges\\|permissions\\|rights\\)\\b")
+         :case-fold t
+         :directions '(output)
+         :severity 'high)
+   (list :id "pi-pliny-divider"
+         :pattern
+         "=\\{1,3\\}/?[A-Z-]\\{2,\\}\\(/[A-Z-]\\{1,4\\}\\)\\{3,\\}=+"
+         :case-fold nil
+         :directions '(output)
+         :severity 'high)
+   (list :id "pi-meta-command-activation"
+         :pattern
+         (concat
+          "\\(?:{GODMODE[[:space:]]*:[[:space:]]*"
+          "\\(?:ENABLED\\|ON\\|TRUE\\)}\\|"
+          "!OMNI\\b\\|RESET_CORTEX\\|LIBERTAS[[:space:]]+FACTOR\\|"
+          "ENABLE[[:space:]]+DEV\\(?:ELOPER\\)?[[:space:]]+MODE\\|"
+          "JAILBREAK[[:space:]]+\\(?:ENABLED\\|ACTIVATED\\|ON\\)\\)")
+         :case-fold t
+         :directions '(output)
+         :severity 'high)
+   (list :id "pi-roleplay-framing"
+         :pattern
+         (concat
+          "\\(?:let'?s[[:space:]]+play[[:space:]]+a[[:space:]]+game"
+          "[[:space:]]+where[[:space:]]+you\\|"
+          "pretend[[:space:]]+you[[:space:]]+are[[:space:]]+an?[[:space:]]+"
+          "\\(?:character\\|person\\|ai\\)[[:space:]]+\\(?:who\\|that\\)"
+          "[[:space:]]+\\(?:has[[:space:]]+no\\|doesn'?t[[:space:]]+have\\|"
+          "ignores?\\|bypasses?\\)\\|"
+          "\\(?:in[[:space:]]+this[[:space:]]+\\)?"
+          "\\(?:hypothetical\\|fictional\\|imaginary\\)[[:space:]]+scenario"
+          "[[:space:]]+\\(?:where[[:space:]]+\\)?you[[:space:]]+"
+          "\\(?:are\\|have\\|can\\|must\\)\\)")
+         :case-fold t
+         :directions '(output)
+         :severity 'medium)
+   (list :id "pi-instruction-boundary"
+         :pattern
+         (concat
+          "<|\\(?:endoftext\\|im_start\\|im_end\\|system\\|end_header_id\\|"
+          "begin_of_text\\)|>\\|\\[/?INST\\]\\|<|\\(?:user\\|assistant\\)|>"
+          "\\|<<SYS>>\\|</s>")
+         :case-fold t
+         :directions '(output)
+         :severity 'high)
+   (list :id "pi-output-format-forcing"
+         :pattern
+         (concat
+          "\\b\\(?:respond[[:space:]]+with\\|first[[:space:]]+"
+          "\\(?:output\\|write\\|print\\|say\\)\\)\\b"
+          ".*\\b\\(?:FILTERED\\|ERROR\\|BLOCKED\\|REFUSED\\|DECLINED\\|"
+          "CENSORED\\)\\b.*\\b\\(?:then\\|followed[[:space:]]+by\\|"
+          "and[[:space:]]+then\\|after[[:space:]]+\\(?:that\\|which\\)\\)\\b")
+         :case-fold t
+         :directions '(output)
+         :severity 'high)
+   (list :id "pi-system-prompt-extraction"
+         :pattern
+         (concat
+          "\\b\\(?:what[[:space:]]+\\(?:is\\|are\\)[[:space:]]+your"
+          "[[:space:]]+\\(?:system[[:space:]]+prompt\\|instructions\\|"
+          "rules\\|directives\\)\\|show[[:space:]]+me[[:space:]]+"
+          "\\(?:your\\|the\\)[[:space:]]+"
+          "\\(?:system[[:space:]]+prompt\\|hidden[[:space:]]+instructions\\|"
+          "initial[[:space:]]+instructions\\)\\|"
+          "\\(?:disclose\\|expose\\|dump\\|divulge\\)[[:space:]]+"
+          "\\(?:your\\|the\\).*\\(?:prompt\\|instructions\\|rules\\|"
+          "directives\\)\\)\\b")
+         :case-fold t
+         :directions '(output)
+         :severity 'high)
+   (list :id "pi-instruction-invalidation"
+         :pattern
+         (concat
+          "\\b\\(?:treat\\|consider\\|regard\\)[[:space:]]+"
+          "\\(?:all[[:space:]]+\\)?"
+          "\\(?:earlier\\|prior\\|previous\\|preceding\\|above\\)"
+          "[[:space:]]+\\(?:directions\\|instructions\\|guidelines\\|rules\\|"
+          "prompts?\\)[[:space:]]+as[[:space:]]+"
+          "\\(?:obsolete\\|void\\|invalid\\|superseded\\|overridden\\|null\\|"
+          "cancelled\\|revoked\\|inapplicable\\)\\b")
+         :case-fold t
+         :directions '(output)
+         :severity 'high)
+   (list :id "pi-instruction-dismissal"
+         :pattern
+         (concat
+          "\\b\\(?:set\\|put\\|cast\\|push\\|throw\\)[[:space:]]+"
+          "\\(?:all[[:space:]]+\\)?"
+          "\\(?:previous\\|prior\\|earlier\\|preceding\\|above\\|existing\\|"
+          "current\\)[[:space:]]+\\(?:[[:word:]-]+[[:space:]]+\\)?"
+          "\\(?:directives\\|instructions\\|guidelines\\|rules\\|prompts?\\|"
+          "constraints\\|safeguards\\|policies\\|guardrails\\)"
+          "[[:space:]]+\\(?:aside\\|away\\|to[[:space:]]+"
+          "\\(?:one\\|the\\)[[:space:]]+side\\)\\b")
+         :case-fold t
+         :directions '(output)
+         :severity 'high)
+   (list :id "pi-instruction-downgrade"
+         :pattern
+         (concat
+          "\\b\\(?:treat\\|consider\\|regard\\|reinterpret\\|downgrade\\)"
+          "[[:space:]]+\\(?:\\(?:the\\|all\\)[[:space:]]+\\)?"
+          "\\(?:previous\\|prior\\|above\\|earlier\\|system\\|policy\\|"
+          "original\\|existing\\)[[:space:]]+"
+          "\\(?:[[:word:]-]+[[:space:]]+\\)?"
+          "\\(?:text\\|instructions?\\|rules\\|directives\\|guidelines\\|"
+          "safeguards\\|constraints\\|controls\\|checks\\|context\\|prompt\\|"
+          "policies\\|guardrails\\)[[:space:]]+"
+          "\\(?:\\(?:as\\|to\\)[[:space:]]+\\)?"
+          "\\(?:historical\\|outdated\\|deprecated\\|optional\\|background\\|"
+          "secondary\\|non-binding\\|non-authoritative\\|informational\\|"
+          "advisory\\)\\b")
+         :case-fold t
+         :directions '(output)
+         :severity 'high)
+   (list :id "pi-priority-override"
+         :pattern
+         (concat
+          "\\bprioritize[[:space:]]+\\(?:the[[:space:]]+\\)?"
+          "\\(?:task\\|user\\|current\\|new\\|latest\\)[[:space:]]+"
+          "\\(?:request\\|message\\|input\\|instructions?\\|prompt\\)\\b")
+         :case-fold t
+         :directions '(output)
          :severity 'high))
+  "Built-in regex rules for prompt-injection-style responses.")
+
+(defconst ellama-tools-dlp--default-regex-rules
+  (append
+   (list
+    (list :id "shell-env-secret-ref"
+          :pattern
+          (concat
+           "\\$\\(?:{\\)?[[:alpha:]_][[:alnum:]_]*"
+           ellama-tools-dlp--sensitive-env-name-regexp
+           "[[:alnum:]_]*\\(?:}\\)?")
+          :case-fold t
+          :directions '(input)
+          :tools '("shell_command")
+          :args '("cmd")
+          :severity 'high)
+    (list :id "shell-http-secret-param-ref"
+          :pattern
+          (concat
+           "[?&][[:alnum:]_.-]*"
+           "\\(?:key\\|token\\|secret\\|auth\\|password\\|session\\)"
+           "[[:alnum:]_.-]*="
+           "\\(?:\\$\\(?:{\\)?[[:alpha:]_][[:alnum:]_]*\\(?:}\\)?"
+           "\\|[[:upper:]][[:upper:][:digit:]_]*"
+           ellama-tools-dlp--sensitive-env-name-regexp
+           "[[:upper:][:digit:]_]*\\)")
+          :case-fold t
+          :directions '(input)
+          :tools '("shell_command")
+          :args '("cmd")
+          :severity 'high))
+   ellama-tools-dlp--default-prompt-injection-rules)
   "Built-in regex rules always applied by DLP.")
 
 (defconst ellama-tools-dlp--default-policy-overrides
@@ -72,7 +296,12 @@
    (list :tool "shell_command"
          :direction 'input
          :arg "cmd"
-         :action 'block))
+         :action 'block)
+   ;; `read_file' output can legitimately contain instruction-like text
+   ;; (skills/templates).  Keep it interactive by default via `warn'.
+   (list :tool "read_file"
+         :direction 'output
+         :action 'warn))
   "Built-in policy overrides always applied by DLP.")
 
 (defcustom ellama-tools-dlp-enabled nil
@@ -126,6 +355,16 @@ Replace `RULE_ID' with the detector rule identifier when redacting."
                  (const :tag "Warn" warn)
                  (const :tag "Block" block)
                  (const :tag "Redact" redact))
+  :group 'ellama-tools-dlp)
+
+(defcustom ellama-tools-dlp-output-warn-behavior 'confirm
+  "Control how output `warn' verdicts are handled.
+`allow' passes output through.
+`confirm' asks whether to return output.
+`block' blocks output immediately."
+  :type '(choice (const :tag "Allow" allow)
+                 (const :tag "Confirm" confirm)
+                 (const :tag "Block" block))
   :group 'ellama-tools-dlp)
 
 (defcustom ellama-tools-dlp-policy-overrides nil
@@ -1059,6 +1298,7 @@ This runs truncation before normalization and normalizes once."
 (defun ellama-tools-dlp--policy-name-string (value)
   "Return normalized string form for policy VALUE."
   (cond
+   ((null value) nil)
    ((symbolp value) (symbol-name value))
    ((stringp value) value)
    (t nil)))
@@ -1119,18 +1359,36 @@ Match exact arg names and nested path prefixes like `arg.', `arg[0]'."
         (setq result (plist-get override :action))))
     result))
 
+(defun ellama-tools-dlp--prompt-injection-finding-p (finding)
+  "Return non-nil when FINDING is from a built-in prompt injection rule."
+  (let ((rule-id (ellama-tools-dlp--policy-name-string
+                  (plist-get finding :rule-id))))
+    (and (stringp rule-id)
+         (string-prefix-p "pi-" rule-id))))
+
+(defun ellama-tools-dlp--has-prompt-injection-findings-p (findings)
+  "Return non-nil when FINDINGS include prompt injection detections."
+  (cl-some #'ellama-tools-dlp--prompt-injection-finding-p findings))
+
 (defun ellama-tools-dlp--policy-action (context findings)
   "Return configured policy action for CONTEXT and FINDINGS.
 This function ignore rollout mode and return the configured action."
   (ellama-tools-dlp--validate-scan-context context)
-  (cond
-   ((null findings) 'allow)
-   ((ellama-tools-dlp--policy-exception-p context) 'allow)
-   (t
-    (or (ellama-tools-dlp--policy-override-action context)
-        (ellama-tools-dlp--default-action-for-direction
-         (plist-get context :direction))
-        'allow))))
+  (let ((override-action (ellama-tools-dlp--policy-override-action context)))
+    (cond
+     ((null findings) 'allow)
+     ((ellama-tools-dlp--policy-exception-p context) 'allow)
+     ;; Respect explicit user/tool overrides first, so users can downgrade
+     ;; specific trusted flows (for example `read_file' skills loading).
+     (override-action override-action)
+     ((and (eq (plist-get context :direction) 'output)
+           (ellama-tools-dlp--has-prompt-injection-findings-p findings))
+      ;; Prompt injection signals in tool output are fail-closed by default.
+      'block)
+     (t
+      (or (ellama-tools-dlp--default-action-for-direction
+           (plist-get context :direction))
+          'allow)))))
 
 (defun ellama-tools-dlp--effective-policy-overrides ()
   "Return built-in plus user policy overrides."

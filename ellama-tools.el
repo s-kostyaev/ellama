@@ -314,16 +314,32 @@ NAME is fallback label used when FUNC has no symbol name."
    :truncated nil))
 
 (defun ellama-tools--dlp-handle-output-string (tool-name text)
-  "Scan output TEXT for TOOL-NAME and return filtered result.
-For output `warn', v1 keeps the original content and relies on logging."
+  "Scan output TEXT for TOOL-NAME and return filtered result."
   (let* ((scan (ellama-tools-dlp--scan-text
                 text
                 (ellama-tools--dlp-make-scan-context 'output tool-name)))
          (verdict (plist-get scan :verdict))
          (action (plist-get verdict :action)))
     (pcase action
-      ((or 'allow 'warn)
+      ('allow
        text)
+      ('warn
+       (pcase ellama-tools-dlp-output-warn-behavior
+         ('allow
+          text)
+         ('block
+          (or (plist-get verdict :message)
+              (format "DLP blocked output for tool %s" tool-name)))
+         (_
+          (pcase (ellama-tools--dlp-output-warn-choice
+                  tool-name (plist-get verdict :message))
+            ('allow
+             text)
+            ('redact
+             (ellama-tools--dlp-redact-output-from-scan
+              scan text tool-name))
+            (_
+             (format "DLP warning denied output for tool %s" tool-name))))))
       ('block
        (or (plist-get verdict :message)
            (format "DLP blocked output for tool %s" tool-name)))
@@ -567,14 +583,41 @@ Return plist with keys `:action' and optional `:message'."
           (list :action 'warn :message warn-message)
         (list :action 'allow)))))
 
-(defun ellama-tools--dlp-confirm-warn (tool-name message)
-  "Ask explicit confirmation for DLP `warn' on TOOL-NAME with MESSAGE."
+(defun ellama-tools--dlp-confirm-warn (tool-name message &optional subject)
+  "Ask explicit confirmation for DLP `warn' on TOOL-NAME with MESSAGE.
+SUBJECT describe what is being allowed."
   (eq (read-char-choice
-       (format "%s. Proceed with tool %s? (y/n): "
+       (format "%s. Proceed with %s %s? (y/n): "
                (or message "DLP warning")
+               (or subject "tool")
                tool-name)
        '(?y ?n))
       ?y))
+
+(defun ellama-tools--dlp-output-warn-choice (tool-name message)
+  "Return output warn choice for TOOL-NAME with MESSAGE.
+Return one of symbols `allow', `redact' or `block'."
+  (pcase (read-char-choice
+          (format "%s. Output from tool %s: (a)llow, (r)edact, (b)lock: "
+                  (or message "DLP warning")
+                  tool-name)
+          '(?a ?r ?b ?y ?n))
+    ((or ?a ?y) 'allow)
+    (?r 'redact)
+    (_ 'block)))
+
+(defun ellama-tools--dlp-redact-output-from-scan (scan text tool-name)
+  "Return best-effort redaction for warn SCAN on TEXT from TOOL-NAME."
+  (let ((verdict (plist-get scan :verdict))
+        (findings (plist-get scan :findings)))
+    (condition-case nil
+        (if findings
+            (ellama-tools-dlp--apply-redaction text findings)
+          (or (plist-get verdict :message)
+              (format "DLP blocked output for tool %s" tool-name)))
+      (error
+       (or (plist-get verdict :message)
+           (format "DLP blocked output for tool %s" tool-name))))))
 
 (defun ellama-tools--dlp-wrap-output-callback (tool-name callback)
   "Wrap CALLBACK to apply DLP output filtering for TOOL-NAME."
