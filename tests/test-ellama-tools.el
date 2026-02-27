@@ -1350,6 +1350,53 @@ Return list with result and prompt."
                        "xxSECRETyy")))
       (should (= prompt-count 2)))))
 
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-dlp-output-warn-sync-view-highlights ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-output-default-action 'warn)
+        (ellama-tools-dlp-regex-rules '((:id "token"
+                                             :pattern "SECRET"
+                                             :directions (output))))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        (prompt-count 0)
+        (responses '(?v ?a)))
+    (let* ((warn-buffer-name "*Ellama DLP Warning*")
+           (tool-plist `(:function ,(lambda (_arg)
+                                      "xxSECRETyy")
+                                   :name "mcp_tool"
+                                   :args ((:name "arg" :type string))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function))
+           result
+           match-face)
+      (when (get-buffer warn-buffer-name)
+        (kill-buffer warn-buffer-name))
+      (unwind-protect
+          (progn
+            (cl-letf (((symbol-function 'read-char-choice)
+                       (lambda (_prompt _choices)
+                         (setq prompt-count (1+ prompt-count))
+                         (or (pop responses) ?a))))
+              (setq result (funcall wrapped-func "ok")))
+            (should (equal result "xxSECRETyy"))
+            (should (= prompt-count 2))
+            (should (get-buffer warn-buffer-name))
+            (with-current-buffer warn-buffer-name
+              (goto-char (point-min))
+              (should (search-forward "SECRET" nil t))
+              (setq match-face
+                    (get-text-property (match-beginning 0) 'face)))
+            (should (or (eq match-face 'match)
+                        (and (listp match-face)
+                             (memq 'match match-face)))))
+        (when (get-buffer warn-buffer-name)
+          (kill-buffer warn-buffer-name))))))
+
 (ert-deftest test-ellama-tools-wrap-with-confirm-dlp-output-warn-sync-deny ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((ellama-tools-dlp-enabled t)

@@ -319,6 +319,7 @@ NAME is fallback label used when FUNC has no symbol name."
                 text
                 (ellama-tools--dlp-make-scan-context 'output tool-name)))
          (verdict (plist-get scan :verdict))
+         (findings (plist-get scan :findings))
          (action (plist-get verdict :action)))
     (pcase action
       ('allow
@@ -332,7 +333,7 @@ NAME is fallback label used when FUNC has no symbol name."
               (format "DLP blocked output for tool %s" tool-name)))
          (_
           (pcase (ellama-tools--dlp-output-warn-choice
-                  tool-name (plist-get verdict :message))
+                  tool-name (plist-get verdict :message) text findings)
             ('allow
              text)
             ('redact
@@ -594,17 +595,70 @@ SUBJECT describe what is being allowed."
        '(?y ?n))
       ?y))
 
-(defun ellama-tools--dlp-output-warn-choice (tool-name message)
+(defun ellama-tools--dlp-highlight-findings (start text findings)
+  "Highlight FINDINGS in TEXT inserted at START."
+  (let ((text-length (length text)))
+    (dolist (finding findings)
+      (let ((span-start (plist-get finding :match-start))
+            (span-end (plist-get finding :match-end)))
+        (when (and (integerp span-start)
+                   (integerp span-end)
+                   (<= 0 span-start)
+                   (<= span-start span-end)
+                   (<= span-end text-length))
+          (add-face-text-property (+ start span-start)
+                                  (+ start span-end)
+                                  'match
+                                  t))))))
+
+(defun ellama-tools--dlp-view-output-warning
+    (tool-name message text findings)
+  "Display output DLP warning details for TOOL-NAME with MESSAGE.
+Render TEXT and highlight FINDINGS spans when available."
+  (let ((buf (get-buffer-create "*Ellama DLP Warning*")))
+    (with-current-buffer buf
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert (propertize "Ellama DLP Output Warning\n"
+                            'face '(:weight bold :height 1.2)))
+        (insert "\n")
+        (insert (format "Tool: %s\n" tool-name))
+        (insert (format "Warning: %s\n\n" (or message "DLP warning")))
+        (insert "Output:\n")
+        (if (stringp text)
+            (let ((text-start (point)))
+              (insert text)
+              (insert "\n")
+              (ellama-tools--dlp-highlight-findings
+               text-start text findings))
+          (insert "  Output content is unavailable.\n")))
+      (goto-char (point-min))
+      (view-mode 1))
+    (display-buffer buf)))
+
+(defun ellama-tools--dlp-output-warn-choice
+    (tool-name message &optional text findings)
   "Return output warn choice for TOOL-NAME with MESSAGE.
+When TEXT and FINDINGS are available, allow viewing highlighted output.
 Return one of symbols `allow', `redact' or `block'."
-  (pcase (read-char-choice
-          (format "%s. Output from tool %s: (a)llow, (r)edact, (b)lock: "
-                  (or message "DLP warning")
-                  tool-name)
-          '(?a ?r ?b ?y ?n))
-    ((or ?a ?y) 'allow)
-    (?r 'redact)
-    (_ 'block)))
+  (save-window-excursion
+    (catch 'done
+      (while t
+        (pcase (read-char-choice
+                (format
+                 "%s. Output from tool %s: (a)llow, (r)edact, (b)lock, (v)iew: "
+                 (or message "DLP warning")
+                 tool-name)
+                '(?a ?r ?b ?y ?n ?v))
+          ((or ?a ?y)
+           (throw 'done 'allow))
+          (?r
+           (throw 'done 'redact))
+          (?v
+           (ellama-tools--dlp-view-output-warning
+            tool-name message text findings))
+          (_
+           (throw 'done 'block)))))))
 
 (defun ellama-tools--dlp-redact-output-from-scan (scan text tool-name)
   "Return best-effort redaction for warn SCAN on TEXT from TOOL-NAME."
