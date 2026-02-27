@@ -167,6 +167,23 @@ Plist with keys `:path', `:mtime' and `:policy'.")
   "Contains hash table of allowed functions.
 Key is a function name symbol.  Value is a boolean t.")
 
+(defconst ellama-tools--call-log-buffer-name "*Ellama Tool Call Logs*"
+  "Name of the buffer with tool call confirmation logs.")
+
+(defun ellama-tools--log-call (status function-name args)
+  "Append tool call log entry with STATUS for FUNCTION-NAME and ARGS."
+  (let ((buf (get-buffer-create ellama-tools--call-log-buffer-name))
+        (args-display
+         (mapcar (lambda (arg) (format "%S" arg))
+                 (cl-remove-if (lambda (arg) (functionp arg)) args))))
+    (with-current-buffer buf
+      (goto-char (point-max))
+      (insert (format-time-string "[%Y-%m-%d %H:%M:%S] "))
+      (insert (format "%s %s" status function-name))
+      (when args-display
+        (insert (format " %s" (mapconcat #'identity args-display ", "))))
+      (insert "\n"))))
+
 (defun ellama-tools--confirm-call (function function-name &rest args)
   "Ask for confirmation before calling FUNCTION named FUNCTION-NAME.
 ARGS are passed to FUNCTION.
@@ -182,6 +199,7 @@ callback and return nil."
      ((or confirmation
           ellama-tools-allow-all
           (cl-find function ellama-tools-allowed))
+      (ellama-tools--log-call "autoaccepted" function-name args)
       (let* ((result (apply function args))
              (result-str (if (stringp result)
                              result
@@ -213,7 +231,8 @@ callback and return nil."
                (prompt (format "Allow calling %s with arguments: %s?"
                                function-name
                                (mapconcat #'identity args-display ", ")))
-               result)
+               result
+               decision)
           (while
               (let ((answer (read-char-choice
                              (format "%s (y)es, (a)lways, (n)o, (r)eply, (v)iew: " prompt)
@@ -243,21 +262,27 @@ callback and return nil."
                   t) ;; Try again.
                  ;; Yes - execute function once
                  ((eq answer ?y)
+                  (setq decision "accepted")
                   (setq result (apply function args))
                   nil) ;; Done.
                  ;; Always - remember approval and execute function
                  ((eq answer ?a)
+                  (setq decision "accepted")
                   (puthash function t ellama-tools-confirm-allowed)
                   (setq result (apply function args))
                   nil) ;; done
                  ;; No - return nil
                  ((eq answer ?n)
+                  (setq decision "rejected")
                   (setq result "Forbidden by the user")
                   nil) ;; Done.
                  ;; Reply - custom response
                  ((eq answer ?r)
+                  (setq decision "rejected")
                   (setq result (read-string "Answer to the agent: "))
                   nil))))
+          (when decision
+            (ellama-tools--log-call decision function-name args))
           (let ((result-str (if (stringp result)
                                 result
                               (when result

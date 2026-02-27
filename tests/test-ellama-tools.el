@@ -183,6 +183,20 @@ Return list with result and prompt."
       (setq result (apply wrapper args)))
     (list result prompt)))
 
+(defun ellama-test--clear-tool-call-log-buffer ()
+  "Delete tool call log buffer if it exists."
+  (let ((buf (get-buffer ellama-tools--call-log-buffer-name)))
+    (when buf
+      (kill-buffer buf))))
+
+(defun ellama-test--tool-call-log-buffer-string ()
+  "Return tool call log buffer content or empty string."
+  (let ((buf (get-buffer ellama-tools--call-log-buffer-name)))
+    (if buf
+        (with-current-buffer buf
+          (buffer-string))
+      "")))
+
 (ert-deftest test-ellama-shell-command-tool-empty-success-output ()
   (should
    (string=
@@ -1669,6 +1683,62 @@ Return list with result and prompt."
       (should (equal
                (ellama-tools-confirm 'ellama-test--named-tool-one-arg "A")
                "Forbidden by the user")))))
+
+(ert-deftest test-ellama-tools-confirm-log-accepted ()
+  (ellama-test--ensure-local-ellama-tools)
+  (ellama-test--clear-tool-call-log-buffer)
+  (unwind-protect
+      (let ((tool 'ellama-test--named-tool-one-arg)
+            (ellama-tools-confirm-allowed (make-hash-table))
+            (ellama-tools-allow-all nil)
+            (ellama-tools-allowed nil))
+        (cl-letf (((symbol-function 'read-char-choice)
+                   (lambda (_prompt _choices) ?y)))
+          (should (equal (ellama-tools-confirm tool "A") "one:A")))
+        (let ((logs (ellama-test--tool-call-log-buffer-string)))
+          (should (string-match-p
+                   (concat
+                    " accepted ellama-test--named-tool-one-arg "
+                    "\"A\"")
+                   logs))))
+    (ellama-test--clear-tool-call-log-buffer)))
+
+(ert-deftest test-ellama-tools-confirm-log-autoaccepted ()
+  (ellama-test--ensure-local-ellama-tools)
+  (ellama-test--clear-tool-call-log-buffer)
+  (unwind-protect
+      (let ((tool 'ellama-test--named-tool-one-arg)
+            (ellama-tools-confirm-allowed (make-hash-table))
+            (ellama-tools-allow-all t)
+            (ellama-tools-allowed nil))
+        (should (equal (ellama-tools-confirm tool "A") "one:A"))
+        (let ((logs (ellama-test--tool-call-log-buffer-string)))
+          (should (string-match-p
+                   (concat
+                    " autoaccepted ellama-test--named-tool-one-arg "
+                    "\"A\"")
+                   logs))))
+    (ellama-test--clear-tool-call-log-buffer)))
+
+(ert-deftest test-ellama-tools-confirm-log-rejected ()
+  (ellama-test--ensure-local-ellama-tools)
+  (ellama-test--clear-tool-call-log-buffer)
+  (unwind-protect
+      (let ((tool 'ellama-test--named-tool-one-arg)
+            (ellama-tools-confirm-allowed (make-hash-table))
+            (ellama-tools-allow-all nil)
+            (ellama-tools-allowed nil))
+        (cl-letf (((symbol-function 'read-char-choice)
+                   (lambda (_prompt _choices) ?n)))
+          (should (equal (ellama-tools-confirm tool "A")
+                         "Forbidden by the user")))
+        (let ((logs (ellama-test--tool-call-log-buffer-string)))
+          (should (string-match-p
+                   (concat
+                    " rejected ellama-test--named-tool-one-arg "
+                    "\"A\"")
+                   logs))))
+    (ellama-test--clear-tool-call-log-buffer)))
 
 (ert-deftest test-ellama-read-file-tool-missing-file ()
   (ellama-test--ensure-local-ellama-tools)
