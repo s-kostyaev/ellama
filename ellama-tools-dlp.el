@@ -31,6 +31,50 @@
   "DLP settings for `ellama' tools."
   :group 'ellama)
 
+(defconst ellama-tools-dlp--sensitive-env-name-regexp
+  (concat
+   "\\(TOKEN\\|SECRET\\|KEY\\|PASS\\|PWD\\|AUTH\\|COOKIE\\|"
+   "CRED\\|SESSION\\)")
+  "Regexp fragment matching sensitive environment variable names.")
+
+(defconst ellama-tools-dlp--default-regex-rules
+  (list
+   (list :id "shell-env-secret-ref"
+         :pattern
+         (concat
+          "\\$\\(?:{\\)?[[:alpha:]_][[:alnum:]_]*"
+          ellama-tools-dlp--sensitive-env-name-regexp
+          "[[:alnum:]_]*\\(?:}\\)?")
+         :case-fold t
+         :directions '(input)
+         :tools '("shell_command")
+         :args '("cmd")
+         :severity 'high)
+   (list :id "shell-http-secret-param-ref"
+         :pattern
+         (concat
+          "[?&][[:alnum:]_.-]*"
+          "\\(?:key\\|token\\|secret\\|auth\\|password\\|session\\)"
+          "[[:alnum:]_.-]*="
+          "\\(?:\\$\\(?:{\\)?[[:alpha:]_][[:alnum:]_]*\\(?:}\\)?"
+          "\\|[[:upper:]][[:upper:][:digit:]_]*"
+          ellama-tools-dlp--sensitive-env-name-regexp
+          "[[:upper:][:digit:]_]*\\)")
+         :case-fold t
+         :directions '(input)
+         :tools '("shell_command")
+         :args '("cmd")
+         :severity 'high))
+  "Built-in regex rules always applied by DLP.")
+
+(defconst ellama-tools-dlp--default-policy-overrides
+  (list
+   (list :tool "shell_command"
+         :direction 'input
+         :arg "cmd"
+         :action 'block))
+  "Built-in policy overrides always applied by DLP.")
+
 (defcustom ellama-tools-dlp-enabled nil
   "Enable DLP checks for `ellama' tools."
   :type 'boolean
@@ -85,7 +129,8 @@ Replace `RULE_ID' with the detector rule identifier when redacting."
   :group 'ellama-tools-dlp)
 
 (defcustom ellama-tools-dlp-policy-overrides nil
-  "Set per-tool and per-arg DLP policy overrides.
+  "Set additional per-tool and per-arg DLP policy overrides.
+Built-in baseline overrides are always applied.
 Each element is a plist.  Supported keys:
 `:tool' (required), `:direction', `:arg', `:action', and `:except'.
 When `:except' is non-nil and the override matches, findings are ignored."
@@ -111,7 +156,8 @@ Set to 0 to disable in-memory incident retention."
   :group 'ellama-tools-dlp)
 
 (defcustom ellama-tools-dlp-regex-rules nil
-  "Regex-based DLP detector rules.
+  "Additional regex-based DLP detector rules.
+Built-in baseline rules are always applied.
 Each rule is a plist.  Supported keys:
 `:id', `:pattern', `:enabled', `:case-fold', `:directions', `:tools',
 `:args', and `:severity'."
@@ -612,11 +658,13 @@ Include scoping fields because cached entries store the normalized rule plist."
 
 (defun ellama-tools-dlp--detect-regex-findings (text context &optional rules)
   "Return regex detector findings for TEXT in CONTEXT.
-When RULES is nil, use `ellama-tools-dlp-regex-rules'."
+When RULES is nil, combine built-in and user regex rules."
   (ellama-tools-dlp--validate-scan-context context)
   (unless (stringp text)
     (error "DLP regex detection expects a string payload"))
-  (let ((selected-rules (or rules ellama-tools-dlp-regex-rules))
+  (let ((selected-rules (or rules
+                            (append ellama-tools-dlp--default-regex-rules
+                                    ellama-tools-dlp-regex-rules)))
         (all-findings nil))
     (dolist (rule selected-rules)
       (setq all-findings
@@ -711,11 +759,8 @@ When RULES is nil, use `ellama-tools-dlp-regex-rules'."
 
 (defun ellama-tools-dlp--env-secret-stage-name-signal (env-name _env-value)
   "Score ENV-NAME when it look security-sensitive."
-  (when (string-match-p
-         (concat
-          "\\(TOKEN\\|SECRET\\|KEY\\|PASS\\|PWD\\|AUTH\\|COOKIE\\|"
-          "CRED\\|SESSION\\)")
-         (upcase env-name))
+  (when (string-match-p ellama-tools-dlp--sensitive-env-name-regexp
+                        (upcase env-name))
     '(:score 2)))
 
 (defun ellama-tools-dlp--env-secret-stage-entropy (_env-name env-value)
@@ -1062,12 +1107,12 @@ Match exact arg names and nested path prefixes like `arg.', `arg[0]'."
   (cl-some (lambda (override)
              (and (plist-get override :except)
                   (ellama-tools-dlp--policy-override-match-p override context)))
-           ellama-tools-dlp-policy-overrides))
+           (ellama-tools-dlp--effective-policy-overrides)))
 
 (defun ellama-tools-dlp--policy-override-action (context)
   "Return last matching override action for CONTEXT, or nil."
   (let (result)
-    (dolist (override ellama-tools-dlp-policy-overrides)
+    (dolist (override (ellama-tools-dlp--effective-policy-overrides))
       (when (and (ellama-tools-dlp--policy-override-match-p override context)
                  (memq (plist-get override :action)
                        '(allow warn block redact)))
@@ -1086,6 +1131,11 @@ This function ignore rollout mode and return the configured action."
         (ellama-tools-dlp--default-action-for-direction
          (plist-get context :direction))
         'allow))))
+
+(defun ellama-tools-dlp--effective-policy-overrides ()
+  "Return built-in plus user policy overrides."
+  (append ellama-tools-dlp--default-policy-overrides
+          ellama-tools-dlp-policy-overrides))
 
 (defun ellama-tools-dlp--findings-rule-ids (findings)
   "Return sorted unique rule IDs from FINDINGS as strings."

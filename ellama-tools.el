@@ -662,15 +662,36 @@ Returns a new tool definition with the :function wrapped."
     (setq tool-plist (plist-put tool-plist :function wrapped-func))
     (plist-put tool-plist :args wrapped-args)))
 
+(defun ellama-tools--tool-name= (tool name)
+  "Return non-nil when TOOL name equals NAME."
+  (string= name (llm-tool-name tool)))
+
+(defun ellama-tools--remove-tool-by-name (tools name)
+  "Return TOOLS list without entries named NAME."
+  (seq-remove (lambda (tool)
+                (ellama-tools--tool-name= tool name))
+              tools))
+
 (defun ellama-tools-define-tool (tool-plist)
-  "Define a new ellama tool with automatic confirmation wrapping.
+  "Define or replace an ellama tool with automatic confirmation wrapping.
 TOOL-PLIST is a property list in the format expected by `llm-make-tool'."
-  (add-to-list
-   'ellama-tools-available
-   (apply 'llm-make-tool (ellama-tools-wrap-with-confirm tool-plist))
-   nil (lambda (a b)
-         (string= (llm-tool-name a)
-                  (llm-tool-name b)))))
+  (let* ((wrapped-tool
+          (apply 'llm-make-tool (ellama-tools-wrap-with-confirm tool-plist)))
+         (name (llm-tool-name wrapped-tool))
+         (enabled-p (cl-some (lambda (tool)
+                               (ellama-tools--tool-name= tool name))
+                             ellama-tools-enabled)))
+    (setq ellama-tools-available
+          (cons wrapped-tool
+                (ellama-tools--remove-tool-by-name
+                 ellama-tools-available name)))
+    (setq ellama-tools-enabled
+          (if enabled-p
+              (cons wrapped-tool
+                    (ellama-tools--remove-tool-by-name
+                     ellama-tools-enabled name))
+            (ellama-tools--remove-tool-by-name
+             ellama-tools-enabled name)))))
 
 (defun ellama-tools-enable-by-name-tool (name)
   "Add to `ellama-tools-enabled' each tool that matches NAME."
