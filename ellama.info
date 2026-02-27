@@ -73,6 +73,11 @@ Assistant".  Previous sentence was written by Ellama itself.
 
 -- The Detailed Node Listing --
 
+Configuration
+
+* DLP for Tool Input/Output::
+* SRT Filesystem Policy for Tools::
+
 Context Management
 
 * Transient Menus for Context Management::
@@ -512,6 +517,25 @@ argument generated text string.
      this list will work without user confirmation.
    • ‘ellama-tools-argument-max-length’: Max length of function argument
      in the confirmation prompt.  Default value 50.
+   • ‘ellama-tools-use-srt’: Run shell-based tools (‘shell_command’,
+     ‘grep’ and ‘grep_in_file’) via the external ‘srt’ sandbox runtime.
+     Disabled by default.  If enabled, non-shell file tools also perform
+     local filesystem checks derived from the same ‘srt’ settings file
+     to keep behavior aligned.  The local checks currently enforce the
+     filesystem subset ‘denyRead’, ‘allowWrite’ and ‘denyWrite’ for
+     tools such as ‘read_file’, ‘write_file’, ‘edit_file’,
+     ‘directory_tree’, ‘move_file’, ‘count_lines’ and ‘lines_range’.  If
+     enabled and ‘srt’ is not installed, or the relevant ‘srt’ settings
+     file is missing or malformed, the tool call signals a user error
+     (fail closed).
+   • ‘ellama-tools-srt-program’: Sandbox runtime executable name/path
+     used when ‘ellama-tools-use-srt’ is enabled.  Default value is
+     ‘"srt"’.
+   • ‘ellama-tools-srt-args’: Extra arguments passed to ‘srt’ before the
+     wrapped command (for example ‘--settings /path/to/settings.json’).
+     The same arguments are also used to resolve the settings file path
+     for local non-shell filesystem checks (default
+     ‘~/.srt-settings.json’ if no ‘--settings~/’-s~ is provided).
    • ‘ellama-blueprint-global-dir’: Global directory for storing
      blueprint files.
    • ‘ellama-blueprint-local-dir’: Local directory name for
@@ -529,6 +553,185 @@ argument generated text string.
    • ‘ellama-tools-subagent-roles’: Subagent roles with provider, system
      prompt and allowed tools.  Configuration of subagents for the
      ‘task’ tool.
+
+* Menu:
+
+* DLP for Tool Input/Output::
+* SRT Filesystem Policy for Tools::
+
+
+File: ellama.info,  Node: DLP for Tool Input/Output,  Next: SRT Filesystem Policy for Tools,  Up: Configuration
+
+4.1 DLP for Tool Input/Output
+=============================
+
+Ellama includes an optional DLP (Data Loss Prevention) layer for tool
+calls.  It can scan:
+
+   • tool input (arguments sent from the model to tools)
+   • tool output (strings returned from tools back to the model)
+
+The DLP layer supports regex-based rules and exact secret detection
+derived from environment variables (including common encoded variants
+such as base64/base64url and hex).
+
+Recommended initial rollout:
+
+   • enable DLP
+   • keep mode in ‘monitor’
+   • review incidents before switching selected paths to ‘enforce’
+
+Example minimal setup:
+
+     (setopt ellama-tools-dlp-enabled t)
+     (setopt ellama-tools-dlp-mode 'monitor)
+     (setopt ellama-tools-dlp-log-targets '(memory))
+
+Key settings:
+
+   • ‘ellama-tools-dlp-enabled’: Enable DLP scanning for tool
+     input/output.
+   • ‘ellama-tools-dlp-mode’: Rollout mode.  Use ‘monitor’ for
+     detect+log only, or ‘enforce’ to apply actions.
+   • ‘ellama-tools-dlp-regex-rules’: Regex detector rules (IDs,
+     patterns, direction/tool/arg scoping, enable/disable, case
+     folding).
+   • ‘ellama-tools-dlp-scan-env-exact-secrets’: Enable exact-secret
+     detection from environment variables (enabled by default).
+   • ‘ellama-tools-dlp-max-scan-size’: Maximum bytes scanned per
+     input/output payload (default 5 MB; larger payloads are truncated
+     for scanning).
+   • ‘ellama-tools-dlp-input-default-action’: Default action for input
+     findings in ‘enforce’ mode (‘allow’, ‘warn’, ‘block’).
+   • ‘ellama-tools-dlp-output-default-action’: Default action for output
+     findings in ‘enforce’ mode (‘allow’, ‘warn’, ‘block’, ‘redact’).
+   • ‘ellama-tools-dlp-policy-overrides’: Per-tool/per-arg overrides and
+     exceptions.  For structured input args, nested string values are
+     scanned with path-like arg names (for example
+     ‘payload.items[0].token’).  Override ‘:arg’ matches exact names and
+     nested path prefixes (for example ‘"payload"’ matches
+     ‘payload.items[0].token’).
+   • ‘ellama-tools-dlp-log-targets’: Incident log targets (‘memory’,
+     ‘message’).
+   • ‘ellama-tools-dlp-incident-log-max’: Maximum in-memory incidents
+     retained.
+   • ‘ellama-tools-dlp-input-fail-open’ /
+     ‘ellama-tools-dlp-output-fail-open’: Behavior when DLP itself
+     errors internally.
+
+Enforcement behavior (v1):
+
+   • input ‘block’ prevents tool execution
+   • input ‘warn’ asks for explicit confirmation before execution
+   • output ‘block’ returns a safe denial string
+   • output ‘redact’ replaces detected fragments with placeholders
+   • output ‘warn’ logs a warning and currently passes content through
+
+Example regex rules:
+
+     (setopt ellama-tools-dlp-regex-rules
+             '((:id "openai-key"
+                :pattern "sk-[[:alnum:]-]+"
+               :directions (input output))
+               (:id "pem-header"
+                :pattern "-----BEGIN [A-Z ]+-----"
+                :directions (output)
+                :enabled t)))
+
+Example scoped override (ignore noisy shell command input):
+
+     (setopt ellama-tools-dlp-policy-overrides
+             '((:tool "shell_command"
+                :direction input
+                :arg "cmd"
+                :except t)))
+
+Example override for structured input payloads (top-level arg prefix
+match):
+
+     (setopt ellama-tools-dlp-policy-overrides
+             '((:tool "write_file"
+                :direction input
+                :arg "content"
+                :action warn)))
+
+Tuning helpers:
+
+   • ‘M-x ellama-tools-dlp-reset-runtime-state’
+   • ‘M-x ellama-tools-dlp-show-incident-stats’
+   • ‘(ellama-tools-dlp-recent-incidents)’
+   • ‘(ellama-tools-dlp-incident-stats)’
+   • ‘(ellama-tools-dlp-incident-stats-report)’
+
+For a longer rollout/tuning walkthrough and more override examples, see
+‘docs/dlp_rollout_guide.md’.
+
+
+File: ellama.info,  Node: SRT Filesystem Policy for Tools,  Prev: DLP for Tool Input/Output,  Up: Configuration
+
+4.2 SRT Filesystem Policy for Tools
+===================================
+
+When ‘ellama-tools-use-srt’ is non-nil, the ‘srt’ settings file is the
+source of truth for tool filesystem policy:
+
+   • shell-based tools (‘shell_command’, ‘grep’, ‘grep_in_file’) are
+     enforced by the external ‘srt’ runtime
+   • non-shell file tools (‘read_file’, ‘write_file’, ‘append_file’,
+     ‘prepend_file’, ‘edit_file’, ‘directory_tree’, ‘move_file’,
+     ‘count_lines’, ‘lines_range’) apply local checks derived from the
+     same ‘srt’ settings file
+
+Supported local filesystem subset (current):
+
+   • ‘filesystem.denyRead’
+   • ‘filesystem.allowWrite’
+   • ‘filesystem.denyWrite’ (takes precedence over ‘allowWrite’)
+
+Local checks intentionally ignore unrelated ‘srt’ keys (for example
+‘network.*’).  If the ‘filesystem’ section is missing, local checks use
+the same defaults as ‘srt’ for filesystem access: reads are allowed by
+default and writes are denied unless allowed by ‘allowWrite’.
+
+Path matching notes for local checks:
+
+   • relative paths in ‘srt’ rules are resolved against Emacs
+     ‘default-directory’
+   • ~~ expands to the current user home directory
+   • literal paths, directory-prefix rules, and glob patterns are
+     supported
+   • malformed/unsupported patterns signal a ‘user-error’ (fail closed)
+
+The local checks fail closed when ‘ellama-tools-use-srt’ is enabled and:
+
+   • ‘srt’ is not installed
+   • the resolved settings file is missing
+   • the settings file is malformed JSON
+   • relevant ‘filesystem’ keys have an invalid shape
+
+Example ‘srt’ config for a project sandbox:
+
+     {
+       "filesystem": {
+         "denyRead": ["~/.ssh/", "./secrets/"],
+         "allowWrite": ["./scratch/", "./notes.md"],
+         "denyWrite": ["./scratch/immutable.txt"]
+       }
+     }
+
+Example Emacs configuration:
+
+     (setopt ellama-tools-use-srt t)
+     (setopt ellama-tools-srt-args
+             '("--settings" "/path/to/.srt-settings.json"))
+
+Parity tests (real ‘srt’ runtime vs local ‘ellama’ checks):
+
+   • ‘make test-srt-integration’: Run host parity tests (requires ‘srt’
+     installed)
+   • ‘make test-srt-integration-linux’: Run parity tests in Docker on
+     Linux semantics.  Requires Docker and runs a privileged container
+     (‘--privileged’).
 
 
 File: ellama.info,  Node: Context Management,  Next: Minor modes,  Prev: Configuration,  Up: Top
@@ -1582,41 +1785,43 @@ their use in free software.
 
 Tag Table:
 Node: Top1379
-Node: Installation3748
-Node: Commands8762
-Node: Keymap16049
-Node: Configuration18883
-Node: Context Management26084
-Node: Transient Menus for Context Management27152
-Node: Managing the Context28766
-Node: Considerations29541
-Node: Minor modes30134
-Node: ellama-context-header-line-mode32122
-Node: ellama-context-header-line-global-mode32947
-Node: ellama-context-mode-line-mode33667
-Node: ellama-context-mode-line-global-mode34515
-Node: Ellama Session Header Line Mode35219
-Node: Enabling and Disabling35788
-Node: Customization36235
-Node: Ellama Session Mode Line Mode36523
-Node: Enabling and Disabling (1)37108
-Node: Customization (1)37555
-Node: Using Blueprints37849
-Node: Key Components of Ellama Blueprints38489
-Node: Creating and Managing Blueprints39096
-Node: Blueprints files40074
-Node: Variable Management40495
-Node: Keymap and Mode40948
-Node: Transient Menus41884
-Node: Running Blueprints programmatically42430
-Node: MCP Integration43017
-Node: Agent Skills44039
-Node: Directory Structure44402
-Node: Creating a Skill45429
-Node: How it works45804
-Node: Acknowledgments46195
-Node: Contributions46906
-Node: GNU Free Documentation License47292
+Node: Installation3830
+Node: Commands8844
+Node: Keymap16131
+Node: Configuration18965
+Node: DLP for Tool Input/Output27557
+Node: SRT Filesystem Policy for Tools31730
+Node: Context Management34299
+Node: Transient Menus for Context Management35367
+Node: Managing the Context36981
+Node: Considerations37756
+Node: Minor modes38349
+Node: ellama-context-header-line-mode40337
+Node: ellama-context-header-line-global-mode41162
+Node: ellama-context-mode-line-mode41882
+Node: ellama-context-mode-line-global-mode42730
+Node: Ellama Session Header Line Mode43434
+Node: Enabling and Disabling44003
+Node: Customization44450
+Node: Ellama Session Mode Line Mode44738
+Node: Enabling and Disabling (1)45323
+Node: Customization (1)45770
+Node: Using Blueprints46064
+Node: Key Components of Ellama Blueprints46704
+Node: Creating and Managing Blueprints47311
+Node: Blueprints files48289
+Node: Variable Management48710
+Node: Keymap and Mode49163
+Node: Transient Menus50099
+Node: Running Blueprints programmatically50645
+Node: MCP Integration51232
+Node: Agent Skills52254
+Node: Directory Structure52617
+Node: Creating a Skill53644
+Node: How it works54019
+Node: Acknowledgments54410
+Node: Contributions55121
+Node: GNU Free Documentation License55507
 
 End Tag Table
 
