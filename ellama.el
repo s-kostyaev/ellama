@@ -1829,8 +1829,6 @@ failure (with BUFFER current).
                          ellama-provider
                          (ellama-get-first-ollama-chat-model))))
          (buffer (or (plist-get args :buffer)
-                     (when (ellama-session-p session)
-                       (ellama-get-session-buffer (ellama--session-uid session)))
                      (current-buffer)))
          (reasoning-buffer (get-buffer-create
                             (concat (make-temp-name "*ellama-reasoning-") "*")))

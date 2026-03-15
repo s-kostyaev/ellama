@@ -831,6 +831,62 @@ detailed comparison to help you decide:
         (when buf
           (kill-buffer buf))))))
 
+(ert-deftest test-ellama-stream-defaults-to-current-buffer-with-active-session ()
+  (let* ((ellama-provider
+          (make-llm-fake
+           :chat-action-func (lambda () "Fake answer")))
+         (ellama-response-process-method 'streaming)
+         (ellama-spinner-enabled nil)
+         (ellama-fill-paragraphs nil)
+         (ellama--active-sessions (make-hash-table :test #'equal))
+         (ellama--active-session-states (make-hash-table :test #'equal))
+         (ellama--current-session-id nil)
+         (ellama--current-session-uid nil)
+         (session (make-ellama-session :id "test-session"
+                                       :provider ellama-provider
+                                       :prompt nil))
+         (session-buffer (generate-new-buffer " *ellama-test-session*")))
+    (unwind-protect
+        (progn
+          (ellama--register-session session session-buffer t)
+          (cl-letf (((symbol-function 'sleep-for)
+                     (lambda (&rest _args) nil)))
+            (with-temp-buffer
+              (ellama-stream "test prompt"
+                             :provider ellama-provider)
+              (should (equal (buffer-string) "Fake answer"))))
+          (with-current-buffer session-buffer
+            (should (string-empty-p (buffer-string)))))
+      (when (buffer-live-p session-buffer)
+        (kill-buffer session-buffer)))))
+
+(ert-deftest test-ellama-chat-writes-to-session-buffer ()
+  (let* ((provider (make-llm-fake
+                    :chat-action-func (lambda () "Chat answer")))
+         (ellama-provider provider)
+         (ellama-coding-provider provider)
+         (ellama-major-mode 'text-mode)
+         (ellama-chat-translation-enabled nil)
+         (ellama-session-auto-save nil)
+         (ellama-response-process-method 'streaming)
+         (ellama-spinner-enabled nil)
+         (session (ellama-new-session provider "initial prompt" t))
+         (uid (ellama--session-uid session))
+         (session-buffer (ellama-get-session-buffer uid)))
+    (unwind-protect
+        (with-temp-buffer
+          (insert "origin")
+          (cl-letf (((symbol-function 'sleep-for)
+                     (lambda (&rest _args) nil)))
+            (ellama-chat "next prompt" nil :session-id uid))
+          (should (equal (buffer-string) "origin"))
+          (with-current-buffer session-buffer
+            (let ((text (buffer-string)))
+              (should (string-match-p "next prompt" text))
+              (should (string-match-p "Chat answer" text)))))
+      (when (buffer-live-p session-buffer)
+        (kill-buffer session-buffer)))))
+
 (ert-deftest test-ellama-stream-retry-with-llm-fake-tool-call-error ()
   (let* ((call-count 0)
          (error-captured nil)
