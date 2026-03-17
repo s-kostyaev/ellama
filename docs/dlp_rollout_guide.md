@@ -95,6 +95,29 @@ Block output for a specific tool in enforce mode:
 4. Prefer output `redact` over `block` when usability matters.
 5. Keep `input warn` for ambiguous cases that need human confirmation.
 
+## Tool Output Line Budget Guard
+
+Ellama tools also apply a per-tool-output line budget before output is sent back
+to the main model. This is separate from DLP detector decisions.
+
+Defaults:
+
+- `ellama-tools-output-line-budget-enabled` = `t`
+- `ellama-tools-output-line-budget-max-lines` = `200`
+- `ellama-tools-output-line-budget-max-line-length` = `4000`
+- `ellama-tools-output-line-budget-save-overflow-file` = `t`
+
+Behavior:
+
+- output beyond the line budget is truncated and replaced with a notice block
+- hyper-long lines are truncated and marked with `...[line truncated]`
+- notice tells the agent that content was truncated and how to continue
+  (`lines_range`, `grep_in_file`, `grep`)
+- if source path is known (for example `read_file`, `lines_range`,
+  `grep_in_file`), the notice references that path
+- if source path is unknown, full output is saved to a temp file and the notice
+  includes this filename (when overflow-file saving is enabled)
+
 ## Safety Notes
 
 - DLP internal errors default to fail-open unless configured otherwise.

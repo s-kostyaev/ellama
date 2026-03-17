@@ -106,6 +106,27 @@ Plist with keys `:path', `:mtime' and `:policy'.")
   :type 'integer
   :group 'ellama)
 
+(defcustom ellama-tools-output-line-budget-enabled t
+  "Enable per-tool output line-budget truncation.
+The guard applies before output is sent back to the LLM."
+  :type 'boolean
+  :group 'ellama)
+
+(defcustom ellama-tools-output-line-budget-max-lines 200
+  "Maximum line count allowed per tool-output payload."
+  :type 'integer
+  :group 'ellama)
+
+(defcustom ellama-tools-output-line-budget-max-line-length 4000
+  "Maximum character count allowed for one output line."
+  :type 'integer
+  :group 'ellama)
+
+(defcustom ellama-tools-output-line-budget-save-overflow-file t
+  "Save full overflowing output to a temp file when source is unknown."
+  :type 'boolean
+  :group 'ellama)
+
 (defcustom ellama-tools-subagent-continue-prompt "Task not marked complete. Continue working. If you are done, YOU MUST use the `report_result` tool."
   "Prompt sent to sub-agent to keep the loop going."
   :type 'string
@@ -337,6 +358,200 @@ NAME is fallback label used when FUNC has no symbol name."
    :arg-name arg-name
    :payload-length 0
    :truncated nil))
+
+(defun ellama-tools--tool-call-values (async call-args)
+  "Return positional CALL-ARGS, excluding callback when ASYNC."
+  (if (and async call-args (functionp (car call-args)))
+      (cdr call-args)
+    call-args))
+
+(defun ellama-tools--output-source-info (kind path)
+  "Return output source info plist for KIND and PATH."
+  (when (and (stringp path) (> (length path) 0))
+    (list :kind kind
+          :path (expand-file-name path))))
+
+(defun ellama-tools--tool-output-source-info (tool-name values)
+  "Return source info plist for TOOL-NAME using VALUES."
+  (pcase tool-name
+    ((or "read_file" "lines_range" "count_lines")
+     (ellama-tools--output-source-info 'file (car values)))
+    ("grep_in_file"
+     (ellama-tools--output-source-info 'file (nth 1 values)))
+    ((or "grep" "directory_tree")
+     (ellama-tools--output-source-info 'directory (car values)))
+    (_
+     nil)))
+
+(defun ellama-tools--tool-output-context (tool-plist call-args)
+  "Build output context plist from TOOL-PLIST and CALL-ARGS."
+  (let* ((tool-name (plist-get tool-plist :name))
+         (async (plist-get tool-plist :async))
+         (values (ellama-tools--tool-call-values async call-args)))
+    (list :source-info (ellama-tools--tool-output-source-info
+                        tool-name values))))
+
+(defun ellama-tools--parse-json-string-value (text)
+  "Return decoded JSON string from TEXT, or nil when decode fails."
+  (condition-case nil
+      (let ((decoded (json-parse-string
+                      text
+                      :object-type 'alist
+                      :array-type 'list
+                      :null-object nil
+                      :false-object nil)))
+        (when (stringp decoded)
+          decoded))
+    (error nil)))
+
+(defun ellama-tools--line-budget-truncate
+    (text max-lines max-line-length)
+  "Return line-budget truncation plist for TEXT.
+MAX-LINES limits how many lines are kept.
+MAX-LINE-LENGTH limits one line width in characters."
+  (let* ((lines (split-string text "\n" nil))
+         (total-lines (length lines))
+         (kept 0)
+         (long-lines 0)
+         (truncated-lines nil)
+         (kept-lines nil))
+    (dolist (line lines)
+      (when (< kept max-lines)
+        (if (> (length line) max-line-length)
+            (let* ((suffix " ...[line truncated]")
+                   (available (- max-line-length (length suffix)))
+                   (prefix-len (if (> available 0) available 0))
+                   (prefix (if (> prefix-len 0)
+                               (substring line 0
+                                          (min (length line) prefix-len))
+                             ""))
+                   (line*
+                    (if (> max-line-length (length suffix))
+                        (concat prefix suffix)
+                      (substring suffix 0 max-line-length))))
+              (push line* kept-lines)
+              (setq long-lines (1+ long-lines))
+              (setq truncated-lines t))
+          (push line kept-lines))
+        (setq kept (1+ kept))))
+    (let ((dropped (max 0 (- total-lines kept))))
+      (list :text (string-join (nreverse kept-lines) "\n")
+            :truncated (or (> dropped 0) truncated-lines)
+            :total-lines total-lines
+            :dropped-lines dropped
+            :long-lines long-lines))))
+
+(defun ellama-tools--save-overflow-output-file (tool-name text)
+  "Save overflowing TEXT for TOOL-NAME to a temp file and return its path."
+  (let* ((safe-tool (replace-regexp-in-string
+                     "[^[:alnum:]_-]" "-"
+                     (or tool-name "tool")))
+         (path (make-temp-file
+                (format "ellama-%s-output-" safe-tool)
+                nil
+                ".txt")))
+    (condition-case nil
+        (progn
+          (write-region text nil path nil 'silent)
+          path)
+      (error nil))))
+
+(defun ellama-tools--output-truncation-notice
+    (tool-name truncation source-info saved-path)
+  "Return tool output truncation notice string.
+TOOL-NAME identifies the tool.
+TRUNCATION is a line-budget result plist.
+SOURCE-INFO describes source path and kind when known.
+SAVED-PATH is optional path to full saved output."
+  (let* ((total-lines (plist-get truncation :total-lines))
+         (dropped-lines (plist-get truncation :dropped-lines))
+         (long-lines (plist-get truncation :long-lines))
+         (snippet (plist-get truncation :text))
+         (source-kind (plist-get source-info :kind))
+         (source-path (plist-get source-info :path)))
+    (concat
+     "[ELLAMA OUTPUT TRUNCATED]\n"
+     (format "Tool `%s` output exceeded line budget and was truncated.\n"
+             tool-name)
+     (format "Original lines: %d.  Kept up to %d lines.\n"
+             total-lines
+             (max 0 ellama-tools-output-line-budget-max-lines))
+     (when (> dropped-lines 0)
+       (format "Dropped lines: %d.\n" dropped-lines))
+     (when (> long-lines 0)
+       (format
+        (concat "Truncated long lines: %d (max %d chars per line).\n")
+        long-lines
+        (max 1 ellama-tools-output-line-budget-max-line-length)))
+     (cond
+      ((and source-path (eq source-kind 'file))
+       (format
+        (concat "Source file: %s\n"
+                "Use `lines_range` for more lines, or "
+                "`grep_in_file`/`grep` to search.\n")
+        source-path))
+      ((and source-path (eq source-kind 'directory))
+       (format
+        (concat "Source directory: %s\n"
+                "Use `grep` in this directory, or read a target file with "
+                "`read_file`/`lines_range`.\n")
+        source-path))
+      (saved-path
+       (format
+        (concat "Full output saved to: %s\n"
+                "Use `lines_range` on this file for more lines, or "
+                "`grep_in_file`/`grep` to search.\n")
+        saved-path))
+      (t
+       (concat
+        "Full output file was not saved.\n"
+        "You can rerun the tool with narrower scope and use `grep`.\n")))
+     "\n--- BEGIN TRUNCATED OUTPUT ---\n"
+     snippet
+     "\n--- END TRUNCATED OUTPUT ---")))
+
+(defun ellama-tools--apply-output-line-budget
+    (tool-name text &optional output-context)
+  "Apply per-output line budget for TOOL-NAME TEXT.
+OUTPUT-CONTEXT may include source metadata under `:source-info'."
+  (if (or (not ellama-tools-output-line-budget-enabled)
+          (not (stringp text)))
+      text
+    (let* ((max-lines (max 0 ellama-tools-output-line-budget-max-lines))
+           (max-line-length
+            (max 1 ellama-tools-output-line-budget-max-line-length))
+           (source-info (plist-get output-context :source-info))
+           (text* (or (ellama-tools--parse-json-string-value text) text))
+           (truncation (ellama-tools--line-budget-truncate
+                        text* max-lines max-line-length)))
+      (if (not (plist-get truncation :truncated))
+          text
+        (let* ((save-p (and ellama-tools-output-line-budget-save-overflow-file
+                            (null source-info)))
+               (saved-path (and save-p
+                                (ellama-tools--save-overflow-output-file
+                                 tool-name text*))))
+          (when (fboundp 'ellama-tools-dlp--record-incident)
+            (ellama-tools-dlp--record-incident
+             (list :type 'output-budget-truncation
+                   :tool-name tool-name
+                   :action 'truncate
+                   :line-count (plist-get truncation :total-lines)
+                   :dropped-lines (plist-get truncation :dropped-lines)
+                   :long-lines (plist-get truncation :long-lines)
+                   :saved-path saved-path)))
+          (ellama-tools--output-truncation-notice
+           tool-name truncation source-info saved-path))))))
+
+(defun ellama-tools--postprocess-output-string
+    (tool-name text &optional output-context)
+  "Apply output guard and DLP filtering for TOOL-NAME TEXT."
+  (let ((dlp-filtered (if ellama-tools-dlp-enabled
+                          (ellama-tools--dlp-handle-output-string
+                           tool-name text)
+                        text)))
+    (ellama-tools--apply-output-line-budget
+     tool-name dlp-filtered output-context)))
 
 (defun ellama-tools--dlp-handle-output-string (tool-name text)
   "Scan output TEXT for TOOL-NAME and return filtered result."
@@ -698,12 +913,14 @@ Return one of symbols `allow', `redact' or `block'."
        (or (plist-get verdict :message)
            (format "DLP blocked output for tool %s" tool-name))))))
 
-(defun ellama-tools--dlp-wrap-output-callback (tool-name callback)
-  "Wrap CALLBACK to apply DLP output filtering for TOOL-NAME."
+(defun ellama-tools--dlp-wrap-output-callback
+    (tool-name callback &optional output-context)
+  "Wrap CALLBACK to apply output filtering for TOOL-NAME."
   (lambda (result)
     (funcall callback
              (if (stringp result)
-                 (ellama-tools--dlp-handle-output-string tool-name result)
+                 (ellama-tools--postprocess-output-string
+                  tool-name result output-context)
                result))))
 
 (defun ellama-tools--dlp-return-message (async args message)
@@ -722,43 +939,47 @@ return nil."
   (let ((tool-name (plist-get tool-plist :name))
         (async (plist-get tool-plist :async)))
     (lambda (&rest args)
-      (if (not ellama-tools-dlp-enabled)
-          (apply func args)
-        (let* ((decision (ellama-tools--dlp-input-decision tool-plist args))
-               (action (plist-get decision :action))
-               (message (plist-get decision :message)))
-          (pcase action
-            ('block
-             (ellama-tools--dlp-return-message
-              async args
-              (or message
-                  (format "DLP blocked input for tool %s" tool-name))))
-            ('warn
-             (if (not (ellama-tools--dlp-confirm-warn tool-name message))
-                 (ellama-tools--dlp-return-message
-                  async args
-                  (format "DLP warning denied tool execution for %s" tool-name))
-               (let* ((wrapped-args
-                       (if (and async args (functionp (car args)))
-                           (cons (ellama-tools--dlp-wrap-output-callback
-                                  tool-name (car args))
-                                 (cdr args))
-                         args))
-                      (result (apply func wrapped-args)))
+      (let* ((output-context
+              (ellama-tools--tool-output-context tool-plist args))
+             (wrapped-args
+              (if (and async args (functionp (car args)))
+                  (cons (ellama-tools--dlp-wrap-output-callback
+                         tool-name (car args) output-context)
+                        (cdr args))
+                args)))
+        (if (not ellama-tools-dlp-enabled)
+            (let ((result (apply func wrapped-args)))
+              (if (and (not async) (stringp result))
+                  (ellama-tools--postprocess-output-string
+                   tool-name result output-context)
+                result))
+          (let* ((decision (ellama-tools--dlp-input-decision
+                            tool-plist args))
+                 (action (plist-get decision :action))
+                 (message (plist-get decision :message)))
+            (pcase action
+              ('block
+               (ellama-tools--dlp-return-message
+                async args
+                (or message
+                    (format "DLP blocked input for tool %s" tool-name))))
+              ('warn
+               (if (not (ellama-tools--dlp-confirm-warn tool-name message))
+                   (ellama-tools--dlp-return-message
+                    async args
+                    (format "DLP warning denied tool execution for %s"
+                            tool-name))
+                 (let ((result (apply func wrapped-args)))
+                   (if (and (not async) (stringp result))
+                       (ellama-tools--postprocess-output-string
+                        tool-name result output-context)
+                     result))))
+              (_
+               (let ((result (apply func wrapped-args)))
                  (if (and (not async) (stringp result))
-                     (ellama-tools--dlp-handle-output-string tool-name result)
-                   result))))
-            (_
-             (let* ((wrapped-args
-                     (if (and async args (functionp (car args)))
-                         (cons (ellama-tools--dlp-wrap-output-callback
-                                tool-name (car args))
-                               (cdr args))
-                       args))
-                    (result (apply func wrapped-args)))
-               (if (and (not async) (stringp result))
-                   (ellama-tools--dlp-handle-output-string tool-name result)
-                 result)))))))))
+                     (ellama-tools--postprocess-output-string
+                      tool-name result output-context)
+                   result))))))))))
 
 (defun ellama-tools-wrap-with-confirm (tool-plist)
   "Wrap a tool's function with automatic confirmation and DLP.

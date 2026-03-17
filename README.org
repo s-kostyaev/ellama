@@ -458,6 +458,14 @@ Key settings:
 - ~ellama-tools-dlp-incident-log-max~: Maximum in-memory incidents retained.
 - ~ellama-tools-dlp-input-fail-open~ / ~ellama-tools-dlp-output-fail-open~:
   Behavior when DLP itself errors internally.
+- ~ellama-tools-output-line-budget-enabled~: Enable per-tool output line-budget
+  truncation before returning text to the model (enabled by default).
+- ~ellama-tools-output-line-budget-max-lines~: Max lines per tool output
+  (default ~200~).
+- ~ellama-tools-output-line-budget-max-line-length~: Max characters per line
+  before a single line is truncated (default ~4000~).
+- ~ellama-tools-output-line-budget-save-overflow-file~: Save full overflowing
+  output to a temp file when the output source file is unknown (default ~t~).
 
 Enforcement behavior (v1):
 
@@ -466,6 +474,19 @@ Enforcement behavior (v1):
 - output ~block~ returns a safe denial string
 - output ~redact~ replaces detected fragments with placeholders
 - output ~warn~ logs a warning and currently passes content through
+
+Tool output truncation behavior:
+
+- line budget is applied per tool output payload
+- if a payload exceeds the line budget, the model receives a truncation notice
+  plus the truncated snippet
+- if lines exceed ~ellama-tools-output-line-budget-max-line-length~, those lines
+  are shortened and marked with ~...[line truncated]~
+- when source is known (for example ~read_file~, ~lines_range~, ~grep_in_file~),
+  the notice includes source path and suggests using ~lines_range~ and
+  ~grep_in_file~/~grep~
+- when source is unknown (for example generic tool output), full output is saved
+  to a temp file (if enabled) and the filename is included in the notice
 
 Example regex rules:
 
