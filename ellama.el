@@ -477,6 +477,8 @@ It should be a function with single argument generated text string."
 
 (defvar ellama--current-session-id nil)
 (defvar ellama--current-session-uid nil)
+(defvar-local ellama--current-session nil)
+(defvar-local ellama--ignore-kill-buffer-request-cancel nil)
 
 (defun ellama--set-file-name-and-save ()
   "Set buffer file name and save buffer."
@@ -540,8 +542,6 @@ It should be a function with single argument generated text string."
 (defvar-local ellama--request-buffers nil)
 
 (defvar-local ellama--request-context nil)
-
-(defvar-local ellama--ignore-kill-buffer-request-cancel nil)
 
 (defconst ellama--code-prefix
   (rx (minimal-match
@@ -755,7 +755,6 @@ This filter contains only subset of markdown syntax to be good enough."
   "Always show ellama chain buffers."
   :type 'boolean)
 
-(defvar-local ellama--current-session nil)
 (defvar ellama--active-sessions (make-hash-table :test #'equal))
 (defvar ellama--active-session-states (make-hash-table :test #'equal))
 
