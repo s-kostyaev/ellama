@@ -37,7 +37,7 @@
   "Project root directory for SRT integration test assets.")
 
 (defun ellama-test-srt-integration--ensure-local-tools ()
-  "Ensure tests use local `ellama-tools.el' from project root."
+  "Load local `ellama-tools.el' from project root when needed."
   (unless (fboundp 'ellama-tools--srt-check-access)
     ;; Parity tests only need the local SRT helpers, not full llm integration.
     ;; Provide tiny stubs when `llm' is unavailable (for clean Docker images).
@@ -55,13 +55,13 @@
      (expand-file-name "ellama-tools.el" ellama-test-srt-integration-root))))
 
 (defun ellama-test-srt-integration--enabled-p ()
-  "Return non-nil when SRT integration tests should run."
+  "Return non-nil when SRT integration should run."
   (and (executable-find "srt")
        (let ((flag (getenv "ELLAMA_SRT_INTEGRATION")))
          (and flag (not (string= flag "")) (not (string= flag "0"))))))
 
 (defun ellama-test-srt-integration--minimal-settings-json ()
-  "Return minimal valid SRT config JSON used by parity tests."
+  "Return minimal valid SRT config JSON for parity execution."
   (concat
    "{\"network\":{\"allowedDomains\":[],\"deniedDomains\":[]},"
    "\"filesystem\":{\"denyRead\":[],\"allowWrite\":[],\"denyWrite\":[]}}"))
@@ -92,7 +92,7 @@
          (delete-file settings-file)))))
 
 (defun ellama-test-srt-integration--preflight-error ()
-  "Return nil if real `srt' is runnable for parity tests, else a reason."
+  "Return nil if real `srt' is runnable for parity execution, else a reason."
   (let ((dir (make-temp-file "ellama-srt-preflight-" t)))
     (unwind-protect
         (ellama-test-srt-integration--with-settings
@@ -129,7 +129,8 @@ Return plist with `:exit', `:stdout', `:stderr'."
         (delete-file stderr-file)))))
 
 (defun ellama-test-srt-integration--real-allows-p (cwd settings-file path op)
-  "Return non-nil if real SRT allows PATH for OP from CWD."
+  "Return non-nil when real SRT permits PATH for OP from CWD.
+Use SETTINGS-FILE as the SRT policy input."
   (let ((res
          (pcase op
            ('read
@@ -147,14 +148,16 @@ Return plist with `:exit', `:stdout', `:stderr'."
       (and (integerp exit-code) (zerop exit-code)))))
 
 (defun ellama-test-srt-integration--local-allows-p (cwd settings-file path op)
-  "Return non-nil if local ellama SRT policy check allows PATH for OP."
+  "Return non-nil when local ellama SRT policy permits PATH for OP.
+Use CWD and SETTINGS-FILE as the local policy context."
   (let ((default-directory cwd)
         (ellama-tools-use-srt t)
         (ellama-tools-srt-args (list "--settings" settings-file)))
     (not (ellama-tools--srt-check-access path op))))
 
 (defun ellama-test-srt-integration--should-match (cwd settings-file path op)
-  "Assert local and real SRT allow/deny decisions match for PATH and OP."
+  "Assert local and real SRT allow/deny decisions match for PATH and OP.
+Use CWD and SETTINGS-FILE as the policy context."
   (let* ((reason (let ((default-directory cwd)
                        (ellama-tools-use-srt t)
                        (ellama-tools-srt-args (list "--settings" settings-file)))
@@ -183,6 +186,7 @@ Return plist with `:exit', `:stdout', `:stderr'."
 (defun ellama-test-srt-integration--should-match-write-with-mkdir
     (cwd settings-file path)
   "Assert local write policy matches real SRT for nested PATH creation.
+Use CWD and SETTINGS-FILE as the policy context.
 The real command creates missing parent directories before writing PATH to
 avoid non-policy failures for non-existing destination parents."
   (let* ((reason (let ((default-directory cwd)
@@ -207,6 +211,7 @@ avoid non-policy failures for non-existing destination parents."
 (defun ellama-test-srt-integration--should-match-move
     (cwd settings-file src dst &optional allow-darwin-write-gap)
   "Assert local move-file policy matches real SRT for `mv SRC DST'.
+Use CWD and SETTINGS-FILE as the policy context.
 When ALLOW-DARWIN-WRITE-GAP is non-nil, accept the observed macOS host
 behavior where real `srt' may allow some cross-directory renames despite
 directory-scoped write-policy denials that local `move_file' checks enforce."

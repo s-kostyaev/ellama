@@ -105,13 +105,13 @@
     (should (equal request-mode-arg -1))
     (should spinner-stop-called)))
 (defun ellama-test--ensure-local-ellama-tools ()
-  "Ensure tests use local `ellama-tools.el' from project root."
+  "Load local `ellama-tools.el' from project root when needed."
   (unless (and (fboundp 'ellama-tools--sanitize-tool-text-output)
                (fboundp 'ellama-tools--command-argv))
     (load-file (expand-file-name "ellama-tools.el" ellama-test-root))))
 
 (defun ellama-test--clear-srt-policy-cache ()
-  "Clear local `srt' policy cache used by tool tests."
+  "Clear local `srt' policy cache for tool test helpers."
   (ellama-test--ensure-local-ellama-tools)
   (if (fboundp 'ellama-tools--srt-policy-clear-cache)
       (ellama-tools--srt-policy-clear-cache)

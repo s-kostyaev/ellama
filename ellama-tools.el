@@ -545,7 +545,8 @@ OUTPUT-CONTEXT may include source metadata under `:source-info'."
 
 (defun ellama-tools--postprocess-output-string
     (tool-name text &optional output-context)
-  "Apply output guard and DLP filtering for TOOL-NAME TEXT."
+  "Apply output guard and DLP filtering for TOOL-NAME TEXT.
+Use OUTPUT-CONTEXT to control budget notices and overflow metadata."
   (let ((dlp-filtered (if ellama-tools-dlp-enabled
                           (ellama-tools--dlp-handle-output-string
                            tool-name text)
