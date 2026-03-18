@@ -1,6 +1,6 @@
 # Makefile for ellama project
 
-.PHONY: build test test-detailed test-srt-integration docker-build-srt-parity test-srt-integration-linux check-compile-warnings manual format-elisp refill-news refill-readme
+.PHONY: build test test-detailed test-integration test-srt-integration docker-build-srt-parity test-srt-integration-linux check-compile-warnings checkdocs manual format-elisp refill-news refill-readme
 
 SRT_PARITY_DOCKER_IMAGE ?= ellama-srt-parity:latest
 SRT_PARITY_DOCKERFILE ?= docker/srt-parity-linux.Dockerfile
@@ -60,6 +60,15 @@ test-detailed:
 		--eval "(setq ert-batch-backtrace-right-margin 200)" \
 		--eval "(ert-run-tests-batch-and-exit t)"
 
+test-integration:
+	emacs -Q -batch \
+		--eval "(package-initialize)" \
+		--eval "(require 'cl-lib)" \
+		--eval "(setq load-path (cl-remove-if (lambda (dir) (string-match-p \"/elpa/org-[^/]+/?$$\" dir)) load-path))" \
+		-l ellama.el \
+		-l tests/integration-test-ellama.el \
+		--eval "(ert t)"
+
 test-srt-integration:
 	ELLAMA_SRT_INTEGRATION=1 emacs -batch --eval "(package-initialize)" \
 		-l tests/test-ellama-tools-srt-integration.el \
@@ -77,6 +86,11 @@ test-srt-integration-linux: docker-build-srt-parity
 
 check-compile-warnings:
 	emacs --batch --eval "(package-initialize)" --eval "(setq native-comp-eln-load-path (list default-directory))" -L . -f batch-native-compile $(ELLAMA_COMPILE_ORDER)
+
+checkdocs:
+	emacs -Q -batch \
+		--eval "(require 'checkdoc)" \
+		--eval "(let* ((files (append (file-expand-wildcards \"ellama*.el\") (file-expand-wildcards \"tests/*.el\"))) (checkdoc-autofix-flag 'never) (checkdoc-diagnostic-buffer \"*ellama checkdoc errors*\") (issues 0)) (dolist (file files) (with-current-buffer (find-file-noselect file) (checkdoc-current-buffer t))) (when (get-buffer checkdoc-diagnostic-buffer) (with-current-buffer checkdoc-diagnostic-buffer (goto-char (point-min)) (while (re-search-forward \"^\\\\(.*\\\\):\\\\([0-9]+\\\\): \\\\(.*\\\\)$$\" nil t) (setq issues (1+ issues)) (princ (format \"%s:%s: %s\\n\" (match-string 1) (match-string 2) (match-string 3))))) (kill-buffer checkdoc-diagnostic-buffer)) (if (> issues 0) (progn (princ (format \"checkdocs: %d issue(s)\\n\" issues)) (kill-emacs 1)) (princ \"checkdocs: OK\\n\")))"
 
 manual:
 	emacs -batch --eval "(package-initialize)" \
