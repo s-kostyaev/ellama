@@ -473,10 +473,27 @@ Key settings:
   path-like arg names (for example ~payload.items[0].token~).  Override ~:arg~
   matches exact names and nested path prefixes (for example ~"payload"~ matches
   ~payload.items[0].token~).
-- ~ellama-tools-dlp-log-targets~: Incident log targets (~memory~, ~message~).
+- ~ellama-tools-dlp-log-targets~: Incident log targets (~memory~, ~message~,
+  ~file~).
+- ~ellama-tools-dlp-audit-log-file~: JSONL path used when ~file~ sink is
+  enabled.
 - ~ellama-tools-dlp-incident-log-max~: Maximum in-memory incidents retained.
 - ~ellama-tools-dlp-input-fail-open~ / ~ellama-tools-dlp-output-fail-open~:
   Behavior when DLP itself errors internally.
+- ~ellama-tools-irreversible-enabled~: Enable irreversible-action handling.
+- ~ellama-tools-irreversible-default-action~: Default irreversible action
+  (~warn~ or ~block~, with monitor downgrade to ~warn-strong~).
+- ~ellama-tools-irreversible-unknown-tool-action~: Default action for unknown
+  MCP tools (~warn~ or ~allow~).
+- ~ellama-tools-irreversible-require-typed-confirm~: Require typed phrase for
+  irreversible warnings.
+- ~ellama-tools-irreversible-project-overrides-enabled~: Enable project-local
+  irreversible override policy.
+- ~ellama-tools-irreversible-project-overrides-file~: Project policy file name.
+- ~ellama-tools-irreversible-project-trust-store-file~: User trust store for
+  repository approval records (repo root + remote + policy hash).
+- ~ellama-tools-irreversible-scoped-bypass-default-ttl~: Default TTL (seconds)
+  for session bypass entries.
 - ~ellama-tools-output-line-budget-enabled~: Enable per-tool output line-budget
   truncation before returning text to the model (enabled by default).
 - ~ellama-tools-output-line-budget-max-lines~: Max lines per tool output
@@ -503,6 +520,29 @@ LLM safety check behavior (v1):
 - in ~monitor~, unsafe LLM verdicts are logged but do not change the result
 - in ~enforce~, an unsafe LLM verdict may force ~block~
 - LLM findings never trigger ~warn~ or ~redact~ and do not affect redaction
+
+Irreversible action safety (v1):
+
+- irreversible warnings use ~warn-strong~ with typed confirmation phrase ~I
+  UNDERSTAND THIS CANNOT BE UNDONE~
+- in ~enforce~, high-confidence irreversible findings hard ~block~
+- in ~monitor~, high-confidence irreversible findings still require typed
+  confirmation and do not hard block
+- unknown MCP tool identities default to ~warn~ (configurable via
+  ~ellama-tools-irreversible-unknown-tool-action~)
+- policy precedence for irreversible decisions: ~high-confidence enforce block~
+  > ~session bypass~ > ~project override~ > global irreversible default
+- project overrides are ignored until the repository policy is explicitly
+  trusted; trust is bound to repo root, remote URL, and policy hash
+- audit sink write failure for irreversible decisions is fail-closed; in
+  interactive sessions a separate explicit confirmation can override once
+
+Session bypass helper:
+
+#+BEGIN_SRC emacs-lisp
+  ;; Allow irreversible actions for one tool identity in this session.
+  (ellama-tools-dlp-add-session-bypass "mcp-db/query" 3600 "migration window")
+#+END_SRC
 
 Tool output truncation behavior:
 
@@ -558,8 +598,21 @@ Tuning helpers:
 - ~(ellama-tools-dlp-incident-stats)~
 - ~(ellama-tools-dlp-incident-stats-report)~
 
+Incident stats include rollups by risk class, rule ID, tool identity, and
+decision type (including ~bypass~).
+
 For a longer rollout/tuning walkthrough and more override examples, see
 ~docs/dlp_rollout_guide.md~.
+
+Troubleshooting:
+
+- repeated irreversible warnings: classify trusted MCP tools with
+  ~ellama-tools-irreversible-tool-risk-overrides~ or use a short-lived session
+  bypass for one tool identity
+- bypass expiry: session bypasses expire by TTL and are removed automatically;
+  re-add with ~ellama-tools-dlp-add-session-bypass~ when needed
+- false positives: inspect incidents via ~ellama-tools-dlp-recent-incidents~ and
+  tune regex rules / overrides before moving more paths to enforce
 
 ** SRT Filesystem Policy for Tools
 
@@ -577,6 +630,10 @@ Supported local filesystem subset (current):
 - ~filesystem.denyRead~
 - ~filesystem.allowWrite~
 - ~filesystem.denyWrite~ (takes precedence over ~allowWrite~)
+
+For irreversible audit hardening, keep ~ellama-tools-dlp-audit-log-file~ outside
+~allowWrite~ and add explicit ~denyRead~/~denyWrite~ entries for the audit
+directory.
 
 Local checks intentionally ignore unrelated ~srt~ keys (for example
 ~network.*~).  If the ~filesystem~ section is missing, local checks use the same
@@ -947,6 +1004,10 @@ to ~ellama~ you can add duckduckgo mcp server
 			  (list tool)))
 	       tools)))))
 #+end_src
+
+When ~:categoryp t~ is used, ellama derives stable MCP tool identity as
+~<category>/<tool-name>~ (for example ~mcp-ddg/search~).  Irreversible policy,
+audit, and overrides are keyed by this identity.
 
 * Agent Skills
 

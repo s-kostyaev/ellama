@@ -27,6 +27,7 @@
 
 (require 'cl-lib)
 (require 'json)
+(require 'project nil t)
 
 (declare-function ellama-get-first-ollama-chat-model "ellama" ())
 (declare-function llm-capabilities "llm" (provider))
@@ -418,6 +419,36 @@ to `warn-strong' in monitor mode."
                  (const :tag "Warn" warn))
   :group 'ellama-tools-dlp)
 
+(defcustom ellama-tools-irreversible-scoped-bypass-default-ttl 3600
+  "Default TTL in seconds for scoped irreversible bypass entries."
+  :type '(choice (const :tag "No Expiry" nil)
+                 integer)
+  :group 'ellama-tools-dlp)
+
+(defcustom ellama-tools-irreversible-project-overrides-enabled t
+  "Enable irreversible project-level overrides."
+  :type 'boolean
+  :group 'ellama-tools-dlp)
+
+(defcustom ellama-tools-irreversible-project-overrides-file
+  ".ellama-irreversible-overrides.el"
+  "Project-local irreversible override file name."
+  :type 'string
+  :group 'ellama-tools-dlp)
+
+(defcustom ellama-tools-irreversible-project-trust-store-file
+  (expand-file-name "ellama-irreversible-trust.el" user-emacs-directory)
+  "User-global trust store for project irreversible overrides."
+  :type 'file
+  :group 'ellama-tools-dlp)
+
+(defcustom ellama-tools-irreversible-tool-risk-overrides nil
+  "Risk classification overrides keyed by tool identity.
+Each element is a plist with keys:
+`:tool-identity' (required), `:risk-class' (`read'/`mutating'/`irreversible')."
+  :type '(repeat plist)
+  :group 'ellama-tools-dlp)
+
 (defcustom ellama-tools-irreversible-high-confidence-block-rules
   '("ir-sql-drop-database"
     "ir-sql-drop-schema"
@@ -563,9 +594,16 @@ When `:except' is non-nil and the override matches, findings are ignored."
 
 (defcustom ellama-tools-dlp-log-targets '(memory)
   "Select DLP incident logging targets.
-Supported targets are `memory' and `message'."
+Supported targets are `memory', `message' and `file'."
   :type '(set (const :tag "In-memory list" memory)
-              (const :tag "Messages buffer" message))
+              (const :tag "Messages buffer" message)
+              (const :tag "JSONL file sink" file))
+  :group 'ellama-tools-dlp)
+
+(defcustom ellama-tools-dlp-audit-log-file
+  (expand-file-name "ellama-dlp-audit.jsonl" user-emacs-directory)
+  "File path for durable JSONL DLP incidents."
+  :type 'file
   :group 'ellama-tools-dlp)
 
 (defcustom ellama-tools-dlp-incident-log-max 200
@@ -632,6 +670,18 @@ or a plist with `:score' and/or `:reject'."
 
 (defvar ellama-tools-dlp--incident-log nil
   "Newest-first list of sanitized internal DLP incident plists.")
+
+(defvar ellama-tools-dlp--last-record-errors nil
+  "Last incident sink write errors for the current record operation.")
+
+(defvar ellama-tools-dlp--session-bypasses nil
+  "Session-scoped irreversible bypass entries.")
+
+(defvar ellama-tools-dlp--project-override-cache nil
+  "Cached parsed project override payload for current project.")
+
+(defvar ellama-tools-dlp--project-trust-cache nil
+  "Cached user trust records for project override files.")
 
 (defvar ellama-tools-dlp--regex-cache (make-hash-table :test 'equal)
   "Cache for validated regex rules.")
@@ -1268,13 +1318,44 @@ When COUNT is non-nil, return at most COUNT incidents."
            ellama-tools-dlp-message-prefix
            (ellama-tools-dlp--incident-summary event)))
 
+(defun ellama-tools-dlp--record-incident-file (event)
+  "Record sanitized DLP EVENT in file sink."
+  (let ((line (concat (json-encode event) "\n")))
+    (make-directory (file-name-directory ellama-tools-dlp-audit-log-file) t)
+    (with-temp-buffer
+      (insert line)
+      (write-region (point-min) (point-max)
+                    ellama-tools-dlp-audit-log-file
+                    t 'silent))))
+
+(defun ellama-tools-dlp--record-incident-fallback-error (error-message)
+  "Write sink ERROR-MESSAGE to non-file targets."
+  (let ((event (list :type 'audit-sink-error
+                     :timestamp (format-time-string "%FT%T%z")
+                     :error error-message)))
+    (when (memq 'memory ellama-tools-dlp-log-targets)
+      (ellama-tools-dlp--record-incident-memory event))
+    (when (memq 'message ellama-tools-dlp-log-targets)
+      (ellama-tools-dlp--record-incident-message event))))
+
 (defun ellama-tools-dlp--record-incident (event)
   "Record sanitized DLP EVENT and return it."
   (let ((sanitized (ellama-tools-dlp--sanitize-incident-value event)))
+    (setq ellama-tools-dlp--last-record-errors nil)
     (when (memq 'memory ellama-tools-dlp-log-targets)
       (ellama-tools-dlp--record-incident-memory sanitized))
     (when (memq 'message ellama-tools-dlp-log-targets)
       (ellama-tools-dlp--record-incident-message sanitized))
+    (when (memq 'file ellama-tools-dlp-log-targets)
+      (condition-case err
+          (ellama-tools-dlp--record-incident-file sanitized)
+        (error
+         (let ((error-message (error-message-string err)))
+           (push (list :target 'file
+                       :error error-message)
+                 ellama-tools-dlp--last-record-errors)
+           (ellama-tools-dlp--record-incident-fallback-error
+            error-message)))))
     sanitized))
 
 (defun ellama-tools-dlp--log-exact-secret-error
@@ -1950,6 +2031,327 @@ Match exact arg names and nested path prefixes like `arg.', `arg[0]'."
         (setq result (plist-get override :action))))
     result))
 
+(defun ellama-tools-dlp--now ()
+  "Return current wall-clock time in seconds."
+  (float-time))
+
+(defun ellama-tools-dlp--tool-risk-override (tool-identity)
+  "Return risk override for TOOL-IDENTITY, or nil."
+  (let ((result nil))
+    (dolist (entry ellama-tools-irreversible-tool-risk-overrides)
+      (when (equal (plist-get entry :tool-identity) tool-identity)
+        (setq result (plist-get entry :risk-class))))
+    (when (memq result '(read mutating irreversible))
+      result)))
+
+(defun ellama-tools-dlp--tool-risk-class (context)
+  "Return risk class for scan CONTEXT.
+Result is one of `read', `mutating', `irreversible' or `unknown'."
+  (let* ((tool (plist-get context :tool-name))
+         (tool-identity (plist-get context :tool-identity))
+         (tool-origin (plist-get context :tool-origin))
+         (override (and (stringp tool-identity)
+                        (ellama-tools-dlp--tool-risk-override tool-identity))))
+    (cond
+     (override override)
+     ((eq tool-origin 'builtin)
+      (or (cdr (assoc tool ellama-tools-dlp--builtin-risk-profile))
+          'mutating))
+     ((eq tool-origin 'mcp)
+      'unknown)
+     (t
+      'unknown))))
+
+(defun ellama-tools-dlp--unknown-mcp-tool-p (context)
+  "Return non-nil when CONTEXT refers to an unknown MCP tool."
+  (and (eq (plist-get context :tool-origin) 'mcp)
+       (eq (ellama-tools-dlp--tool-risk-class context) 'unknown)))
+
+(defun ellama-tools-dlp--entry-expired-p (entry)
+  "Return non-nil when bypass ENTRY is expired."
+  (let ((expires-at (plist-get entry :expires-at)))
+    (and (numberp expires-at)
+         (> (ellama-tools-dlp--now) expires-at))))
+
+(defun ellama-tools-dlp--purge-expired-session-bypasses ()
+  "Drop expired entries from session bypass store."
+  (setq ellama-tools-dlp--session-bypasses
+        (seq-remove #'ellama-tools-dlp--entry-expired-p
+                    ellama-tools-dlp--session-bypasses)))
+
+(defun ellama-tools-dlp-clear-session-bypasses ()
+  "Clear session-scoped irreversible bypass entries."
+  (interactive)
+  (setq ellama-tools-dlp--session-bypasses nil))
+
+(defun ellama-tools-dlp--make-bypass-id ()
+  "Return unique bypass identifier."
+  (format "bypass-%d-%06x"
+          (floor (* 1000 (ellama-tools-dlp--now)))
+          (random #xFFFFFF)))
+
+(defun ellama-tools-dlp-add-session-bypass
+    (tool-identity &optional ttl reason)
+  "Add session irreversible bypass for TOOL-IDENTITY.
+TTL is in seconds.  When nil, use
+`ellama-tools-irreversible-scoped-bypass-default-ttl'.  REASON is optional."
+  (unless (and (stringp tool-identity) (> (length tool-identity) 0))
+    (error "TOOL-IDENTITY must be a non-empty string"))
+  (let* ((ttl (if (null ttl)
+                  ellama-tools-irreversible-scoped-bypass-default-ttl
+                ttl))
+         (expires-at (and (numberp ttl)
+                          (+ (ellama-tools-dlp--now) ttl)))
+         (entry (list :scope 'session
+                      :tool-identity tool-identity
+                      :action 'allow
+                      :reason reason
+                      :bypass-id (ellama-tools-dlp--make-bypass-id)
+                      :expires-at expires-at)))
+    (ellama-tools-dlp--purge-expired-session-bypasses)
+    (push entry ellama-tools-dlp--session-bypasses)
+    (copy-tree entry)))
+
+(defun ellama-tools-dlp--session-bypass-entry (context)
+  "Return matching active session bypass entry for CONTEXT, or nil."
+  (ellama-tools-dlp--purge-expired-session-bypasses)
+  (let ((tool-identity (plist-get context :tool-identity))
+        result)
+    (dolist (entry ellama-tools-dlp--session-bypasses)
+      (when (and (equal (plist-get entry :tool-identity) tool-identity)
+                 (not (ellama-tools-dlp--entry-expired-p entry)))
+        (setq result entry)))
+    result))
+
+(defun ellama-tools-dlp--project-root ()
+  "Return current project root directory, or nil."
+  (let ((project (and (fboundp 'project-current)
+                      (project-current nil default-directory))))
+    (cond
+     ((and project (fboundp 'project-root))
+      (expand-file-name (project-root project)))
+     ((locate-dominating-file default-directory ".git")
+      (expand-file-name
+       (locate-dominating-file default-directory ".git")))
+     (t
+      nil))))
+
+(defun ellama-tools-dlp--project-remote-url (project-root)
+  "Return origin remote URL for PROJECT-ROOT, or nil."
+  (condition-case nil
+      (car (process-lines "git" "-C" project-root "remote" "get-url" "origin"))
+    (error nil)))
+
+(defun ellama-tools-dlp--project-overrides-path (project-root)
+  "Return absolute override policy path for PROJECT-ROOT."
+  (when (and (stringp project-root)
+             (stringp ellama-tools-irreversible-project-overrides-file))
+    (expand-file-name ellama-tools-irreversible-project-overrides-file
+                      project-root)))
+
+(defun ellama-tools-dlp--read-file-string (path)
+  "Return file content of PATH as string."
+  (with-temp-buffer
+    (insert-file-contents path)
+    (buffer-string)))
+
+(defun ellama-tools-dlp--policy-file-hash (path)
+  "Return SHA256 hash for PATH content."
+  (when (and (stringp path) (file-exists-p path))
+    (secure-hash 'sha256 (ellama-tools-dlp--read-file-string path))))
+
+(defun ellama-tools-dlp--normalize-project-override-action (action)
+  "Return normalized override ACTION symbol, or nil."
+  (when (or (symbolp action) (stringp action))
+    (let* ((raw (if (symbolp action) (symbol-name action) action))
+           (sym (intern (downcase raw))))
+      (when (memq sym '(allow warn warn-strong block))
+        sym))))
+
+(defun ellama-tools-dlp--normalize-project-override (entry)
+  "Return normalized project override ENTRY, or nil."
+  (let* ((tool-identity (plist-get entry :tool-identity))
+         (tool-name (plist-get entry :tool))
+         (action
+          (ellama-tools-dlp--normalize-project-override-action
+           (plist-get entry :action)))
+         (expires-at (plist-get entry :expires-at))
+         (ttl (plist-get entry :ttl))
+         (created-at (or (plist-get entry :created-at)
+                         (ellama-tools-dlp--now)))
+         (computed-expiry (or (and (numberp expires-at) expires-at)
+                              (and (numberp ttl) (+ created-at ttl)))))
+    (when (and action
+               (or (stringp tool-identity) (stringp tool-name)))
+      (list :tool-identity tool-identity
+            :tool tool-name
+            :action action
+            :reason (plist-get entry :reason)
+            :bypass-id (or (plist-get entry :bypass-id)
+                           (ellama-tools-dlp--make-bypass-id))
+            :expires-at computed-expiry))))
+
+(defun ellama-tools-dlp--normalize-project-overrides (raw-overrides)
+  "Return normalized override list from RAW-OVERRIDES."
+  (let (result)
+    (dolist (entry raw-overrides)
+      (let ((normalized (and (listp entry)
+                             (ellama-tools-dlp--normalize-project-override
+                              entry))))
+        (when normalized
+          (push normalized result))))
+    (nreverse result)))
+
+(defun ellama-tools-dlp--read-project-overrides-file (path)
+  "Return normalized overrides loaded from PATH."
+  (when (and (stringp path) (file-exists-p path))
+    (let* ((raw (read (ellama-tools-dlp--read-file-string path)))
+           (overrides (if (and (listp raw)
+                               (plist-member raw :overrides))
+                          (plist-get raw :overrides)
+                        raw)))
+      (ellama-tools-dlp--normalize-project-overrides overrides))))
+
+(defun ellama-tools-dlp--project-overrides-payload ()
+  "Return project overrides payload plist for current project, or nil."
+  (let* ((project-root (ellama-tools-dlp--project-root))
+         (policy-path (and project-root
+                           (ellama-tools-dlp--project-overrides-path
+                            project-root))))
+    (when (and project-root
+               ellama-tools-irreversible-project-overrides-enabled
+               (stringp policy-path)
+               (file-exists-p policy-path))
+      (let* ((policy-hash (ellama-tools-dlp--policy-file-hash policy-path))
+             (cache-key (list project-root policy-path policy-hash)))
+        (if (and ellama-tools-dlp--project-override-cache
+                 (equal (plist-get ellama-tools-dlp--project-override-cache
+                                   :cache-key)
+                        cache-key))
+            ellama-tools-dlp--project-override-cache
+          (setq ellama-tools-dlp--project-override-cache
+                (list :cache-key cache-key
+                      :project-root project-root
+                      :policy-path policy-path
+                      :policy-hash policy-hash
+                      :remote-url
+                      (ellama-tools-dlp--project-remote-url project-root)
+                      :overrides
+                      (condition-case nil
+                          (ellama-tools-dlp--read-project-overrides-file
+                           policy-path)
+                        (error nil)))))))))
+
+(defun ellama-tools-dlp--project-trust-load ()
+  "Return trust records from persistent trust store."
+  (if ellama-tools-dlp--project-trust-cache
+      ellama-tools-dlp--project-trust-cache
+    (setq ellama-tools-dlp--project-trust-cache
+          (condition-case nil
+              (when (file-exists-p ellama-tools-irreversible-project-trust-store-file)
+                (let ((raw
+                       (read (ellama-tools-dlp--read-file-string
+                              ellama-tools-irreversible-project-trust-store-file))))
+                  (if (listp raw) raw nil)))
+            (error nil)))))
+
+(defun ellama-tools-dlp--project-trust-save (records)
+  "Persist trust RECORDS and refresh cache."
+  (make-directory
+   (file-name-directory ellama-tools-irreversible-project-trust-store-file) t)
+  (with-temp-file ellama-tools-irreversible-project-trust-store-file
+    (let ((print-length nil)
+          (print-level nil))
+      (prin1 records (current-buffer))
+      (insert "\n")))
+  (setq ellama-tools-dlp--project-trust-cache records))
+
+(defun ellama-tools-dlp--project-trusted-p (payload)
+  "Return non-nil when project override PAYLOAD is trusted."
+  (let* ((records (ellama-tools-dlp--project-trust-load))
+         (root (plist-get payload :project-root))
+         (remote (plist-get payload :remote-url))
+         (hash (plist-get payload :policy-hash))
+         trusted)
+    (dolist (record records)
+      (when (and (equal (plist-get record :project-root) root)
+                 (equal (plist-get record :remote-url) remote)
+                 (equal (plist-get record :policy-hash) hash))
+        (setq trusted t)))
+    trusted))
+
+(defun ellama-tools-dlp--project-override-summary (payload)
+  "Return short summary string for project override PAYLOAD."
+  (let ((overrides (plist-get payload :overrides))
+        (tool-count 0)
+        (action-count 0))
+    (dolist (entry overrides)
+      (when (or (plist-get entry :tool-identity) (plist-get entry :tool))
+        (setq tool-count (1+ tool-count)))
+      (when (plist-get entry :action)
+        (setq action-count (1+ action-count))))
+    (format "overrides=%d actions=%d"
+            tool-count action-count)))
+
+(defun ellama-tools-dlp--project-trust-approve (payload)
+  "Ask approval to trust project override PAYLOAD and persist if approved."
+  (if noninteractive
+      nil
+    (let* ((root (plist-get payload :project-root))
+           (remote (or (plist-get payload :remote-url) "none"))
+           (hash (or (plist-get payload :policy-hash) "unknown"))
+           (summary (ellama-tools-dlp--project-override-summary payload))
+           (answer
+            (read-char-choice
+             (format
+              (concat
+               "Trust irreversible project overrides for %s "
+               "(remote: %s, hash: %s, %s)? (y/n): ")
+              root remote hash summary)
+             '(?y ?n))))
+      (when (eq answer ?y)
+        (let* ((records (or (ellama-tools-dlp--project-trust-load) nil))
+               (cleaned
+                (seq-remove
+                 (lambda (record)
+                   (and (equal (plist-get record :project-root) root)
+                        (equal (plist-get record :remote-url) remote)))
+                 records))
+               (record (list :project-root root
+                             :remote-url remote
+                             :policy-hash hash
+                             :approved-at
+                             (format-time-string "%FT%T%z"))))
+          (ellama-tools-dlp--project-trust-save
+           (cons record cleaned))
+          t)))))
+
+(defun ellama-tools-dlp--trusted-project-overrides ()
+  "Return trusted project override entries for current project, or nil."
+  (let ((payload (ellama-tools-dlp--project-overrides-payload)))
+    (when payload
+      (if (or (ellama-tools-dlp--project-trusted-p payload)
+              (ellama-tools-dlp--project-trust-approve payload))
+          (plist-get payload :overrides)
+        nil))))
+
+(defun ellama-tools-dlp--project-override-entry (context)
+  "Return matching trusted project override entry for CONTEXT, or nil."
+  (let ((tool (plist-get context :tool-name))
+        (tool-identity (plist-get context :tool-identity))
+        (overrides (ellama-tools-dlp--trusted-project-overrides))
+        result)
+    (dolist (entry overrides)
+      (let ((tool-match
+             (or (and (stringp (plist-get entry :tool-identity))
+                      (equal (plist-get entry :tool-identity) tool-identity))
+                 (and (stringp (plist-get entry :tool))
+                      (equal (plist-get entry :tool) tool)))))
+        (when (and tool-match
+                   (not (ellama-tools-dlp--entry-expired-p entry)))
+          (setq result entry))))
+    result))
+
 (defun ellama-tools-dlp--irreversible-finding-p (finding)
   "Return non-nil when FINDING is irreversible."
   (or (eq (plist-get finding :risk-class) 'irreversible)
@@ -1999,21 +2401,46 @@ Match exact arg names and nested path prefixes like `arg.', `arg[0]'."
 (defun ellama-tools-dlp--policy-decision (context findings)
   "Return configured policy decision plist for CONTEXT and FINDINGS."
   (ellama-tools-dlp--validate-scan-context context)
-  (let ((override-action (ellama-tools-dlp--policy-override-action context))
-        (direction (plist-get context :direction))
-        (has-irreversible
-         (and ellama-tools-irreversible-enabled
-              (ellama-tools-dlp--has-irreversible-findings-p findings)))
-        (has-irreversible-high
-         (and ellama-tools-irreversible-enabled
-              (ellama-tools-dlp--has-irreversible-high-confidence-p findings))))
+  (let* ((override-action (ellama-tools-dlp--policy-override-action context))
+         (direction (plist-get context :direction))
+         (has-irreversible
+          (and ellama-tools-irreversible-enabled
+               (ellama-tools-dlp--has-irreversible-findings-p findings)))
+         (has-irreversible-high
+          (and ellama-tools-irreversible-enabled
+               (ellama-tools-dlp--has-irreversible-high-confidence-p findings)))
+         (session-bypass
+          (and ellama-tools-irreversible-enabled
+               (eq (plist-get context :direction) 'input)
+               has-irreversible
+               (ellama-tools-dlp--session-bypass-entry context)))
+         (project-override
+          (and ellama-tools-irreversible-enabled
+               (eq (plist-get context :direction) 'input)
+               has-irreversible
+               (ellama-tools-dlp--project-override-entry context))))
     (cond
-     ((null findings)
-      (list :action 'allow :policy-source 'clean))
      ((and has-irreversible-high
            (eq ellama-tools-dlp-mode 'enforce))
       ;; High-confidence irreversible block in enforce mode is non-downgradeable.
       (list :action 'block :policy-source 'irreversible-high-confidence))
+     (session-bypass
+      (list :action (or (plist-get session-bypass :action) 'allow)
+            :policy-source 'session-bypass
+            :bypass-id (plist-get session-bypass :bypass-id)
+            :bypass-expires-at (plist-get session-bypass :expires-at)))
+     (project-override
+      (list :action (or (plist-get project-override :action) 'allow)
+            :policy-source 'project-override
+            :bypass-id (plist-get project-override :bypass-id)
+            :bypass-expires-at (plist-get project-override :expires-at)))
+     ((and (null findings)
+           (eq direction 'input)
+           (ellama-tools-dlp--unknown-mcp-tool-p context))
+      (list :action ellama-tools-irreversible-unknown-tool-action
+            :policy-source 'unknown-mcp-default))
+     ((null findings)
+      (list :action 'allow :policy-source 'clean))
      ((ellama-tools-dlp--policy-exception-p context)
       (list :action 'allow :policy-source 'override))
      (has-irreversible
@@ -2155,18 +2582,23 @@ Each span is a plist with `:start', `:end', and `:rule-id'."
 
 (defun ellama-tools-dlp--apply-enforcement
     (text context findings configured-action
-          &optional effective-findings policy-source decision-id)
+          &optional effective-findings policy-source decision-id
+          bypass-id bypass-expires-at)
   "Return DLP verdict for TEXT in CONTEXT with FINDINGS.
 CONFIGURED-ACTION is the policy action before rollout mode adjustment.
 EFFECTIVE-FINDINGS are the findings used for logging and safe messages.
 POLICY-SOURCE tracks which policy layer produced the action.
-DECISION-ID is attached to verdict/incident records."
+DECISION-ID is attached to verdict/incident records.
+BYPASS-ID and BYPASS-EXPIRES-AT annotate bypass-originated decisions."
   (let* ((mode ellama-tools-dlp-mode)
          (effective-findings (or effective-findings findings))
          (action (cond
-                  ((null effective-findings) 'allow)
+                  ((and (null effective-findings)
+                        (not (eq policy-source 'unknown-mcp-default)))
+                   'allow)
                   ((and (eq mode 'monitor)
-                        (not (eq configured-action 'warn-strong)))
+                        (not (eq configured-action 'warn-strong))
+                        (not (eq policy-source 'unknown-mcp-default)))
                    'allow)
                   (t configured-action)))
          (requires-typed-confirm
@@ -2183,67 +2615,74 @@ DECISION-ID is attached to verdict/incident records."
                           action)
                         effective-findings))))
     (condition-case nil
-        (pcase action
-          ('allow
-           (ellama-tools-dlp--make-verdict
-            :action 'allow
-            :message message
-            :findings effective-findings
-            :requires-typed-confirm requires-typed-confirm
-            :policy-source policy-source
-            :decision-id decision-id))
-          ('warn
-           (ellama-tools-dlp--make-verdict
-            :action 'warn
-            :message message
-            :findings effective-findings
-            :requires-typed-confirm requires-typed-confirm
-            :policy-source policy-source
-            :decision-id decision-id))
-          ('warn-strong
-           (ellama-tools-dlp--make-verdict
-            :action 'warn-strong
-            :message message
-            :findings effective-findings
-            :requires-typed-confirm requires-typed-confirm
-            :policy-source policy-source
-            :decision-id decision-id))
-          ('block
-           (ellama-tools-dlp--make-verdict
-            :action 'block
-            :message message
-            :findings effective-findings
-            :requires-typed-confirm requires-typed-confirm
-            :policy-source policy-source
-            :decision-id decision-id))
-          ('redact
-           (if (or (not (eq (plist-get context :direction) 'output))
-                   (plist-get context :truncated))
-               (ellama-tools-dlp--make-verdict
-                :action 'block
-                :message (ellama-tools-dlp--format-safe-message
-                          context 'block effective-findings)
-                :findings effective-findings
-                :requires-typed-confirm requires-typed-confirm
-                :policy-source policy-source
-                :decision-id decision-id)
-             (ellama-tools-dlp--make-verdict
-              :action 'redact
-              :message message
-              :findings effective-findings
-              :requires-typed-confirm requires-typed-confirm
-              :policy-source policy-source
-              :decision-id decision-id
-              :redacted-text (ellama-tools-dlp--apply-redaction
-                              text findings))))
-          (_
-           (ellama-tools-dlp--make-verdict
-            :action 'allow
-            :message message
-            :findings effective-findings
-            :requires-typed-confirm requires-typed-confirm
-            :policy-source policy-source
-            :decision-id decision-id)))
+        (let ((verdict
+               (pcase action
+                 ('allow
+                  (ellama-tools-dlp--make-verdict
+                   :action 'allow
+                   :message message
+                   :findings effective-findings
+                   :requires-typed-confirm requires-typed-confirm
+                   :policy-source policy-source
+                   :decision-id decision-id))
+                 ('warn
+                  (ellama-tools-dlp--make-verdict
+                   :action 'warn
+                   :message message
+                   :findings effective-findings
+                   :requires-typed-confirm requires-typed-confirm
+                   :policy-source policy-source
+                   :decision-id decision-id))
+                 ('warn-strong
+                  (ellama-tools-dlp--make-verdict
+                   :action 'warn-strong
+                   :message message
+                   :findings effective-findings
+                   :requires-typed-confirm requires-typed-confirm
+                   :policy-source policy-source
+                   :decision-id decision-id))
+                 ('block
+                  (ellama-tools-dlp--make-verdict
+                   :action 'block
+                   :message message
+                   :findings effective-findings
+                   :requires-typed-confirm requires-typed-confirm
+                   :policy-source policy-source
+                   :decision-id decision-id))
+                 ('redact
+                  (if (or (not (eq (plist-get context :direction) 'output))
+                          (plist-get context :truncated))
+                      (ellama-tools-dlp--make-verdict
+                       :action 'block
+                       :message (ellama-tools-dlp--format-safe-message
+                                 context 'block effective-findings)
+                       :findings effective-findings
+                       :requires-typed-confirm requires-typed-confirm
+                       :policy-source policy-source
+                       :decision-id decision-id)
+                    (ellama-tools-dlp--make-verdict
+                     :action 'redact
+                     :message message
+                     :findings effective-findings
+                     :requires-typed-confirm requires-typed-confirm
+                     :policy-source policy-source
+                     :decision-id decision-id
+                     :redacted-text (ellama-tools-dlp--apply-redaction
+                                     text findings))))
+                 (_
+                  (ellama-tools-dlp--make-verdict
+                   :action 'allow
+                   :message message
+                   :findings effective-findings
+                   :requires-typed-confirm requires-typed-confirm
+                   :policy-source policy-source
+                   :decision-id decision-id)))))
+          (when bypass-id
+            (setq verdict (plist-put verdict :bypass-id bypass-id)))
+          (when bypass-expires-at
+            (setq verdict
+                  (plist-put verdict :bypass-expires-at bypass-expires-at)))
+          verdict)
       (error
        ;; Redaction failure must fail closed.  Other verdict construction
        ;; errors also fail closed for safety when findings exist.
@@ -2305,6 +2744,8 @@ and LLM-CHECK will be recorded."
            :deterministic-action deterministic-action
            :policy-source (plist-get verdict :policy-source)
            :decision-id (plist-get verdict :decision-id)
+           :bypass-id (plist-get verdict :bypass-id)
+           :bypass-expires-at (plist-get verdict :bypass-expires-at)
            :rule-ids (ellama-tools-dlp--findings-rule-ids effective-findings)
            :detectors (ellama-tools-dlp--findings-detectors effective-findings)
            :risk-classes
@@ -2385,6 +2826,9 @@ Return plist with keys `:context', `:findings', and `:verdict'."
                (deterministic-configured-action
                 (plist-get policy-decision :action))
                (policy-source (plist-get policy-decision :policy-source))
+               (bypass-id (plist-get policy-decision :bypass-id))
+               (bypass-expires-at
+                (plist-get policy-decision :bypass-expires-at))
                (decision-id (ellama-tools-dlp--decision-id))
                (eligibility (ellama-tools-dlp--llm-check-eligible-p
                              prepared-text prepared-context findings
@@ -2429,12 +2873,28 @@ Return plist with keys `:context', `:findings', and `:verdict'."
                 (ellama-tools-dlp--apply-enforcement
                  prepared-text prepared-context findings
                  configured-action effective-findings
-                 policy-source decision-id))
+                 policy-source decision-id
+                 bypass-id bypass-expires-at))
           (setq verdict
                 (plist-put verdict :configured-action configured-action))
+          (setq ellama-tools-dlp--last-record-errors nil)
           (ellama-tools-dlp--log-scan-decision
            prepared-context findings verdict configured-action
            deterministic-configured-action llm-check)
+          (when (and ellama-tools-dlp--last-record-errors
+                     (ellama-tools-dlp--has-irreversible-findings-p
+                      effective-findings))
+            (setq verdict
+                  (plist-put
+                   (plist-put
+                    (plist-put verdict :action 'block)
+                    :configured-action 'block)
+                   :message
+                   (concat
+                    "DLP blocked irreversible input because audit sink "
+                    "write failed")))
+            (setq verdict
+                  (plist-put verdict :audit-sink-failure t)))
           (list :context prepared-context
                 :findings findings
                 :verdict verdict))
@@ -2461,6 +2921,10 @@ Clear incident logs and detector caches."
   (ellama-tools-dlp--clear-incident-log)
   (ellama-tools-dlp--clear-regex-cache)
   (ellama-tools-dlp--invalidate-exact-secret-cache)
+  (ellama-tools-dlp-clear-session-bypasses)
+  (setq ellama-tools-dlp--project-override-cache nil)
+  (setq ellama-tools-dlp--project-trust-cache nil)
+  (setq ellama-tools-dlp--last-record-errors nil)
   t)
 
 (defun ellama-tools-dlp--increment-count (table key)
@@ -2486,31 +2950,57 @@ When COUNT is non-nil, aggregate only the newest COUNT incidents."
   (let* ((incidents (ellama-tools-dlp-recent-incidents count))
          (by-type (make-hash-table :test 'equal))
          (by-action (make-hash-table :test 'equal))
+         (by-decision-type (make-hash-table :test 'equal))
          (by-tool (make-hash-table :test 'equal))
+         (by-tool-identity (make-hash-table :test 'equal))
          (by-rule-id (make-hash-table :test 'equal))
+         (by-risk-class (make-hash-table :test 'equal))
          (truncated-count 0))
     (dolist (incident incidents)
       (let ((type (plist-get incident :type))
             (action (plist-get incident :action))
             (tool (plist-get incident :tool-name))
-            (rule-ids (plist-get incident :rule-ids)))
+            (tool-identity (plist-get incident :tool-identity))
+            (policy-source (plist-get incident :policy-source))
+            (rule-ids (plist-get incident :rule-ids))
+            (risk-classes (plist-get incident :risk-classes)))
         (when type
           (ellama-tools-dlp--increment-count by-type type))
         (when action
           (ellama-tools-dlp--increment-count by-action action))
+        (when (and (eq type 'scan-decision)
+                   (or action
+                       (memq policy-source
+                             '(session-bypass project-override))))
+          (ellama-tools-dlp--increment-count
+           by-decision-type
+           (if (memq policy-source '(session-bypass project-override))
+               'bypass
+             action)))
         (when tool
           (ellama-tools-dlp--increment-count by-tool tool))
+        (when tool-identity
+          (ellama-tools-dlp--increment-count by-tool-identity tool-identity))
         (when (plist-get incident :truncated)
           (setq truncated-count (1+ truncated-count)))
         (when (listp rule-ids)
           (dolist (rule-id rule-ids)
-            (ellama-tools-dlp--increment-count by-rule-id rule-id)))))
+            (ellama-tools-dlp--increment-count by-rule-id rule-id)))
+        (when (listp risk-classes)
+          (dolist (risk-class risk-classes)
+            (ellama-tools-dlp--increment-count by-risk-class risk-class)))))
     (list :total (length incidents)
           :truncated-count truncated-count
           :by-type (ellama-tools-dlp--hash-counts-to-alist by-type)
           :by-action (ellama-tools-dlp--hash-counts-to-alist by-action)
+          :by-decision-type
+          (ellama-tools-dlp--hash-counts-to-alist by-decision-type)
           :by-tool (ellama-tools-dlp--hash-counts-to-alist by-tool)
-          :by-rule-id (ellama-tools-dlp--hash-counts-to-alist by-rule-id))))
+          :by-tool-identity
+          (ellama-tools-dlp--hash-counts-to-alist by-tool-identity)
+          :by-rule-id (ellama-tools-dlp--hash-counts-to-alist by-rule-id)
+          :by-risk-class
+          (ellama-tools-dlp--hash-counts-to-alist by-risk-class))))
 
 (defun ellama-tools-dlp--stats-section-lines (title rows)
   "Return formatted lines for stats section TITLE from ROWS."
@@ -2542,10 +3032,22 @@ When COUNT is non-nil, summarize only the newest COUNT incidents."
                   "By action" (plist-get stats :by-action))
                  '("")
                  (ellama-tools-dlp--stats-section-lines
+                  "By decision type"
+                  (plist-get stats :by-decision-type))
+                 '("")
+                 (ellama-tools-dlp--stats-section-lines
                   "By tool" (plist-get stats :by-tool))
                  '("")
                  (ellama-tools-dlp--stats-section-lines
-                  "By rule id" (plist-get stats :by-rule-id)))))
+                  "By tool identity"
+                  (plist-get stats :by-tool-identity))
+                 '("")
+                 (ellama-tools-dlp--stats-section-lines
+                  "By rule id" (plist-get stats :by-rule-id))
+                 '("")
+                 (ellama-tools-dlp--stats-section-lines
+                  "By risk class"
+                  (plist-get stats :by-risk-class)))))
     (concat (mapconcat #'identity lines "\n") "\n")))
 
 (defun ellama-tools-dlp-show-incident-stats (&optional count)

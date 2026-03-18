@@ -203,12 +203,17 @@
      '(:type scan-decision
              :action block
              :tool-name "shell_command"
+             :tool-identity "shell_command"
              :rule-ids ("r1" "r2")
+             :risk-classes ("irreversible")
              :truncated t))
     (ellama-tools-dlp--record-incident
      '(:type scan-decision
-             :action redact
+             :action allow
              :tool-name "read_file"
+             :tool-identity "mcp-db/query"
+             :policy-source project-override
+             :risk-classes ("read")
              :rule-ids ("r2")))
     (ellama-tools-dlp--record-incident
      '(:type truncation
@@ -220,8 +225,16 @@
       (should (equal (cdr (assoc 'scan-decision (plist-get stats :by-type))) 2))
       (should (equal (cdr (assoc 'truncation (plist-get stats :by-type))) 1))
       (should (equal (cdr (assoc 'block (plist-get stats :by-action))) 1))
-      (should (equal (cdr (assoc 'redact (plist-get stats :by-action))) 1))
+      (should (equal (cdr (assoc 'allow (plist-get stats :by-action))) 1))
+      (should (equal (cdr (assoc 'bypass (plist-get stats :by-decision-type)))
+                     1))
       (should (equal (cdr (assoc "read_file" (plist-get stats :by-tool))) 2))
+      (should (equal
+               (cdr (assoc "mcp-db/query" (plist-get stats :by-tool-identity)))
+               1))
+      (should (equal
+               (cdr (assoc "irreversible" (plist-get stats :by-risk-class)))
+               1))
       (should (equal (cdr (assoc "r2" (plist-get stats :by-rule-id))) 2))
       (should (equal (cdr (assoc "r1" (plist-get stats :by-rule-id))) 1)))))
 
@@ -230,12 +243,19 @@
     (ellama-tools-dlp--clear-incident-log)
     (ellama-tools-dlp--clear-regex-cache)
     (setq ellama-tools-dlp--exact-secret-cache '(:signature ("X=1")))
+    (setq ellama-tools-dlp--session-bypasses
+          '((:tool-identity "mcp-db/query")))
+    (setq ellama-tools-dlp--project-override-cache '(:cache-key t))
+    (setq ellama-tools-dlp--project-trust-cache '((:project-root "/tmp")))
     (ellama-tools-dlp--record-incident '(:type scan-error))
     (puthash '(dummy) '(:status ok) ellama-tools-dlp--regex-cache)
     (should (ellama-tools-dlp-reset-runtime-state))
     (should (null (ellama-tools-dlp--incident-log)))
     (should (= (hash-table-count ellama-tools-dlp--regex-cache) 0))
-    (should (null ellama-tools-dlp--exact-secret-cache))))
+    (should (null ellama-tools-dlp--exact-secret-cache))
+    (should (null ellama-tools-dlp--session-bypasses))
+    (should (null ellama-tools-dlp--project-override-cache))
+    (should (null ellama-tools-dlp--project-trust-cache))))
 
 (ert-deftest test-ellama-tools-dlp-incident-stats-report-formats-sections ()
   (let ((ellama-tools-dlp-log-targets '(memory))
@@ -255,10 +275,13 @@
       (should (string-match-p "scan-decision: 1" report))
       (should (string-match-p "By action:" report))
       (should (string-match-p "block: 1" report))
+      (should (string-match-p "By decision type:" report))
       (should (string-match-p "By tool:" report))
       (should (string-match-p "shell_command: 1" report))
+      (should (string-match-p "By tool identity:" report))
       (should (string-match-p "By rule id:" report))
-      (should (string-match-p "r1: 1" report)))))
+      (should (string-match-p "r1: 1" report))
+      (should (string-match-p "By risk class:" report)))))
 
 (ert-deftest test-ellama-tools-dlp-show-incident-stats-uses-temp-buffer ()
   (let ((buffer-name "*Ellama DLP Incident Stats*"))
@@ -1221,6 +1244,227 @@
     (should (eq (plist-get verdict :configured-action) 'block))
     (should (eq (plist-get verdict :policy-source)
                 'irreversible-high-confidence))))
+
+(ert-deftest test-ellama-tools-dlp-unknown-mcp-default-warn ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'monitor)
+         (ellama-tools-irreversible-unknown-tool-action 'warn)
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'input
+                   :tool-name "query"
+                   :arg-name "arg"
+                   :payload-length 0
+                   :truncated nil
+                   :tool-origin 'mcp
+                   :server-id "mcp-db"
+                   :tool-identity "mcp-db/query"))
+         (result (ellama-tools-dlp--scan-text "SELECT 1" context))
+         (verdict (plist-get result :verdict)))
+    (should (eq (plist-get verdict :action) 'warn))
+    (should (eq (plist-get verdict :configured-action) 'warn))
+    (should (eq (plist-get verdict :policy-source) 'unknown-mcp-default))))
+
+(ert-deftest
+    test-ellama-tools-dlp-irreversible-session-bypass-beats-project-override ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-regex-rules
+          '((:id "ir-test-warn"
+                 :pattern "DROP TABLE"
+                 :directions (input)
+                 :risk-class irreversible
+                 :confidence medium
+                 :requires-typed-confirm t)))
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'input
+                   :tool-name "query"
+                   :arg-name "arg"
+                   :payload-length 0
+                   :truncated nil
+                   :tool-origin 'mcp
+                   :server-id "mcp-db"
+                   :tool-identity "mcp-db/query")))
+    (setq ellama-tools-dlp--session-bypasses
+          (list '(:tool-identity "mcp-db/query"
+                                 :action allow
+                                 :bypass-id "session-1")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'ellama-tools-dlp--project-override-entry)
+                   (lambda (_ctx)
+                     '(:tool-identity "mcp-db/query"
+                                      :action block
+                                      :bypass-id "project-1"))))
+          (let* ((result (ellama-tools-dlp--scan-text "DROP TABLE users"
+                                                      context))
+                 (verdict (plist-get result :verdict)))
+            (should (eq (plist-get verdict :action) 'allow))
+            (should (eq (plist-get verdict :configured-action) 'allow))
+            (should (eq (plist-get verdict :policy-source) 'session-bypass))
+            (should (equal (plist-get verdict :bypass-id) "session-1"))))
+      (setq ellama-tools-dlp--session-bypasses nil))))
+
+(ert-deftest
+    test-ellama-tools-dlp-irreversible-enforce-block-ignores-project-override ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-regex-rules
+          '((:id "ir-test-high"
+                 :pattern "DROP DATABASE"
+                 :directions (input)
+                 :risk-class irreversible
+                 :confidence high
+                 :requires-typed-confirm t)))
+         (ellama-tools-irreversible-high-confidence-block-rules
+          '("ir-test-high"))
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'input
+                   :tool-name "query"
+                   :arg-name "arg"
+                   :payload-length 0
+                   :truncated nil
+                   :tool-origin 'mcp
+                   :server-id "mcp-db"
+                   :tool-identity "mcp-db/query")))
+    (cl-letf (((symbol-function 'ellama-tools-dlp--project-override-entry)
+               (lambda (_ctx)
+                 '(:tool-identity "mcp-db/query"
+                                  :action allow
+                                  :bypass-id "project-1"))))
+      (let* ((result (ellama-tools-dlp--scan-text "DROP DATABASE prod" context))
+             (verdict (plist-get result :verdict)))
+        (should (eq (plist-get verdict :action) 'block))
+        (should (eq (plist-get verdict :configured-action) 'block))
+        (should (eq (plist-get verdict :policy-source)
+                    'irreversible-high-confidence))))))
+
+(ert-deftest
+    test-ellama-tools-dlp-audit-sink-failure-fail-closed-for-irreversible ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-log-targets '(memory file))
+         (ellama-tools-dlp-regex-rules
+          '((:id "ir-test-warn"
+                 :pattern "DROP TABLE"
+                 :directions (input)
+                 :risk-class irreversible
+                 :confidence medium
+                 :requires-typed-confirm t)))
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'input
+                   :tool-name "query"
+                   :arg-name "arg"
+                   :payload-length 0
+                   :truncated nil))
+         verdict)
+    (cl-letf (((symbol-function 'ellama-tools-dlp--record-incident-file)
+               (lambda (_event)
+                 (error "Disk full"))))
+      (setq verdict
+            (plist-get
+             (ellama-tools-dlp--scan-text "DROP TABLE users" context)
+             :verdict)))
+    (should (eq (plist-get verdict :action) 'block))
+    (should (eq (plist-get verdict :configured-action) 'block))
+    (should (eq (plist-get verdict :audit-sink-failure) t))
+    (should (string-match-p "audit sink write failed"
+                            (plist-get verdict :message)))))
+
+(ert-deftest test-ellama-tools-dlp-project-override-trust-gate-untrusted ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp--session-bypasses nil)
+         (ellama-tools-dlp-regex-rules
+          '((:id "ir-test-warn"
+                 :pattern "DROP TABLE"
+                 :directions (input)
+                 :risk-class irreversible
+                 :confidence medium
+                 :requires-typed-confirm t)))
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'input
+                   :tool-name "query"
+                   :arg-name "arg"
+                   :payload-length 0
+                   :truncated nil
+                   :tool-origin 'mcp
+                   :server-id "mcp-db"
+                   :tool-identity "mcp-db/query"))
+         verdict)
+    (cl-letf (((symbol-function 'ellama-tools-dlp--project-overrides-payload)
+               (lambda ()
+                 '(:project-root "/tmp/project"
+                                 :remote-url "git@example"
+                                 :policy-hash "hash-v1"
+                                 :overrides
+                                 ((:tool-identity "mcp-db/query"
+                                                  :action allow)))))
+              ((symbol-function 'ellama-tools-dlp--project-trusted-p)
+               (lambda (_payload) nil))
+              ((symbol-function 'ellama-tools-dlp--project-trust-approve)
+               (lambda (_payload) nil)))
+      (setq verdict
+            (plist-get
+             (ellama-tools-dlp--scan-text "DROP TABLE users" context)
+             :verdict)))
+    (should (eq (plist-get verdict :action) 'warn-strong))
+    (should (eq (plist-get verdict :policy-source)
+                'irreversible-default))))
+
+(ert-deftest test-ellama-tools-dlp-project-override-trust-gate-trusted ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp--session-bypasses nil)
+         (ellama-tools-dlp-regex-rules
+          '((:id "ir-test-warn"
+                 :pattern "DROP TABLE"
+                 :directions (input)
+                 :risk-class irreversible
+                 :confidence medium
+                 :requires-typed-confirm t)))
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'input
+                   :tool-name "query"
+                   :arg-name "arg"
+                   :payload-length 0
+                   :truncated nil
+                   :tool-origin 'mcp
+                   :server-id "mcp-db"
+                   :tool-identity "mcp-db/query"))
+         verdict)
+    (cl-letf (((symbol-function 'ellama-tools-dlp--project-overrides-payload)
+               (lambda ()
+                 '(:project-root "/tmp/project"
+                                 :remote-url "git@example"
+                                 :policy-hash "hash-v1"
+                                 :overrides
+                                 ((:tool-identity "mcp-db/query"
+                                                  :action allow
+                                                  :bypass-id "project-1")))))
+              ((symbol-function 'ellama-tools-dlp--project-trusted-p)
+               (lambda (_payload) t)))
+      (setq verdict
+            (plist-get
+             (ellama-tools-dlp--scan-text "DROP TABLE users" context)
+             :verdict)))
+    (should (eq (plist-get verdict :action) 'allow))
+    (should (eq (plist-get verdict :policy-source) 'project-override))
+    (should (equal (plist-get verdict :bypass-id) "project-1"))))
+
+(ert-deftest test-ellama-tools-dlp-project-trusted-p-hash-mismatch ()
+  (let ((ellama-tools-dlp--project-trust-cache
+         '((:project-root "/tmp/project"
+                          :remote-url "git@example"
+                          :policy-hash "old-hash"))))
+    (should-not
+     (ellama-tools-dlp--project-trusted-p
+      '(:project-root "/tmp/project"
+                      :remote-url "git@example"
+                      :policy-hash "new-hash")))))
 
 (provide 'test-ellama-tools-dlp)
 ;;; test-ellama-tools-dlp.el ends here

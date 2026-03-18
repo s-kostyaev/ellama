@@ -811,7 +811,9 @@ CALLBACK receives `(TEXT PATH)'.  Traverse lists, vectors and hash tables."
                     (list :action 'block
                           :message (or message
                                        (format "DLP blocked input for %s"
-                                               tool-name)))))
+                                               tool-name))
+                          :audit-sink-failure
+                          (plist-get verdict :audit-sink-failure))))
             ((and (eq action 'warn-strong)
                   (not warn-strong-message))
              (setq warn-strong-message
@@ -909,6 +911,18 @@ MESSAGE is a user-facing warning text."
                    ellama-tools-irreversible-typed-confirm-phrase
                    tool-name))))
       (string= typed ellama-tools-irreversible-typed-confirm-phrase))))
+
+(defun ellama-tools--dlp-confirm-audit-sink-failure (tool-name message)
+  "Ask explicit confirmation for audit sink failure on TOOL-NAME with MESSAGE."
+  (eq (read-char-choice
+       (format
+        (concat
+         "%s. Audit sink write failed for irreversible action on tool %s. "
+         "Proceed without durable audit logging? (y/n): ")
+        (or message "DLP blocked irreversible input")
+        tool-name)
+       '(?y ?n))
+      ?y))
 
 (defun ellama-tools--dlp-highlight-findings (start text findings)
   "Highlight FINDINGS in TEXT inserted at START."
@@ -1032,13 +1046,33 @@ return nil."
           (let* ((decision (ellama-tools--dlp-input-decision
                             tool-plist args))
                  (action (plist-get decision :action))
-                 (message (plist-get decision :message)))
+                 (message (plist-get decision :message))
+                 (audit-sink-failure
+                  (plist-get decision :audit-sink-failure)))
             (pcase action
               ('block
-               (ellama-tools--dlp-return-message
-                async args
-                (or message
-                    (format "DLP blocked input for tool %s" tool-name))))
+               (if audit-sink-failure
+                   (if noninteractive
+                       (ellama-tools--dlp-return-message
+                        async args
+                        (or message
+                            (format "DLP blocked input for tool %s"
+                                    tool-name)))
+                     (if (not (ellama-tools--dlp-confirm-audit-sink-failure
+                               tool-name message))
+                         (ellama-tools--dlp-return-message
+                          async args
+                          (format "DLP blocked input for tool %s"
+                                  tool-name))
+                       (let ((result (apply func wrapped-args)))
+                         (if (and (not async) (stringp result))
+                             (ellama-tools--postprocess-output-string
+                              tool-name result output-context tool-metadata)
+                           result))))
+                 (ellama-tools--dlp-return-message
+                  async args
+                  (or message
+                      (format "DLP blocked input for tool %s" tool-name)))))
               ('warn
                (if (not (ellama-tools--dlp-confirm-warn tool-name message))
                    (ellama-tools--dlp-return-message

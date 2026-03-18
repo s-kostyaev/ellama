@@ -2242,6 +2242,197 @@ Return list with result and prompt."
       (should (equal (plist-get incident :server-id) "mcp-db"))
       (should (equal (plist-get incident :tool-identity) "mcp-db/query")))))
 
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-dlp-warn-not-typed-confirm ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((noninteractive nil)
+        (ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-regex-rules
+         '((:id "warn-test"
+                :pattern "SECRET"
+                :directions (input))))
+        (ellama-tools-dlp-input-default-action 'warn)
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        (read-char-called 0)
+        (read-string-called 0))
+    (let* ((tool-plist `(:function ,(lambda (_arg) "ok")
+                                   :name "mcp_tool"
+                                   :args ((:name "arg" :type string))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function)))
+      (cl-letf (((symbol-function 'read-char-choice)
+                 (lambda (_prompt _choices)
+                   (setq read-char-called (1+ read-char-called))
+                   ?y))
+                ((symbol-function 'read-string)
+                 (lambda (_prompt &rest _args)
+                   (setq read-string-called (1+ read-string-called))
+                   "")))
+        (should (equal (funcall wrapped-func "SECRET") "ok")))
+      (should (= read-char-called 1))
+      (should (= read-string-called 0)))))
+
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-irreversible-session-bypass-in-scope ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((noninteractive nil)
+        (ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-regex-rules
+         '((:id "ir-test-warn"
+                :pattern "DROP TABLE"
+                :directions (input)
+                :risk-class irreversible
+                :confidence medium
+                :requires-typed-confirm t)))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        (prompt-count 0))
+    (setq ellama-tools-dlp--session-bypasses nil)
+    (unwind-protect
+        (let* ((tool-a
+                `(:function ,(lambda (_arg) "ok-a")
+                            :name "query"
+                            :category "mcp-db"
+                            :args ((:name "arg" :type string))))
+               (tool-b
+                `(:function ,(lambda (_arg) "ok-b")
+                            :name "query"
+                            :category "mcp-other"
+                            :args ((:name "arg" :type string))))
+               (wrapped-a (plist-get (ellama-tools-wrap-with-confirm tool-a)
+                                     :function))
+               (wrapped-b (plist-get (ellama-tools-wrap-with-confirm tool-b)
+                                     :function)))
+          (ellama-tools-dlp-add-session-bypass "mcp-db/query" 60 "test")
+          (cl-letf (((symbol-function 'read-string)
+                     (lambda (_prompt &rest _args)
+                       (setq prompt-count (1+ prompt-count))
+                       "no")))
+            (should (equal (funcall wrapped-a "DROP TABLE users") "ok-a"))
+            (should (string-match-p
+                     "DLP warning denied tool execution"
+                     (funcall wrapped-b "DROP TABLE users")))))
+      (setq ellama-tools-dlp--session-bypasses nil))
+    (should (= prompt-count 1))))
+
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-irreversible-session-bypass-expiry ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((noninteractive nil)
+        (ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-regex-rules
+         '((:id "ir-test-warn"
+                :pattern "DROP TABLE"
+                :directions (input)
+                :risk-class irreversible
+                :confidence medium
+                :requires-typed-confirm t)))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        (now 1000)
+        (prompt-count 0))
+    (setq ellama-tools-dlp--session-bypasses nil)
+    (unwind-protect
+        (let* ((tool-plist `(:function ,(lambda (_arg) "ok")
+                                       :name "query"
+                                       :category "mcp-db"
+                                       :args ((:name "arg" :type string))))
+               (wrapped-func
+                (plist-get (ellama-tools-wrap-with-confirm tool-plist)
+                           :function)))
+          (cl-letf (((symbol-function 'ellama-tools-dlp--now)
+                     (lambda () now))
+                    ((symbol-function 'read-string)
+                     (lambda (_prompt &rest _args)
+                       (setq prompt-count (1+ prompt-count))
+                       ellama-tools-irreversible-typed-confirm-phrase)))
+            (ellama-tools-dlp-add-session-bypass "mcp-db/query" 1 "test")
+            (should (equal (funcall wrapped-func "DROP TABLE users") "ok"))
+            (setq now 1002)
+            (should (equal (funcall wrapped-func "DROP TABLE users") "ok"))))
+      (setq ellama-tools-dlp--session-bypasses nil))
+    (should (= prompt-count 1))))
+
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-audit-sink-failure-interactive-override ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((noninteractive nil)
+        (ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-log-targets '(memory file))
+        (ellama-tools-dlp-regex-rules
+         '((:id "ir-test-warn"
+                :pattern "DROP TABLE"
+                :directions (input)
+                :risk-class irreversible
+                :confidence medium
+                :requires-typed-confirm t)))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        tool-called)
+    (let* ((tool-plist `(:function ,(lambda (_arg)
+                                      (setq tool-called t)
+                                      "ok")
+                                   :name "query"
+                                   :category "mcp-db"
+                                   :args ((:name "arg" :type string))))
+           (wrapped-func
+            (plist-get (ellama-tools-wrap-with-confirm tool-plist) :function)))
+      (cl-letf (((symbol-function 'ellama-tools-dlp--record-incident-file)
+                 (lambda (_event)
+                   (error "Disk full")))
+                ((symbol-function 'read-char-choice)
+                 (lambda (_prompt _choices) ?y)))
+        (should (equal (funcall wrapped-func "DROP TABLE users") "ok"))
+        (should tool-called)))))
+
+(ert-deftest
+    test-ellama-tools-wrap-with-confirm-audit-sink-failure-noninteractive-block ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((noninteractive t)
+        (ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-log-targets '(memory file))
+        (ellama-tools-dlp-regex-rules
+         '((:id "ir-test-warn"
+                :pattern "DROP TABLE"
+                :directions (input)
+                :risk-class irreversible
+                :confidence medium
+                :requires-typed-confirm t)))
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        tool-called)
+    (let* ((tool-plist `(:function ,(lambda (_arg)
+                                      (setq tool-called t)
+                                      "ok")
+                                   :name "query"
+                                   :category "mcp-db"
+                                   :args ((:name "arg" :type string))))
+           (wrapped-func
+            (plist-get (ellama-tools-wrap-with-confirm tool-plist) :function))
+           result)
+      (cl-letf (((symbol-function 'ellama-tools-dlp--record-incident-file)
+                 (lambda (_event)
+                   (error "Disk full"))))
+        (setq result (funcall wrapped-func "DROP TABLE users")))
+      (should (string-match-p "audit sink write failed" result))
+      (should-not tool-called))))
+
 (provide 'test-ellama-tools)
 
 ;;; test-ellama-tools.el ends here

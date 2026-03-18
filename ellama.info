@@ -632,12 +632,32 @@ Key settings:
      nested path prefixes (for example ‘"payload"’ matches
      ‘payload.items[0].token’).
    • ‘ellama-tools-dlp-log-targets’: Incident log targets (‘memory’,
-     ‘message’).
+     ‘message’, ‘file’).
+   • ‘ellama-tools-dlp-audit-log-file’: JSONL path used when ‘file’ sink
+     is enabled.
    • ‘ellama-tools-dlp-incident-log-max’: Maximum in-memory incidents
      retained.
    • ‘ellama-tools-dlp-input-fail-open’ /
      ‘ellama-tools-dlp-output-fail-open’: Behavior when DLP itself
      errors internally.
+   • ‘ellama-tools-irreversible-enabled’: Enable irreversible-action
+     handling.
+   • ‘ellama-tools-irreversible-default-action’: Default irreversible
+     action (‘warn’ or ‘block’, with monitor downgrade to
+     ‘warn-strong’).
+   • ‘ellama-tools-irreversible-unknown-tool-action’: Default action for
+     unknown MCP tools (‘warn’ or ‘allow’).
+   • ‘ellama-tools-irreversible-require-typed-confirm’: Require typed
+     phrase for irreversible warnings.
+   • ‘ellama-tools-irreversible-project-overrides-enabled’: Enable
+     project-local irreversible override policy.
+   • ‘ellama-tools-irreversible-project-overrides-file’: Project policy
+     file name.
+   • ‘ellama-tools-irreversible-project-trust-store-file’: User trust
+     store for repository approval records (repo root + remote + policy
+     hash).
+   • ‘ellama-tools-irreversible-scoped-bypass-default-ttl’: Default TTL
+     (seconds) for session bypass entries.
    • ‘ellama-tools-output-line-budget-enabled’: Enable per-tool output
      line-budget truncation before returning text to the model (enabled
      by default).
@@ -669,6 +689,30 @@ LLM safety check behavior (v1):
    • in ‘enforce’, an unsafe LLM verdict may force ‘block’
    • LLM findings never trigger ‘warn’ or ‘redact’ and do not affect
      redaction
+
+Irreversible action safety (v1):
+
+   • irreversible warnings use ‘warn-strong’ with typed confirmation
+     phrase ‘I UNDERSTAND THIS CANNOT BE UNDONE’
+   • in ‘enforce’, high-confidence irreversible findings hard ‘block’
+   • in ‘monitor’, high-confidence irreversible findings still require
+     typed confirmation and do not hard block
+   • unknown MCP tool identities default to ‘warn’ (configurable via
+     ‘ellama-tools-irreversible-unknown-tool-action’)
+   • policy precedence for irreversible decisions: ‘high-confidence
+     enforce block’ > ‘session bypass’ > ‘project override’ > global
+     irreversible default
+   • project overrides are ignored until the repository policy is
+     explicitly trusted; trust is bound to repo root, remote URL, and
+     policy hash
+   • audit sink write failure for irreversible decisions is fail-closed;
+     in interactive sessions a separate explicit confirmation can
+     override once
+
+Session bypass helper:
+
+     ;; Allow irreversible actions for one tool identity in this session.
+     (ellama-tools-dlp-add-session-bypass "mcp-db/query" 3600 "migration window")
 
 Tool output truncation behavior:
 
@@ -720,8 +764,23 @@ Tuning helpers:
    • ‘(ellama-tools-dlp-incident-stats)’
    • ‘(ellama-tools-dlp-incident-stats-report)’
 
+Incident stats include rollups by risk class, rule ID, tool identity,
+and decision type (including ‘bypass’).
+
 For a longer rollout/tuning walkthrough and more override examples, see
 ‘docs/dlp_rollout_guide.md’.
+
+Troubleshooting:
+
+   • repeated irreversible warnings: classify trusted MCP tools with
+     ‘ellama-tools-irreversible-tool-risk-overrides’ or use a
+     short-lived session bypass for one tool identity
+   • bypass expiry: session bypasses expire by TTL and are removed
+     automatically; re-add with ‘ellama-tools-dlp-add-session-bypass’
+     when needed
+   • false positives: inspect incidents via
+     ‘ellama-tools-dlp-recent-incidents’ and tune regex rules /
+     overrides before moving more paths to enforce
 
 
 File: ellama.info,  Node: SRT Filesystem Policy for Tools,  Prev: DLP for Tool Input/Output,  Up: Configuration
@@ -744,6 +803,10 @@ Supported local filesystem subset (current):
    • ‘filesystem.denyRead’
    • ‘filesystem.allowWrite’
    • ‘filesystem.denyWrite’ (takes precedence over ‘allowWrite’)
+
+For irreversible audit hardening, keep ‘ellama-tools-dlp-audit-log-file’
+outside ‘allowWrite’ and add explicit ‘denyRead~/~denyWrite’ entries for
+the audit directory.
 
 Local checks intentionally ignore unrelated ‘srt’ keys (for example
 ‘network.*’).  If the ‘filesystem’ section is missing, local checks use
@@ -1255,6 +1318,10 @@ capability to ‘ellama’ you can add duckduckgo mcp server
                         (apply #'ellama-tools-define-tool
                                (list tool)))
                     tools)))))
+
+When ‘:categoryp t’ is used, ellama derives stable MCP tool identity as
+‘<category>/<tool-name>’ (for example ‘mcp-ddg/search’).  Irreversible
+policy, audit, and overrides are keyed by this identity.
 
 
 File: ellama.info,  Node: Agent Skills,  Next: Acknowledgments,  Prev: MCP Integration,  Up: Top
@@ -1847,38 +1914,38 @@ Node: Commands8844
 Node: Keymap16131
 Node: Configuration18965
 Node: DLP for Tool Input/Output27557
-Node: SRT Filesystem Policy for Tools34871
-Node: Context Management37440
-Node: Transient Menus for Context Management38508
-Node: Managing the Context40122
-Node: Considerations40897
-Node: Minor modes41490
-Node: ellama-context-header-line-mode43478
-Node: ellama-context-header-line-global-mode44303
-Node: ellama-context-mode-line-mode45023
-Node: ellama-context-mode-line-global-mode45871
-Node: Ellama Session Header Line Mode46575
-Node: Enabling and Disabling47144
-Node: Customization47591
-Node: Ellama Session Mode Line Mode47879
-Node: Enabling and Disabling (1)48464
-Node: Customization (1)48911
-Node: Using Blueprints49205
-Node: Key Components of Ellama Blueprints49845
-Node: Creating and Managing Blueprints50452
-Node: Blueprints files51430
-Node: Variable Management51851
-Node: Keymap and Mode52304
-Node: Transient Menus53240
-Node: Running Blueprints programmatically53786
-Node: MCP Integration54373
-Node: Agent Skills55395
-Node: Directory Structure55758
-Node: Creating a Skill56785
-Node: How it works57160
-Node: Acknowledgments57551
-Node: Contributions58262
-Node: GNU Free Documentation License58648
+Node: SRT Filesystem Policy for Tools37805
+Node: Context Management40554
+Node: Transient Menus for Context Management41622
+Node: Managing the Context43236
+Node: Considerations44011
+Node: Minor modes44604
+Node: ellama-context-header-line-mode46592
+Node: ellama-context-header-line-global-mode47417
+Node: ellama-context-mode-line-mode48137
+Node: ellama-context-mode-line-global-mode48985
+Node: Ellama Session Header Line Mode49689
+Node: Enabling and Disabling50258
+Node: Customization50705
+Node: Ellama Session Mode Line Mode50993
+Node: Enabling and Disabling (1)51578
+Node: Customization (1)52025
+Node: Using Blueprints52319
+Node: Key Components of Ellama Blueprints52959
+Node: Creating and Managing Blueprints53566
+Node: Blueprints files54544
+Node: Variable Management54965
+Node: Keymap and Mode55418
+Node: Transient Menus56354
+Node: Running Blueprints programmatically56900
+Node: MCP Integration57487
+Node: Agent Skills58722
+Node: Directory Structure59085
+Node: Creating a Skill60112
+Node: How it works60487
+Node: Acknowledgments60878
+Node: Contributions61589
+Node: GNU Free Documentation License61975
 
 End Tag Table
 

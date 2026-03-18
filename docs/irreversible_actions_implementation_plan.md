@@ -457,7 +457,7 @@ Tasks:
    - built-in: tool name
    - MCP: derive from `:category` (`mcp-<server>`) + tool name
 - [x] Add default built-in risk profile table.
-- [ ] Add unknown MCP default action (`warn`).
+- [x] Add unknown MCP default action (`warn`).
 
 Acceptance criteria:
 
@@ -507,18 +507,18 @@ Goal:
 
 Tasks:
 
-1. Add scoped bypass store (session/project/tool identity).
-2. Add TTL and reason fields.
-3. Evaluate bypass before prompting.
-4. Ensure bypass never disables irreversible detector execution; it only changes
-   final interaction policy for matching scope.
-5. Add project-override trust gate:
-   - do not apply project overrides for untrusted repositories
-   - require explicit first-load approval with override summary
-6. Bind project trust to repo root + remote URL + policy hash, and invalidate
-   trust on policy changes.
-7. Ensure project overrides cannot downgrade enforce-mode high-confidence
-   irreversible `block` decisions.
+- [x] Add scoped bypass store (session/project/tool identity).
+- [x] Add TTL and reason fields.
+- [x] Evaluate bypass before prompting.
+- [x] Ensure bypass never disables irreversible detector execution; it only
+  changes final interaction policy for matching scope.
+- [x] Add project-override trust gate:
+  - do not apply project overrides for untrusted repositories
+  - require explicit first-load approval with override summary
+- [x] Bind project trust to repo root + remote URL + policy hash, and
+  invalidate trust on policy changes.
+- [x] Ensure project overrides cannot downgrade enforce-mode
+  high-confidence irreversible `block` decisions.
 
 Acceptance criteria:
 
@@ -537,11 +537,12 @@ Goal:
 
 Tasks:
 
-1. Add file-backed incident sink for irreversible decisions.
-2. Add stable decision IDs and policy-source metadata to each record.
-3. Ensure sink write failures are fail-closed for irreversible actions.
-4. Add interactive override path for sink failure.
-5. Enforce noninteractive fallback to `block` for sink-failure override path.
+- [x] Add file-backed incident sink for irreversible decisions.
+- [x] Add stable decision IDs and policy-source metadata to each record.
+- [x] Ensure sink write failures are fail-closed for irreversible actions.
+- [x] Add interactive override path for sink failure.
+- [x] Enforce noninteractive fallback to `block` for sink-failure override
+  path.
 
 Acceptance criteria:
 
@@ -557,12 +558,12 @@ Goal:
 
 Tasks:
 
-1. Extend incident aggregation with:
-   - by risk class
-   - by rule
-   - by tool identity
-   - by decision type (`allow`, `warn`, `block`, `bypass`)
-2. Add stats report section for irreversible controls.
+- [x] Extend incident aggregation with:
+  - by risk class
+  - by rule
+  - by tool identity
+  - by decision type (`allow`, `warn`, `block`, `bypass`)
+- [x] Add stats report section for irreversible controls.
 
 Acceptance criteria:
 
@@ -576,39 +577,40 @@ Goal:
 
 Unit tests (`tests/test-ellama-tools-dlp.el`):
 
-1. high-confidence block patterns
-2. warning-class patterns
-3. unknown MCP action default
-4. risk metadata propagation
-5. sanitized logging (no raw sensitive payload)
-6. monitor-mode irreversible high-confidence downgrade to `warn-strong`
-7. enforce-mode irreversible high-confidence `block`
-8. enforce-mode high-confidence irreversible block cannot be downgraded by
-   legacy DLP override
-9. `ellama-tools-dlp-enabled` defaults to enabled behavior
-10. enforce-mode high-confidence irreversible `block` cannot be downgraded by
-    project override
+- [x] high-confidence block patterns
+- [x] warning-class patterns
+- [x] unknown MCP action default
+- [x] risk metadata propagation
+- [x] sanitized logging (no raw sensitive payload)
+- [x] monitor-mode irreversible high-confidence downgrade to `warn-strong`
+- [x] enforce-mode irreversible high-confidence `block`
+- [x] enforce-mode high-confidence irreversible block cannot be downgraded by
+  legacy DLP override
+- [x] `ellama-tools-dlp-enabled` defaults to enabled behavior
+- [x] enforce-mode high-confidence irreversible `block` cannot be downgraded by
+  project override
 
 Wrapper tests (`tests/test-ellama-tools.el`):
 
-1. typed confirmation required for irreversible warn
-2. typed confirmation not required for normal warn
-3. scoped bypass suppresses prompt in scope only
-4. bypass expiry restores prompt behavior
-5. async tools preserve irreversible gating behavior
-6. `ellama-tools-allow-all` bypasses manual confirm only
-7. precedence for non-hard-block cases:
-   session bypass > project override > global default
-8. audit sink failure is fail-closed unless interactive confirmation is given
-9. noninteractive irreversible warnings are blocked (no prompt)
-10. noninteractive audit sink failure path is blocked (no prompt)
-11. `ellama-tools-use-srt` enabled with missing/invalid `srt` fails closed for
-    affected tool calls with actionable error
-12. untrusted repository project override is ignored
-13. trusted repository project override is applied in-scope
-14. project override policy hash change requires re-approval
-15. project override cannot suppress enforce-mode high-confidence irreversible
-    `block`
+- [x] typed confirmation required for irreversible warn
+- [x] typed confirmation not required for normal warn
+- [x] scoped bypass suppresses prompt in scope only
+- [x] bypass expiry restores prompt behavior
+- [x] async tools preserve irreversible gating behavior
+- [x] `ellama-tools-allow-all` bypasses manual confirm only
+- [x] precedence for non-hard-block cases:
+  session bypass > project override > global default
+- [x] audit sink failure is fail-closed unless interactive confirmation is
+  given
+- [x] noninteractive irreversible warnings are blocked (no prompt)
+- [x] noninteractive audit sink failure path is blocked (no prompt)
+- [x] `ellama-tools-use-srt` enabled with missing/invalid `srt` fails closed
+  for affected tool calls with actionable error
+- [x] untrusted repository project override is ignored
+- [x] trusted repository project override is applied in-scope
+- [x] project override policy hash change requires re-approval
+- [x] project override cannot suppress enforce-mode high-confidence
+  irreversible `block`
 
 ## Phase 8: Documentation Updates
 
@@ -618,19 +620,19 @@ Goal:
 
 Tasks:
 
-1. Update `README.org` with:
-   - irreversible safety overview
-   - typed confirmation behavior
-   - scoped bypass behavior and precedence
-   - MCP identity/classification behavior
-2. Add/extend docs for operations:
-   - where audit logs live
-   - how to tune unknown MCP default action
-   - how to use `srt` deny rules to protect audit logs
-3. Add troubleshooting notes:
-   - repeated warnings
-   - bypass expiry behavior
-   - false-positive reporting workflow
+- [x] Update `README.org` with:
+  - irreversible safety overview
+  - typed confirmation behavior
+  - scoped bypass behavior and precedence
+  - MCP identity/classification behavior
+- [x] Add/extend docs for operations:
+  - where audit logs live
+  - how to tune unknown MCP default action
+  - how to use `srt` deny rules to protect audit logs
+- [x] Add troubleshooting notes:
+  - repeated warnings
+  - bypass expiry behavior
+  - false-positive reporting workflow
 
 Acceptance criteria:
 
