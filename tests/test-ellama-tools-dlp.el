@@ -1104,5 +1104,123 @@
     (should (equal (plist-get verdict :redacted-text)
                    "xx[REDACTED:token]yy"))))
 
+(ert-deftest test-ellama-tools-dlp-default-enabled ()
+  (should (eq ellama-tools-dlp-enabled t)))
+
+(ert-deftest test-ellama-tools-dlp-make-scan-context-with-tool-identity ()
+  (let ((context (ellama-tools-dlp--make-scan-context
+                  :direction 'input
+                  :tool-name "search"
+                  :arg-name "query"
+                  :payload-length 5
+                  :truncated nil
+                  :tool-origin 'mcp
+                  :server-id "mcp-ddg"
+                  :tool-identity "mcp-ddg/search")))
+    (should (equal (plist-get context :tool-origin) 'mcp))
+    (should (equal (plist-get context :server-id) "mcp-ddg"))
+    (should (equal (plist-get context :tool-identity) "mcp-ddg/search"))))
+
+(ert-deftest test-ellama-tools-dlp-make-finding-irreversible-metadata ()
+  (let ((finding (ellama-tools-dlp--make-finding
+                  :rule-id "ir-test"
+                  :detector 'regex
+                  :severity 'high
+                  :risk-class 'irreversible
+                  :confidence 'high
+                  :requires-typed-confirm t
+                  :match-start 0
+                  :match-end 3)))
+    (should (eq (plist-get finding :risk-class) 'irreversible))
+    (should (eq (plist-get finding :confidence) 'high))
+    (should (eq (plist-get finding :requires-typed-confirm) t))))
+
+(ert-deftest test-ellama-tools-dlp-irreversible-high-confidence-enforce-block ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-regex-rules
+          '((:id "ir-test-high"
+                 :pattern "DROP DATABASE"
+                 :directions (input)
+                 :risk-class irreversible
+                 :confidence high
+                 :requires-typed-confirm t)))
+         (ellama-tools-irreversible-high-confidence-block-rules
+          '("ir-test-high"))
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'input
+                   :tool-name "shell_command"
+                   :arg-name "cmd"
+                   :payload-length 0
+                   :truncated nil
+                   :tool-origin 'mcp
+                   :server-id "mcp-db"
+                   :tool-identity "mcp-db/query"))
+         (result (ellama-tools-dlp--scan-text "DROP DATABASE prod" context))
+         (verdict (plist-get result :verdict)))
+    (should (eq (plist-get verdict :action) 'block))
+    (should (eq (plist-get verdict :configured-action) 'block))
+    (should (eq (plist-get verdict :requires-typed-confirm) t))
+    (should (eq (plist-get verdict :policy-source)
+                'irreversible-high-confidence))
+    (should (stringp (plist-get verdict :decision-id)))))
+
+(ert-deftest
+    test-ellama-tools-dlp-irreversible-high-confidence-monitor-warn-strong ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'monitor)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-regex-rules
+          '((:id "ir-test-high"
+                 :pattern "DROP DATABASE"
+                 :directions (input)
+                 :risk-class irreversible
+                 :confidence high
+                 :requires-typed-confirm t)))
+         (ellama-tools-irreversible-high-confidence-block-rules
+          '("ir-test-high"))
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'input
+                   :tool-name "shell_command"
+                   :arg-name "cmd"
+                   :payload-length 0
+                   :truncated nil))
+         (result (ellama-tools-dlp--scan-text "DROP DATABASE prod" context))
+         (verdict (plist-get result :verdict)))
+    (should (eq (plist-get verdict :action) 'warn-strong))
+    (should (eq (plist-get verdict :configured-action) 'warn-strong))
+    (should (eq (plist-get verdict :requires-typed-confirm) t))))
+
+(ert-deftest
+    test-ellama-tools-dlp-irreversible-enforce-block-ignores-policy-override ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-policy-overrides
+          '((:tool "shell_command" :direction input :arg "cmd"
+                   :action allow)))
+         (ellama-tools-dlp-regex-rules
+          '((:id "ir-test-high"
+                 :pattern "DROP DATABASE"
+                 :directions (input)
+                 :risk-class irreversible
+                 :confidence high
+                 :requires-typed-confirm t)))
+         (ellama-tools-irreversible-high-confidence-block-rules
+          '("ir-test-high"))
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'input
+                   :tool-name "shell_command"
+                   :arg-name "cmd"
+                   :payload-length 0
+                   :truncated nil))
+         (result (ellama-tools-dlp--scan-text "DROP DATABASE prod" context))
+         (verdict (plist-get result :verdict)))
+    (should (eq (plist-get verdict :action) 'block))
+    (should (eq (plist-get verdict :configured-action) 'block))
+    (should (eq (plist-get verdict :policy-source)
+                'irreversible-high-confidence))))
+
 (provide 'test-ellama-tools-dlp)
 ;;; test-ellama-tools-dlp.el ends here

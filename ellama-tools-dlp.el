@@ -300,6 +300,81 @@
    ellama-tools-dlp--default-prompt-injection-rules)
   "Built-in regex rules always applied by DLP.")
 
+(defconst ellama-tools-dlp--default-irreversible-regex-rules
+  (list
+   (list :id "ir-sql-drop-database"
+         :pattern "\\bDROP[[:space:]]+DATABASE\\b"
+         :case-fold t
+         :directions '(input)
+         :severity 'high
+         :risk-class 'irreversible
+         :confidence 'high
+         :requires-typed-confirm t)
+   (list :id "ir-sql-drop-schema"
+         :pattern "\\bDROP[[:space:]]+SCHEMA\\b"
+         :case-fold t
+         :directions '(input)
+         :severity 'high
+         :risk-class 'irreversible
+         :confidence 'high
+         :requires-typed-confirm t)
+   (list :id "ir-sql-delete-no-where"
+         :pattern
+         (concat
+          "\\bDELETE[[:space:]]+FROM[[:space:]]+"
+          "[[:alnum:]_\"`.$-]+[[:space:]]*\\(?:;\\|\\'\\)")
+         :case-fold t
+         :directions '(input)
+         :severity 'high
+         :risk-class 'irreversible
+         :confidence 'high
+         :requires-typed-confirm t)
+   (list :id "ir-shell-rm-rf-root"
+         :pattern
+         (concat
+          "\\b\\(?:sudo[[:space:]]+\\)?rm[[:space:]]+"
+          "-[[:alnum:]-]*r[[:alnum:]-]*f[[:alnum:]-]*"
+          "[[:space:]]+/"
+          "\\(?:[[:space:]]\\|\\'\\)")
+         :case-fold t
+         :directions '(input)
+         :tools '("shell_command")
+         :args '("cmd")
+         :severity 'high
+         :risk-class 'irreversible
+         :confidence 'high
+         :requires-typed-confirm t)
+   (list :id "ir-shell-rm-rf"
+         :pattern
+         "\\brm[[:space:]]+-[[:alnum:]-]*r[[:alnum:]-]*f[[:alnum:]-]*\\b"
+         :case-fold t
+         :directions '(input)
+         :tools '("shell_command")
+         :args '("cmd")
+         :severity 'medium
+         :risk-class 'irreversible
+         :confidence 'medium
+         :requires-typed-confirm t)
+   (list :id "ir-sql-delete"
+         :pattern "\\bDELETE[[:space:]]+FROM\\b"
+         :case-fold t
+         :directions '(input)
+         :severity 'medium
+         :risk-class 'irreversible
+         :confidence 'medium
+         :requires-typed-confirm t))
+  "Built-in irreversible intent regex rules.")
+
+(defconst ellama-tools-dlp--builtin-risk-profile
+  '(("read_file" . read)
+    ("lines_range" . read)
+    ("count_lines" . read)
+    ("directory_tree" . read)
+    ("grep" . read)
+    ("grep_in_file" . read)
+    ("shell_command" . mutating))
+  "Default risk profile for built-in tools.")
+
 (defconst ellama-tools-dlp--default-policy-overrides
   (list
    (list :tool "shell_command"
@@ -313,7 +388,7 @@
          :action 'warn))
   "Built-in policy overrides always applied by DLP.")
 
-(defcustom ellama-tools-dlp-enabled nil
+(defcustom ellama-tools-dlp-enabled t
   "Enable DLP checks for `ellama' tools."
   :type 'boolean
   :group 'ellama-tools-dlp)
@@ -322,6 +397,46 @@
   "Select DLP rollout mode."
   :type '(choice (const :tag "Monitor" monitor)
                  (const :tag "Enforce" enforce))
+  :group 'ellama-tools-dlp)
+
+(defcustom ellama-tools-irreversible-enabled t
+  "Enable irreversible action checks for `ellama' tool input."
+  :type 'boolean
+  :group 'ellama-tools-dlp)
+
+(defcustom ellama-tools-irreversible-default-action 'warn
+  "Set default action for irreversible findings.
+`warn' maps to `warn-strong'.  `block' blocks in enforce mode and degrades
+to `warn-strong' in monitor mode."
+  :type '(choice (const :tag "Warn Strong" warn)
+                 (const :tag "Block" block))
+  :group 'ellama-tools-dlp)
+
+(defcustom ellama-tools-irreversible-unknown-tool-action 'warn
+  "Set default action for unknown MCP tools."
+  :type '(choice (const :tag "Allow" allow)
+                 (const :tag "Warn" warn))
+  :group 'ellama-tools-dlp)
+
+(defcustom ellama-tools-irreversible-high-confidence-block-rules
+  '("ir-sql-drop-database"
+    "ir-sql-drop-schema"
+    "ir-sql-delete-no-where"
+    "ir-shell-rm-rf-root")
+  "Rule IDs considered high-confidence irreversible block signals."
+  :type '(repeat string)
+  :group 'ellama-tools-dlp)
+
+(defcustom ellama-tools-irreversible-require-typed-confirm t
+  "Require typed confirmation for irreversible warnings."
+  :type 'boolean
+  :group 'ellama-tools-dlp)
+
+(defcustom
+  ellama-tools-irreversible-typed-confirm-phrase
+  "I UNDERSTAND THIS CANNOT BE UNDONE"
+  "Typed phrase required for irreversible warnings."
+  :type 'string
   :group 'ellama-tools-dlp)
 
 (defcustom ellama-tools-dlp-max-scan-size (* 5 1024 1024)
@@ -568,6 +683,19 @@ or a plist with `:score' and/or `:reject'."
              (not (ellama-tools-dlp--bool-or-nil-p
                    (plist-get context :truncated))))
     (error "DLP scan context :truncated must be boolean or nil"))
+  (when (and (ellama-tools-dlp--plist-key-present-p context :tool-origin)
+             (not (or (null (plist-get context :tool-origin))
+                      (memq (plist-get context :tool-origin)
+                            '(builtin mcp)))))
+    (error "DLP scan context :tool-origin must be `builtin' or `mcp'"))
+  (when (and (ellama-tools-dlp--plist-key-present-p context :server-id)
+             (not (or (null (plist-get context :server-id))
+                      (stringp (plist-get context :server-id)))))
+    (error "DLP scan context :server-id must be nil or a string"))
+  (when (and (ellama-tools-dlp--plist-key-present-p context :tool-identity)
+             (not (or (null (plist-get context :tool-identity))
+                      (stringp (plist-get context :tool-identity)))))
+    (error "DLP scan context :tool-identity must be nil or a string"))
   context)
 
 (defun ellama-tools-dlp--scan-context-p (context)
@@ -579,19 +707,26 @@ or a plist with `:score' and/or `:reject'."
     (error nil)))
 
 (cl-defun ellama-tools-dlp--make-scan-context
-    (&key direction tool-name arg-name payload-length truncated)
+    (&key direction tool-name arg-name payload-length truncated
+          tool-origin server-id tool-identity)
   "Build a DLP scan context plist.
 DIRECTION must contain `input'/'output'.
 TOOL-NAME is a tool name.
 ARG-NAME is a name of an argument.
 PAYLOAD-LENGTH is a length of a payload.
-TRUNCATED is a flag show that payload was truncated."
+TRUNCATED is a flag show that payload was truncated.
+TOOL-ORIGIN can be `builtin' or `mcp'.
+SERVER-ID is MCP server category identifier.
+TOOL-IDENTITY is a stable identity string."
   (ellama-tools-dlp--validate-scan-context
    (list :direction direction
          :tool-name tool-name
          :arg-name arg-name
          :payload-length payload-length
-         :truncated truncated)))
+         :truncated truncated
+         :tool-origin tool-origin
+         :server-id server-id
+         :tool-identity tool-identity)))
 
 (defun ellama-tools-dlp--scan-context-get (context key &optional default)
   "Return KEY from scan CONTEXT, or DEFAULT when KEY is absent."
@@ -921,6 +1056,24 @@ FINDINGS and CONFIGURED-ACTION describe deterministic scan state."
                         (symbolp (plist-get finding :severity))
                         (stringp (plist-get finding :severity)))))
       (error "DLP finding :severity must be nil, symbol, or string"))
+    (when (and (ellama-tools-dlp--plist-key-present-p finding :risk-class)
+               (not (or (null (plist-get finding :risk-class))
+                        (memq (plist-get finding :risk-class)
+                              '(read mutating irreversible)))))
+      (error
+       "DLP finding :risk-class must be nil, read, mutating, or irreversible"))
+    (when (and (ellama-tools-dlp--plist-key-present-p finding :confidence)
+               (not (or (null (plist-get finding :confidence))
+                        (memq (plist-get finding :confidence)
+                              '(high medium)))))
+      (error "DLP finding :confidence must be nil, high, or medium"))
+    (when (and (ellama-tools-dlp--plist-key-present-p
+                finding :requires-typed-confirm)
+               (not (ellama-tools-dlp--bool-or-nil-p
+                     (plist-get finding :requires-typed-confirm))))
+      (error
+       (concat
+        "DLP finding :requires-typed-confirm must be boolean or nil")))
     (when (and (ellama-tools-dlp--plist-key-present-p finding :match-start)
                match-start
                (not (ellama-tools-dlp--nonnegative-integer-p match-start)))
@@ -947,16 +1100,23 @@ FINDINGS and CONFIGURED-ACTION describe deterministic scan state."
     (error nil)))
 
 (cl-defun ellama-tools-dlp--make-finding
-    (&key rule-id detector severity match-start match-end)
+    (&key rule-id detector severity match-start match-end
+          risk-class confidence requires-typed-confirm)
   "Build a DLP finding plist.
 RULE-ID is an identificator of a rule.
 DETECTOR is a name of a detector.
 SEVERITY can be nil, a symbol or a string.
-MATCH-START and MATCH-END is a match boundaries."
+MATCH-START and MATCH-END is a match boundaries.
+RISK-CLASS can be `read', `mutating', or `irreversible'.
+CONFIDENCE can be `high' or `medium'.
+REQUIRES-TYPED-CONFIRM marks findings that need explicit typing."
   (ellama-tools-dlp--validate-finding
    (list :rule-id rule-id
          :detector detector
          :severity severity
+         :risk-class risk-class
+         :confidence confidence
+         :requires-typed-confirm requires-typed-confirm
          :match-start match-start
          :match-end match-end)))
 
@@ -970,8 +1130,10 @@ MATCH-START and MATCH-END is a match boundaries."
   "Signal an error when VERDICT is not a valid DLP verdict plist."
   (unless (listp verdict)
     (error "DLP verdict must be a plist"))
-  (unless (memq (plist-get verdict :action) '(allow warn block redact))
-    (error "DLP verdict :action must be allow, warn, block, or redact"))
+  (unless (memq (plist-get verdict :action)
+                '(allow warn warn-strong block redact))
+    (error
+     "DLP verdict :action must be allow, warn, warn-strong, block, or redact"))
   (when (and (ellama-tools-dlp--plist-key-present-p verdict :message)
              (not (or (null (plist-get verdict :message))
                       (stringp (plist-get verdict :message)))))
@@ -987,6 +1149,20 @@ MATCH-START and MATCH-END is a match boundaries."
              (not (or (null (plist-get verdict :redacted-text))
                       (stringp (plist-get verdict :redacted-text)))))
     (error "DLP verdict :redacted-text must be nil or a string"))
+  (when (and (ellama-tools-dlp--plist-key-present-p
+              verdict :requires-typed-confirm)
+             (not (ellama-tools-dlp--bool-or-nil-p
+                   (plist-get verdict :requires-typed-confirm))))
+    (error "DLP verdict :requires-typed-confirm must be boolean or nil"))
+  (when (and (ellama-tools-dlp--plist-key-present-p verdict :decision-id)
+             (not (or (null (plist-get verdict :decision-id))
+                      (stringp (plist-get verdict :decision-id)))))
+    (error "DLP verdict :decision-id must be nil or a string"))
+  (when (and (ellama-tools-dlp--plist-key-present-p verdict :policy-source)
+             (not (or (null (plist-get verdict :policy-source))
+                      (symbolp (plist-get verdict :policy-source))
+                      (stringp (plist-get verdict :policy-source)))))
+    (error "DLP verdict :policy-source must be nil, symbol, or string"))
   verdict)
 
 (defun ellama-tools-dlp--verdict-p (verdict)
@@ -998,17 +1174,24 @@ MATCH-START and MATCH-END is a match boundaries."
     (error nil)))
 
 (cl-defun ellama-tools-dlp--make-verdict
-    (&key action message findings redacted-text)
+    (&key action message findings redacted-text
+          requires-typed-confirm decision-id policy-source)
   "Build a DLP verdict plist.
 ACTION is an action.
 MESSAGE is a string message.
 FINDINGS contains current findings.
-REDACTED-TEXT is a redacted text to prevent secrets leakage."
+REDACTED-TEXT is a redacted text to prevent secrets leakage.
+REQUIRES-TYPED-CONFIRM marks typed confirmation requirements.
+DECISION-ID is a stable incident identifier.
+POLICY-SOURCE describes where the action came from."
   (ellama-tools-dlp--validate-verdict
    (list :action action
          :message message
          :findings findings
-         :redacted-text redacted-text)))
+         :redacted-text redacted-text
+         :requires-typed-confirm requires-typed-confirm
+         :decision-id decision-id
+         :policy-source policy-source)))
 
 (defun ellama-tools-dlp--verdict-get (verdict key &optional default)
   "Return KEY from VERDICT, or DEFAULT when KEY is absent."
@@ -1166,6 +1349,17 @@ ENV-NAME is optional environment variable name."
                       (stringp (plist-get rule :severity))
                       (symbolp (plist-get rule :severity)))))
     (error "DLP regex rule :severity must be nil, string, or symbol"))
+  (when (and (plist-member rule :risk-class)
+             (not (memq (plist-get rule :risk-class)
+                        '(read mutating irreversible))))
+    (error "DLP regex rule :risk-class must be read, mutating, or irreversible"))
+  (when (and (plist-member rule :confidence)
+             (not (memq (plist-get rule :confidence) '(high medium))))
+    (error "DLP regex rule :confidence must be high or medium"))
+  (when (and (plist-member rule :requires-typed-confirm)
+             (not (ellama-tools-dlp--bool-or-nil-p
+                   (plist-get rule :requires-typed-confirm))))
+    (error "DLP regex rule :requires-typed-confirm must be boolean or nil"))
   rule)
 
 (defun ellama-tools-dlp--normalize-regex-rule (rule)
@@ -1257,6 +1451,10 @@ Include scoping fields because cached entries store the normalized rule plist."
             (pattern (plist-get rule* :pattern))
             (severity (plist-get rule* :severity))
             (rule-id (plist-get rule* :id))
+            (risk-class (plist-get rule* :risk-class))
+            (confidence (plist-get rule* :confidence))
+            (requires-typed-confirm
+             (plist-get rule* :requires-typed-confirm))
             (pos 0)
             (findings nil))
         (condition-case err
@@ -1269,6 +1467,9 @@ Include scoping fields because cached entries store the normalized rule plist."
                          :rule-id rule-id
                          :detector 'regex
                          :severity severity
+                         :risk-class risk-class
+                         :confidence confidence
+                         :requires-typed-confirm requires-typed-confirm
                          :match-start start
                          :match-end end)
                         findings)
@@ -1289,8 +1490,11 @@ When RULES is nil, combine built-in and user regex rules."
   (unless (stringp text)
     (error "DLP regex detection expects a string payload"))
   (let ((selected-rules (or rules
-                            (append ellama-tools-dlp--default-regex-rules
-                                    ellama-tools-dlp-regex-rules)))
+                            (append
+                             ellama-tools-dlp--default-regex-rules
+                             (when ellama-tools-irreversible-enabled
+                               ellama-tools-dlp--default-irreversible-regex-rules)
+                             ellama-tools-dlp-regex-rules)))
         (all-findings nil))
     (dolist (rule selected-rules)
       (setq all-findings
@@ -1742,9 +1946,44 @@ Match exact arg names and nested path prefixes like `arg.', `arg[0]'."
     (dolist (override (ellama-tools-dlp--effective-policy-overrides))
       (when (and (ellama-tools-dlp--policy-override-match-p override context)
                  (memq (plist-get override :action)
-                       '(allow warn block redact)))
+                       '(allow warn warn-strong block redact)))
         (setq result (plist-get override :action))))
     result))
+
+(defun ellama-tools-dlp--irreversible-finding-p (finding)
+  "Return non-nil when FINDING is irreversible."
+  (or (eq (plist-get finding :risk-class) 'irreversible)
+      (let ((rule-id
+             (ellama-tools-dlp--policy-name-string
+              (plist-get finding :rule-id))))
+        (and (stringp rule-id)
+             (string-prefix-p "ir-" rule-id)))))
+
+(defun ellama-tools-dlp--irreversible-high-confidence-finding-p (finding)
+  "Return non-nil when FINDING is a high-confidence irreversible signal."
+  (and (ellama-tools-dlp--irreversible-finding-p finding)
+       (or (eq (plist-get finding :confidence) 'high)
+           (member (ellama-tools-dlp--policy-name-string
+                    (plist-get finding :rule-id))
+                   ellama-tools-irreversible-high-confidence-block-rules))))
+
+(defun ellama-tools-dlp--has-irreversible-findings-p (findings)
+  "Return non-nil when FINDINGS include irreversible signals."
+  (cl-some #'ellama-tools-dlp--irreversible-finding-p findings))
+
+(defun ellama-tools-dlp--has-irreversible-high-confidence-p (findings)
+  "Return non-nil when FINDINGS include high-confidence irreversible signals."
+  (cl-some #'ellama-tools-dlp--irreversible-high-confidence-finding-p findings))
+
+(defun ellama-tools-dlp--irreversible-action-for-mode ()
+  "Return configured irreversible action for current rollout mode."
+  (pcase ellama-tools-irreversible-default-action
+    ('block
+     (if (eq ellama-tools-dlp-mode 'enforce)
+         'block
+       'warn-strong))
+    (_
+     'warn-strong)))
 
 (defun ellama-tools-dlp--prompt-injection-finding-p (finding)
   "Return non-nil when FINDING is from a built-in prompt injection rule."
@@ -1757,25 +1996,51 @@ Match exact arg names and nested path prefixes like `arg.', `arg[0]'."
   "Return non-nil when FINDINGS include prompt injection detections."
   (cl-some #'ellama-tools-dlp--prompt-injection-finding-p findings))
 
-(defun ellama-tools-dlp--policy-action (context findings)
-  "Return configured policy action for CONTEXT and FINDINGS.
-This function ignore rollout mode and return the configured action."
+(defun ellama-tools-dlp--policy-decision (context findings)
+  "Return configured policy decision plist for CONTEXT and FINDINGS."
   (ellama-tools-dlp--validate-scan-context context)
-  (let ((override-action (ellama-tools-dlp--policy-override-action context)))
+  (let ((override-action (ellama-tools-dlp--policy-override-action context))
+        (direction (plist-get context :direction))
+        (has-irreversible
+         (and ellama-tools-irreversible-enabled
+              (ellama-tools-dlp--has-irreversible-findings-p findings)))
+        (has-irreversible-high
+         (and ellama-tools-irreversible-enabled
+              (ellama-tools-dlp--has-irreversible-high-confidence-p findings))))
     (cond
-     ((null findings) 'allow)
-     ((ellama-tools-dlp--policy-exception-p context) 'allow)
+     ((null findings)
+      (list :action 'allow :policy-source 'clean))
+     ((and has-irreversible-high
+           (eq ellama-tools-dlp-mode 'enforce))
+      ;; High-confidence irreversible block in enforce mode is non-downgradeable.
+      (list :action 'block :policy-source 'irreversible-high-confidence))
+     ((ellama-tools-dlp--policy-exception-p context)
+      (list :action 'allow :policy-source 'override))
+     (has-irreversible
+      (list :action (if has-irreversible-high
+                        'warn-strong
+                      (ellama-tools-dlp--irreversible-action-for-mode))
+            :policy-source (if has-irreversible-high
+                               'irreversible-high-confidence
+                             'irreversible-default)))
      ;; Respect explicit user/tool overrides first, so users can downgrade
      ;; specific trusted flows (for example `read_file' skills loading).
-     (override-action override-action)
-     ((and (eq (plist-get context :direction) 'output)
+     (override-action
+      (list :action override-action :policy-source 'override))
+     ((and (eq direction 'output)
            (ellama-tools-dlp--has-prompt-injection-findings-p findings))
       ;; Prompt injection signals in tool output are fail-closed by default.
-      'block)
+      (list :action 'block :policy-source 'default))
      (t
-      (or (ellama-tools-dlp--default-action-for-direction
-           (plist-get context :direction))
-          'allow)))))
+      (list :action
+            (or (ellama-tools-dlp--default-action-for-direction direction)
+                'allow)
+            :policy-source 'default)))))
+
+(defun ellama-tools-dlp--policy-action (context findings)
+  "Return configured policy action for CONTEXT and FINDINGS."
+  (plist-get (ellama-tools-dlp--policy-decision context findings)
+             :action))
 
 (defun ellama-tools-dlp--effective-policy-overrides ()
   "Return built-in plus user policy overrides."
@@ -1812,6 +2077,7 @@ This function ignore rollout mode and return the configured action."
   "Return safe user-facing DLP message for CONTEXT ACTION and FINDINGS."
   (let* ((direction (symbol-name (plist-get context :direction)))
          (tool (plist-get context :tool-name))
+         (tool-identity (plist-get context :tool-identity))
          (arg (plist-get context :arg-name))
          (rule-ids (ellama-tools-dlp--findings-rule-ids findings))
          (rule-text (if rule-ids
@@ -1820,7 +2086,7 @@ This function ignore rollout mode and return the configured action."
     (format "DLP %s %s for tool %s%s (rules: %s)"
             action
             direction
-            tool
+            (or tool-identity tool)
             (if arg (format " arg %s" arg) "")
             rule-text)))
 
@@ -1888,19 +2154,33 @@ Each span is a plist with `:start', `:end', and `:rule-id'."
     (apply #'concat (nreverse parts))))
 
 (defun ellama-tools-dlp--apply-enforcement
-    (text context findings configured-action &optional effective-findings)
+    (text context findings configured-action
+          &optional effective-findings policy-source decision-id)
   "Return DLP verdict for TEXT in CONTEXT with FINDINGS.
 CONFIGURED-ACTION is the policy action before rollout mode adjustment.
-EFFECTIVE-FINDINGS are the findings used for logging and safe messages."
+EFFECTIVE-FINDINGS are the findings used for logging and safe messages.
+POLICY-SOURCE tracks which policy layer produced the action.
+DECISION-ID is attached to verdict/incident records."
   (let* ((mode ellama-tools-dlp-mode)
          (effective-findings (or effective-findings findings))
-         (action (if (or (null effective-findings) (eq mode 'monitor))
-                     'allow
-                   configured-action))
+         (action (cond
+                  ((null effective-findings) 'allow)
+                  ((and (eq mode 'monitor)
+                        (not (eq configured-action 'warn-strong)))
+                   'allow)
+                  (t configured-action)))
+         (requires-typed-confirm
+          (or (eq action 'warn-strong)
+              (cl-some (lambda (finding)
+                         (eq (plist-get finding :requires-typed-confirm) t))
+                       effective-findings)))
          (message (and effective-findings
                        (ellama-tools-dlp--format-safe-message
                         context
-                        (if (eq mode 'monitor) 'monitor action)
+                        (if (and (eq mode 'monitor)
+                                 (not (eq action 'warn-strong)))
+                            'monitor
+                          action)
                         effective-findings))))
     (condition-case nil
         (pcase action
@@ -1908,17 +2188,34 @@ EFFECTIVE-FINDINGS are the findings used for logging and safe messages."
            (ellama-tools-dlp--make-verdict
             :action 'allow
             :message message
-            :findings effective-findings))
+            :findings effective-findings
+            :requires-typed-confirm requires-typed-confirm
+            :policy-source policy-source
+            :decision-id decision-id))
           ('warn
            (ellama-tools-dlp--make-verdict
             :action 'warn
             :message message
-            :findings effective-findings))
+            :findings effective-findings
+            :requires-typed-confirm requires-typed-confirm
+            :policy-source policy-source
+            :decision-id decision-id))
+          ('warn-strong
+           (ellama-tools-dlp--make-verdict
+            :action 'warn-strong
+            :message message
+            :findings effective-findings
+            :requires-typed-confirm requires-typed-confirm
+            :policy-source policy-source
+            :decision-id decision-id))
           ('block
            (ellama-tools-dlp--make-verdict
             :action 'block
             :message message
-            :findings effective-findings))
+            :findings effective-findings
+            :requires-typed-confirm requires-typed-confirm
+            :policy-source policy-source
+            :decision-id decision-id))
           ('redact
            (if (or (not (eq (plist-get context :direction) 'output))
                    (plist-get context :truncated))
@@ -1926,18 +2223,27 @@ EFFECTIVE-FINDINGS are the findings used for logging and safe messages."
                 :action 'block
                 :message (ellama-tools-dlp--format-safe-message
                           context 'block effective-findings)
-                :findings effective-findings)
+                :findings effective-findings
+                :requires-typed-confirm requires-typed-confirm
+                :policy-source policy-source
+                :decision-id decision-id)
              (ellama-tools-dlp--make-verdict
               :action 'redact
               :message message
               :findings effective-findings
+              :requires-typed-confirm requires-typed-confirm
+              :policy-source policy-source
+              :decision-id decision-id
               :redacted-text (ellama-tools-dlp--apply-redaction
                               text findings))))
           (_
            (ellama-tools-dlp--make-verdict
             :action 'allow
             :message message
-            :findings effective-findings)))
+            :findings effective-findings
+            :requires-typed-confirm requires-typed-confirm
+            :policy-source policy-source
+            :decision-id decision-id)))
       (error
        ;; Redaction failure must fail closed.  Other verdict construction
        ;; errors also fail closed for safety when findings exist.
@@ -1945,7 +2251,30 @@ EFFECTIVE-FINDINGS are the findings used for logging and safe messages."
         :action 'block
         :message (ellama-tools-dlp--format-safe-message
                   context 'block effective-findings)
-        :findings effective-findings)))))
+        :findings effective-findings
+        :requires-typed-confirm requires-typed-confirm
+        :policy-source policy-source
+        :decision-id decision-id)))))
+
+(defun ellama-tools-dlp--decision-id ()
+  "Return stable-ish decision ID for incident correlation."
+  (format "dlp-%d-%06x"
+          (floor (* 1000 (float-time)))
+          (random #xFFFFFF)))
+
+(defun ellama-tools-dlp--findings-risk-classes (findings)
+  "Return sorted unique risk classes from FINDINGS as strings."
+  (let ((seen (make-hash-table :test 'equal))
+        classes)
+    (dolist (finding findings)
+      (let ((risk-class
+             (ellama-tools-dlp--policy-name-string
+              (plist-get finding :risk-class))))
+        (when risk-class
+          (unless (gethash risk-class seen)
+            (puthash risk-class t seen)
+            (push risk-class classes)))))
+    (sort classes #'string<)))
 
 (defun ellama-tools-dlp--log-scan-decision
     (context findings verdict configured-action
@@ -1966,13 +2295,22 @@ and LLM-CHECK will be recorded."
            :timestamp (format-time-string "%FT%T%z")
            :direction (plist-get context :direction)
            :tool-name (plist-get context :tool-name)
+           :tool-origin (plist-get context :tool-origin)
+           :server-id (plist-get context :server-id)
+           :tool-identity (plist-get context :tool-identity)
            :arg-name (plist-get context :arg-name)
            :mode ellama-tools-dlp-mode
            :action (plist-get verdict :action)
            :configured-action configured-action
            :deterministic-action deterministic-action
+           :policy-source (plist-get verdict :policy-source)
+           :decision-id (plist-get verdict :decision-id)
            :rule-ids (ellama-tools-dlp--findings-rule-ids effective-findings)
            :detectors (ellama-tools-dlp--findings-detectors effective-findings)
+           :risk-classes
+           (ellama-tools-dlp--findings-risk-classes effective-findings)
+           :requires-typed-confirm
+           (plist-get verdict :requires-typed-confirm)
            :findings-count (length effective-findings)
            :payload-length (plist-get context :payload-length)
            :truncated (plist-get context :truncated)
@@ -1990,6 +2328,9 @@ and LLM-CHECK will be recorded."
          :timestamp (format-time-string "%FT%T%z")
          :direction (plist-get context :direction)
          :tool-name (plist-get context :tool-name)
+         :tool-origin (plist-get context :tool-origin)
+         :server-id (plist-get context :server-id)
+         :tool-identity (plist-get context :tool-identity)
          :arg-name (plist-get context :arg-name)
          :error-type error-type)))
 
@@ -2039,8 +2380,12 @@ Return plist with keys `:context', `:findings', and `:verdict'."
                (prepared-context (plist-get prepared :context))
                (findings (ellama-tools-dlp--detect-findings
                           prepared-text prepared-context))
+               (policy-decision
+                (ellama-tools-dlp--policy-decision prepared-context findings))
                (deterministic-configured-action
-                (ellama-tools-dlp--policy-action prepared-context findings))
+                (plist-get policy-decision :action))
+               (policy-source (plist-get policy-decision :policy-source))
+               (decision-id (ellama-tools-dlp--decision-id))
                (eligibility (ellama-tools-dlp--llm-check-eligible-p
                              prepared-text prepared-context findings
                              deterministic-configured-action))
@@ -2083,7 +2428,8 @@ Return plist with keys `:context', `:findings', and `:verdict'."
           (setq verdict
                 (ellama-tools-dlp--apply-enforcement
                  prepared-text prepared-context findings
-                 configured-action effective-findings))
+                 configured-action effective-findings
+                 policy-source decision-id))
           (setq verdict
                 (plist-put verdict :configured-action configured-action))
           (ellama-tools-dlp--log-scan-decision

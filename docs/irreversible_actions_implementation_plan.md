@@ -425,15 +425,16 @@ Goal:
 
 Tasks:
 
-1. Set `ellama-tools-dlp-enabled` default to `t`.
-2. Add defcustom flags and defaults (`ellama-tools-irreversible-enabled` = `t`).
-3. Add risk metadata fields to findings/verdict context helpers.
-4. Add incident schema extensions (sanitized only).
-5. Reuse `ellama-tools-dlp-mode` (no separate irreversible mode variable).
-6. Implement monitor-mode exception for irreversible findings:
+- [x] Set `ellama-tools-dlp-enabled` default to `t`.
+- [x] Add defcustom flags and defaults
+  (`ellama-tools-irreversible-enabled` = `t`).
+- [x] Add risk metadata fields to findings/verdict context helpers.
+- [x] Add incident schema extensions (sanitized only).
+- [x] Reuse `ellama-tools-dlp-mode` (no separate irreversible mode variable).
+- [x] Implement monitor-mode exception for irreversible findings:
    - warnings still require typed confirmation
    - high-confidence irreversible rules do not hard-block in monitor
-7. Keep `ellama-tools-use-srt` optional (`nil` default) and document behavior
+- [x] Keep `ellama-tools-use-srt` optional (`nil` default) and document behavior
    when `srt` is unavailable.
 
 Acceptance criteria:
@@ -452,11 +453,11 @@ Goal:
 
 Tasks:
 
-1. Add helper to compute stable tool identity:
+- [x] Add helper to compute stable tool identity:
    - built-in: tool name
    - MCP: derive from `:category` (`mcp-<server>`) + tool name
-2. Add default built-in risk profile table.
-3. Add unknown MCP default action (`warn`).
+- [x] Add default built-in risk profile table.
+- [ ] Add unknown MCP default action (`warn`).
 
 Acceptance criteria:
 
@@ -471,9 +472,9 @@ Goal:
 
 Tasks:
 
-1. Add small high-confidence block rule set.
-2. Add broader warning rule set for mutating/irreversible intent.
-3. Map each rule to risk class and confidence.
+- [x] Add small high-confidence block rule set.
+- [x] Add broader warning rule set for mutating/irreversible intent.
+- [x] Map each rule to risk class and confidence.
 
 Acceptance criteria:
 
@@ -489,9 +490,9 @@ Goal:
 
 Tasks:
 
-1. Extend warn prompt path with typed-confirm branch.
-2. Keep existing lightweight prompt for non-irreversible warnings.
-3. Add concise impact summary in prompt text.
+- [x] Extend warn prompt path with typed-confirm branch.
+- [x] Keep existing lightweight prompt for non-irreversible warnings.
+- [x] Add concise impact summary in prompt text.
 
 Acceptance criteria:
 

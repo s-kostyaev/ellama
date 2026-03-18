@@ -350,14 +350,42 @@ NAME is fallback label used when FUNC has no symbol name."
       (apply #'ellama-tools-confirm-with-name func name args))))
 
 (defun ellama-tools--dlp-make-scan-context
-    (direction tool-name &optional arg-name)
-  "Build DLP scan context for DIRECTION, TOOL-NAME and ARG-NAME."
-  (ellama-tools-dlp--make-scan-context
-   :direction direction
-   :tool-name tool-name
-   :arg-name arg-name
-   :payload-length 0
-   :truncated nil))
+    (direction tool-name &optional arg-name tool-metadata)
+  "Build DLP scan context for DIRECTION, TOOL-NAME and ARG-NAME.
+TOOL-METADATA may include `:tool-origin', `:server-id' and
+`:tool-identity' values."
+  (let ((tool-origin (plist-get tool-metadata :tool-origin))
+        (server-id (plist-get tool-metadata :server-id))
+        (tool-identity (plist-get tool-metadata :tool-identity)))
+    (ellama-tools-dlp--make-scan-context
+     :direction direction
+     :tool-name tool-name
+     :arg-name arg-name
+     :payload-length 0
+     :truncated nil
+     :tool-origin tool-origin
+     :server-id server-id
+     :tool-identity tool-identity)))
+
+(defun ellama-tools--tool-category-name (tool-plist)
+  "Return normalized category name from TOOL-PLIST, or nil."
+  (let ((category (plist-get tool-plist :category)))
+    (cond
+     ((stringp category) category)
+     ((symbolp category) (symbol-name category))
+     (t nil))))
+
+(defun ellama-tools--tool-scan-metadata (tool-plist)
+  "Return DLP scan metadata plist for TOOL-PLIST."
+  (let* ((tool-name (plist-get tool-plist :name))
+         (category (ellama-tools--tool-category-name tool-plist)))
+    (if (and (stringp category)
+             (string-prefix-p "mcp-" category))
+        (list :tool-origin 'mcp
+              :server-id category
+              :tool-identity (format "%s/%s" category tool-name))
+      (list :tool-origin 'builtin
+            :tool-identity tool-name))))
 
 (defun ellama-tools--tool-call-values (async call-args)
   "Return positional CALL-ARGS, excluding callback when ASYNC."
@@ -543,29 +571,21 @@ OUTPUT-CONTEXT may include source metadata under `:source-info'."
           (ellama-tools--output-truncation-notice
            tool-name truncation source-info saved-path))))))
 
-(defun ellama-tools--postprocess-output-string
-    (tool-name text &optional output-context)
-  "Apply output guard and DLP filtering for TOOL-NAME TEXT.
-Use OUTPUT-CONTEXT to control budget notices and overflow metadata."
-  (let ((dlp-filtered (if ellama-tools-dlp-enabled
-                          (ellama-tools--dlp-handle-output-string
-                           tool-name text)
-                        text)))
-    (ellama-tools--apply-output-line-budget
-     tool-name dlp-filtered output-context)))
-
-(defun ellama-tools--dlp-handle-output-string (tool-name text)
-  "Scan output TEXT for TOOL-NAME and return filtered result."
+(defun ellama-tools--dlp-handle-output-string
+    (tool-name text &optional tool-metadata)
+  "Scan output TEXT for TOOL-NAME and return filtered result.
+TOOL-METADATA may provide identity fields for scan context."
   (let* ((scan (ellama-tools-dlp--scan-text
                 text
-                (ellama-tools--dlp-make-scan-context 'output tool-name)))
+                (ellama-tools--dlp-make-scan-context
+                 'output tool-name nil tool-metadata)))
          (verdict (plist-get scan :verdict))
          (findings (plist-get scan :findings))
          (action (plist-get verdict :action)))
     (pcase action
       ('allow
        text)
-      ('warn
+      ((or 'warn 'warn-strong)
        (pcase ellama-tools-dlp-output-warn-behavior
          ('allow
           text)
@@ -591,6 +611,18 @@ Use OUTPUT-CONTEXT to control budget notices and overflow metadata."
            (format "DLP blocked output for tool %s" tool-name)))
       (_
        text))))
+
+(defun ellama-tools--postprocess-output-string
+    (tool-name text &optional output-context tool-metadata)
+  "Apply output guard and DLP filtering for TOOL-NAME TEXT.
+Use OUTPUT-CONTEXT to control budget notices and overflow metadata.
+TOOL-METADATA may provide tool identity details for DLP scans."
+  (let ((dlp-filtered (if ellama-tools-dlp-enabled
+                          (ellama-tools--dlp-handle-output-string
+                           tool-name text tool-metadata)
+                        text)))
+    (ellama-tools--apply-output-line-budget
+     tool-name dlp-filtered output-context)))
 
 (defconst ellama-tools--dlp-input-max-walk-depth 24
   "Maximum nested depth traversed when scanning structured tool inputs.")
@@ -758,9 +790,10 @@ CALLBACK receives `(TEXT PATH)'.  Traverse lists, vectors and hash tables."
    (vector 0)
    0))
 
-(defun ellama-tools--dlp-scan-input-value (tool-name arg-name value)
+(defun ellama-tools--dlp-scan-input-value
+    (tool-name arg-name value &optional tool-metadata)
   "Scan VALUE for TOOL-NAME under ARG-NAME and return a decision plist."
-  (let (warn-message)
+  (let (warn-message warn-strong-message)
     (catch 'done
       (ellama-tools--dlp-walk-strings
        value arg-name
@@ -768,7 +801,7 @@ CALLBACK receives `(TEXT PATH)'.  Traverse lists, vectors and hash tables."
          (let* ((scan (ellama-tools-dlp--scan-text
                        text
                        (ellama-tools--dlp-make-scan-context
-                        'input tool-name path)))
+                        'input tool-name path tool-metadata)))
                 (verdict (plist-get scan :verdict))
                 (action (plist-get verdict :action))
                 (message (plist-get verdict :message)))
@@ -779,14 +812,24 @@ CALLBACK receives `(TEXT PATH)'.  Traverse lists, vectors and hash tables."
                           :message (or message
                                        (format "DLP blocked input for %s"
                                                tool-name)))))
+            ((and (eq action 'warn-strong)
+                  (not warn-strong-message))
+             (setq warn-strong-message
+                   (or message
+                       (format "DLP warned strongly on input for tool %s"
+                               tool-name))))
             ((and (eq action 'warn) (not warn-message))
              (setq warn-message
                    (or message
                        (format "DLP warned on input for tool %s"
                                tool-name))))))))
-      (if warn-message
-          (list :action 'warn :message warn-message)
-        (list :action 'allow)))))
+      (cond
+       (warn-strong-message
+        (list :action 'warn-strong :message warn-strong-message))
+       (warn-message
+        (list :action 'warn :message warn-message))
+       (t
+        (list :action 'allow))))))
 
 (defun ellama-tools--dlp-input-decision (tool-plist call-args)
   "Scan TOOL-PLIST CALL-ARGS and return decision plist.
@@ -794,12 +837,14 @@ Return plist with keys `:action' and optional `:message'."
   (let* ((tool-name (plist-get tool-plist :name))
          (async (plist-get tool-plist :async))
          (declared-args (plist-get tool-plist :args))
+         (tool-metadata (ellama-tools--tool-scan-metadata tool-plist))
          (values (if (and async call-args (functionp (car call-args)))
                      (cdr call-args)
                    call-args))
          (specs declared-args)
          (index 0)
-         warn-message)
+         warn-message
+         warn-strong-message)
     (catch 'done
       (while (and values specs)
         (let* ((value (car values))
@@ -810,20 +855,25 @@ Return plist with keys `:action' and optional `:message'."
                              (symbol-name raw-name)
                            raw-name)))
           (let* ((arg-decision
-                  (ellama-tools--dlp-scan-input-value tool-name arg-name value))
+                  (ellama-tools--dlp-scan-input-value
+                   tool-name arg-name value tool-metadata))
                  (action (plist-get arg-decision :action))
                  (message (plist-get arg-decision :message)))
             (cond
              ((eq action 'block)
               (throw 'done arg-decision))
+             ((and (eq action 'warn-strong) (not warn-strong-message))
+              (setq warn-strong-message message))
              ((and (eq action 'warn) (not warn-message))
               (setq warn-message message)))))
         (setq values (cdr values))
         (setq specs (cdr specs))
         (setq index (1+ index)))
-      (if warn-message
-          (list :action 'warn :message warn-message)
-        (list :action 'allow)))))
+      (if warn-strong-message
+          (list :action 'warn-strong :message warn-strong-message)
+        (if warn-message
+            (list :action 'warn :message warn-message)
+          (list :action 'allow))))))
 
 (defun ellama-tools--dlp-confirm-warn (tool-name message &optional subject)
   "Ask explicit confirmation for DLP `warn' on TOOL-NAME with MESSAGE.
@@ -835,6 +885,30 @@ SUBJECT describe what is being allowed."
                tool-name)
        '(?y ?n))
       ?y))
+
+(defun ellama-tools--dlp-blocked-noninteractive-message (tool-name message)
+  "Return noninteractive block message for TOOL-NAME with MESSAGE."
+  (format
+   (concat
+    "%s. Interactive typed confirmation is required for irreversible "
+    "actions on tool %s")
+   (or message "DLP blocked irreversible input")
+   tool-name))
+
+(defun ellama-tools--dlp-confirm-warn-strong (tool-name message)
+  "Ask typed confirmation for irreversible warning on TOOL-NAME.
+MESSAGE is a user-facing warning text."
+  (if (not ellama-tools-irreversible-require-typed-confirm)
+      (ellama-tools--dlp-confirm-warn tool-name message "irreversible action")
+    (let ((typed (read-string
+                  (format
+                   (concat
+                    "%s. Type \"%s\" to proceed with irreversible action "
+                    "for tool %s: ")
+                   (or message "DLP warn-strong input")
+                   ellama-tools-irreversible-typed-confirm-phrase
+                   tool-name))))
+      (string= typed ellama-tools-irreversible-typed-confirm-phrase))))
 
 (defun ellama-tools--dlp-highlight-findings (start text findings)
   "Highlight FINDINGS in TEXT inserted at START."
@@ -915,13 +989,13 @@ Return one of symbols `allow', `redact' or `block'."
            (format "DLP blocked output for tool %s" tool-name))))))
 
 (defun ellama-tools--dlp-wrap-output-callback
-    (tool-name callback &optional output-context)
+    (tool-name callback &optional output-context tool-metadata)
   "Wrap CALLBACK to apply output filtering for TOOL-NAME."
   (lambda (result)
     (funcall callback
              (if (stringp result)
                  (ellama-tools--postprocess-output-string
-                  tool-name result output-context)
+                  tool-name result output-context tool-metadata)
                result))))
 
 (defun ellama-tools--dlp-return-message (async args message)
@@ -938,21 +1012,22 @@ return nil."
 (defun ellama-tools--make-dlp-wrapper (func tool-plist)
   "Make DLP wrapper for FUNC using TOOL-PLIST metadata."
   (let ((tool-name (plist-get tool-plist :name))
-        (async (plist-get tool-plist :async)))
+        (async (plist-get tool-plist :async))
+        (tool-metadata (ellama-tools--tool-scan-metadata tool-plist)))
     (lambda (&rest args)
       (let* ((output-context
               (ellama-tools--tool-output-context tool-plist args))
              (wrapped-args
               (if (and async args (functionp (car args)))
                   (cons (ellama-tools--dlp-wrap-output-callback
-                         tool-name (car args) output-context)
+                         tool-name (car args) output-context tool-metadata)
                         (cdr args))
                 args)))
         (if (not ellama-tools-dlp-enabled)
             (let ((result (apply func wrapped-args)))
               (if (and (not async) (stringp result))
                   (ellama-tools--postprocess-output-string
-                   tool-name result output-context)
+                   tool-name result output-context tool-metadata)
                 result))
           (let* ((decision (ellama-tools--dlp-input-decision
                             tool-plist args))
@@ -973,13 +1048,30 @@ return nil."
                  (let ((result (apply func wrapped-args)))
                    (if (and (not async) (stringp result))
                        (ellama-tools--postprocess-output-string
-                        tool-name result output-context)
+                        tool-name result output-context tool-metadata)
                      result))))
+              ('warn-strong
+               (if noninteractive
+                   (ellama-tools--dlp-return-message
+                    async args
+                    (ellama-tools--dlp-blocked-noninteractive-message
+                     tool-name message))
+                 (if (not (ellama-tools--dlp-confirm-warn-strong
+                           tool-name message))
+                     (ellama-tools--dlp-return-message
+                      async args
+                      (format "DLP warning denied tool execution for %s"
+                              tool-name))
+                   (let ((result (apply func wrapped-args)))
+                     (if (and (not async) (stringp result))
+                         (ellama-tools--postprocess-output-string
+                          tool-name result output-context tool-metadata)
+                       result)))))
               (_
                (let ((result (apply func wrapped-args)))
                  (if (and (not async) (stringp result))
                      (ellama-tools--postprocess-output-string
-                      tool-name result output-context)
+                      tool-name result output-context tool-metadata)
                    result))))))))))
 
 (defun ellama-tools-wrap-with-confirm (tool-plist)
