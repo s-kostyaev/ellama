@@ -418,13 +418,16 @@ can scan:
 
 The DLP layer supports regex-based rules and exact secret detection derived from
 environment variables (including common encoded variants such as
-base64/base64url and hex).
+base64/base64url and hex).  It also includes an optional LLM-based semantic
+check as a block-only backstop for payloads that look unsafe but do not match a
+deterministic rule.
 
 Recommended initial rollout:
 
 - enable DLP
 - keep mode in ~monitor~
 - review incidents before switching selected paths to ~enforce~
+- if enabling the LLM detector, start with a small tool allowlist
 
 Example minimal setup:
 
@@ -443,12 +446,28 @@ Key settings:
   direction/tool/arg scoping, enable/disable, case folding).
 - ~ellama-tools-dlp-scan-env-exact-secrets~: Enable exact-secret detection from
   environment variables (enabled by default).
+- ~ellama-tools-dlp-llm-check-enabled~: Enable the optional isolated LLM safety
+  classifier (disabled by default).
+- ~ellama-tools-dlp-llm-provider~: Provider used for the isolated LLM safety
+  check.  When nil, it falls back to the extraction provider, then the default
+  provider.
+- ~ellama-tools-dlp-llm-directions~: Directions where the LLM detector may run
+  (~input~, ~output~, or both).
+- ~ellama-tools-dlp-llm-max-scan-size~: Maximum bytes eligible for the LLM
+  detector.  Payloads above this limit are skipped for the LLM pass.
+- ~ellama-tools-dlp-llm-tool-allowlist~: Optional list of tool names allowed to
+  use the LLM detector.  Nil means all tools are eligible.
+- ~ellama-tools-dlp-llm-run-policy~: Run the LLM detector only when
+  deterministic findings are empty (~clean-only~) or on every non-blocked scan
+  (~always-unless-blocked~).
 - ~ellama-tools-dlp-max-scan-size~: Maximum bytes scanned per input/output
   payload (default 5 MB; larger payloads are truncated for scanning).
 - ~ellama-tools-dlp-input-default-action~: Default action for input findings in
   ~enforce~ mode (~allow~, ~warn~, ~block~).
 - ~ellama-tools-dlp-output-default-action~: Default action for output findings
   in ~enforce~ mode (~allow~, ~warn~, ~block~, ~redact~).
+- ~ellama-tools-dlp-output-warn-behavior~: Handling for output ~warn~ verdicts
+  (~allow~, ~confirm~, or ~block~).
 - ~ellama-tools-dlp-policy-overrides~: Per-tool/per-arg overrides and
   exceptions.  For structured input args, nested string values are scanned with
   path-like arg names (for example ~payload.items[0].token~).  Override ~:arg~
@@ -473,7 +492,17 @@ Enforcement behavior (v1):
 - input ~warn~ asks for explicit confirmation before execution
 - output ~block~ returns a safe denial string
 - output ~redact~ replaces detected fragments with placeholders
-- output ~warn~ logs a warning and currently passes content through
+- output ~warn~ follows ~ellama-tools-dlp-output-warn-behavior~ (~confirm~ by
+  default)
+
+LLM safety check behavior (v1):
+
+- the LLM detector runs only when ~ellama-tools-dlp-llm-check-enabled~ is
+  non-nil
+- the checker uses an isolated structured-output request with no tools
+- in ~monitor~, unsafe LLM verdicts are logged but do not change the result
+- in ~enforce~, an unsafe LLM verdict may force ~block~
+- LLM findings never trigger ~warn~ or ~redact~ and do not affect redaction
 
 Tool output truncation behavior:
 

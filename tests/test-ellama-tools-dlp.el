@@ -77,6 +77,66 @@
     :detector 'exact-secret
     :match-start 1)))
 
+(ert-deftest test-ellama-tools-dlp-make-finding-llm ()
+  (let ((finding (ellama-tools-dlp--make-finding
+                  :rule-id "llm-prompt_injection"
+                  :detector 'llm
+                  :severity 'high)))
+    (should (ellama-tools-dlp--finding-p finding))
+    (should (eq (plist-get finding :detector) 'llm))
+    (should-not (plist-get finding :match-start))
+    (should-not (plist-get finding :match-end))))
+
+(ert-deftest test-ellama-tools-dlp-make-finding-llm-rejects-spans ()
+  (should-error
+   (ellama-tools-dlp--make-finding
+    :rule-id "llm-prompt_injection"
+    :detector 'llm
+    :severity 'high
+    :match-start 1
+    :match-end 5)))
+
+(ert-deftest test-ellama-tools-dlp-llm-check-prompt-disables-tools ()
+  (let (captured)
+    (cl-letf (((symbol-function 'ellama-tools-dlp--llm-make-chat-prompt)
+               (lambda (prompt &rest args)
+                 (setq captured (list prompt args))
+                 'prompt)))
+      (should
+       (eq (ellama-tools-dlp--llm-check-prompt
+            "payload"
+            (ellama-tools-dlp--make-scan-context
+             :direction 'input
+             :tool-name "shell_command"
+             :arg-name "cmd"
+             :payload-length 7
+             :truncated nil))
+           'prompt)))
+    (should (equal (car captured)
+                   (ellama-tools-dlp--llm-render-template
+                    "payload"
+                    (ellama-tools-dlp--make-scan-context
+                     :direction 'input
+                     :tool-name "shell_command"
+                     :arg-name "cmd"
+                     :payload-length 7
+                     :truncated nil))))
+    (should (equal (plist-get (cadr captured) :response-format)
+                   ellama-tools-dlp--llm-response-format))
+    (should (null (plist-get (cadr captured) :tools)))))
+
+(ert-deftest test-ellama-tools-dlp-llm-render-template-no-reexpansion ()
+  (let ((prompt (ellama-tools-dlp--llm-render-template
+                 "payload"
+                 (ellama-tools-dlp--make-scan-context
+                  :direction 'input
+                  :tool-name "shell_command"
+                  :arg-name "{{payload}}"
+                  :payload-length 7
+                  :truncated nil))))
+    (should (string-match-p "Arg: {{payload}}" prompt))
+    (should (string-match-p "Payload:\npayload" prompt))))
+
 (ert-deftest test-ellama-tools-dlp-make-verdict ()
   (let* ((finding (ellama-tools-dlp--make-finding
                    :rule-id "api-key"
@@ -473,7 +533,7 @@
   (let* ((secret "TOPSECRET-DO-NOT-LOG-123456789")
          (process-environment (list (concat "BROKEN_SECRET=" secret)))
          (ellama-tools-dlp-env-secret-heuristic-stages
-         (list (lambda (_env-name _env-value)
+          (list (lambda (_env-name _env-value)
                   (error "Boom")))))
     (ellama-tools-dlp--clear-incident-log)
     (ellama-tools-dlp--invalidate-exact-secret-cache)
@@ -511,6 +571,333 @@
       (should (eq (plist-get incident :action) 'allow))
       (should (eq (plist-get incident :configured-action) 'block))
       (should-not (string-match-p "SECRET" serialized)))))
+
+(ert-deftest test-ellama-tools-dlp-scan-text-llm-disabled-does-not-call ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-llm-check-enabled nil)
+         (ellama-tools-dlp-regex-rules nil)
+         (called nil)
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'input
+                   :tool-name "mcp_tool"
+                   :arg-name "arg"
+                   :payload-length 0
+                   :truncated nil)))
+    (cl-letf (((symbol-function 'ellama-tools-dlp--llm-check-text)
+               (lambda (&rest _args)
+                 (setq called t)
+                 (error "Should not run"))))
+      (let* ((result (ellama-tools-dlp--scan-text "echo ok" context))
+             (verdict (plist-get result :verdict)))
+        (should (eq (plist-get verdict :action) 'allow))
+        (should-not called)))))
+
+(ert-deftest test-ellama-tools-dlp-scan-text-llm-direction-skip ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-llm-check-enabled t)
+         (ellama-tools-dlp-llm-directions '(input))
+         (ellama-tools-dlp-regex-rules nil)
+         (called nil)
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'output
+                   :tool-name "read_file"
+                   :arg-name nil
+                   :payload-length 0
+                   :truncated nil)))
+    (ellama-tools-dlp--clear-incident-log)
+    (cl-letf (((symbol-function 'ellama-tools-dlp--llm-runtime-available-p)
+               (lambda () t))
+              ((symbol-function 'ellama-tools-dlp--llm-provider)
+               (lambda () 'provider))
+              ((symbol-function 'ellama-tools-dlp--llm-check-text)
+               (lambda (&rest _args)
+                 (setq called t)
+                 (error "Should not run"))))
+      (ellama-tools-dlp--scan-text "harmless" context))
+    (let ((skip-incident (nth 1 (ellama-tools-dlp--incident-log))))
+      (should-not called)
+      (should (eq (plist-get skip-incident :type) 'llm-check-skip))
+      (should (eq (plist-get skip-incident :skip-reason)
+                  'direction-disabled)))))
+
+(ert-deftest test-ellama-tools-dlp-scan-text-llm-provider-unsupported-skip ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-llm-check-enabled t)
+         (ellama-tools-dlp-regex-rules nil)
+         (called nil)
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'input
+                   :tool-name "shell_command"
+                   :arg-name "cmd"
+                   :payload-length 0
+                   :truncated nil)))
+    (ellama-tools-dlp--clear-incident-log)
+    (cl-letf (((symbol-function 'ellama-tools-dlp--llm-runtime-available-p)
+               (lambda () t))
+              ((symbol-function 'ellama-tools-dlp--llm-provider)
+               (lambda () (list :provider "unsupported")))
+              ((symbol-function 'ellama-tools-dlp--llm-provider-supported-p)
+               (lambda (_provider) nil))
+              ((symbol-function 'ellama-tools-dlp--llm-check-text)
+               (lambda (&rest _args)
+                 (setq called t)
+                 (error "Should not run"))))
+      (ellama-tools-dlp--scan-text "echo ok" context))
+    (let ((skip-incident (nth 1 (ellama-tools-dlp--incident-log))))
+      (should-not called)
+      (should (eq (plist-get skip-incident :type) 'llm-check-skip))
+      (should (eq (plist-get skip-incident :skip-reason)
+                  'provider-unsupported)))))
+
+(ert-deftest
+    test-ellama-tools-dlp-scan-text-llm-provider-resolution-error-skips ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-llm-check-enabled t)
+         (ellama-tools-dlp-regex-rules nil)
+         (called nil)
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'input
+                   :tool-name "shell_command"
+                   :arg-name "cmd"
+                   :payload-length 0
+                   :truncated nil)))
+    (ellama-tools-dlp--clear-incident-log)
+    (cl-letf (((symbol-function 'ellama-tools-dlp--llm-runtime-available-p)
+               (lambda () t))
+              ((symbol-function 'ellama-tools-dlp--llm-provider-resolution)
+               (lambda ()
+                 (list :ok nil :reason 'provider-resolution-error)))
+              ((symbol-function 'ellama-tools-dlp--llm-check-text)
+               (lambda (&rest _args)
+                 (setq called t)
+                 (error "Should not run"))))
+      (let* ((result (ellama-tools-dlp--scan-text "echo ok" context))
+             (verdict (plist-get result :verdict)))
+        (should (eq (plist-get verdict :action) 'allow))))
+    (let ((decision-incident (car (ellama-tools-dlp--incident-log)))
+          (skip-incident (nth 1 (ellama-tools-dlp--incident-log))))
+      (should-not called)
+      (should (eq (plist-get decision-incident :type) 'scan-decision))
+      (should-not (plist-get decision-incident :llm-ran))
+      (should (eq (plist-get skip-incident :type) 'llm-check-skip))
+      (should (eq (plist-get skip-incident :skip-reason)
+                  'provider-resolution-error)))))
+
+(ert-deftest test-ellama-tools-dlp-scan-text-llm-clean-only-skips-dirty-scan ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-llm-check-enabled t)
+         (ellama-tools-dlp-llm-run-policy 'clean-only)
+         (ellama-tools-dlp-input-default-action 'warn)
+         (ellama-tools-dlp-regex-rules '((:id "token" :pattern "SECRET")))
+         (called nil)
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'input
+                   :tool-name "mcp_tool"
+                   :arg-name "arg"
+                   :payload-length 0
+                   :truncated nil)))
+    (ellama-tools-dlp--clear-incident-log)
+    (cl-letf (((symbol-function 'ellama-tools-dlp--llm-runtime-available-p)
+               (lambda () t))
+              ((symbol-function 'ellama-tools-dlp--llm-provider)
+               (lambda () 'provider))
+              ((symbol-function 'ellama-tools-dlp--llm-check-text)
+               (lambda (&rest _args)
+                 (setq called t)
+                 (error "Should not run"))))
+      (let* ((result (ellama-tools-dlp--scan-text "SECRET" context))
+             (verdict (plist-get result :verdict)))
+        (should (eq (plist-get verdict :action) 'warn))))
+    (let ((skip-incident (nth 1 (ellama-tools-dlp--incident-log))))
+      (should-not called)
+      (should (eq (plist-get skip-incident :type) 'llm-check-skip))
+      (should (eq (plist-get skip-incident :skip-reason)
+                  'deterministic-findings)))))
+
+(ert-deftest
+    test-ellama-tools-dlp-scan-text-llm-always-unless-blocked-still-runs ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-llm-check-enabled t)
+         (ellama-tools-dlp-llm-run-policy 'always-unless-blocked)
+         (ellama-tools-dlp-input-default-action 'warn)
+         (ellama-tools-dlp-regex-rules '((:id "token" :pattern "SECRET")))
+         (called nil)
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'input
+                   :tool-name "mcp_tool"
+                   :arg-name "arg"
+                   :payload-length 0
+                   :truncated nil)))
+    (cl-letf (((symbol-function 'ellama-tools-dlp--llm-runtime-available-p)
+               (lambda () t))
+              ((symbol-function 'ellama-tools-dlp--llm-provider)
+               (lambda () 'provider))
+              ((symbol-function 'ellama-tools-dlp--llm-check-text)
+               (lambda (&rest _args)
+                 (setq called t)
+                 (list :status 'ok
+                       :result '(:unsafe nil
+                                         :category "unknown"
+                                         :risk "none"
+                                         :reason "ok")))))
+      (let* ((result (ellama-tools-dlp--scan-text "SECRET" context))
+             (verdict (plist-get result :verdict)))
+        (should called)
+        (should (eq (plist-get verdict :action) 'warn))))))
+
+(ert-deftest test-ellama-tools-dlp-scan-text-llm-deterministic-block-skips ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-llm-check-enabled t)
+         (ellama-tools-dlp-llm-run-policy 'always-unless-blocked)
+         (ellama-tools-dlp-input-default-action 'block)
+         (ellama-tools-dlp-regex-rules '((:id "token" :pattern "SECRET")))
+         (called nil)
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'input
+                   :tool-name "shell_command"
+                   :arg-name "cmd"
+                   :payload-length 0
+                   :truncated nil)))
+    (ellama-tools-dlp--clear-incident-log)
+    (cl-letf (((symbol-function 'ellama-tools-dlp--llm-runtime-available-p)
+               (lambda () t))
+              ((symbol-function 'ellama-tools-dlp--llm-provider)
+               (lambda () 'provider))
+              ((symbol-function 'ellama-tools-dlp--llm-check-text)
+               (lambda (&rest _args)
+                 (setq called t)
+                 (error "Should not run"))))
+      (let* ((result (ellama-tools-dlp--scan-text "SECRET" context))
+             (verdict (plist-get result :verdict)))
+        (should (eq (plist-get verdict :action) 'block))))
+    (let ((skip-incident (nth 1 (ellama-tools-dlp--incident-log))))
+      (should-not called)
+      (should (eq (plist-get skip-incident :type) 'llm-check-skip))
+      (should (eq (plist-get skip-incident :skip-reason)
+                  'deterministic-block)))))
+
+(ert-deftest test-ellama-tools-dlp-scan-text-llm-blocks-in-enforce ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-llm-check-enabled t)
+         (ellama-tools-dlp-regex-rules nil)
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'output
+                   :tool-name "mcp_tool"
+                   :arg-name nil
+                   :payload-length 0
+                   :truncated nil)))
+    (ellama-tools-dlp--clear-incident-log)
+    (cl-letf (((symbol-function 'ellama-tools-dlp--llm-runtime-available-p)
+               (lambda () t))
+              ((symbol-function 'ellama-tools-dlp--llm-provider)
+               (lambda () 'provider))
+              ((symbol-function 'ellama-tools-dlp--llm-check-text)
+               (lambda (&rest _args)
+                 (list :status 'ok
+                       :result '(:unsafe t
+                                         :category "prompt_injection"
+                                         :risk "high"
+                                         :reason "unsafe")))))
+      (let* ((result (ellama-tools-dlp--scan-text "plain output" context))
+             (verdict (plist-get result :verdict))
+             (incident (car (ellama-tools-dlp--incident-log))))
+        (should (null (plist-get result :findings)))
+        (should (eq (plist-get verdict :action) 'block))
+        (should (eq (plist-get verdict :configured-action) 'block))
+        (should (string-match-p "llm-prompt_injection"
+                                (plist-get verdict :message)))
+        (should (equal (mapcar (lambda (finding)
+                                 (plist-get finding :rule-id))
+                               (plist-get verdict :findings))
+                       '("llm-prompt_injection")))
+        (should (eq (plist-get incident :type) 'scan-decision))
+        (should (eq (plist-get incident :llm-unsafe) t))
+        (should (eq (plist-get incident :llm-overrode) t))))))
+
+(ert-deftest test-ellama-tools-dlp-scan-text-llm-monitor-does-not-override ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'monitor)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-llm-check-enabled t)
+         (ellama-tools-dlp-regex-rules nil)
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'output
+                   :tool-name "mcp_tool"
+                   :arg-name nil
+                   :payload-length 0
+                   :truncated nil)))
+    (ellama-tools-dlp--clear-incident-log)
+    (cl-letf (((symbol-function 'ellama-tools-dlp--llm-runtime-available-p)
+               (lambda () t))
+              ((symbol-function 'ellama-tools-dlp--llm-provider)
+               (lambda () 'provider))
+              ((symbol-function 'ellama-tools-dlp--llm-check-text)
+               (lambda (&rest _args)
+                 (list :status 'ok
+                       :result '(:unsafe t
+                                         :category "prompt_injection"
+                                         :risk "high"
+                                         :reason "unsafe")))))
+      (let* ((result (ellama-tools-dlp--scan-text "plain output" context))
+             (verdict (plist-get result :verdict))
+             (incident (car (ellama-tools-dlp--incident-log))))
+        (should (eq (plist-get verdict :action) 'allow))
+        (should (eq (plist-get verdict :configured-action) 'allow))
+        (should-not (plist-get verdict :message))
+        (should (eq (plist-get incident :type) 'scan-decision))
+        (should (eq (plist-get incident :llm-ran) t))
+        (should (eq (plist-get incident :llm-unsafe) t))
+        (should-not (plist-get incident :llm-overrode))))))
+
+(ert-deftest test-ellama-tools-dlp-scan-text-llm-json-error-falls-back ()
+  (let* ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-llm-check-enabled t)
+         (ellama-tools-dlp-regex-rules nil)
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'input
+                   :tool-name "shell_command"
+                   :arg-name "cmd"
+                   :payload-length 0
+                   :truncated nil)))
+    (ellama-tools-dlp--clear-incident-log)
+    (cl-letf (((symbol-function 'ellama-tools-dlp--llm-runtime-available-p)
+               (lambda () t))
+              ((symbol-function 'ellama-tools-dlp--llm-provider)
+               (lambda () 'provider))
+              ((symbol-function 'ellama-tools-dlp--llm-check-prompt)
+               (lambda (_text _context)
+                 'prompt))
+              ((symbol-function 'ellama-tools-dlp--llm-chat-call)
+               (lambda (_provider _prompt)
+                 "{broken")))
+      (let* ((result (ellama-tools-dlp--scan-text "echo ok" context))
+             (verdict (plist-get result :verdict))
+             (decision-incident (car (ellama-tools-dlp--incident-log)))
+             (error-incident (nth 1 (ellama-tools-dlp--incident-log))))
+        (should (eq (plist-get verdict :action) 'allow))
+        (should (eq (plist-get decision-incident :type) 'scan-decision))
+        (should (eq (plist-get decision-incident :llm-ran) t))
+        (should (eq (plist-get error-incident :type) 'llm-check-error))
+        (should (eq (plist-get error-incident :error-type)
+                    'json-parse-error))))))
 
 (ert-deftest test-ellama-tools-dlp-policy-overrides-and-exceptions ()
   (let* ((ellama-tools-dlp-enabled t)
@@ -689,6 +1076,33 @@
                    "TEXT" context (list finding) 'redact)))
     (should (eq (plist-get verdict :action) 'block))
     (should-not (plist-get verdict :redacted-text))))
+
+(ert-deftest test-ellama-tools-dlp-redaction-ignore-llm-findings ()
+  (let* ((ellama-tools-dlp-mode 'enforce)
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'output
+                   :tool-name "read_file"
+                   :arg-name nil
+                   :payload-length 10
+                   :truncated nil))
+         (regex-finding (ellama-tools-dlp--make-finding
+                         :rule-id "token"
+                         :detector 'regex
+                         :match-start 2
+                         :match-end 8))
+         (llm-finding (ellama-tools-dlp--make-finding
+                       :rule-id "llm-prompt_injection"
+                       :detector 'llm
+                       :severity 'high))
+         (verdict (ellama-tools-dlp--apply-enforcement
+                   "xxSECRETyy"
+                   context
+                   (list regex-finding)
+                   'redact
+                   (list regex-finding llm-finding))))
+    (should (eq (plist-get verdict :action) 'redact))
+    (should (equal (plist-get verdict :redacted-text)
+                   "xx[REDACTED:token]yy"))))
 
 (provide 'test-ellama-tools-dlp)
 ;;; test-ellama-tools-dlp.el ends here

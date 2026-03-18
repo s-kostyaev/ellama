@@ -573,13 +573,16 @@ calls.  It can scan:
 
 The DLP layer supports regex-based rules and exact secret detection
 derived from environment variables (including common encoded variants
-such as base64/base64url and hex).
+such as base64/base64url and hex).  It also includes an optional
+LLM-based semantic check as a block-only backstop for payloads that look
+unsafe but do not match a deterministic rule.
 
 Recommended initial rollout:
 
    • enable DLP
    • keep mode in ‘monitor’
    • review incidents before switching selected paths to ‘enforce’
+   • if enabling the LLM detector, start with a small tool allowlist
 
 Example minimal setup:
 
@@ -598,6 +601,21 @@ Key settings:
      folding).
    • ‘ellama-tools-dlp-scan-env-exact-secrets’: Enable exact-secret
      detection from environment variables (enabled by default).
+   • ‘ellama-tools-dlp-llm-check-enabled’: Enable the optional isolated
+     LLM safety classifier (disabled by default).
+   • ‘ellama-tools-dlp-llm-provider’: Provider used for the isolated LLM
+     safety check.  When nil, it falls back to the extraction provider,
+     then the default provider.
+   • ‘ellama-tools-dlp-llm-directions’: Directions where the LLM
+     detector may run (‘input’, ‘output’, or both).
+   • ‘ellama-tools-dlp-llm-max-scan-size’: Maximum bytes eligible for
+     the LLM detector.  Payloads above this limit are skipped for the
+     LLM pass.
+   • ‘ellama-tools-dlp-llm-tool-allowlist’: Optional list of tool names
+     allowed to use the LLM detector.  Nil means all tools are eligible.
+   • ‘ellama-tools-dlp-llm-run-policy’: Run the LLM detector only when
+     deterministic findings are empty (‘clean-only’) or on every
+     non-blocked scan (‘always-unless-blocked’).
    • ‘ellama-tools-dlp-max-scan-size’: Maximum bytes scanned per
      input/output payload (default 5 MB; larger payloads are truncated
      for scanning).
@@ -605,6 +623,8 @@ Key settings:
      findings in ‘enforce’ mode (‘allow’, ‘warn’, ‘block’).
    • ‘ellama-tools-dlp-output-default-action’: Default action for output
      findings in ‘enforce’ mode (‘allow’, ‘warn’, ‘block’, ‘redact’).
+   • ‘ellama-tools-dlp-output-warn-behavior’: Handling for output ‘warn’
+     verdicts (‘allow’, ‘confirm’, or ‘block’).
    • ‘ellama-tools-dlp-policy-overrides’: Per-tool/per-arg overrides and
      exceptions.  For structured input args, nested string values are
      scanned with path-like arg names (for example
@@ -618,6 +638,16 @@ Key settings:
    • ‘ellama-tools-dlp-input-fail-open’ /
      ‘ellama-tools-dlp-output-fail-open’: Behavior when DLP itself
      errors internally.
+   • ‘ellama-tools-output-line-budget-enabled’: Enable per-tool output
+     line-budget truncation before returning text to the model (enabled
+     by default).
+   • ‘ellama-tools-output-line-budget-max-lines’: Max lines per tool
+     output (default ‘200’).
+   • ‘ellama-tools-output-line-budget-max-line-length’: Max characters
+     per line before a single line is truncated (default ‘4000’).
+   • ‘ellama-tools-output-line-budget-save-overflow-file’: Save full
+     overflowing output to a temp file when the output source file is
+     unknown (default ‘t’).
 
 Enforcement behavior (v1):
 
@@ -625,7 +655,34 @@ Enforcement behavior (v1):
    • input ‘warn’ asks for explicit confirmation before execution
    • output ‘block’ returns a safe denial string
    • output ‘redact’ replaces detected fragments with placeholders
-   • output ‘warn’ logs a warning and currently passes content through
+   • output ‘warn’ follows ‘ellama-tools-dlp-output-warn-behavior’
+     (‘confirm’ by default)
+
+LLM safety check behavior (v1):
+
+   • the LLM detector runs only when
+     ‘ellama-tools-dlp-llm-check-enabled’ is non-nil
+   • the checker uses an isolated structured-output request with no
+     tools
+   • in ‘monitor’, unsafe LLM verdicts are logged but do not change the
+     result
+   • in ‘enforce’, an unsafe LLM verdict may force ‘block’
+   • LLM findings never trigger ‘warn’ or ‘redact’ and do not affect
+     redaction
+
+Tool output truncation behavior:
+
+   • line budget is applied per tool output payload
+   • if a payload exceeds the line budget, the model receives a
+     truncation notice plus the truncated snippet
+   • if lines exceed ‘ellama-tools-output-line-budget-max-line-length’,
+     those lines are shortened and marked with ‘...[line truncated]’
+   • when source is known (for example ‘read_file’, ‘lines_range’,
+     ‘grep_in_file’), the notice includes source path and suggests using
+     ‘lines_range’ and ‘grep_in_file~/~grep’
+   • when source is unknown (for example generic tool output), full
+     output is saved to a temp file (if enabled) and the filename is
+     included in the notice
 
 Example regex rules:
 
@@ -1790,38 +1847,38 @@ Node: Commands8844
 Node: Keymap16131
 Node: Configuration18965
 Node: DLP for Tool Input/Output27557
-Node: SRT Filesystem Policy for Tools31730
-Node: Context Management34299
-Node: Transient Menus for Context Management35367
-Node: Managing the Context36981
-Node: Considerations37756
-Node: Minor modes38349
-Node: ellama-context-header-line-mode40337
-Node: ellama-context-header-line-global-mode41162
-Node: ellama-context-mode-line-mode41882
-Node: ellama-context-mode-line-global-mode42730
-Node: Ellama Session Header Line Mode43434
-Node: Enabling and Disabling44003
-Node: Customization44450
-Node: Ellama Session Mode Line Mode44738
-Node: Enabling and Disabling (1)45323
-Node: Customization (1)45770
-Node: Using Blueprints46064
-Node: Key Components of Ellama Blueprints46704
-Node: Creating and Managing Blueprints47311
-Node: Blueprints files48289
-Node: Variable Management48710
-Node: Keymap and Mode49163
-Node: Transient Menus50099
-Node: Running Blueprints programmatically50645
-Node: MCP Integration51232
-Node: Agent Skills52254
-Node: Directory Structure52617
-Node: Creating a Skill53644
-Node: How it works54019
-Node: Acknowledgments54410
-Node: Contributions55121
-Node: GNU Free Documentation License55507
+Node: SRT Filesystem Policy for Tools34871
+Node: Context Management37440
+Node: Transient Menus for Context Management38508
+Node: Managing the Context40122
+Node: Considerations40897
+Node: Minor modes41490
+Node: ellama-context-header-line-mode43478
+Node: ellama-context-header-line-global-mode44303
+Node: ellama-context-mode-line-mode45023
+Node: ellama-context-mode-line-global-mode45871
+Node: Ellama Session Header Line Mode46575
+Node: Enabling and Disabling47144
+Node: Customization47591
+Node: Ellama Session Mode Line Mode47879
+Node: Enabling and Disabling (1)48464
+Node: Customization (1)48911
+Node: Using Blueprints49205
+Node: Key Components of Ellama Blueprints49845
+Node: Creating and Managing Blueprints50452
+Node: Blueprints files51430
+Node: Variable Management51851
+Node: Keymap and Mode52304
+Node: Transient Menus53240
+Node: Running Blueprints programmatically53786
+Node: MCP Integration54373
+Node: Agent Skills55395
+Node: Directory Structure55758
+Node: Creating a Skill56785
+Node: How it works57160
+Node: Acknowledgments57551
+Node: Contributions58262
+Node: GNU Free Documentation License58648
 
 End Tag Table
 

@@ -1785,7 +1785,7 @@ CALLBACK – function called once with the result string."
    ellama-tools-grep-in-file-tool
    :name "grep_in_file"
    :args ((:name "search_string" :type string :description "String to search for.")
-          (:name "file" :type file :description "File to search in."))
+          (:name "file" :type string :description "File to search in."))
    :description "Grep SEARCH-STRING in FILE."))
 
 (defun ellama-tools-now-tool ()

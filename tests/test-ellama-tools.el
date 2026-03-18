@@ -1303,6 +1303,45 @@ Return list with result and prompt."
       (should (string-match-p "pi-ignore-prior-instructions" result))
       (should-not (string-match-p "Ignore all your previous" result)))))
 
+(ert-deftest test-ellama-tools-wrap-with-confirm-dlp-output-blocks-llm-sync ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-llm-check-enabled t)
+        (ellama-tools-dlp-regex-rules nil)
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil))
+    (let* ((tool-plist `(:function ,(lambda (_arg)
+                                      "all clear")
+                                   :name "mcp_tool"
+                                   :args ((:name "arg" :type string))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function))
+           result)
+      (cl-letf (((symbol-function 'ellama-tools-dlp--llm-runtime-available-p)
+                 (lambda () t))
+                ((symbol-function 'ellama-tools-dlp--llm-provider)
+                 (lambda () 'provider))
+                ((symbol-function 'ellama-tools-dlp--llm-check-text)
+                 (lambda (_text context _provider)
+                   (list :status 'ok
+                         :result
+                         (if (eq (plist-get context :direction) 'output)
+                             '(:unsafe t
+                                       :category "prompt_injection"
+                                       :risk "high"
+                                       :reason "unsafe")
+                           '(:unsafe nil
+                                     :category "unknown"
+                                     :risk "none"
+                                     :reason "ok"))))))
+        (setq result (funcall wrapped-func "ok")))
+      (should (string-match-p "DLP block output" result))
+      (should (string-match-p "llm-prompt_injection" result))
+      (should-not (string-match-p "all clear" result)))))
+
 (ert-deftest
     test-ellama-tools-wrap-with-confirm-dlp-read-file-default-pi-warn-prompts ()
   (ellama-test--ensure-local-ellama-tools)
@@ -1529,6 +1568,52 @@ Return list with result and prompt."
       (should-not (string-match-p "SECRET" callback-result)))))
 
 (ert-deftest
+    test-ellama-tools-wrap-with-confirm-dlp-output-blocks-llm-async-callback ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-llm-check-enabled t)
+        (ellama-tools-dlp-regex-rules nil)
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        callback-result)
+    (let* ((tool-plist `(:function ,(lambda (callback cmd)
+                                      (funcall callback (concat "out:" cmd))
+                                      nil)
+                                   :name "async_tool"
+                                   :async t
+                                   :args ((:name "cmd" :type string))))
+           (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+           (wrapped-func (plist-get wrapped :function)))
+      (cl-letf (((symbol-function 'ellama-tools-dlp--llm-runtime-available-p)
+                 (lambda () t))
+                ((symbol-function 'ellama-tools-dlp--llm-provider)
+                 (lambda () 'provider))
+                ((symbol-function 'ellama-tools-dlp--llm-check-text)
+                 (lambda (_text context _provider)
+                   (list :status 'ok
+                         :result
+                         (if (eq (plist-get context :direction) 'output)
+                             '(:unsafe t
+                                       :category "prompt_injection"
+                                       :risk "high"
+                                       :reason "unsafe")
+                           '(:unsafe nil
+                                     :category "unknown"
+                                     :risk "none"
+                                     :reason "ok"))))))
+        (should (equal (funcall wrapped-func
+                                (lambda (result)
+                                  (setq callback-result result))
+                                "go")
+                       nil)))
+      (should (string-match-p "DLP block output" callback-result))
+      (should (string-match-p "llm-prompt_injection" callback-result))
+      (should-not (string-match-p "out:go" callback-result)))))
+
+(ert-deftest
     test-ellama-tools-wrap-with-confirm-dlp-output-warn-denied-async-callback ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((ellama-tools-dlp-enabled t)
@@ -1647,8 +1732,8 @@ Return list with result and prompt."
       (unwind-protect
           (let* ((tool-plist `(:function ,(lambda (_file-name)
                                             "line-1\nline-2\nline-3")
-                                     :name "read_file"
-                                     :args ((:name "file_name" :type string))))
+                                         :name "read_file"
+                                         :args ((:name "file_name" :type string))))
                  (wrapped (ellama-tools-wrap-with-confirm tool-plist))
                  (wrapped-func (plist-get wrapped :function))
                  (result (funcall wrapped-func source-path)))
