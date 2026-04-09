@@ -1781,6 +1781,17 @@ inserted into the BUFFER."
             (ellama-collapse-org-quotes))
           (ellama--deactivate-current-request request-context))))))
 
+(defun ellama--resolve-stream-session (buffer &optional session session-id)
+  "Resolve session for `ellama-stream' in BUFFER.
+Prefer explicit SESSION or SESSION-ID.  Otherwise only use BUFFER local
+session state, never the globally active session selection."
+  (or (when (or session session-id)
+        (ellama--resolve-session session session-id))
+      (with-current-buffer buffer
+        (when ellama--current-session
+          (ellama--ensure-session-uid ellama--current-session)
+          ellama--current-session))))
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
@@ -1818,8 +1829,11 @@ failure (with BUFFER current).
   (declare-function spinner-start "ext:spinner")
   (declare-function spinner-stop "ext:spinner")
   (declare-function ellama-context-prompt-with-context "ellama-context")
-  (let* ((session-id (plist-get args :session-id))
-         (session (ellama--resolve-session
+  (let* ((buffer (or (plist-get args :buffer)
+                     (current-buffer)))
+         (session-id (plist-get args :session-id))
+         (session (ellama--resolve-stream-session
+                   buffer
                    (plist-get args :session)
                    session-id))
          (provider (if session
@@ -1827,8 +1841,6 @@ failure (with BUFFER current).
                      (or (plist-get args :provider)
                          ellama-provider
                          (ellama-get-first-ollama-chat-model))))
-         (buffer (or (plist-get args :buffer)
-                     (current-buffer)))
          (reasoning-buffer (get-buffer-create
                             (concat (make-temp-name "*ellama-reasoning-") "*")))
          (point (or (plist-get args :point)
