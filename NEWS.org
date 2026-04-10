@@ -1,3 +1,8 @@
+* Version 1.13.0
+- Implement DLP (Data Loss Prevention) layer.
+- Add prompt‑injection detection and configurable output‑warning handling.
+- Add SRT sandbox integration to ellama-tools.
+- Remove apply_patch tool.
 * Version 1.12.18
 - Add refill-readme target. Updated AGENTS.md to include a new “Refill readme”
   step in the build instructions. Modified Makefile to add the target to the
