@@ -6,9 +6,10 @@
 2. **Run unit tests** (ERT): `make test`
 		If it fails, run `make test-detailed` to see fail reasons.
 3. **Check native compilation warnings**: `make check-compile-warnings`
-4. **Format Elisp files**: `make format-elisp`
-5. **Export manual**: `make manual`
-6. **Refill readme**: `make refill-readme`
+4. **Check docstrings and style docs**: `make checkdocs`
+5. **Format Elisp files**: `make format-elisp`
+6. **Export manual**: `make manual`
+7. **Refill readme**: `make refill-readme`
 
 ## Code Style Guidelines
 

@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.12.18
+;; Version: 1.13.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -477,6 +477,8 @@ It should be a function with single argument generated text string."
 
 (defvar ellama--current-session-id nil)
 (defvar ellama--current-session-uid nil)
+(defvar-local ellama--current-session nil)
+(defvar-local ellama--ignore-kill-buffer-request-cancel nil)
 
 (defun ellama--set-file-name-and-save ()
   "Set buffer file name and save buffer."
@@ -540,8 +542,6 @@ It should be a function with single argument generated text string."
 (defvar-local ellama--request-buffers nil)
 
 (defvar-local ellama--request-context nil)
-
-(defvar-local ellama--ignore-kill-buffer-request-cancel nil)
 
 (defconst ellama--code-prefix
   (rx (minimal-match
@@ -755,7 +755,6 @@ This filter contains only subset of markdown syntax to be good enough."
   "Always show ellama chain buffers."
   :type 'boolean)
 
-(defvar-local ellama--current-session nil)
 (defvar ellama--active-sessions (make-hash-table :test #'equal))
 (defvar ellama--active-session-states (make-hash-table :test #'equal))
 
@@ -1782,6 +1781,17 @@ inserted into the BUFFER."
             (ellama-collapse-org-quotes))
           (ellama--deactivate-current-request request-context))))))
 
+(defun ellama--resolve-stream-session (buffer &optional session session-id)
+  "Resolve session for `ellama-stream' in BUFFER.
+Prefer explicit SESSION or SESSION-ID.  Otherwise only use BUFFER local
+session state, never the globally active session selection."
+  (or (when (or session session-id)
+        (ellama--resolve-session session session-id))
+      (with-current-buffer buffer
+        (when ellama--current-session
+          (ellama--ensure-session-uid ellama--current-session)
+          ellama--current-session))))
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
@@ -1819,8 +1829,11 @@ failure (with BUFFER current).
   (declare-function spinner-start "ext:spinner")
   (declare-function spinner-stop "ext:spinner")
   (declare-function ellama-context-prompt-with-context "ellama-context")
-  (let* ((session-id (plist-get args :session-id))
-         (session (ellama--resolve-session
+  (let* ((buffer (or (plist-get args :buffer)
+                     (current-buffer)))
+         (session-id (plist-get args :session-id))
+         (session (ellama--resolve-stream-session
+                   buffer
                    (plist-get args :session)
                    session-id))
          (provider (if session
@@ -1828,10 +1841,6 @@ failure (with BUFFER current).
                      (or (plist-get args :provider)
                          ellama-provider
                          (ellama-get-first-ollama-chat-model))))
-         (buffer (or (plist-get args :buffer)
-                     (when (ellama-session-p session)
-                       (ellama-get-session-buffer (ellama--session-uid session)))
-                     (current-buffer)))
          (reasoning-buffer (get-buffer-create
                             (concat (make-temp-name "*ellama-reasoning-") "*")))
          (point (or (plist-get args :point)

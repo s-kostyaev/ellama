@@ -377,6 +377,21 @@ generated text string.
   will work without user confirmation.
 - ~ellama-tools-argument-max-length~: Max length of function argument in the
   confirmation prompt. Default value 50.
+- ~ellama-tools-use-srt~: Run shell-based tools (~shell_command~, ~grep~ and
+  ~grep_in_file~) via the external ~srt~ sandbox runtime. Disabled by default.
+  If enabled, non-shell file tools also perform local filesystem checks derived
+  from the same ~srt~ settings file to keep behavior aligned.  The local checks
+  currently enforce the filesystem subset ~denyRead~, ~allowWrite~ and
+  ~denyWrite~ for tools such as ~read_file~, ~write_file~, ~edit_file~,
+  ~directory_tree~, ~move_file~, ~count_lines~ and ~lines_range~.  If enabled
+  and ~srt~ is not installed, or the relevant ~srt~ settings file is missing or
+  malformed, the tool call signals a user error (fail closed).
+- ~ellama-tools-srt-program~: Sandbox runtime executable name/path used when
+  ~ellama-tools-use-srt~ is enabled. Default value is ~"srt"~.
+- ~ellama-tools-srt-args~: Extra arguments passed to ~srt~ before the wrapped
+  command (for example ~--settings /path/to/settings.json~).  The same arguments
+  are also used to resolve the settings file path for local non-shell filesystem
+  checks (default =~/.srt-settings.json= if no ~--settings~/~-s~ is provided).
 - ~ellama-blueprint-global-dir~: Global directory for storing blueprint files.
 - ~ellama-blueprint-local-dir~: Local directory name for project-specific
   blueprints.
@@ -392,6 +407,494 @@ generated text string.
   auto-continue steps for a sub-agent. Default value is 30.
 - ~ellama-tools-subagent-roles~: Subagent roles with provider, system prompt and
   allowed tools. Configuration of subagents for the ~task~ tool.
+
+** DLP for Tool Input/Output
+
+Ellama includes an optional DLP (Data Loss Prevention) layer for tool calls.  It
+can scan:
+
+- tool input (arguments sent from the model to tools)
+- tool output (strings returned from tools back to the model)
+
+The DLP layer supports regex-based rules and exact secret detection derived from
+environment variables (including common encoded variants such as
+base64/base64url and hex).  It also includes an optional LLM-based semantic
+check as a block-only backstop for payloads that look unsafe but do not match a
+deterministic rule.
+
+Recommended initial rollout:
+
+- enable DLP
+- keep mode in ~monitor~
+- review incidents before switching selected paths to ~enforce~
+- if enabling the LLM detector, start with a small tool allowlist
+
+Example minimal setup:
+
+#+BEGIN_SRC emacs-lisp
+  (setopt ellama-tools-dlp-enabled t)
+  (setopt ellama-tools-dlp-mode 'monitor)
+  (setopt ellama-tools-dlp-log-targets '(memory))
+#+END_SRC
+
+Key settings:
+
+- ~ellama-tools-dlp-enabled~: Enable DLP scanning for tool input/output.
+- ~ellama-tools-dlp-mode~: Rollout mode. Use ~monitor~ for detect+log only, or
+  ~enforce~ to apply actions.
+- ~ellama-tools-dlp-regex-rules~: Regex detector rules (IDs, patterns,
+  direction/tool/arg scoping, enable/disable, case folding).
+- ~ellama-tools-dlp-scan-env-exact-secrets~: Enable exact-secret detection from
+  environment variables (enabled by default).
+- ~ellama-tools-dlp-llm-check-enabled~: Enable the optional isolated LLM safety
+  classifier (disabled by default).
+- ~ellama-tools-dlp-llm-provider~: Provider used for the isolated LLM safety
+  check.  When nil, it falls back to the extraction provider, then the default
+  provider.
+- ~ellama-tools-dlp-llm-directions~: Directions where the LLM detector may run
+  (~input~, ~output~, or both).
+- ~ellama-tools-dlp-llm-max-scan-size~: Maximum bytes eligible for the LLM
+  detector.  Payloads above this limit are skipped for the LLM pass.
+- ~ellama-tools-dlp-llm-tool-allowlist~: Optional list of tool names allowed to
+  use the LLM detector.  Nil means all tools are eligible.
+- ~ellama-tools-dlp-llm-run-policy~: Run the LLM detector only when
+  deterministic findings are empty (~clean-only~) or on every non-blocked scan
+  (~always-unless-blocked~).
+- ~ellama-tools-dlp-max-scan-size~: Maximum bytes scanned per input/output
+  payload (default 5 MB; larger payloads are truncated for scanning).
+- ~ellama-tools-dlp-input-default-action~: Default action for input findings in
+  ~enforce~ mode (~allow~, ~warn~, ~block~).
+- ~ellama-tools-dlp-output-default-action~: Default action for output findings
+  in ~enforce~ mode (~allow~, ~warn~, ~block~, ~redact~).
+- ~ellama-tools-dlp-output-warn-behavior~: Handling for output ~warn~ verdicts
+  (~allow~, ~confirm~, or ~block~).
+- ~ellama-tools-dlp-policy-overrides~: Per-tool/per-arg overrides and
+  exceptions.  For structured input args, nested string values are scanned with
+  path-like arg names (for example ~payload.items[0].token~).  Override ~:arg~
+  matches exact names and nested path prefixes (for example ~"payload"~ matches
+  ~payload.items[0].token~).
+- ~ellama-tools-dlp-log-targets~: Incident log targets (~memory~, ~message~,
+  ~file~).
+- ~ellama-tools-dlp-audit-log-file~: JSONL path used when ~file~ sink is
+  enabled.
+- ~ellama-tools-dlp-incident-log-max~: Maximum in-memory incidents retained.
+- ~ellama-tools-dlp-input-fail-open~ / ~ellama-tools-dlp-output-fail-open~:
+  Behavior when DLP itself errors internally.
+- ~ellama-tools-irreversible-enabled~: Enable irreversible-action handling.
+- ~ellama-tools-irreversible-default-action~: Default irreversible action
+  (~warn~ or ~block~, with monitor downgrade to ~warn-strong~).
+- ~ellama-tools-irreversible-unknown-tool-action~: Default action for unknown
+  MCP tools (~warn~ or ~allow~).
+- ~ellama-tools-irreversible-require-typed-confirm~: Require typed phrase for
+  irreversible warnings.
+- ~ellama-tools-irreversible-project-overrides-enabled~: Enable project-local
+  irreversible override policy.
+- ~ellama-tools-irreversible-project-overrides-file~: Project policy file name.
+- ~ellama-tools-irreversible-project-trust-store-file~: User trust store for
+  repository approval records (repo root + remote + policy hash).
+- ~ellama-tools-irreversible-scoped-bypass-default-ttl~: Default TTL (seconds)
+  for session bypass entries.
+- ~ellama-tools-output-line-budget-enabled~: Enable per-tool output line-budget
+  truncation before returning text to the model (enabled by default).
+- ~ellama-tools-output-line-budget-max-lines~: Max lines per tool output
+  (default ~200~).
+- ~ellama-tools-output-line-budget-max-line-length~: Max characters per line
+  before a single line is truncated (default ~4000~).
+- ~ellama-tools-output-line-budget-save-overflow-file~: Save full overflowing
+  output to a temp file when the output source file is unknown (default ~t~).
+
+Enforcement behavior (v1):
+
+- input ~block~ prevents tool execution
+- input ~warn~ asks for explicit confirmation before execution
+- output ~block~ returns a safe denial string
+- output ~redact~ replaces detected fragments with placeholders
+- output ~warn~ follows ~ellama-tools-dlp-output-warn-behavior~ (~confirm~ by
+  default)
+
+LLM safety check behavior (v1):
+
+- the LLM detector runs only when ~ellama-tools-dlp-llm-check-enabled~ is
+  non-nil
+- the checker uses an isolated structured-output request with no tools
+- in ~monitor~, unsafe LLM verdicts are logged but do not change the result
+- in ~enforce~, an unsafe LLM verdict may force ~block~
+- LLM findings never trigger ~warn~ or ~redact~ and do not affect redaction
+
+Irreversible action safety (v1):
+
+- irreversible warnings use ~warn-strong~ with typed confirmation phrase ~I
+  UNDERSTAND THIS CANNOT BE UNDONE~
+- in ~enforce~, high-confidence irreversible findings hard ~block~
+- in ~monitor~, high-confidence irreversible findings still require typed
+  confirmation and do not hard block
+- unknown MCP tool identities default to ~warn~ (configurable via
+  ~ellama-tools-irreversible-unknown-tool-action~)
+- policy precedence for irreversible decisions: ~high-confidence enforce block~
+  > ~session bypass~ > ~project override~ > global irreversible default
+- project overrides are ignored until the repository policy is explicitly
+  trusted; trust is bound to repo root, remote URL, and policy hash
+- audit sink write failure for irreversible decisions is fail-closed; in
+  interactive sessions a separate explicit confirmation can override once
+
+Session bypass helper:
+
+#+BEGIN_SRC emacs-lisp
+  ;; Allow irreversible actions for one tool identity in this session.
+  (ellama-tools-dlp-add-session-bypass "mcp-db/query" 3600 "migration window")
+#+END_SRC
+
+Autonomous agent configuration:
+
+Autonomous agents need a low-friction policy.  Prompting on every ordinary tool
+call trains users to approve blindly, which is worse than a smaller set of
+high-signal prompts.  The recommended shape is:
+
+- clean read/write operations inside the approved workspace run automatically
+- secret leaks and prompt-injection-like output are redacted or blocked
+- ambiguous dangerous actions require typed user confirmation or fail closed
+- high-confidence destructive actions are blocked, not prompted
+- unknown MCP tools warn until they are classified
+
+~ellama-tools-allow-all~ only bypasses the normal confirmation wrapper.  It does
+not bypass DLP, irreversible-action checks, output scanning, or ~srt~ filesystem
+checks because DLP wraps the confirmation layer.  This makes ~allow-all~
+suitable only when DLP enforcement is enabled and tool filesystem access is
+constrained.
+
+Recommended baseline for autonomous coding:
+
+#+BEGIN_SRC emacs-lisp
+  (with-eval-after-load 'ellama-tools
+    ;; Let clean calls run without repetitive prompts.
+    (setopt ellama-tools-allow-all t)
+
+    ;; Required safety layer.
+    (setopt ellama-tools-dlp-enabled t)
+    (setopt ellama-tools-dlp-mode 'enforce)
+
+    ;; Prefer fail-closed behavior for autonomous operation.
+    (setopt ellama-tools-dlp-input-fail-open nil)
+    (setopt ellama-tools-dlp-output-fail-open nil)
+
+    ;; Keep secret and output protections active.
+    (setopt ellama-tools-dlp-scan-env-exact-secrets t)
+    (setopt ellama-tools-dlp-input-default-action 'warn)
+    (setopt ellama-tools-dlp-output-default-action 'redact)
+
+    ;; Irreversible actions require stronger intent.
+    (setopt ellama-tools-irreversible-enabled t)
+    (setopt ellama-tools-irreversible-default-action 'warn)
+    (setopt ellama-tools-irreversible-require-typed-confirm t)
+
+    ;; Keep telemetry durable enough to tune.
+    (setopt ellama-tools-dlp-log-targets '(memory file))
+
+    ;; Strongly recommended when `ellama-tools-allow-all' is enabled.
+    (setopt ellama-tools-use-srt t)
+    (setopt ellama-tools-srt-args
+            '("--settings" "~/.config/ellama/srt-autonomous.json")))
+#+END_SRC
+
+Use an ~srt~ policy that allows writes only inside the current project and a
+scratch area.  Add explicit read/write denials for secrets, credentials, audit
+logs, and system paths.  See the project sandbox example in the SRT Filesystem
+Policy for Tools section.
+
+There are two reasonable policies for dangerous cases.  User-handled dangerous
+cases ask only for DLP warnings and irreversible actions:
+
+#+BEGIN_SRC emacs-lisp
+  (setopt ellama-tools-dlp-input-default-action 'warn)
+  (setopt ellama-tools-dlp-output-warn-behavior 'confirm)
+  (setopt ellama-tools-irreversible-default-action 'warn)
+  (setopt ellama-tools-irreversible-require-typed-confirm t)
+#+END_SRC
+
+Medium-risk irreversible actions require the typed confirmation phrase ~I
+UNDERSTAND THIS CANNOT BE UNDONE~.  High-confidence destructive actions are
+still blocked in ~enforce~ mode before session or project overrides apply.
+
+Secure fallback is better for unattended agents:
+
+#+BEGIN_SRC emacs-lisp
+  (setopt ellama-tools-dlp-input-default-action 'block)
+  (setopt ellama-tools-dlp-output-warn-behavior 'block)
+  (setopt ellama-tools-irreversible-default-action 'block)
+  (setopt ellama-tools-irreversible-require-typed-confirm t)
+#+END_SRC
+
+With secure fallback, the agent receives a denial string and must find a safer
+path.  This avoids turning user confirmation into a routine approval habit.
+
+Reduce prompt fatigue by tightening tool roles instead of weakening safety.
+Avoid ~:tools :all~ for autonomous subagents.  Prefer separate roles such as:
+
+- read-only explorer without ~shell_command~
+- coder with file tools and sandboxed ~shell_command~
+- bash role only when a task explicitly needs shell access
+- no ~ask_user~ tool unless user interruption is intentional
+
+For MCP tools, keep ~ellama-tools-irreversible-unknown-tool-action~ as ~warn~
+initially.  After observing common safe tools, classify trusted tool identities
+with ~ellama-tools-irreversible-tool-risk-overrides~ or trusted project
+overrides.  Use ~ellama-tools-dlp-add-session-bypass~ only for narrow tool
+identities and short TTLs; do not disable DLP globally to reduce prompts.
+
+If ~srt~ is not available, do not use global ~ellama-tools-allow-all~ for
+autonomous coding.  Use a small ~ellama-tools-allowed~ list of safe read-only
+tools instead, and keep mutating tools behind confirmation or DLP fallback.
+
+Tool output truncation behavior:
+
+- line budget is applied per tool output payload
+- if a payload exceeds the line budget, the model receives a truncation notice
+  plus the truncated snippet
+- if lines exceed ~ellama-tools-output-line-budget-max-line-length~, those lines
+  are shortened and marked with ~...[line truncated]~
+- when source is known (for example ~read_file~, ~lines_range~, ~grep_in_file~),
+  the notice includes source path and suggests using ~lines_range~ and
+  ~grep_in_file~/~grep~
+- when source is unknown (for example generic tool output), full output is saved
+  to a temp file (if enabled) and the filename is included in the notice
+
+Example regex rules:
+
+#+BEGIN_SRC emacs-lisp
+  (setopt ellama-tools-dlp-regex-rules
+          '((:id "openai-key"
+             :pattern "sk-[[:alnum:]-]+"
+            :directions (input output))
+            (:id "pem-header"
+             :pattern "-----BEGIN [A-Z ]+-----"
+             :directions (output)
+             :enabled t)))
+#+END_SRC
+
+Example scoped override (ignore noisy shell command input):
+
+#+BEGIN_SRC emacs-lisp
+  (setopt ellama-tools-dlp-policy-overrides
+          '((:tool "shell_command"
+             :direction input
+             :arg "cmd"
+             :except t)))
+#+END_SRC
+
+Example override for structured input payloads (top-level arg prefix match):
+
+#+BEGIN_SRC emacs-lisp
+  (setopt ellama-tools-dlp-policy-overrides
+          '((:tool "write_file"
+             :direction input
+             :arg "content"
+             :action warn)))
+#+END_SRC
+
+Tuning helpers:
+
+- ~M-x ellama-tools-dlp-reset-runtime-state~
+- ~M-x ellama-tools-dlp-show-incident-stats~
+- ~(ellama-tools-dlp-recent-incidents)~
+- ~(ellama-tools-dlp-incident-stats)~
+- ~(ellama-tools-dlp-incident-stats-report)~
+
+Incident stats include rollups by risk class, rule ID, tool identity, and
+decision type (including ~bypass~).
+
+For a longer rollout/tuning walkthrough and more override examples, see
+~docs/dlp_rollout_guide.md~.
+
+Troubleshooting:
+
+- repeated irreversible warnings: classify trusted MCP tools with
+  ~ellama-tools-irreversible-tool-risk-overrides~ or use a short-lived session
+  bypass for one tool identity
+- bypass expiry: session bypasses expire by TTL and are removed automatically;
+  re-add with ~ellama-tools-dlp-add-session-bypass~ when needed
+- false positives: inspect incidents via ~ellama-tools-dlp-recent-incidents~ and
+  tune regex rules / overrides before moving more paths to enforce
+
+** SRT Filesystem Policy for Tools
+
+When ~ellama-tools-use-srt~ is non-nil, the ~srt~ settings file is the source of
+truth for tool filesystem policy:
+
+- shell-based tools (~shell_command~, ~grep~, ~grep_in_file~) are enforced by
+  the external ~srt~ runtime
+- non-shell file tools (~read_file~, ~write_file~, ~append_file~,
+  ~prepend_file~, ~edit_file~, ~directory_tree~, ~move_file~, ~count_lines~,
+  ~lines_range~) apply local checks derived from the same ~srt~ settings file
+
+Supported local filesystem subset (current):
+
+- ~filesystem.denyRead~
+- ~filesystem.allowWrite~
+- ~filesystem.denyWrite~ (takes precedence over ~allowWrite~)
+
+For irreversible audit hardening, keep ~ellama-tools-dlp-audit-log-file~ outside
+~allowWrite~ and add explicit ~denyRead~/~denyWrite~ entries for the audit
+directory.
+
+Local checks intentionally ignore unrelated ~srt~ keys (for example
+~network.*~).  If the ~filesystem~ section is missing, local checks use the same
+defaults as ~srt~ for filesystem access: reads are allowed by default and writes
+are denied unless allowed by ~allowWrite~.
+
+Path matching notes for local checks:
+
+- relative paths in ~srt~ rules are resolved against Emacs ~default-directory~
+- ~~ expands to the current user home directory
+- literal paths, directory-prefix rules, and glob patterns are supported
+- malformed/unsupported patterns signal a ~user-error~ (fail closed)
+
+The local checks fail closed when ~ellama-tools-use-srt~ is enabled and:
+
+- ~srt~ is not installed
+- the resolved settings file is missing
+- the settings file is malformed JSON
+- relevant ~filesystem~ keys have an invalid shape
+
+Example ~srt~ config for a project sandbox:
+
+#+BEGIN_SRC json
+{
+  "network": {
+    "allowedDomains": [
+      "github.com",
+      "*.github.com",
+      "api.github.com",
+      "*.npmjs.org"
+    ],
+    "deniedDomains": [],
+    "allowUnixSockets": [],
+    "allowLocalBinding": false
+  },
+  "filesystem": {
+    "denyRead": [
+      "~/.srt-settings.json",
+      "~/.ssh",
+      "~/.aws",
+      "~/.gnupg/",
+      "~/.config/gcloud/",
+      "~/.azure/",
+      "~/.kube/",
+      "~/.docker/",
+      "~/.netrc",
+      "~/.npmrc",
+      "~/.pypirc",
+      "~/.git-credentials",
+      "~/.emacs.d/ellama-dlp-audit.jsonl",
+      ".env",
+      ".env.*",
+      ".env*.local",
+      "*.env",
+      "*-credentials.json",
+      "*serviceAccount*.json",
+      "*service-account*.json",
+      "kubeconfig",
+      "*-secret.yaml",
+      "secrets.yaml",
+      "*.pem",
+      "*.key",
+      "*.p12",
+      "*.pfx",
+      "*.tfstate",
+      "*.tfstate.backup",
+      ".terraform/",
+      ".vercel/",
+      ".netlify/",
+      ".supabase/",
+      "dump.sql",
+      "backup.sql",
+      "*.dump"
+    ],
+    "allowWrite": [
+      ".",
+      "src/",
+      "test/",
+      "docs/",
+      "/tmp/ellama-agent"
+    ],
+    "denyWrite": [
+      "~/.srt-settings.json",
+      "~/.ssh",
+      "~/.aws",
+      "~/.gnupg/",
+      "~/.config/gcloud/",
+      "~/.azure/",
+      "~/.kube/",
+      "~/.docker/",
+      "~/.netrc",
+      "~/.npmrc",
+      "~/.pypirc",
+      "~/.git-credentials",
+      "~/.emacs.d/ellama-dlp-audit.jsonl",
+      ".env",
+      ".env.*",
+      ".env*.local",
+      "*.env",
+      "*-credentials.json",
+      "*serviceAccount*.json",
+      "*service-account*.json",
+      "kubeconfig",
+      "*-secret.yaml",
+      "secrets.yaml",
+      "*.pem",
+      "*.key",
+      "*.p12",
+      "*.pfx",
+      "*.tfstate",
+      "*.tfstate.backup",
+      ".terraform/",
+      ".vercel/",
+      ".netlify/",
+      ".supabase/",
+      "dump.sql",
+      "backup.sql",
+      "*.dump",
+      "/etc/",
+      "/usr/",
+      "/bin/",
+      "/sbin/",
+      "/boot/",
+      "/root/",
+      "~/.bash_history",
+      "~/.zsh_history",
+      "~/.node_repl_history",
+      "~/.bashrc",
+      "~/.zshrc",
+      "~/.profile",
+      "~/.bash_profile"
+    ]
+  },
+  "ignoreViolations": {
+    "npm": [
+      "/private/tmp"
+    ]
+  },
+  "enableWeakerNestedSandbox": false,
+  "enableWeakerNetworkIsolation": false
+}
+#+END_SRC
+
+Keep ~allowUnixSockets~ empty unless the agent explicitly needs a local socket.
+For example, adding ~/var/run/docker.sock~ gives the sandbox broad Docker
+control and should be treated as a privileged capability.
+
+Example Emacs configuration:
+
+#+BEGIN_SRC emacs-lisp
+  (setopt ellama-tools-use-srt t)
+  (setopt ellama-tools-srt-args
+          '("--settings" "/path/to/.srt-settings.json"))
+#+END_SRC
+
+Parity tests (real ~srt~ runtime vs local ~ellama~ checks):
+
+- ~make test-srt-integration~: Run host parity tests (requires ~srt~ installed)
+- ~make test-srt-integration-linux~: Run parity tests in Docker on Linux
+  semantics.  Requires Docker and runs a privileged container (~--privileged~).
 
 * Context Management
 
@@ -717,6 +1220,10 @@ to ~ellama~ you can add duckduckgo mcp server
 			  (list tool)))
 	       tools)))))
 #+end_src
+
+When ~:categoryp t~ is used, ellama derives stable MCP tool identity as
+~<category>/<tool-name>~ (for example ~mcp-ddg/search~).  Irreversible policy,
+audit, and overrides are keyed by this identity.
 
 * Agent Skills
 
