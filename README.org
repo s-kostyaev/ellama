@@ -767,7 +767,6 @@ Example ~srt~ config for a project sandbox:
       "*.npmjs.org"
     ],
     "deniedDomains": [],
-    "httpProxyPort": 8888,
     "allowUnixSockets": [],
     "allowLocalBinding": false
   },

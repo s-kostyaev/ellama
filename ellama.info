@@ -943,7 +943,6 @@ Example ‘srt’ config for a project sandbox:
            "*.npmjs.org"
          ],
          "deniedDomains": [],
-         "httpProxyPort": 8888,
          "allowUnixSockets": [],
          "allowLocalBinding": false
        },
@@ -2134,37 +2133,37 @@ Node: Keymap16131
 Node: Configuration18965
 Node: DLP for Tool Input/Output27557
 Node: SRT Filesystem Policy for Tools42431
-Node: Context Management48132
-Node: Transient Menus for Context Management49200
-Node: Managing the Context50814
-Node: Considerations51589
-Node: Minor modes52182
-Node: ellama-context-header-line-mode54170
-Node: ellama-context-header-line-global-mode54995
-Node: ellama-context-mode-line-mode55715
-Node: ellama-context-mode-line-global-mode56563
-Node: Ellama Session Header Line Mode57267
-Node: Enabling and Disabling57836
-Node: Customization58283
-Node: Ellama Session Mode Line Mode58571
-Node: Enabling and Disabling (1)59156
-Node: Customization (1)59603
-Node: Using Blueprints59897
-Node: Key Components of Ellama Blueprints60537
-Node: Creating and Managing Blueprints61144
-Node: Blueprints files62122
-Node: Variable Management62543
-Node: Keymap and Mode62996
-Node: Transient Menus63932
-Node: Running Blueprints programmatically64478
-Node: MCP Integration65065
-Node: Agent Skills66300
-Node: Directory Structure66663
-Node: Creating a Skill67690
-Node: How it works68065
-Node: Acknowledgments68456
-Node: Contributions69167
-Node: GNU Free Documentation License69553
+Node: Context Management48100
+Node: Transient Menus for Context Management49168
+Node: Managing the Context50782
+Node: Considerations51557
+Node: Minor modes52150
+Node: ellama-context-header-line-mode54138
+Node: ellama-context-header-line-global-mode54963
+Node: ellama-context-mode-line-mode55683
+Node: ellama-context-mode-line-global-mode56531
+Node: Ellama Session Header Line Mode57235
+Node: Enabling and Disabling57804
+Node: Customization58251
+Node: Ellama Session Mode Line Mode58539
+Node: Enabling and Disabling (1)59124
+Node: Customization (1)59571
+Node: Using Blueprints59865
+Node: Key Components of Ellama Blueprints60505
+Node: Creating and Managing Blueprints61112
+Node: Blueprints files62090
+Node: Variable Management62511
+Node: Keymap and Mode62964
+Node: Transient Menus63900
+Node: Running Blueprints programmatically64446
+Node: MCP Integration65033
+Node: Agent Skills66268
+Node: Directory Structure66631
+Node: Creating a Skill67658
+Node: How it works68033
+Node: Acknowledgments68424
+Node: Contributions69135
+Node: GNU Free Documentation License69521
 
 End Tag Table
 
