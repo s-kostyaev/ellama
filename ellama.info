@@ -768,33 +768,9 @@ Recommended baseline for autonomous coding:
                '("--settings" "~/.config/ellama/srt-autonomous.json")))
 
 Use an ‘srt’ policy that allows writes only inside the current project
-and a scratch area.  Add explicit read/write denials for secrets and
-audit logs:
-
-     {
-       "filesystem": {
-         "allowWrite": [
-           "/path/to/project",
-           "/tmp/ellama-agent"
-         ],
-         "denyRead": [
-           "~/.ssh",
-           "~/.gnupg",
-           "~/.authinfo",
-           "~/.aws",
-           "~/.config/gh",
-           "~/.emacs.d/ellama-dlp-audit.jsonl"
-         ],
-         "denyWrite": [
-           "~/.ssh",
-           "~/.gnupg",
-           "~/.authinfo",
-           "~/.aws",
-           "~/.config/gh",
-           "~/.emacs.d/ellama-dlp-audit.jsonl"
-         ]
-       }
-     }
+and a scratch area.  Add explicit read/write denials for secrets,
+credentials, audit logs, and system paths.  See the project sandbox
+example in the SRT Filesystem Policy for Tools section.
 
 There are two reasonable policies for dangerous cases.  User-handled
 dangerous cases ask only for DLP warnings and irreversible actions:
@@ -959,12 +935,128 @@ The local checks fail closed when ‘ellama-tools-use-srt’ is enabled and:
 Example ‘srt’ config for a project sandbox:
 
      {
+       "network": {
+         "allowedDomains": [
+           "github.com",
+           "*.github.com",
+           "api.github.com",
+           "*.npmjs.org"
+         ],
+         "deniedDomains": [],
+         "httpProxyPort": 8888,
+         "allowUnixSockets": [],
+         "allowLocalBinding": false
+       },
        "filesystem": {
-         "denyRead": ["~/.ssh/", "./secrets/"],
-         "allowWrite": ["./scratch/", "./notes.md"],
-         "denyWrite": ["./scratch/immutable.txt"]
-       }
+         "denyRead": [
+           "~/.srt-settings.json",
+           "~/.ssh",
+           "~/.aws",
+           "~/.gnupg/",
+           "~/.config/gcloud/",
+           "~/.azure/",
+           "~/.kube/",
+           "~/.docker/",
+           "~/.netrc",
+           "~/.npmrc",
+           "~/.pypirc",
+           "~/.git-credentials",
+           "~/.emacs.d/ellama-dlp-audit.jsonl",
+           ".env",
+           ".env.*",
+           ".env*.local",
+           "*.env",
+           "*-credentials.json",
+           "*serviceAccount*.json",
+           "*service-account*.json",
+           "kubeconfig",
+           "*-secret.yaml",
+           "secrets.yaml",
+           "*.pem",
+           "*.key",
+           "*.p12",
+           "*.pfx",
+           "*.tfstate",
+           "*.tfstate.backup",
+           ".terraform/",
+           ".vercel/",
+           ".netlify/",
+           ".supabase/",
+           "dump.sql",
+           "backup.sql",
+           "*.dump"
+         ],
+         "allowWrite": [
+           ".",
+           "src/",
+           "test/",
+           "docs/",
+           "/tmp/ellama-agent"
+         ],
+         "denyWrite": [
+           "~/.srt-settings.json",
+           "~/.ssh",
+           "~/.aws",
+           "~/.gnupg/",
+           "~/.config/gcloud/",
+           "~/.azure/",
+           "~/.kube/",
+           "~/.docker/",
+           "~/.netrc",
+           "~/.npmrc",
+           "~/.pypirc",
+           "~/.git-credentials",
+           "~/.emacs.d/ellama-dlp-audit.jsonl",
+           ".env",
+           ".env.*",
+           ".env*.local",
+           "*.env",
+           "*-credentials.json",
+           "*serviceAccount*.json",
+           "*service-account*.json",
+           "kubeconfig",
+           "*-secret.yaml",
+           "secrets.yaml",
+           "*.pem",
+           "*.key",
+           "*.p12",
+           "*.pfx",
+           "*.tfstate",
+           "*.tfstate.backup",
+           ".terraform/",
+           ".vercel/",
+           ".netlify/",
+           ".supabase/",
+           "dump.sql",
+           "backup.sql",
+           "*.dump",
+           "/etc/",
+           "/usr/",
+           "/bin/",
+           "/sbin/",
+           "/boot/",
+           "/root/",
+           "~/.bash_history",
+           "~/.zsh_history",
+           "~/.node_repl_history",
+           "~/.bashrc",
+           "~/.zshrc",
+           "~/.profile",
+           "~/.bash_profile"
+         ]
+       },
+       "ignoreViolations": {
+         "npm": [
+           "/private/tmp"
+         ]
+       },
+       "enableWeakerNestedSandbox": false,
+       "enableWeakerNetworkIsolation": false
      }
+
+Keep ‘allowUnixSockets’ empty unless the agent explicitly needs a local
+socket.  For example, adding ‘/var/run/docker.sock’ gives the sandbox
+broad Docker control and should be treated as a privileged capability.
 
 Example Emacs configuration:
 
@@ -2041,38 +2133,38 @@ Node: Commands8844
 Node: Keymap16131
 Node: Configuration18965
 Node: DLP for Tool Input/Output27557
-Node: SRT Filesystem Policy for Tools42868
-Node: Context Management45617
-Node: Transient Menus for Context Management46685
-Node: Managing the Context48299
-Node: Considerations49074
-Node: Minor modes49667
-Node: ellama-context-header-line-mode51655
-Node: ellama-context-header-line-global-mode52480
-Node: ellama-context-mode-line-mode53200
-Node: ellama-context-mode-line-global-mode54048
-Node: Ellama Session Header Line Mode54752
-Node: Enabling and Disabling55321
-Node: Customization55768
-Node: Ellama Session Mode Line Mode56056
-Node: Enabling and Disabling (1)56641
-Node: Customization (1)57088
-Node: Using Blueprints57382
-Node: Key Components of Ellama Blueprints58022
-Node: Creating and Managing Blueprints58629
-Node: Blueprints files59607
-Node: Variable Management60028
-Node: Keymap and Mode60481
-Node: Transient Menus61417
-Node: Running Blueprints programmatically61963
-Node: MCP Integration62550
-Node: Agent Skills63785
-Node: Directory Structure64148
-Node: Creating a Skill65175
-Node: How it works65550
-Node: Acknowledgments65941
-Node: Contributions66652
-Node: GNU Free Documentation License67038
+Node: SRT Filesystem Policy for Tools42431
+Node: Context Management48132
+Node: Transient Menus for Context Management49200
+Node: Managing the Context50814
+Node: Considerations51589
+Node: Minor modes52182
+Node: ellama-context-header-line-mode54170
+Node: ellama-context-header-line-global-mode54995
+Node: ellama-context-mode-line-mode55715
+Node: ellama-context-mode-line-global-mode56563
+Node: Ellama Session Header Line Mode57267
+Node: Enabling and Disabling57836
+Node: Customization58283
+Node: Ellama Session Mode Line Mode58571
+Node: Enabling and Disabling (1)59156
+Node: Customization (1)59603
+Node: Using Blueprints59897
+Node: Key Components of Ellama Blueprints60537
+Node: Creating and Managing Blueprints61144
+Node: Blueprints files62122
+Node: Variable Management62543
+Node: Keymap and Mode62996
+Node: Transient Menus63932
+Node: Running Blueprints programmatically64478
+Node: MCP Integration65065
+Node: Agent Skills66300
+Node: Directory Structure66663
+Node: Creating a Skill67690
+Node: How it works68065
+Node: Acknowledgments68456
+Node: Contributions69167
+Node: GNU Free Documentation License69553
 
 End Tag Table
 

@@ -148,34 +148,134 @@ Recommended baseline for autonomous coding:
 ```
 
 Use an `srt` policy that allows writes only inside the current project and a
-scratch area.  Add explicit read/write denials for secrets and audit logs:
+scratch area.  Add explicit read/write denials for secrets, credentials, audit
+logs, and system paths:
 
 ```json
 {
+  "network": {
+    "allowedDomains": [
+      "github.com",
+      "*.github.com",
+      "api.github.com",
+      "*.npmjs.org"
+    ],
+    "deniedDomains": [],
+    "httpProxyPort": 8888,
+    "allowUnixSockets": [],
+    "allowLocalBinding": false
+  },
   "filesystem": {
     "allowWrite": [
-      "/path/to/project",
+      ".",
+      "src/",
+      "test/",
+      "docs/",
       "/tmp/ellama-agent"
     ],
     "denyRead": [
+      "~/.srt-settings.json",
       "~/.ssh",
-      "~/.gnupg",
-      "~/.authinfo",
       "~/.aws",
-      "~/.config/gh",
-      "~/.emacs.d/ellama-dlp-audit.jsonl"
+      "~/.gnupg/",
+      "~/.config/gcloud/",
+      "~/.azure/",
+      "~/.kube/",
+      "~/.docker/",
+      "~/.netrc",
+      "~/.npmrc",
+      "~/.pypirc",
+      "~/.git-credentials",
+      "~/.emacs.d/ellama-dlp-audit.jsonl",
+      ".env",
+      ".env.*",
+      ".env*.local",
+      "*.env",
+      "*-credentials.json",
+      "*serviceAccount*.json",
+      "*service-account*.json",
+      "kubeconfig",
+      "*-secret.yaml",
+      "secrets.yaml",
+      "*.pem",
+      "*.key",
+      "*.p12",
+      "*.pfx",
+      "*.tfstate",
+      "*.tfstate.backup",
+      ".terraform/",
+      ".vercel/",
+      ".netlify/",
+      ".supabase/",
+      "dump.sql",
+      "backup.sql",
+      "*.dump"
     ],
     "denyWrite": [
+      "~/.srt-settings.json",
       "~/.ssh",
-      "~/.gnupg",
-      "~/.authinfo",
       "~/.aws",
-      "~/.config/gh",
-      "~/.emacs.d/ellama-dlp-audit.jsonl"
+      "~/.gnupg/",
+      "~/.config/gcloud/",
+      "~/.azure/",
+      "~/.kube/",
+      "~/.docker/",
+      "~/.netrc",
+      "~/.npmrc",
+      "~/.pypirc",
+      "~/.git-credentials",
+      "~/.emacs.d/ellama-dlp-audit.jsonl",
+      ".env",
+      ".env.*",
+      ".env*.local",
+      "*.env",
+      "*-credentials.json",
+      "*serviceAccount*.json",
+      "*service-account*.json",
+      "kubeconfig",
+      "*-secret.yaml",
+      "secrets.yaml",
+      "*.pem",
+      "*.key",
+      "*.p12",
+      "*.pfx",
+      "*.tfstate",
+      "*.tfstate.backup",
+      ".terraform/",
+      ".vercel/",
+      ".netlify/",
+      ".supabase/",
+      "dump.sql",
+      "backup.sql",
+      "*.dump",
+      "/etc/",
+      "/usr/",
+      "/bin/",
+      "/sbin/",
+      "/boot/",
+      "/root/",
+      "~/.bash_history",
+      "~/.zsh_history",
+      "~/.node_repl_history",
+      "~/.bashrc",
+      "~/.zshrc",
+      "~/.profile",
+      "~/.bash_profile"
     ]
-  }
+  },
+  "ignoreViolations": {
+    "npm": [
+      "/private/tmp"
+    ]
+  },
+  "enableWeakerNestedSandbox": false,
+  "enableWeakerNetworkIsolation": false
 }
 ```
+
+Keep `allowUnixSockets` empty unless the agent explicitly needs a local socket.
+For example, adding `/var/run/docker.sock` gives the sandbox broad Docker
+control and should be treated as a privileged capability.
 
 There are two reasonable policies for dangerous cases:
 
