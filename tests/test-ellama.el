@@ -911,6 +911,99 @@ detailed comparison to help you decide:
       (when (buffer-live-p session-buffer)
         (kill-buffer session-buffer)))))
 
+(defun ellama-test--compact-session (provider)
+  "Return test session with PROVIDER and compactable history."
+  (let ((prompt (llm-make-chat-prompt "user 1" :context "System context")))
+    (llm-chat-prompt-append-response prompt "assistant 1" 'assistant)
+    (llm-chat-prompt-append-response prompt "user 2")
+    (llm-chat-prompt-append-response prompt "assistant 2" 'assistant)
+    (llm-chat-prompt-append-response prompt "user 3")
+    (llm-chat-prompt-append-response prompt "assistant 3" 'assistant)
+    (llm-chat-prompt-append-response prompt "user 4")
+    (llm-chat-prompt-append-response prompt "assistant 4" 'assistant)
+    (make-ellama-session
+     :id "compact-test"
+     :provider provider
+     :prompt prompt
+     :extra '(:uid "compact-test"))))
+
+(ert-deftest test-ellama-session-auto-compact-enabled-by-default ()
+  (should ellama-session-auto-compact-enabled))
+
+(ert-deftest test-ellama-session-auto-compact-needed-above-threshold ()
+  (let* ((provider (make-llm-fake))
+         (session (ellama-test--compact-session provider))
+         (ellama-session-auto-compact-enabled t)
+         (ellama-session-auto-compact-token-threshold 100))
+    (should
+     (= 110
+        (ellama--session-auto-compact-needed-p
+         session provider '(:input-tokens 90 :output-tokens 20) "answer")))
+    (should-not
+     (ellama--session-auto-compact-needed-p
+      session provider '(:input-tokens 60 :output-tokens 20) "answer"))))
+
+(ert-deftest test-ellama-session-auto-compact-ignores-missing-token-use ()
+  (let* ((provider (make-llm-fake))
+         (session (ellama-test--compact-session provider))
+         (ellama-session-auto-compact-enabled t)
+         (ellama-session-auto-compact-token-threshold 1))
+    (should-not
+     (ellama--session-auto-compact-needed-p
+      session provider '(:text "answer") "answer"))))
+
+(ert-deftest test-ellama-session-auto-compact-estimates-output-tokens ()
+  (let* ((provider (make-llm-fake))
+         (session (ellama-test--compact-session provider))
+         (ellama-session-auto-compact-enabled t)
+         (ellama-session-auto-compact-token-threshold 100))
+    (cl-letf (((symbol-function 'llm-count-tokens)
+               (lambda (_provider _text) 12)))
+      (should
+       (= 107
+          (ellama--session-auto-compact-needed-p
+           session provider '(:input-tokens 95) "answer"))))))
+
+(ert-deftest test-ellama-session-compact-rewrites-prompt-and-shows-message ()
+  (let* ((provider (make-llm-fake))
+         (summary-provider
+          (make-llm-fake :chat-action-func
+                         (lambda () "Summary of earlier durable facts.")))
+         (session (ellama-test--compact-session provider))
+         (prompt (ellama-session-prompt session))
+         (ellama-session-auto-compact-provider summary-provider)
+         (ellama-session-auto-compact-keep-last-turns 2)
+         (ellama-session-auto-compact-show-message t))
+    (with-temp-buffer
+      (insert "assistant output")
+      (should
+       (ellama--session-compact
+        session
+        :provider provider
+        :buffer (current-buffer)
+        :token-count 150))
+      (should
+       (string-match-p
+        "System context"
+        (llm-chat-prompt-context prompt)))
+      (should
+       (string-match-p
+        "Previous conversation summary:"
+        (llm-chat-prompt-context prompt)))
+      (should
+       (string-match-p
+        "Summary of earlier durable facts."
+        (llm-chat-prompt-context prompt)))
+      (should
+       (equal
+        (mapcar #'llm-chat-prompt-interaction-content
+                (llm-chat-prompt-interactions prompt))
+        '("user 3" "assistant 3" "user 4" "assistant 4")))
+      (should
+       (string-match-p
+        "Ellama compacted conversation context"
+        (buffer-string))))))
+
 (ert-deftest test-ellama-chat-writes-to-session-buffer ()
   (let* ((provider (make-llm-fake
                     :chat-action-func (lambda () "Chat answer")))
