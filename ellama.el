@@ -944,7 +944,7 @@ CONTEXT will be ignored.  Use global context instead.
       (ellama--session-extra-get session :auto-compact-last-token-count)))
 
 (defun ellama--session-compaction-buffer (session buffer)
-  "Return live buffer for SESSION compaction status."
+  "Return live BUFFER for SESSION compaction status."
   (or (and (buffer-live-p buffer) buffer)
       (when-let ((uid (ellama--session-uid session)))
         (let ((session-buffer (ellama-get-session-buffer uid)))
@@ -979,7 +979,7 @@ CONTEXT will be ignored.  Use global context instead.
 
 (defun ellama--session-store-response-token-count
     (session provider response text)
-  "Persist latest known token count for SESSION from RESPONSE and TEXT."
+  "Persist latest known token count for SESSION from PROVIDER RESPONSE and TEXT."
   (when-let ((token-count
               (ellama--session-response-token-use provider response text)))
     (ellama--session-set-token-count session token-count)
@@ -1120,7 +1120,9 @@ Drop the synthetic summary interaction inserted by previous compaction."
 
 (defun ellama--session-compact-current-token-count
     (session provider prompt token-count)
-  "Return best known token count for SESSION before compaction."
+  "Return best known token count for SESSION before compaction.
+PROVIDER and PROMPT are used for fallback estimation.
+TOKEN-COUNT overrides any stored value when non-nil."
   (or token-count
       (ellama--session-token-count session)
       (let ((estimated
@@ -1176,7 +1178,12 @@ TARGET-TOKENS is the approximate target size."
 (defun ellama--session-compact-apply
     (session prompt provider buffer original-context interactions
              old-interactions recent-interactions token-count summary)
-  "Apply completed compaction for SESSION to PROMPT."
+  "Apply completed compaction for SESSION to PROMPT.
+PROVIDER estimates resulting token count.  BUFFER receives notices.
+ORIGINAL-CONTEXT stays as the system message.
+INTERACTIONS is the pre-compaction interaction snapshot.
+OLD-INTERACTIONS and RECENT-INTERACTIONS are the compaction split.
+TOKEN-COUNT is the pre-compaction estimate.  SUMMARY is the new summary."
   (let* ((current-prompt (ellama-session-prompt session)))
     (unless (and (eq current-prompt prompt)
                  (llm-chat-prompt-p current-prompt))
