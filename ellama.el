@@ -595,6 +595,11 @@ It should be a function with single argument generated text string."
                  'ellama--cancel-current-request-on-kill)
     (ellama--cancel-current-request)))
 
+(define-minor-mode ellama-compaction-mode
+  "Minor mode for `ellama' buffers with active session compaction."
+  :interactive nil
+  :lighter " ellama:compacting")
+
 (defvar-local ellama--change-group nil)
 
 (defvar-local ellama--current-request nil)
@@ -936,6 +941,21 @@ CONTEXT will be ignored.  Use global context instead.
   (or (ellama--session-extra-get session :token-count)
       (ellama--session-extra-get session :auto-compact-last-token-count)))
 
+(defun ellama--session-compaction-buffer (session buffer)
+  "Return live buffer for SESSION compaction status."
+  (or (and (buffer-live-p buffer) buffer)
+      (when-let ((uid (ellama--session-uid session)))
+        (let ((session-buffer (ellama-get-session-buffer uid)))
+          (and (buffer-live-p session-buffer) session-buffer)))))
+
+(defun ellama--session-set-compaction-mode (session buffer enabled)
+  "Set compaction lighter for SESSION BUFFER to ENABLED."
+  (when-let ((target-buffer
+              (ellama--session-compaction-buffer session buffer)))
+    (with-current-buffer target-buffer
+      (ellama-compaction-mode (if enabled +1 -1))
+      (force-mode-line-update t))))
+
 (defun ellama--session-set-token-count (session token-count)
   "Store TOKEN-COUNT for SESSION when it is known."
   (when token-count
@@ -1179,6 +1199,7 @@ TARGET-TOKENS is the approximate target size."
 (defun ellama--session-compact-handle-async-error (session err)
   "Reset SESSION compaction state and report asynchronous ERR."
   (ellama--session-extra-put session :auto-compact-in-progress nil)
+  (ellama--session-set-compaction-mode session nil nil)
   (message "Ellama context compaction failed: %s" err))
 
 (cl-defun ellama--session-compact
@@ -1209,6 +1230,7 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
             (error "Not enough session history to compact"))
           (ellama--session-extra-put
            session :auto-compact-in-progress t)
+          (ellama--session-set-compaction-mode session buffer t)
           (let* ((old-interactions (car split))
                  (recent-interactions (cdr split))
                  (extra-original
@@ -1246,8 +1268,10 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
                               response
                             (plist-get response :text)))
                        (error
-                        (ellama--session-compact-handle-async-error
+                       (ellama--session-compact-handle-async-error
                          session (error-message-string compact-err))))
+                     (ellama--session-set-compaction-mode
+                      session buffer nil)
                      (ellama--session-extra-put
                       session :auto-compact-in-progress nil))
                    (lambda (&rest err)
@@ -1259,6 +1283,7 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
                    t)
                   t)
               (error
+               (ellama--session-set-compaction-mode session buffer nil)
                (ellama--session-extra-put
                 session :auto-compact-in-progress nil)
                (signal (car err) (cdr err)))))))

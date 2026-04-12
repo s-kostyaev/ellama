@@ -1069,6 +1069,29 @@ detailed comparison to help you decide:
             (ellama--session-extra-get
              session :auto-compact-last-token-count)))))))
 
+(ert-deftest test-ellama-session-compact-shows-compacting-lighter ()
+  (let* ((provider (make-llm-fake))
+         (session (ellama-test--compact-session provider))
+         (response-callback nil)
+         (ellama-session-auto-compact-provider (make-llm-fake))
+         (ellama-session-auto-compact-keep-last-turns 2)
+         (ellama-session-auto-compact-show-message nil))
+    (cl-letf (((symbol-function 'llm-chat-async)
+               (lambda (_provider _summary-prompt callback
+                                 _error-callback &optional _multi-output)
+                 (setq response-callback callback)
+                 'request)))
+      (with-temp-buffer
+        (should-not ellama-compaction-mode)
+        (should
+         (ellama--session-compact
+          session
+          :provider provider
+          :buffer (current-buffer)))
+        (should ellama-compaction-mode)
+        (funcall response-callback '(:text "Summary"))
+        (should-not ellama-compaction-mode)))))
+
 (ert-deftest test-ellama-chat-writes-to-session-buffer ()
   (let* ((provider (make-llm-fake
                     :chat-action-func (lambda () "Chat answer")))
