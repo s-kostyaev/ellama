@@ -308,6 +308,8 @@ Keep durable information that future replies need:
 
 Discard greetings, repeated confirmations, superseded failed attempts,
 assistant narration, and long raw output unless it contains durable facts.
+Do not copy or restate the system message.  The compacted session keeps
+the original system message separately in `:context`.
 
 Merge the previous summary with the older chat history into one updated
 summary.  Keep it under approximately %s tokens.
@@ -1074,15 +1076,33 @@ CONTEXT will be ignored.  Use global context instead.
       (cons (cl-subseq interactions 0 index)
             (cl-subseq interactions index)))))
 
-(defun ellama--session-compact-context (original-context summary)
-  "Return compacted context from ORIGINAL-CONTEXT and SUMMARY."
-  (string-join
-   (delq nil
-         (list (unless (string-empty-p (or original-context ""))
-                 original-context)
-               "Previous conversation summary:"
-               summary))
-   "\n\n"))
+(defun ellama--session-summary-interaction-content (summary)
+  "Return synthetic interaction content for SUMMARY."
+  (format "Previous conversation summary:\n\n%s" summary))
+
+(defun ellama--session-summary-interaction (summary)
+  "Return synthetic assistant interaction carrying SUMMARY."
+  (make-llm-chat-prompt-interaction
+   :role 'assistant
+   :content (ellama--session-summary-interaction-content summary)))
+
+(defun ellama--session-summary-interaction-p (session interaction)
+  "Return non-nil when INTERACTION is stored compaction summary for SESSION."
+  (let ((stored-summary (ellama--session-extra-get session :auto-compact-summary)))
+    (and stored-summary
+         (eq (llm-chat-prompt-interaction-role interaction) 'assistant)
+         (equal (llm-chat-prompt-interaction-content interaction)
+                (ellama--session-summary-interaction-content stored-summary)))))
+
+(defun ellama--session-compact-base-interactions (session prompt)
+  "Return compactable interactions from PROMPT for SESSION.
+Drop the synthetic summary interaction inserted by previous compaction."
+  (let ((interactions (llm-chat-prompt-interactions prompt)))
+    (if (and interactions
+             (ellama--session-summary-interaction-p
+              session (car interactions)))
+        (cdr interactions)
+      interactions)))
 
 (defun ellama--session-compact-turn-count (interactions)
   "Return user turn count for INTERACTIONS."
@@ -1161,7 +1181,9 @@ TARGET-TOKENS is the approximate target size."
     (unless (and (eq current-prompt prompt)
                  (llm-chat-prompt-p current-prompt))
       (error "Ellama session prompt changed during compaction"))
-    (let* ((current-interactions (llm-chat-prompt-interactions current-prompt))
+    (let* ((current-interactions
+            (ellama--session-compact-base-interactions
+             session current-prompt))
          (new-interactions
           (ellama--session-compact-new-interactions
            interactions current-interactions))
@@ -1171,10 +1193,10 @@ TARGET-TOKENS is the approximate target size."
          (kept-turns
           (ellama--session-compact-turn-count kept-interactions)))
       (setf (llm-chat-prompt-context current-prompt)
-            (ellama--session-compact-context
-             original-context summary))
+            original-context)
       (setf (llm-chat-prompt-interactions current-prompt)
-            kept-interactions)
+            (cons (ellama--session-summary-interaction summary)
+                  kept-interactions))
       (ellama--session-extra-put
        session :auto-compact-original-context original-context)
       (ellama--session-extra-put
@@ -1222,7 +1244,8 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
           (error "Ellama session compaction is already in progress"))
         (unless summary-provider
           (error "No provider available for Ellama session compaction"))
-        (let* ((interactions (llm-chat-prompt-interactions prompt))
+        (let* ((interactions
+                (ellama--session-compact-base-interactions session prompt))
                (split (ellama--session-compact-split-interactions
                        interactions
                        (max 0 ellama-session-auto-compact-keep-last-turns))))
