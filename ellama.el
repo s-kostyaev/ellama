@@ -931,6 +931,16 @@ CONTEXT will be ignored.  Use global context instead.
     (setf (ellama-session-extra session)
           (plist-put extra key value))))
 
+(defun ellama--session-token-count (session)
+  "Return latest known token count stored for SESSION."
+  (or (ellama--session-extra-get session :token-count)
+      (ellama--session-extra-get session :auto-compact-last-token-count)))
+
+(defun ellama--session-set-token-count (session token-count)
+  "Store TOKEN-COUNT for SESSION when it is known."
+  (when token-count
+    (ellama--session-extra-put session :token-count token-count)))
+
 (defun ellama--session-response-token-use (provider response text)
   "Return token use from RESPONSE for PROVIDER and TEXT."
   (let* ((input-tokens (plist-get response :input-tokens))
@@ -944,6 +954,14 @@ CONTEXT will be ignored.  Use global context instead.
     (when (or input-tokens reported-output-tokens)
       (+ (or input-tokens 0)
          (or output-tokens 0)))))
+
+(defun ellama--session-store-response-token-count
+    (session provider response text)
+  "Persist latest known token count for SESSION from RESPONSE and TEXT."
+  (when-let ((token-count
+              (ellama--session-response-token-use provider response text)))
+    (ellama--session-set-token-count session token-count)
+    token-count))
 
 (defun ellama--session-auto-compact-threshold (provider)
   "Return automatic compaction token threshold for PROVIDER."
@@ -1060,6 +1078,29 @@ CONTEXT will be ignored.  Use global context instead.
         (llm-count-tokens provider (llm-chat-prompt-to-text prompt))
       (error nil))))
 
+(defun ellama--session-compact-current-token-count
+    (session provider prompt token-count)
+  "Return best known token count for SESSION before compaction."
+  (or token-count
+      (ellama--session-token-count session)
+      (let ((estimated
+             (ellama--session-compact-estimate-prompt-tokens
+              provider prompt)))
+        (ellama--session-set-token-count session estimated)
+        estimated)))
+
+(defun ellama--session-compact-new-interactions
+    (original-interactions current-interactions)
+  "Return interactions added after ORIGINAL-INTERACTIONS.
+Signal an error when CURRENT-INTERACTIONS no longer starts with
+ORIGINAL-INTERACTIONS."
+  (let ((original-length (length original-interactions)))
+    (unless (and (>= (length current-interactions) original-length)
+                 (equal original-interactions
+                        (cl-subseq current-interactions 0 original-length)))
+      (error "Ellama session changed during compaction"))
+    (cl-subseq current-interactions original-length)))
+
 (defun ellama--session-insert-compaction-message
     (buffer summarized-turns kept-turns before-tokens after-tokens)
   "Insert compaction message into BUFFER.
@@ -1092,6 +1133,54 @@ TARGET-TOKENS is the approximate target size."
           (ellama--session-compact-render-interactions
            old-interactions)))
 
+(defun ellama--session-compact-apply
+    (session prompt provider buffer original-context interactions
+             old-interactions recent-interactions token-count summary)
+  "Apply completed compaction for SESSION to PROMPT."
+  (let* ((current-prompt (ellama-session-prompt session)))
+    (unless (and (eq current-prompt prompt)
+                 (llm-chat-prompt-p current-prompt))
+      (error "Ellama session prompt changed during compaction"))
+    (let* ((current-interactions (llm-chat-prompt-interactions current-prompt))
+         (new-interactions
+          (ellama--session-compact-new-interactions
+           interactions current-interactions))
+         (kept-interactions (append recent-interactions new-interactions))
+         (summarized-turns
+          (ellama--session-compact-turn-count old-interactions))
+         (kept-turns
+          (ellama--session-compact-turn-count kept-interactions)))
+      (setf (llm-chat-prompt-context current-prompt)
+            (ellama--session-compact-context
+             original-context summary))
+      (setf (llm-chat-prompt-interactions current-prompt)
+            kept-interactions)
+      (ellama--session-extra-put
+       session :auto-compact-original-context original-context)
+      (ellama--session-extra-put
+       session :auto-compact-summary summary)
+      (ellama--session-extra-put
+       session :auto-compact-count
+       (1+ (or (ellama--session-extra-get
+                session :auto-compact-count)
+               0)))
+      (ellama--session-extra-put
+       session :auto-compact-last-token-count token-count)
+      (ellama--session-extra-put
+       session :auto-compact-last-time (current-time))
+      (let ((after-tokens
+             (ellama--session-compact-estimate-prompt-tokens
+              provider current-prompt)))
+        (ellama--session-set-token-count session after-tokens)
+        (ellama--session-insert-compaction-message
+         buffer summarized-turns kept-turns token-count after-tokens))
+      t)))
+
+(defun ellama--session-compact-handle-async-error (session err)
+  "Reset SESSION compaction state and report asynchronous ERR."
+  (ellama--session-extra-put session :auto-compact-in-progress nil)
+  (message "Ellama context compaction failed: %s" err))
+
 (cl-defun ellama--session-compact
     (session &key provider buffer token-count automatic)
   "Compact SESSION conversation context.
@@ -1120,59 +1209,59 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
             (error "Not enough session history to compact"))
           (ellama--session-extra-put
            session :auto-compact-in-progress t)
-          (unwind-protect
-              (let* ((old-interactions (car split))
-                     (recent-interactions (cdr split))
-                     (extra-original
-                      (ellama--session-extra-get
-                       session :auto-compact-original-context))
-                     (original-context
-                      (if (ellama--session-extra-get
-                           session :auto-compact-summary)
-                          extra-original
-                        (llm-chat-prompt-context prompt)))
-                     (previous-summary
-                      (ellama--session-extra-get
-                       session :auto-compact-summary))
-                     (target
-                      (ellama--session-auto-compact-target
-                       (ellama--session-auto-compact-threshold provider)))
-                     (summary-prompt
-                      (ellama--session-compact-build-summary-prompt
-                       previous-summary old-interactions target))
-                     (summary
-                      (llm-chat summary-provider
-                                (llm-make-chat-prompt summary-prompt)))
-                     (summarized-turns
-                      (ellama--session-compact-turn-count old-interactions))
-                     (kept-turns
-                      (ellama--session-compact-turn-count
-                       recent-interactions)))
-                (setf (llm-chat-prompt-context prompt)
-                      (ellama--session-compact-context
-                       original-context summary))
-                (setf (llm-chat-prompt-interactions prompt)
-                      recent-interactions)
-                (ellama--session-extra-put
-                 session :auto-compact-original-context original-context)
-                (ellama--session-extra-put
-                 session :auto-compact-summary summary)
-                (ellama--session-extra-put
-                 session :auto-compact-count
-                 (1+ (or (ellama--session-extra-get
-                          session :auto-compact-count)
-                         0)))
-                (ellama--session-extra-put
-                 session :auto-compact-last-token-count token-count)
-                (ellama--session-extra-put
-                 session :auto-compact-last-time (current-time))
-                (ellama--session-insert-compaction-message
-                 buffer summarized-turns kept-turns token-count
-                 (ellama--session-compact-estimate-prompt-tokens
-                  provider prompt))
-                t)
-            (ellama--session-extra-put
-             session :auto-compact-in-progress nil))))
+          (let* ((old-interactions (car split))
+                 (recent-interactions (cdr split))
+                 (extra-original
+                  (ellama--session-extra-get
+                   session :auto-compact-original-context))
+                 (original-context
+                  (if (ellama--session-extra-get
+                       session :auto-compact-summary)
+                      extra-original
+                    (llm-chat-prompt-context prompt)))
+                 (previous-summary
+                  (ellama--session-extra-get
+                   session :auto-compact-summary))
+                 (target
+                  (ellama--session-auto-compact-target
+                   (ellama--session-auto-compact-threshold provider)))
+                 (before-token-count
+                  (ellama--session-compact-current-token-count
+                   session provider prompt token-count))
+                 (summary-prompt
+                  (ellama--session-compact-build-summary-prompt
+                   previous-summary old-interactions target)))
+            (condition-case err
+                (progn
+                  (llm-chat-async
+                   summary-provider
+                   (llm-make-chat-prompt summary-prompt)
+                   (lambda (response)
+                     (condition-case compact-err
+                         (ellama--session-compact-apply
+                          session prompt provider buffer original-context
+                          interactions old-interactions recent-interactions
+                          before-token-count
+                          (if (stringp response)
+                              response
+                            (plist-get response :text)))
+                       (error
+                        (ellama--session-compact-handle-async-error
+                         session (error-message-string compact-err))))
+                     (ellama--session-extra-put
+                      session :auto-compact-in-progress nil))
+                   (lambda (&rest err)
+                     (ellama--session-compact-handle-async-error
+                      session
+                      (mapconcat
+                       (lambda (item) (format "%s" item))
+                       err " ")))
+                   t)
+                  t)
+              (error
+               (ellama--session-extra-put
+                session :auto-compact-in-progress nil)
+               (signal (car err) (cdr err)))))))
     (error
      (if automatic
          (progn
@@ -2144,6 +2233,8 @@ inserted into the BUFFER."
             (spinner-stop))
           (when (and (not tool-result)
                      (ellama-session-p ellama--current-session))
+            (ellama--session-store-response-token-count
+             ellama--current-session provider response text)
             (ellama--session-auto-compact-maybe
              ellama--current-session provider response text buffer))
           (if (and (listp donecb)

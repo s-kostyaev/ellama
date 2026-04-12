@@ -964,45 +964,110 @@ detailed comparison to help you decide:
           (ellama--session-auto-compact-needed-p
            session provider '(:input-tokens 95) "answer"))))))
 
+(ert-deftest test-ellama-session-store-response-token-count ()
+  (let* ((provider (make-llm-fake))
+         (session (ellama-test--compact-session provider)))
+    (should
+     (= 110
+        (ellama--session-store-response-token-count
+         session provider '(:input-tokens 90 :output-tokens 20) "answer")))
+    (should (= 110 (ellama--session-extra-get session :token-count)))))
+
 (ert-deftest test-ellama-session-compact-rewrites-prompt-and-shows-message ()
   (let* ((provider (make-llm-fake))
-         (summary-provider
-          (make-llm-fake :chat-action-func
-                         (lambda () "Summary of earlier durable facts.")))
          (session (ellama-test--compact-session provider))
          (prompt (ellama-session-prompt session))
-         (ellama-session-auto-compact-provider summary-provider)
+         (ellama-session-auto-compact-provider (make-llm-fake))
          (ellama-session-auto-compact-keep-last-turns 2)
          (ellama-session-auto-compact-show-message t))
-    (with-temp-buffer
-      (insert "assistant output")
+    (cl-letf (((symbol-function 'llm-chat-async)
+               (lambda (_provider _summary-prompt response-callback
+                                 _error-callback &optional _multi-output)
+                 (funcall response-callback
+                          '(:text "Summary of earlier durable facts."))
+                 'request)))
+      (with-temp-buffer
+        (insert "assistant output")
+        (should
+         (ellama--session-compact
+          session
+          :provider provider
+          :buffer (current-buffer)
+          :token-count 150))
+        (should
+         (string-match-p
+          "System context"
+          (llm-chat-prompt-context prompt)))
+        (should
+         (string-match-p
+          "Previous conversation summary:"
+          (llm-chat-prompt-context prompt)))
+        (should
+         (string-match-p
+          "Summary of earlier durable facts."
+          (llm-chat-prompt-context prompt)))
+        (should
+         (equal
+          (mapcar #'llm-chat-prompt-interaction-content
+                  (llm-chat-prompt-interactions prompt))
+          '("user 3" "assistant 3" "user 4" "assistant 4")))
+        (should
+         (string-match-p
+          "Ellama compacted conversation context"
+          (buffer-string)))))))
+
+(ert-deftest test-ellama-session-compact-keeps-interactions-added-in-flight ()
+  (let* ((provider (make-llm-fake))
+         (session (ellama-test--compact-session provider))
+         (prompt (ellama-session-prompt session))
+         (ellama-session-auto-compact-provider (make-llm-fake))
+         (ellama-session-auto-compact-keep-last-turns 2)
+         (ellama-session-auto-compact-show-message nil))
+    (cl-letf (((symbol-function 'llm-chat-async)
+               (lambda (_provider _summary-prompt response-callback
+                                 _error-callback &optional _multi-output)
+                 (llm-chat-prompt-append-response prompt "user 5")
+                 (llm-chat-prompt-append-response
+                  prompt "assistant 5" 'assistant)
+                 (funcall response-callback '(:text "Summary"))
+                 'request)))
       (should
        (ellama--session-compact
         session
-        :provider provider
-        :buffer (current-buffer)
-        :token-count 150))
-      (should
-       (string-match-p
-        "System context"
-        (llm-chat-prompt-context prompt)))
-      (should
-       (string-match-p
-        "Previous conversation summary:"
-        (llm-chat-prompt-context prompt)))
-      (should
-       (string-match-p
-        "Summary of earlier durable facts."
-        (llm-chat-prompt-context prompt)))
+        :provider provider))
       (should
        (equal
         (mapcar #'llm-chat-prompt-interaction-content
                 (llm-chat-prompt-interactions prompt))
-        '("user 3" "assistant 3" "user 4" "assistant 4")))
-      (should
-       (string-match-p
-        "Ellama compacted conversation context"
-        (buffer-string))))))
+        '("user 3" "assistant 3"
+          "user 4" "assistant 4"
+          "user 5" "assistant 5"))))))
+
+(ert-deftest test-ellama-session-compact-uses-stored-token-count ()
+  (let* ((provider (make-llm-fake))
+         (session (ellama-test--compact-session provider))
+         (ellama-session-auto-compact-provider (make-llm-fake))
+         (ellama-session-auto-compact-keep-last-turns 2)
+         (ellama-session-auto-compact-show-message t))
+    (ellama--session-extra-put session :token-count 144)
+    (cl-letf (((symbol-function 'llm-chat-async)
+               (lambda (_provider _summary-prompt response-callback
+                                 _error-callback &optional _multi-output)
+                 (funcall response-callback '(:text "Summary"))
+                 'request)))
+      (with-temp-buffer
+        (ellama--session-compact
+         session
+         :provider provider
+         :buffer (current-buffer))
+        (should
+         (string-match-p
+          "estimated context 144 ->"
+          (buffer-string)))
+        (should
+         (= 144
+            (ellama--session-extra-get
+             session :auto-compact-last-token-count)))))))
 
 (ert-deftest test-ellama-chat-writes-to-session-buffer ()
   (let* ((provider (make-llm-fake
