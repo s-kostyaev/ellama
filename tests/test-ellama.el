@@ -982,7 +982,7 @@ detailed comparison to help you decide:
          (ellama-session-auto-compact-show-message t))
     (cl-letf (((symbol-function 'llm-chat-async)
                (lambda (_provider _summary-prompt response-callback
-                                 _error-callback &optional _multi-output)
+                                  _error-callback &optional _multi-output)
                  (funcall response-callback
                           '(:text "Summary of earlier durable facts."))
                  'request)))
@@ -1021,7 +1021,7 @@ detailed comparison to help you decide:
          (ellama-session-auto-compact-show-message nil))
     (cl-letf (((symbol-function 'llm-chat-async)
                (lambda (_provider _summary-prompt response-callback
-                                 _error-callback &optional _multi-output)
+                                  _error-callback &optional _multi-output)
                  (llm-chat-prompt-append-response prompt "user 5")
                  (llm-chat-prompt-append-response
                   prompt "assistant 5" 'assistant)
@@ -1049,7 +1049,7 @@ detailed comparison to help you decide:
     (ellama--session-extra-put session :token-count 144)
     (cl-letf (((symbol-function 'llm-chat-async)
                (lambda (_provider _summary-prompt response-callback
-                                 _error-callback &optional _multi-output)
+                                  _error-callback &optional _multi-output)
                  (funcall response-callback '(:text "Summary"))
                  'request)))
       (with-temp-buffer
@@ -1076,7 +1076,7 @@ detailed comparison to help you decide:
          (ellama-session-auto-compact-show-message nil))
     (cl-letf (((symbol-function 'llm-chat-async)
                (lambda (_provider _summary-prompt response-callback
-                                 _error-callback &optional _multi-output)
+                                  _error-callback &optional _multi-output)
                  (funcall response-callback
                           `(:text ,(pop summaries)))
                  'request)))
@@ -1102,7 +1102,7 @@ detailed comparison to help you decide:
          (ellama-session-auto-compact-show-message nil))
     (cl-letf (((symbol-function 'llm-chat-async)
                (lambda (_provider _summary-prompt callback
-                                 _error-callback &optional _multi-output)
+                                  _error-callback &optional _multi-output)
                  (setq response-callback callback)
                  'request)))
       (with-temp-buffer

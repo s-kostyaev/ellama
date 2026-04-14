@@ -1191,14 +1191,14 @@ TOKEN-COUNT is the pre-compaction estimate.  SUMMARY is the new summary."
     (let* ((current-interactions
             (ellama--session-compact-base-interactions
              session current-prompt))
-         (new-interactions
-          (ellama--session-compact-new-interactions
-           interactions current-interactions))
-         (kept-interactions (append recent-interactions new-interactions))
-         (summarized-turns
-          (ellama--session-compact-turn-count old-interactions))
-         (kept-turns
-          (ellama--session-compact-turn-count kept-interactions)))
+           (new-interactions
+            (ellama--session-compact-new-interactions
+             interactions current-interactions))
+           (kept-interactions (append recent-interactions new-interactions))
+           (summarized-turns
+            (ellama--session-compact-turn-count old-interactions))
+           (kept-turns
+            (ellama--session-compact-turn-count kept-interactions)))
       (setf (llm-chat-prompt-context current-prompt)
             original-context)
       (setf (llm-chat-prompt-interactions current-prompt)
@@ -1298,7 +1298,7 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
                               response
                             (plist-get response :text)))
                        (error
-                       (ellama--session-compact-handle-async-error
+                        (ellama--session-compact-handle-async-error
                          session (error-message-string compact-err))))
                      (ellama--session-set-compaction-mode
                       session buffer nil)
