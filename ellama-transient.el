@@ -288,6 +288,15 @@ FORMAT is used for non-default VALUE."
     (setf (llm-standard-chat-provider-default-chat-temperature provider)
           ellama-transient-temperature)))
 
+(defun ellama-transient--provider-context-length (provider)
+  "Return default context length from PROVIDER."
+  (declare-function llm-ollama-default-chat-non-standard-params
+                    "ext:llm-ollama")
+  (when (ellama-transient--ollama-provider-p provider)
+    (when-let ((params (llm-ollama-default-chat-non-standard-params provider)))
+      (alist-get "num_ctx" (ellama-transient--alist params)
+                 nil nil #'string=))))
+
 (defun ellama-transient--provider-model (provider)
   "Return chat model from PROVIDER."
   (declare-function llm-ollama-chat-model "ext:llm-ollama")
@@ -333,15 +342,11 @@ FORMAT is used for non-default VALUE."
   (when (ellama-transient--ollama-provider-p provider)
     (setq ellama-transient-model-name (llm-ollama-chat-model provider))
     (setq ellama-transient-temperature
-          (or (llm-ollama-default-chat-temperature provider) 0.7))
+          (llm-ollama-default-chat-temperature provider))
     (setq ellama-transient-host (llm-ollama-host provider))
     (setq ellama-transient-port (llm-ollama-port provider))
-    (let* ((other-params (llm-ollama-default-chat-non-standard-params provider))
-           (ctx-len (when other-params (alist-get
-                                        "num_ctx"
-                                        (ellama-transient--alist other-params)
-                                        nil nil #'string=))))
-      (setq ellama-transient-context-length (or ctx-len 4096)))))
+    (setq ellama-transient-context-length
+          (ellama-transient--provider-context-length provider))))
 
 (defun ellama-fill-transient-model (provider)
   "Set transient model fields from PROVIDER."
@@ -350,7 +355,7 @@ FORMAT is used for non-default VALUE."
   (when-let ((model (ellama-transient--provider-model provider)))
     (setq ellama-transient-model-name model))
   (setq ellama-transient-temperature
-        (or (ellama-transient--standard-temperature provider) 0.7))
+        (ellama-transient--standard-temperature provider))
   (when (ellama-transient--openai-compatible-provider-p provider)
     (setq ellama-transient-url (llm-openai-compatible-url provider)))
   (ellama-transient--fill-ollama provider))
