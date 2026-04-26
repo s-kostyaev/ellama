@@ -1,3 +1,11 @@
+* Version 1.14.2
+- Add project-local skill pointers for changelog and commit-message workflows.
+  This makes repository-specific Codex skills discoverable from ~.codex/skills~.
+- Add a ~commit-message~ skill for concise commit message generation from diffs.
+- Update agent instructions to document the project commit workflow.  The
+  workflow now covers pre-commit checks, branch creation from ~main~, iterative
+  check/fix/commit/push cycles, documentation updates, changelog generation,
+  version bumps, and when to ask for clarification.
 * Version 1.14.1
 - Refactor transient model handling and provider construction. Generalize
   transient model handling to support multiple provider types beyond Ollama,
