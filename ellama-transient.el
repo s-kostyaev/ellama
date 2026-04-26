@@ -268,7 +268,9 @@ Otherwise, prompt the user to enter a system message."
     ("r" "Rename Session" ellama-session-rename)
     ("d" "Delete Session" ellama-session-delete)
     ("a" "Activate Session" ellama-session-switch)
-    ("k" "Kill Session" ellama-session-kill)]
+    ("k" "Kill Session" ellama-session-kill)
+    ("c" "Compact Current Session" ellama-session-compact-current)
+    ("C" "Compact Session" ellama-session-compact)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 ;;;###autoload (autoload 'ellama-transient-improve-menu "ellama-transient" nil t)
