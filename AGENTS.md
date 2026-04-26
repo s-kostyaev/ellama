@@ -28,6 +28,24 @@ After making changes and before committing, use the project-local
 `commit-message` skill to write the commit message from the final diff:
 `.codex/skills/commit-message/SKILL.md`.
 
+## Git Workflow
+
+1. Check the current branch before starting work. If it is `main`, create a
+   new branch before making changes.
+2. Observe the code and plan the change. Ask the user for explanations when the
+   requested behavior, release scope, or expected workflow is unclear.
+3. Make the requested changes.
+4. Run all appropriate checks from the Build / Lint / Test section.
+5. Fix any findings and rerun the relevant checks. Repeat until the checks pass.
+6. Commit the implementation using the project-local `commit-message` skill,
+   then push the branch.
+7. Continue with additional implementation/check/fix/commit/push iterations
+   when the task requires more work.
+8. Update documentation after the implementation is stable.
+9. Generate the changelog using the project-local `changelog` skill, update the
+   version in `ellama.el`, commit those generated release changes with the
+   exact commit message `Bump version`, and push.
+
 ## Code Style Guidelines
 
 - **Imports**: Keep `require`s grouped at the file top.
