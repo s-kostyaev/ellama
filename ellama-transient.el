@@ -32,17 +32,24 @@
 (require 'ellama)
 (require 'transient)
 (require 'ellama-context)
+(eval-when-compile
+  (require 'llm-ollama)
+  (require 'llm-openai))
 
 (defcustom ellama-transient-system-show-limit 45
   "Maximum length of system message to show."
   :type 'ingeger
   :group 'ellama)
 
-(defvar ellama-transient-ollama-model-name "")
+(defvaralias 'ellama-transient-ollama-model-name
+  'ellama-transient-model-name)
+(defvar ellama-transient-model-name "")
 (defvar ellama-transient-temperature 0.7)
 (defvar ellama-transient-context-length 4096)
 (defvar ellama-transient-host "localhost")
 (defvar ellama-transient-port 11434)
+(defvar ellama-transient-url nil)
+(defvar ellama-transient-provider nil)
 (defvar ellama--current-session-uid)
 
 (defun ellama-transient-system-show ()
@@ -69,10 +76,14 @@ Otherwise, prompt the user to enter a system message."
   (setq ellama-global-system (buffer-substring-no-properties
                               (point-min) (point-max))))
 
-(transient-define-suffix ellama-transient-set-ollama-model ()
-  "Set ollama model name."
+(transient-define-suffix ellama-transient-set-model ()
+  "Set model name."
   (interactive)
-  (setq ellama-transient-ollama-model-name (ellama-get-ollama-model-name)))
+  (setq ellama-transient-model-name
+        (ellama-transient-read-model-name ellama-transient-provider)))
+
+(defalias 'ellama-transient-set-ollama-model
+  'ellama-transient-set-model)
 
 (transient-define-suffix ellama-transient-set-temperature ()
   "Set temperature value."
@@ -94,27 +105,40 @@ Otherwise, prompt the user to enter a system message."
   (interactive)
   (setq ellama-transient-port (read-number "Enter port: ")))
 
+(transient-define-suffix ellama-transient-set-url ()
+  "Set API URL."
+  (interactive)
+  (setq ellama-transient-url (read-string "Enter URL: " ellama-transient-url)))
+
+(transient-define-suffix ellama-transient-reset-model-fields ()
+  "Reset model fields to provider defaults."
+  (interactive)
+  (setq ellama-transient-model-name nil
+        ellama-transient-temperature nil
+        ellama-transient-context-length nil))
+
 (defvar ellama-provider-list '(ellama-provider
                                ellama-coding-provider
                                ellama-translation-provider
                                ellama-extraction-provider
                                ellama-summarization-provider
                                ellama-naming-provider)
-  "List of ollama providers.")
+  "List of providers.")
 
 (transient-define-suffix ellama-transient-model-get-from-provider ()
   "Fill transient model from provider."
   (interactive)
-  (ellama-fill-transient-ollama-model
+  (ellama-fill-transient-model
    (eval (read
           (completing-read "Select provider: "
-                           (mapcar #'prin1-to-string ellama-provider-list))))))
+                           (mapcar #'prin1-to-string
+                                   ellama-provider-list))))))
 
 (transient-define-suffix ellama-transient-model-get-from-current-session ()
   "Fill transient model from current session."
   (interactive)
   (when-let ((session (ellama-get-current-session)))
-    (ellama-fill-transient-ollama-model
+    (ellama-fill-transient-model
      (ellama-session-provider session))))
 
 (transient-define-suffix ellama-transient-set-provider ()
@@ -122,80 +146,328 @@ Otherwise, prompt the user to enter a system message."
   (interactive)
   (let ((provider (read
                    (completing-read "Select provider: "
-                                    (mapcar #'prin1-to-string ellama-provider-list)))))
+                                    (mapcar #'prin1-to-string
+                                            ellama-provider-list)))))
     (set provider
-         (ellama-construct-ollama-provider-from-transient))
-    ;; if you change `ellama-provider' you probably want to start new chat session
+         (ellama-construct-provider-from-transient (symbol-value provider)))
+    ;; if you change `ellama-provider' you probably want new chat session
     (when (equal provider 'ellama-provider)
       (setq ellama--current-session-id nil
             ellama--current-session-uid nil))))
 
-;;;###autoload (autoload 'ellama-select-ollama-model "ellama-transient" nil t)
-(transient-define-prefix ellama-select-ollama-model ()
-  "Select ollama model."
+;;;###autoload (autoload 'ellama-select-model "ellama-transient" nil t)
+(transient-define-prefix ellama-select-model ()
+  "Select model."
   [["Model"
     ("f" "Load from provider" ellama-transient-model-get-from-provider
      :transient t)
-    ("F" "Load from current session" ellama-transient-model-get-from-current-session
-     :description (lambda () (format "Load from current session (%s)" ellama--current-session-id))
+    ("F" "Load from current session"
+     ellama-transient-model-get-from-current-session
+     :description (lambda ()
+                    (format "Load from current session (%s)"
+                            ellama--current-session-id))
      :transient t)
-    ("m" "Set Model" ellama-transient-set-ollama-model
+    ("m" "Set Model" ellama-transient-set-model
      :transient t
-     :description (lambda () (format "Model (%s)" ellama-transient-ollama-model-name)))
+     :description ellama-transient-model-description)
     ("t" "Set Temperature" ellama-transient-set-temperature
      :transient t
-     :description (lambda () (format "Temperature (%.2f)" ellama-transient-temperature)))
+     :description ellama-transient-temperature-description)
     ("c" "Set Context Length" ellama-transient-set-context-length
+     :if (lambda () (ellama-transient--ollama-provider-p
+                     ellama-transient-provider))
      :transient t
-     :description (lambda () (format "Context Length (%d)" ellama-transient-context-length)))
+     :description ellama-transient-context-length-description)
+    ("r" "Reset model fields" ellama-transient-reset-model-fields
+     :transient t)
     ("S" "Set provider" ellama-transient-set-provider
      :transient t)
     ("s" "Set provider and quit" ellama-transient-set-provider)]
    ["Connection"
     ("h" "Set Host" ellama-transient-set-host
+     :if (lambda () (ellama-transient--ollama-provider-p
+                     ellama-transient-provider))
      :transient t
      :description (lambda () (if ellama-transient-host
                                  (format "Host (%s)" ellama-transient-host)
                                "Host")))
     ("p" "Set Port" ellama-transient-set-port
+     :if (lambda () (ellama-transient--ollama-provider-p
+                     ellama-transient-provider))
      :transient t
      :description (lambda () (if ellama-transient-port
                                  (format "Port (%s)" ellama-transient-port)
-                               "Port")))]
+                               "Port")))
+    ("u" "Set URL" ellama-transient-set-url
+     :if (lambda () (ellama-transient--openai-compatible-provider-p
+                     ellama-transient-provider))
+     :transient t
+     :description (lambda () (if ellama-transient-url
+                                 (format "URL (%s)" ellama-transient-url)
+                               "URL")))]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
-(defun ellama-fill-transient-ollama-model (provider)
-  "Set transient ollama model from PROVIDER."
+(defalias 'ellama-select-ollama-model 'ellama-select-model)
+
+(defun ellama-transient--default-value-p (value)
+  "Return non-nil when VALUE means provider default."
+  (or (null value)
+      (and (stringp value) (string-empty-p value))))
+
+(defun ellama-transient--field-description (name value &optional format)
+  "Return description for NAME and VALUE.
+FORMAT is used for non-default VALUE."
+  (format "%s (%s)" name
+          (if (ellama-transient--default-value-p value)
+              "default"
+            (if format
+                (format format value)
+              value))))
+
+(defun ellama-transient-model-description ()
+  "Return transient model description."
+  (ellama-transient--field-description "Model" ellama-transient-model-name))
+
+(defun ellama-transient-temperature-description ()
+  "Return transient temperature description."
+  (ellama-transient--field-description
+   "Temperature" ellama-transient-temperature "%.2f"))
+
+(defun ellama-transient-context-length-description ()
+  "Return transient context length description."
+  (ellama-transient--field-description
+   "Context Length" ellama-transient-context-length "%d"))
+
+(defun ellama-transient--ollama-provider-p (provider)
+  "Return non-nil when PROVIDER is an Ollama provider."
   (declare-function llm-ollama-p "ext:llm-ollama")
+  (and provider
+       (fboundp 'llm-ollama-p)
+       (llm-ollama-p provider)))
+
+(defun ellama-transient--openai-compatible-provider-p (provider)
+  "Return non-nil when PROVIDER is OpenAI-compatible."
+  (declare-function llm-openai-compatible-p "ext:llm-openai")
+  (and provider
+       (fboundp 'llm-openai-compatible-p)
+       (llm-openai-compatible-p provider)))
+
+(defun ellama-transient--openai-provider-p (provider)
+  "Return non-nil when PROVIDER is an OpenAI provider."
+  (declare-function llm-openai-p "ext:llm-openai")
+  (and provider
+       (fboundp 'llm-openai-p)
+       (llm-openai-p provider)))
+
+(defun ellama-transient--alist (value)
+  "Return VALUE as an alist."
+  (cond
+   ((vectorp value) (append value nil))
+   ((listp value) value)))
+
+(defun ellama-transient--standard-temperature (provider)
+  "Return default chat temperature for PROVIDER."
+  (declare-function llm-standard-chat-provider-p "ext:llm-provider-utils")
+  (declare-function llm-standard-chat-provider-default-chat-temperature
+                    "ext:llm-provider-utils")
+  (when (and provider
+             (fboundp 'llm-standard-chat-provider-p)
+             (llm-standard-chat-provider-p provider))
+    (llm-standard-chat-provider-default-chat-temperature provider)))
+
+(defun ellama-transient--set-standard-temperature (provider)
+  "Set PROVIDER default chat temperature from transient."
+  (declare-function llm-standard-chat-provider-p "ext:llm-provider-utils")
+  (declare-function llm-standard-chat-provider-default-chat-temperature
+                    "ext:llm-provider-utils")
+  (declare-function (setf llm-standard-chat-provider-default-chat-temperature)
+                    "ext:llm-provider-utils")
+  (when (and provider
+             (fboundp 'llm-standard-chat-provider-p)
+             (llm-standard-chat-provider-p provider))
+    (setf (llm-standard-chat-provider-default-chat-temperature provider)
+          ellama-transient-temperature)))
+
+(defun ellama-transient--provider-context-length (provider)
+  "Return default context length from PROVIDER."
+  (declare-function llm-ollama-default-chat-non-standard-params
+                    "ext:llm-ollama")
+  (when (ellama-transient--ollama-provider-p provider)
+    (when-let ((params (llm-ollama-default-chat-non-standard-params provider)))
+      (alist-get "num_ctx" (ellama-transient--alist params)
+                 nil nil #'string=))))
+
+(defun ellama-transient--provider-model (provider)
+  "Return chat model from PROVIDER."
+  (declare-function llm-ollama-chat-model "ext:llm-ollama")
+  (declare-function llm-openai-chat-model "ext:llm-openai")
+  (declare-function llm-openai-compatible-chat-model "ext:llm-openai")
+  (cond
+   ((ellama-transient--ollama-provider-p provider)
+    (llm-ollama-chat-model provider))
+   ((ellama-transient--openai-compatible-provider-p provider)
+    (llm-openai-compatible-chat-model provider))
+   ((ellama-transient--openai-provider-p provider)
+    (llm-openai-chat-model provider))))
+
+(defun ellama-transient--provider-models (provider)
+  "Return available chat models for PROVIDER."
+  (when (and provider (member 'model-list (llm-capabilities provider)))
+    (condition-case err
+        (llm-models provider)
+      (error
+       (message "Ellama could not fetch model list: %s" err)
+       nil))))
+
+(defun ellama-transient-read-model-name (&optional provider)
+  "Read model name for PROVIDER."
+  (let* ((provider (or provider ellama-provider))
+         (models (ellama-transient--provider-models provider))
+         (default (if (ellama-transient--default-value-p
+                       ellama-transient-model-name)
+                      (ellama-transient--provider-model provider)
+                    ellama-transient-model-name)))
+    (if models
+        (completing-read "Select model: " models nil nil nil nil default)
+      (read-string "Enter model: " default))))
+
+(defun ellama-transient--fill-ollama (provider)
+  "Set transient Ollama fields from PROVIDER."
   (declare-function llm-ollama-host "ext:llm-ollama")
   (declare-function llm-ollama-port "ext:llm-ollama")
   (declare-function llm-ollama-chat-model "ext:llm-ollama")
   (declare-function llm-ollama-default-chat-temperature "ext:llm-ollama")
-  (declare-function llm-ollama-default-chat-non-standard-params "ext:llm-ollama")
-  (when (and (fboundp 'llm-ollama-p)
-             (llm-ollama-p provider))
-    (setq ellama-transient-ollama-model-name (llm-ollama-chat-model provider))
-    (setq ellama-transient-temperature (or (llm-ollama-default-chat-temperature provider) 0.7))
+  (declare-function llm-ollama-default-chat-non-standard-params
+                    "ext:llm-ollama")
+  (when (ellama-transient--ollama-provider-p provider)
+    (setq ellama-transient-model-name (llm-ollama-chat-model provider))
+    (setq ellama-transient-temperature
+          (llm-ollama-default-chat-temperature provider))
     (setq ellama-transient-host (llm-ollama-host provider))
     (setq ellama-transient-port (llm-ollama-port provider))
-    (let* ((other-params (llm-ollama-default-chat-non-standard-params provider))
-           (ctx-len (when other-params (alist-get
-                                        "num_ctx"
-                                        (seq--into-list other-params)
-                                        nil nil #'string=))))
-      (setq ellama-transient-context-length (or ctx-len 4096)))))
+    (setq ellama-transient-context-length
+          (ellama-transient--provider-context-length provider))))
+
+(defun ellama-fill-transient-model (provider)
+  "Set transient model fields from PROVIDER."
+  (declare-function llm-openai-compatible-url "ext:llm-openai")
+  (setq ellama-transient-provider provider)
+  (when-let ((model (ellama-transient--provider-model provider)))
+    (setq ellama-transient-model-name model))
+  (setq ellama-transient-temperature
+        (ellama-transient--standard-temperature provider))
+  (when (ellama-transient--openai-compatible-provider-p provider)
+    (setq ellama-transient-url (llm-openai-compatible-url provider)))
+  (ellama-transient--fill-ollama provider))
+
+(defalias 'ellama-fill-transient-ollama-model
+  'ellama-fill-transient-model)
+
+(defun ellama-transient--replace-param (params key value)
+  "Return PARAMS with KEY set to VALUE."
+  (let ((params (copy-tree (ellama-transient--alist params))))
+    (if-let ((cell (assoc key params)))
+        (setcdr cell value)
+      (push (cons key value) params))
+    params))
+
+(defun ellama-transient--remove-param (params key)
+  "Return PARAMS with KEY removed."
+  (cl-remove key (copy-tree (ellama-transient--alist params))
+             :key #'car :test #'equal))
+
+(defun ellama-transient--provider-default-model (provider)
+  "Return default chat model for PROVIDER type."
+  (when-let ((constructor (intern-soft (format "make-%s" (type-of provider)))))
+    (when (fboundp constructor)
+      (condition-case nil
+          (ellama-transient--provider-model (funcall constructor))
+        (error nil)))))
+
+(defun ellama-transient--effective-model (provider)
+  "Return transient model or PROVIDER default model."
+  (if (ellama-transient--default-value-p ellama-transient-model-name)
+      (ellama-transient--provider-default-model provider)
+    ellama-transient-model-name))
+
+(defun ellama-transient--set-ollama-fields (provider)
+  "Set Ollama-specific PROVIDER fields from transient."
+  (declare-function llm-ollama-chat-model "ext:llm-ollama")
+  (declare-function llm-ollama-host "ext:llm-ollama")
+  (declare-function llm-ollama-port "ext:llm-ollama")
+  (declare-function llm-ollama-default-chat-non-standard-params
+                    "ext:llm-ollama")
+  (declare-function (setf llm-ollama-chat-model) "ext:llm-ollama")
+  (declare-function (setf llm-ollama-host) "ext:llm-ollama")
+  (declare-function (setf llm-ollama-port) "ext:llm-ollama")
+  (declare-function (setf llm-ollama-default-chat-non-standard-params)
+                    "ext:llm-ollama")
+  (setf (llm-ollama-chat-model provider)
+        (ellama-transient--effective-model provider)
+        (llm-ollama-host provider) ellama-transient-host
+        (llm-ollama-port provider) ellama-transient-port)
+  (setf (llm-ollama-default-chat-non-standard-params provider)
+        (if ellama-transient-context-length
+            (ellama-transient--replace-param
+             (llm-ollama-default-chat-non-standard-params provider)
+             "num_ctx" ellama-transient-context-length)
+          (ellama-transient--remove-param
+           (llm-ollama-default-chat-non-standard-params provider)
+           "num_ctx")))
+  provider)
+
+(defun ellama-transient--set-openai-fields (provider)
+  "Set OpenAI-compatible PROVIDER fields from transient."
+  (declare-function llm-openai-chat-model "ext:llm-openai")
+  (declare-function llm-openai-compatible-chat-model "ext:llm-openai")
+  (declare-function llm-openai-compatible-url "ext:llm-openai")
+  (declare-function (setf llm-openai-chat-model) "ext:llm-openai")
+  (declare-function (setf llm-openai-compatible-chat-model) "ext:llm-openai")
+  (declare-function (setf llm-openai-compatible-url) "ext:llm-openai")
+  (cond
+   ((ellama-transient--openai-compatible-provider-p provider)
+    (setf (llm-openai-compatible-chat-model provider)
+          (ellama-transient--effective-model provider))
+    (when ellama-transient-url
+      (setf (llm-openai-compatible-url provider) ellama-transient-url)))
+   ((ellama-transient--openai-provider-p provider)
+    (setf (llm-openai-chat-model provider)
+          (ellama-transient--effective-model provider))))
+  provider)
+
+(defun ellama-construct-provider-from-transient (&optional base-provider)
+  "Make provider from transient menu using BASE-PROVIDER."
+  (declare-function make-llm-ollama "ext:llm-ollama")
+  (declare-function copy-llm-ollama "ext:llm-ollama")
+  (declare-function copy-llm-openai "ext:llm-openai")
+  (declare-function copy-llm-openai-compatible "ext:llm-openai")
+  (let* ((base-provider (or ellama-transient-provider base-provider))
+         (provider
+          (cond
+           ((ellama-transient--ollama-provider-p base-provider)
+            (copy-llm-ollama base-provider))
+           ((ellama-transient--openai-compatible-provider-p base-provider)
+            (copy-llm-openai-compatible base-provider))
+           ((ellama-transient--openai-provider-p base-provider)
+            (copy-llm-openai base-provider))
+           ((not base-provider)
+            (require 'llm-ollama)
+            (make-llm-ollama))
+           (t
+            (error "Provider type does not support transient model changes")))))
+    (ellama-transient--set-standard-temperature provider)
+    (cond
+     ((ellama-transient--ollama-provider-p provider)
+      (ellama-transient--set-ollama-fields provider))
+     ((or (ellama-transient--openai-compatible-provider-p provider)
+          (ellama-transient--openai-provider-p provider))
+      (ellama-transient--set-openai-fields provider)))
+    provider))
 
 (defun ellama-construct-ollama-provider-from-transient ()
-  "Make provider with ollama mode in transient menu."
-  (declare-function make-llm-ollama "ext:llm-ollama")
-  (require 'llm-ollama)
-  (make-llm-ollama
-   :chat-model ellama-transient-ollama-model-name
-   :default-chat-temperature ellama-transient-temperature
-   :host ellama-transient-host
-   :port ellama-transient-port
-   :default-chat-non-standard-params
-   `[("num_ctx" . ,ellama-transient-context-length)]))
+  "Make Ollama provider from transient menu."
+  (let ((ellama-transient-provider nil))
+    (ellama-construct-provider-from-transient)))
 
 (transient-define-suffix ellama-transient-code-review (&optional args)
   "Review the code.  ARGS used for transient arguments."
@@ -489,7 +761,7 @@ ARGS used for transient arguments."
     ("t" "Translate Commands" ellama-transient-translate-menu)
     ("m" "Make Commands" ellama-transient-make-menu)]]
   ["System"
-   [("o" "Ollama model" ellama-select-ollama-model)
+   [("o" "Model" ellama-select-model)
     ("p" "Provider selection" ellama-provider-select)
     ("y" "Set system message" ellama-transient-set-system
      :transient t
@@ -503,8 +775,9 @@ ARGS used for transient arguments."
   [["Quit" ("q" "Quit" transient-quit-one)]]
   (interactive)
   (transient-setup 'ellama-transient-main-menu)
-  (when (string-empty-p ellama-transient-ollama-model-name)
-    (ellama-fill-transient-ollama-model ellama-provider)))
+  (when (and (not ellama-transient-provider)
+             (ellama-transient--default-value-p ellama-transient-model-name))
+    (ellama-fill-transient-model ellama-provider)))
 
 ;;;###autoload (autoload 'ellama "ellama-transient" nil t)
 (defalias 'ellama 'ellama-transient-main-menu)

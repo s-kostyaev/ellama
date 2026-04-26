@@ -32,6 +32,7 @@
 (require 'ellama-transient)
 (require 'ert)
 (require 'llm-ollama)
+(require 'llm-openai)
 
 (ert-deftest test-ellama-fill-transient-ollama-model-populates-fields ()
   (let ((provider (make-llm-ollama
@@ -41,13 +42,14 @@
                    :port 11000
                    :default-chat-non-standard-params
                    '(("num_ctx" . 8192))))
-        (ellama-transient-ollama-model-name "")
+        (ellama-transient-model-name "")
         (ellama-transient-temperature 0.7)
         (ellama-transient-context-length 4096)
         (ellama-transient-host "localhost")
         (ellama-transient-port 11434))
-    (ellama-fill-transient-ollama-model provider)
-    (should (equal ellama-transient-ollama-model-name "test-model"))
+    (ellama-fill-transient-model provider)
+    (should (eq ellama-transient-provider provider))
+    (should (equal ellama-transient-model-name "test-model"))
     (should (= ellama-transient-temperature 0.2))
     (should (= ellama-transient-context-length 8192))
     (should (equal ellama-transient-host "example.org"))
@@ -62,30 +64,76 @@
                    :default-chat-non-standard-params nil))
         (ellama-transient-temperature 0.3)
         (ellama-transient-context-length 123))
-    (ellama-fill-transient-ollama-model provider)
-    (should (= ellama-transient-temperature 0.7))
-    (should (= ellama-transient-context-length 4096))))
+    (ellama-fill-transient-model provider)
+    (should-not ellama-transient-temperature)
+    (should-not ellama-transient-context-length)))
 
 (ert-deftest test-ellama-fill-transient-ollama-model-noop-for-non-ollama ()
-  (let ((ellama-transient-ollama-model-name "keep-model")
+  (let ((ellama-transient-model-name "keep-model")
         (ellama-transient-temperature 0.9)
         (ellama-transient-context-length 2222)
         (ellama-transient-host "keep-host")
         (ellama-transient-port 22000))
-    (ellama-fill-transient-ollama-model :not-ollama-provider)
-    (should (equal ellama-transient-ollama-model-name "keep-model"))
-    (should (= ellama-transient-temperature 0.9))
+    (ellama-fill-transient-model :not-ollama-provider)
+    (should (equal ellama-transient-model-name "keep-model"))
+    (should-not ellama-transient-temperature)
     (should (= ellama-transient-context-length 2222))
     (should (equal ellama-transient-host "keep-host"))
     (should (= ellama-transient-port 22000))))
 
+(ert-deftest test-ellama-fill-transient-model-openai-compatible ()
+  (let ((provider (make-llm-openai-compatible
+                   :url "http://127.0.0.1:8000/v1"
+                   :chat-model "LFM2.5"
+                   :key "secret"
+                   :default-chat-temperature 0.4))
+        (ellama-transient-model-name "")
+        (ellama-transient-temperature 0.7)
+        (ellama-transient-url nil))
+    (ellama-fill-transient-model provider)
+    (should (eq ellama-transient-provider provider))
+    (should (equal ellama-transient-model-name "LFM2.5"))
+    (should (= ellama-transient-temperature 0.4))
+    (should (equal ellama-transient-url "http://127.0.0.1:8000/v1"))))
+
+(ert-deftest test-ellama-transient-reset-model-fields-and-descriptions ()
+  (let ((ellama-transient-model-name "model")
+        (ellama-transient-temperature 0.4)
+        (ellama-transient-context-length 8192))
+    (ellama-transient-reset-model-fields)
+    (should-not ellama-transient-model-name)
+    (should-not ellama-transient-temperature)
+    (should-not ellama-transient-context-length)
+    (should (equal (ellama-transient-model-description)
+                   "Model (default)"))
+    (should (equal (ellama-transient-temperature-description)
+                   "Temperature (default)"))
+    (should (equal (ellama-transient-context-length-description)
+                   "Context Length (default)"))))
+
+(ert-deftest test-ellama-transient-set-model-keeps-reset-temperature ()
+  (let ((ellama-transient-provider :provider)
+        (ellama-transient-model-name nil)
+        (ellama-transient-temperature nil)
+        (ellama-transient-context-length nil))
+    (cl-letf (((symbol-function 'ellama-transient-read-model-name)
+               (lambda (&rest _args)
+                 "new-model")))
+      (ellama-transient-set-model)
+      (should (equal ellama-transient-model-name "new-model"))
+      (should-not ellama-transient-temperature)
+      (should-not ellama-transient-context-length)
+      (should (equal (ellama-transient-temperature-description)
+                     "Temperature (default)")))))
+
 (ert-deftest
     test-ellama-construct-ollama-provider-from-transient-passes-all-params ()
-  (let ((ellama-transient-ollama-model-name "model-x")
+  (let ((ellama-transient-model-name "model-x")
         (ellama-transient-temperature 0.61)
         (ellama-transient-host "localhost")
         (ellama-transient-port 12000)
-        (ellama-transient-context-length 16384))
+        (ellama-transient-context-length 16384)
+        (ellama-transient-provider nil))
     (let* ((provider (ellama-construct-ollama-provider-from-transient))
            (params
             (seq--into-list
@@ -97,14 +145,83 @@
       (should (= (llm-ollama-port provider) 12000))
       (should (equal params '(("num_ctx" . 16384)))))))
 
+(ert-deftest test-ellama-construct-provider-reset-ollama-model-fields ()
+  (let ((base (make-llm-ollama
+               :chat-model "old-model"
+               :default-chat-temperature 0.9
+               :host "example.org"
+               :port 11000
+               :default-chat-non-standard-params
+               '(("num_ctx" . 8192) ("keep_alive" . "5m"))))
+        (ellama-transient-model-name nil)
+        (ellama-transient-temperature nil)
+        (ellama-transient-context-length nil)
+        (ellama-transient-host "example.org")
+        (ellama-transient-port 11000)
+        (ellama-transient-provider nil))
+    (let* ((provider (ellama-construct-provider-from-transient base))
+           (params
+            (seq--into-list
+             (llm-ollama-default-chat-non-standard-params provider))))
+      (should-not (llm-ollama-chat-model provider))
+      (should-not (llm-ollama-default-chat-temperature provider))
+      (should-not (assoc "num_ctx" params))
+      (should (equal (assoc "keep_alive" params)
+                     '("keep_alive" . "5m")))
+      (should (equal (llm-ollama-host provider) "example.org"))
+      (should (= (llm-ollama-port provider) 11000)))))
+
+(ert-deftest
+    test-ellama-construct-provider-from-transient-openai-compatible ()
+  (let ((base (make-llm-openai-compatible
+               :url "http://old/v1"
+               :chat-model "old-model"
+               :key "secret"
+               :default-chat-temperature 0.1))
+        (ellama-transient-model-name "new-model")
+        (ellama-transient-temperature 0.8)
+        (ellama-transient-url "http://new/v1")
+        (ellama-transient-provider nil))
+    (let ((provider (ellama-construct-provider-from-transient base)))
+      (should (llm-openai-compatible-p provider))
+      (should-not (eq provider base))
+      (should (equal (llm-openai-compatible-chat-model provider)
+                     "new-model"))
+      (should (equal (llm-openai-compatible-url provider)
+                     "http://new/v1"))
+      (should (equal (llm-openai-compatible-key provider) "secret"))
+      (should (= (llm-openai-compatible-default-chat-temperature provider)
+                 0.8)))))
+
+(ert-deftest
+    test-ellama-construct-provider-reset-openai-compatible-model-fields ()
+  (let ((base (make-llm-openai-compatible
+               :url "http://old/v1"
+               :chat-model "old-model"
+               :key "secret"
+               :default-chat-temperature 0.1))
+        (ellama-transient-model-name nil)
+        (ellama-transient-temperature nil)
+        (ellama-transient-url nil)
+        (ellama-transient-provider nil))
+    (let ((provider (ellama-construct-provider-from-transient base)))
+      (should (equal (llm-openai-compatible-chat-model provider)
+                     (llm-openai-compatible-chat-model
+                      (make-llm-openai-compatible))))
+      (should-not
+       (llm-openai-compatible-default-chat-temperature provider))
+      (should (equal (llm-openai-compatible-url provider)
+                     "http://old/v1"))
+      (should (equal (llm-openai-compatible-key provider) "secret")))))
+
 (ert-deftest test-ellama-transient-set-provider-updates-selected-symbol ()
   (let ((ellama-provider :old-default)
         (ellama-coding-provider :old-coding))
     (cl-letf (((symbol-function 'completing-read)
-               (lambda (&rest _args)
+              (lambda (&rest _args)
                  "ellama-coding-provider"))
-              ((symbol-function 'ellama-construct-ollama-provider-from-transient)
-               (lambda ()
+              ((symbol-function 'ellama-construct-provider-from-transient)
+               (lambda (&rest _args)
                  :new-provider)))
       (ellama-transient-set-provider)
       (should (eq ellama-coding-provider :new-provider))
@@ -121,9 +238,9 @@
     (cl-letf (((symbol-function 'completing-read)
                (lambda (&rest _args)
                  (prog1 (car providers)
-                   (setq providers (cdr providers)))))
-              ((symbol-function 'ellama-construct-ollama-provider-from-transient)
-               (lambda ()
+                  (setq providers (cdr providers)))))
+              ((symbol-function 'ellama-construct-provider-from-transient)
+               (lambda (&rest _args)
                  (prog1 (car values)
                    (setq values (cdr values))))))
       (ellama-transient-set-provider)
@@ -143,7 +260,7 @@
   (let ((called 0))
     (cl-letf (((symbol-function 'ellama-get-current-session)
                (lambda () nil))
-              ((symbol-function 'ellama-fill-transient-ollama-model)
+              ((symbol-function 'ellama-fill-transient-model)
                (lambda (&rest _args)
                  (cl-incf called))))
       (ellama-transient-model-get-from-current-session)
@@ -155,7 +272,7 @@
                (lambda ()
                  (setq provided-session session)
                  session))
-              ((symbol-function 'ellama-fill-transient-ollama-model)
+              ((symbol-function 'ellama-fill-transient-model)
                (lambda (provider)
                  (setq provided-provider provider))))
       (ellama-transient-model-get-from-current-session)
@@ -255,19 +372,20 @@
 (ert-deftest
     test-ellama-transient-main-menu-initializes-model-only-when-empty ()
   (let ((ellama-provider :provider)
-        (ellama-transient-ollama-model-name "")
+        (ellama-transient-model-name "")
+        (ellama-transient-provider nil)
         (fill-calls 0)
         fill-provider)
     (cl-letf (((symbol-function 'transient-setup)
                (lambda (&rest _args) nil))
-              ((symbol-function 'ellama-fill-transient-ollama-model)
+              ((symbol-function 'ellama-fill-transient-model)
                (lambda (provider)
                  (cl-incf fill-calls)
                  (setq fill-provider provider))))
       (ellama-transient-main-menu)
       (should (= fill-calls 1))
       (should (eq fill-provider :provider))
-      (setq ellama-transient-ollama-model-name "model-already-set")
+      (setq ellama-transient-model-name "model-already-set")
       (ellama-transient-main-menu)
       (should (= fill-calls 1)))))
 

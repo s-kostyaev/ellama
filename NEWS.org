@@ -1,3 +1,24 @@
+* Version 1.14.1
+- Refactor transient model handling and provider construction. Generalize
+  transient model handling to support multiple provider types beyond Ollama,
+  including OpenAI-compatible providers.
+- Implement ~ellama-transient-set-model~ and ~ellama-transient-set-url~ for
+  broader provider support.
+- Add ~ellama-transient-reset-model-fields~ to reset model-specific parameters.
+- Refactor ~ellama-construct-provider-from-transient~ to dynamically handle
+  different provider types.
+- Improve transient descriptions to dynamically show if values are set to
+  defaults.
+- Add logic to filter transient menu items based on the selected provider type.
+- Add support for loading models and filling settings from existing provider
+  defaults and current sessions.
+- Update tests to cover various provider types and edge cases.
+- Refactor provider parameter extraction. Introduced
+  ~ellama-transient--provider-context-length~ to handle context length
+  retrieval.
+- Removed hardcoded default values for temperature and context length, ensuring
+  parameters are directly retrieved from the provider.
+- Update documentation.
 * Version 1.14.0
 - Implement automatic session context compaction. This feature automatically
   summarizes chat history when it reaches a certain token threshold to manage

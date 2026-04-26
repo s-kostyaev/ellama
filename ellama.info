@@ -274,6 +274,12 @@ File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Top
    • ‘ellama-summarize-webpage’: Summarize a webpage fetched from a URL
      using Ellama.
    • ‘ellama-provider-select’: Select ellama provider.
+   • ‘ellama-select-model’: Change the current provider model
+     interactively.  The model transient supports Ollama and
+     OpenAI-compatible providers, including URL editing for compatible
+     APIs.  Use "Reset model fields" to clear model, temperature, and
+     context-length overrides and let the provider use its defaults;
+     reset values are shown as ‘default’ in the transient.
    • ‘ellama-code-complete’: Complete selected code or code in the
      current buffer according to a provided change using Ellama.
    • ‘ellama-code-add’: Generate and insert new code based on
@@ -2194,42 +2200,42 @@ Tag Table:
 Node: Top1379
 Node: Installation3853
 Node: Commands8867
-Node: Keymap16339
-Node: Configuration19173
-Node: Session Compaction29095
-Node: DLP for Tool Input/Output30733
-Node: SRT Filesystem Policy for Tools45634
-Node: Context Management51303
-Node: Transient Menus for Context Management52371
-Node: Managing the Context53985
-Node: Considerations54760
-Node: Minor modes55353
-Node: ellama-context-header-line-mode57341
-Node: ellama-context-header-line-global-mode58166
-Node: ellama-context-mode-line-mode58886
-Node: ellama-context-mode-line-global-mode59734
-Node: Ellama Session Header Line Mode60438
-Node: Enabling and Disabling61007
-Node: Customization61454
-Node: Ellama Session Mode Line Mode61742
-Node: Enabling and Disabling (1)62327
-Node: Customization (1)62774
-Node: Using Blueprints63068
-Node: Key Components of Ellama Blueprints63708
-Node: Creating and Managing Blueprints64315
-Node: Blueprints files65293
-Node: Variable Management65714
-Node: Keymap and Mode66167
-Node: Transient Menus67103
-Node: Running Blueprints programmatically67649
-Node: MCP Integration68236
-Node: Agent Skills69471
-Node: Directory Structure69834
-Node: Creating a Skill70861
-Node: How it works71236
-Node: Acknowledgments71627
-Node: Contributions72338
-Node: GNU Free Documentation License72724
+Node: Keymap16741
+Node: Configuration19575
+Node: Session Compaction29497
+Node: DLP for Tool Input/Output31135
+Node: SRT Filesystem Policy for Tools46036
+Node: Context Management51705
+Node: Transient Menus for Context Management52773
+Node: Managing the Context54387
+Node: Considerations55162
+Node: Minor modes55755
+Node: ellama-context-header-line-mode57743
+Node: ellama-context-header-line-global-mode58568
+Node: ellama-context-mode-line-mode59288
+Node: ellama-context-mode-line-global-mode60136
+Node: Ellama Session Header Line Mode60840
+Node: Enabling and Disabling61409
+Node: Customization61856
+Node: Ellama Session Mode Line Mode62144
+Node: Enabling and Disabling (1)62729
+Node: Customization (1)63176
+Node: Using Blueprints63470
+Node: Key Components of Ellama Blueprints64110
+Node: Creating and Managing Blueprints64717
+Node: Blueprints files65695
+Node: Variable Management66116
+Node: Keymap and Mode66569
+Node: Transient Menus67505
+Node: Running Blueprints programmatically68051
+Node: MCP Integration68638
+Node: Agent Skills69873
+Node: Directory Structure70236
+Node: Creating a Skill71263
+Node: How it works71638
+Node: Acknowledgments72029
+Node: Contributions72740
+Node: GNU Free Documentation License73126
 
 End Tag Table
 
