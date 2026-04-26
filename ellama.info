@@ -75,6 +75,7 @@ Assistant".  Previous sentence was written by Ellama itself.
 
 Configuration
 
+* Session Compaction::
 * DLP for Tool Input/Output::
 * SRT Filesystem Policy for Tools::
 
@@ -299,6 +300,10 @@ File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Top
    • ‘ellama-session-switch’: Change current active session.
    • ‘ellama-session-kill’: Select and kill one of active sessions.
    • ‘ellama-session-rename’: Rename current ellama session.
+   • ‘ellama-session-compact-current’: Compact current Ellama session
+     context.
+   • ‘ellama-session-compact’: Select and compact an active Ellama
+     session context.
    • ‘ellama-context-add-file’: Add file to context.
    • ‘ellama-context-add-directory’: Add all files in directory to the
      context.
@@ -450,6 +455,27 @@ argument generated text string.
      default.
    • ‘ellama-session-auto-save’: Automatically save ellama sessions if
      set.  Enabled by default.
+   • ‘ellama-session-auto-compact-enabled’: Automatically compact long
+     chat session context.  Enabled by default.
+   • ‘ellama-session-auto-compact-token-threshold’: Total token count
+     that triggers automatic session compaction.  If not set, Ellama
+     uses ‘ellama-session-auto-compact-threshold-percent’ of the
+     provider context window.
+   • ‘ellama-session-auto-compact-threshold-percent’: Percentage of
+     provider context limit that triggers automatic compaction.  Default
+     value is 80.
+   • ‘ellama-session-auto-compact-keep-last-turns’: Number of recent
+     user turns to keep verbatim during compaction.  Default value is 3.
+   • ‘ellama-session-auto-compact-target-token-threshold’: Preferred
+     target token count after compaction.  If not set, Ellama targets
+     half of the compaction threshold.
+   • ‘ellama-session-auto-compact-provider’: Provider used to summarize
+     old session context.  If not set, Ellama uses
+     ‘ellama-summarization-provider’, then the session provider.
+   • ‘ellama-session-auto-compact-show-message’: Show compaction notices
+     in chat buffers.  Enabled by default.
+   • ‘ellama-session-auto-compact-prompt-template’: Prompt template for
+     automatic session context compaction.
    • ‘ellama-naming-scheme’: How to name new sessions.
    • ‘ellama-naming-provider’: LLM provider for generating session names
      by LLM.  If not set ‘ellama-provider’ will be used.
@@ -556,13 +582,52 @@ argument generated text string.
 
 * Menu:
 
+* Session Compaction::
 * DLP for Tool Input/Output::
 * SRT Filesystem Policy for Tools::
 
 
-File: ellama.info,  Node: DLP for Tool Input/Output,  Next: SRT Filesystem Policy for Tools,  Up: Configuration
+File: ellama.info,  Node: Session Compaction,  Next: DLP for Tool Input/Output,  Up: Configuration
 
-4.1 DLP for Tool Input/Output
+4.1 Session Compaction
+======================
+
+Ellama can compact long chat sessions to keep them within the provider
+context window.  Compaction summarizes older conversation turns into one
+synthetic assistant message and keeps the most recent user turns
+verbatim.  New messages continue from the compacted prompt, so the
+session can keep running without resending the full history.
+
+Automatic compaction is enabled by default with
+‘ellama-session-auto-compact-enabled’.  It runs after a response when
+Ellama can determine or estimate token usage and the session crosses the
+configured threshold.  Use ‘ellama-session-auto-compact-token-threshold’
+for an absolute token threshold, or leave it unset to use
+‘ellama-session-auto-compact-threshold-percent’ of the provider context
+limit.
+
+You can compact sessions manually:
+
+   • ‘M-x ellama-session-compact-current’ compacts the current session.
+   • ‘M-x ellama-session-compact’ prompts for an active session and
+     compacts it.
+
+The system message is not summarized by the compaction LLM.  Ellama
+restores the original system message in the compacted session prompt
+context, including when an LLM provider moved the system message into a
+system interaction before the request.
+
+Example configuration:
+
+     (setopt ellama-session-auto-compact-enabled t)
+     (setopt ellama-session-auto-compact-threshold-percent 75)
+     (setopt ellama-session-auto-compact-keep-last-turns 4)
+     (setopt ellama-session-auto-compact-provider ellama-summarization-provider)
+
+
+File: ellama.info,  Node: DLP for Tool Input/Output,  Next: SRT Filesystem Policy for Tools,  Prev: Session Compaction,  Up: Configuration
+
+4.2 DLP for Tool Input/Output
 =============================
 
 Ellama includes an optional DLP (Data Loss Prevention) layer for tool
@@ -888,7 +953,7 @@ Troubleshooting:
 
 File: ellama.info,  Node: SRT Filesystem Policy for Tools,  Prev: DLP for Tool Input/Output,  Up: Configuration
 
-4.2 SRT Filesystem Policy for Tools
+4.3 SRT Filesystem Policy for Tools
 ===================================
 
 When ‘ellama-tools-use-srt’ is non-nil, the ‘srt’ settings file is the
@@ -2127,43 +2192,44 @@ their use in free software.
 
 Tag Table:
 Node: Top1379
-Node: Installation3830
-Node: Commands8844
-Node: Keymap16131
-Node: Configuration18965
-Node: DLP for Tool Input/Output27557
-Node: SRT Filesystem Policy for Tools42431
-Node: Context Management48100
-Node: Transient Menus for Context Management49168
-Node: Managing the Context50782
-Node: Considerations51557
-Node: Minor modes52150
-Node: ellama-context-header-line-mode54138
-Node: ellama-context-header-line-global-mode54963
-Node: ellama-context-mode-line-mode55683
-Node: ellama-context-mode-line-global-mode56531
-Node: Ellama Session Header Line Mode57235
-Node: Enabling and Disabling57804
-Node: Customization58251
-Node: Ellama Session Mode Line Mode58539
-Node: Enabling and Disabling (1)59124
-Node: Customization (1)59571
-Node: Using Blueprints59865
-Node: Key Components of Ellama Blueprints60505
-Node: Creating and Managing Blueprints61112
-Node: Blueprints files62090
-Node: Variable Management62511
-Node: Keymap and Mode62964
-Node: Transient Menus63900
-Node: Running Blueprints programmatically64446
-Node: MCP Integration65033
-Node: Agent Skills66268
-Node: Directory Structure66631
-Node: Creating a Skill67658
-Node: How it works68033
-Node: Acknowledgments68424
-Node: Contributions69135
-Node: GNU Free Documentation License69521
+Node: Installation3853
+Node: Commands8867
+Node: Keymap16339
+Node: Configuration19173
+Node: Session Compaction29095
+Node: DLP for Tool Input/Output30733
+Node: SRT Filesystem Policy for Tools45634
+Node: Context Management51303
+Node: Transient Menus for Context Management52371
+Node: Managing the Context53985
+Node: Considerations54760
+Node: Minor modes55353
+Node: ellama-context-header-line-mode57341
+Node: ellama-context-header-line-global-mode58166
+Node: ellama-context-mode-line-mode58886
+Node: ellama-context-mode-line-global-mode59734
+Node: Ellama Session Header Line Mode60438
+Node: Enabling and Disabling61007
+Node: Customization61454
+Node: Ellama Session Mode Line Mode61742
+Node: Enabling and Disabling (1)62327
+Node: Customization (1)62774
+Node: Using Blueprints63068
+Node: Key Components of Ellama Blueprints63708
+Node: Creating and Managing Blueprints64315
+Node: Blueprints files65293
+Node: Variable Management65714
+Node: Keymap and Mode66167
+Node: Transient Menus67103
+Node: Running Blueprints programmatically67649
+Node: MCP Integration68236
+Node: Agent Skills69471
+Node: Directory Structure69834
+Node: Creating a Skill70861
+Node: How it works71236
+Node: Acknowledgments71627
+Node: Contributions72338
+Node: GNU Free Documentation License72724
 
 End Tag Table
 
