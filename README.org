@@ -160,6 +160,11 @@ More sophisticated configuration example:
 - ~ellama-summarize-webpage~: Summarize a webpage fetched from a URL using
   Ellama.
 - ~ellama-provider-select~: Select ellama provider.
+- ~ellama-select-model~: Change the current provider model interactively.  The
+  model transient supports Ollama and OpenAI-compatible providers, including URL
+  editing for compatible APIs.  Use "Reset model fields" to clear model,
+  temperature, and context-length overrides and let the provider use its
+  defaults; reset values are shown as ~default~ in the transient.
 - ~ellama-code-complete~: Complete selected code or code in the current buffer
   according to a provided change using Ellama.
 - ~ellama-code-add~: Generate and insert new code based on description. This
