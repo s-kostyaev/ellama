@@ -11,6 +11,23 @@
 6. **Export manual**: `make manual`
 7. **Refill readme**: `make refill-readme`
 
+Before committing changes, run all make targets appropriate for the changed
+files:
+
+- Always run `make build`, `make test`, `make check-compile-warnings`, and
+  `make checkdocs` for Elisp changes.
+- Run `make format-elisp` when formatting changed Elisp files.
+- Run `make refill-readme` after changing `README.org`.
+- Run `make manual` after changing `README.org` or manual generation code.
+- Run `make refill-news` after changing `NEWS.org`.
+- Run specialized integration targets when touching their area, for example
+  `make test-srt-integration` or `make test-srt-integration-linux` for SRT
+  integration changes.
+
+After making changes and before committing, use the project-local
+`commit-message` skill to write the commit message from the final diff:
+`.codex/skills/commit-message/SKILL.md`.
+
 ## Code Style Guidelines
 
 - **Imports**: Keep `require`s grouped at the file top.
@@ -42,7 +59,6 @@
 
 Just one backslash (\) in front of quotes.
 
-3. Do not use git, util requested by user explicitly.
-4. ALWAYS use `oq` skill to see content of `.org` files (for example
+3. ALWAYS use `oq` skill to see content of `.org` files (for example
    ./README.org and ./NEWS.org) isntead of `read_file` tool. README.org and
    NEWS.org are big enough, you NEED to use `oq` skill with it.
