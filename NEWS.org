@@ -19,6 +19,14 @@
 - Removed hardcoded default values for temperature and context length, ensuring
   parameters are directly retrieved from the provider.
 - Update documentation.
+* Version 1.14.2
+- Add project-local skill pointers for changelog and commit-message workflows.
+  This makes repository-specific Codex skills discoverable from ~.codex/skills~.
+- Add a ~commit-message~ skill for concise commit message generation from diffs.
+- Update agent instructions to document the project commit workflow.  The
+  workflow now covers pre-commit checks, branch creation from ~main~, iterative
+  check/fix/commit/push cycles, documentation updates, changelog generation,
+  version bumps, and when to ask for clarification.
 * Version 1.14.0
 - Implement automatic session context compaction. This feature automatically
   summarizes chat history when it reaches a certain token threshold to manage
