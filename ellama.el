@@ -1094,10 +1094,46 @@ CONTEXT will be ignored.  Use global context instead.
          (equal (llm-chat-prompt-interaction-content interaction)
                 (ellama--session-summary-interaction-content stored-summary)))))
 
+(defun ellama--session-system-interaction-p (interaction)
+  "Return non-nil when INTERACTION is a system interaction."
+  (eq (llm-chat-prompt-interaction-role interaction) 'system))
+
+(defun ellama--session-drop-system-interactions (interactions)
+  "Drop leading system interactions from INTERACTIONS."
+  (while (and interactions
+              (ellama--session-system-interaction-p (car interactions)))
+    (setq interactions (cdr interactions)))
+  interactions)
+
+(defun ellama--session-system-context-from-interactions (interactions)
+  "Return system context from leading system INTERACTIONS."
+  (let ((system-interactions nil))
+    (while (and interactions
+                (ellama--session-system-interaction-p (car interactions)))
+      (push (car interactions) system-interactions)
+      (setq interactions (cdr interactions)))
+    (when system-interactions
+      (string-join
+       (mapcar
+        (lambda (interaction)
+          (ellama--session-compact-content-to-string
+           (llm-chat-prompt-interaction-content interaction)))
+        (nreverse system-interactions))
+       "\n"))))
+
+(defun ellama--session-original-context (session prompt)
+  "Return original system context for SESSION PROMPT."
+  (or (ellama--session-extra-get session :auto-compact-original-context)
+      (llm-chat-prompt-context prompt)
+      (ellama--session-system-context-from-interactions
+       (llm-chat-prompt-interactions prompt))))
+
 (defun ellama--session-compact-base-interactions (session prompt)
   "Return compactable interactions from PROMPT for SESSION.
-Drop the synthetic summary interaction inserted by previous compaction."
-  (let ((interactions (llm-chat-prompt-interactions prompt)))
+Drop the synthetic summary interaction inserted by previous compaction.
+Drop leading system interactions; they are restored as prompt context."
+  (let ((interactions (ellama--session-drop-system-interactions
+                       (llm-chat-prompt-interactions prompt))))
     (if (and interactions
              (ellama--session-summary-interaction-p
               session (car interactions)))
@@ -1267,10 +1303,8 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
                   (ellama--session-extra-get
                    session :auto-compact-original-context))
                  (original-context
-                  (if (ellama--session-extra-get
-                       session :auto-compact-summary)
-                      extra-original
-                    (llm-chat-prompt-context prompt)))
+                  (or extra-original
+                      (ellama--session-original-context session prompt)))
                  (previous-summary
                   (ellama--session-extra-get
                    session :auto-compact-summary))

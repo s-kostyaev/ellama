@@ -1012,6 +1012,42 @@ detailed comparison to help you decide:
           "Ellama compacted conversation context"
           (buffer-string)))))))
 
+(ert-deftest test-ellama-session-compact-restores-mutated-system-context ()
+  (let* ((provider (make-llm-fake))
+         (session (ellama-test--compact-session provider))
+         (prompt (ellama-session-prompt session))
+         (summary-prompt-text nil)
+         (ellama-session-auto-compact-provider (make-llm-fake))
+         (ellama-session-auto-compact-keep-last-turns 2)
+         (ellama-session-auto-compact-show-message nil))
+    (push (make-llm-chat-prompt-interaction
+           :role 'system
+           :content "System context")
+          (llm-chat-prompt-interactions prompt))
+    (setf (llm-chat-prompt-context prompt) nil)
+    (cl-letf (((symbol-function 'llm-chat-async)
+               (lambda (_provider summary-prompt response-callback
+                                  _error-callback &optional _multi-output)
+                 (setq summary-prompt-text
+                       (llm-chat-prompt-to-text summary-prompt))
+                 (funcall response-callback
+                          '(:text "Summary without system message."))
+                 'request)))
+      (should (ellama--session-compact session :provider provider))
+      (should (equal "System context"
+                     (llm-chat-prompt-context prompt)))
+      (should-not (string-match-p "System context" summary-prompt-text))
+      (should-not
+       (cl-some
+        #'ellama--session-system-interaction-p
+        (llm-chat-prompt-interactions prompt)))
+      (should
+       (equal
+        (mapcar #'llm-chat-prompt-interaction-content
+                (llm-chat-prompt-interactions prompt))
+        '("Previous conversation summary:\n\nSummary without system message."
+          "user 3" "assistant 3" "user 4" "assistant 4"))))))
+
 (ert-deftest test-ellama-session-compact-keeps-interactions-added-in-flight ()
   (let* ((provider (make-llm-fake))
          (session (ellama-test--compact-session provider))
