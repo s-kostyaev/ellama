@@ -1,3 +1,24 @@
+* Version 1.14.0
+- Implement automatic session context compaction. This feature automatically
+  summarizes chat history when it reaches a certain token threshold to manage
+  context window limits. It includes customization variables for threshold,
+  target size, provider, and turn retention.
+- Refactor session compaction to be asynchronous using `llm-chat-async`. This
+  introduces helper functions to manage token counts, apply compaction results,
+  and handle asynchronous errors and state changes.
+- Add a compaction minor mode (`ellama-compaction-mode`) for visual feedback in
+  the mode line when session compaction is in progress.
+- Refactor session compaction to use synthetic interactions for
+  summaries. Instead of appending the summary to the prompt context, it is now
+  represented as a synthetic assistant interaction. This ensures the original
+  system context is preserved and subsequent compactions correctly replace the
+  previous summary.
+- Improve session compaction system interaction handling. Added functions to
+  identify, drop, and extract system context from leading system interactions,
+  ensuring they are correctly preserved during the compaction process.
+- Add session compaction options to the transient menu, including "Compact
+  Current Session" and "Compact Session" commands.
+- Fix docstring warnings and reformat code.
 * Version 1.13.0
 - Implement DLP (Data Loss Prevention) layer.
 - Add prompt‑injection detection and configurable output‑warning handling.
