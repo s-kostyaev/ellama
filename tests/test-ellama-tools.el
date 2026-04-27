@@ -107,7 +107,8 @@
 (defun ellama-test--ensure-local-ellama-tools ()
   "Load local `ellama-tools.el' from project root when needed."
   (unless (and (fboundp 'ellama-tools--sanitize-tool-text-output)
-               (fboundp 'ellama-tools--command-argv))
+               (fboundp 'ellama-tools--command-argv)
+               (fboundp 'ellama-tools--task-description))
     (load-file (expand-file-name "ellama-tools.el" ellama-test-root))))
 
 (defun ellama-test--clear-srt-policy-cache ()
@@ -2128,6 +2129,126 @@ Return list with result and prompt."
                "report_result"))
       (should (eq (cadr (plist-get captured-extra :tools))
                   role-tool)))))
+
+(ert-deftest test-ellama-tools-task-tool-template-renders-arguments ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((root (make-temp-file "ellama-task-template-" t))
+         (templates (expand-file-name "templates" root))
+         (worker (make-ellama-session :id "worker-template"))
+         (arguments (make-hash-table :test #'equal))
+         (ellama--current-session-id "parent-template")
+         (ellama-tools-subagent-roles
+          '(("explorer" :system "Explore." :tools nil)))
+         new-session-prompt
+         stream-prompt
+         callback-msg)
+    (unwind-protect
+        (progn
+          (make-directory templates)
+          (with-temp-file (expand-file-name "researcher.md" templates)
+            (insert "Goal: {project_goal}\nTopic: {subtopic_name}\n"))
+          (puthash "project_goal" "Map the area" arguments)
+          (puthash "subtopic_name" "Safety" arguments)
+          (cl-letf (((symbol-function 'ellama-tools--provider-for-role)
+                     (lambda (_role) 'provider))
+                    ((symbol-function 'ellama-tools--for-role)
+                     (lambda (_role) nil))
+                    ((symbol-function 'ellama-new-session)
+                     (lambda (_provider prompt _ephemeral)
+                       (setq new-session-prompt prompt)
+                       worker))
+                    ((symbol-function 'ellama-tools--set-session-extra)
+                     (lambda (_session _extra) nil))
+                    ((symbol-function 'ellama-stream)
+                     (lambda (prompt &rest _args)
+                       (setq stream-prompt prompt)))
+                    ((symbol-function 'message)
+                     (lambda (&rest _args) nil)))
+            (should
+             (null
+              (ellama-tools-task-tool
+               (lambda (msg) (setq callback-msg msg))
+               nil
+               "explorer"
+               "templates/researcher.md"
+               root
+               arguments)))
+            (should (equal new-session-prompt
+                           "Goal: Map the area\nTopic: Safety\n"))
+            (should (equal stream-prompt new-session-prompt))
+            (should (null callback-msg))))
+      (delete-directory root t))))
+
+(ert-deftest test-ellama-tools-task-tool-template-validation-hints ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((root (make-temp-file "ellama-task-template-" t))
+         (arguments (make-hash-table :test #'equal))
+         (ellama-tools-subagent-roles
+          '(("explorer" :system "Explore." :tools nil)))
+         callback-msg
+         started)
+    (unwind-protect
+        (progn
+          (with-temp-file (expand-file-name "researcher.md" root)
+            (insert "Goal: {project_goal}\nTopic: {subtopic_name}\n"))
+          (puthash "project_goal" "Map the area" arguments)
+          (puthash "topic" "Wrong key" arguments)
+          (cl-letf (((symbol-function 'ellama-new-session)
+                     (lambda (&rest _args)
+                       (setq started t))))
+            (should
+             (null
+              (ellama-tools-task-tool
+               (lambda (msg) (setq callback-msg msg))
+               nil
+               "explorer"
+               "researcher.md"
+               root
+               arguments)))
+            (should-not started)
+            (should (string-match-p
+                     "Task template validation failed"
+                     callback-msg))
+            (should (string-match-p "- subtopic_name" callback-msg))
+            (should (string-match-p "- project_goal" callback-msg))
+            (should (string-match-p "- topic" callback-msg))
+            (should (string-match-p
+                     "\"subtopic_name\": \"\\.\\.\\.\""
+                     callback-msg))))
+      (delete-directory root t))))
+
+(ert-deftest test-ellama-tools-task-tool-template-rejects-traversal ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((root (make-temp-file "ellama-task-template-" t))
+         (base (expand-file-name "base" root))
+         (arguments (make-hash-table :test #'equal))
+         (ellama-tools-subagent-roles
+          '(("explorer" :system "Explore." :tools nil)))
+         callback-msg
+         started)
+    (unwind-protect
+        (progn
+          (make-directory base)
+          (with-temp-file (expand-file-name "outside.md" root)
+            (insert "Outside: {value}\n"))
+          (puthash "value" "secret" arguments)
+          (cl-letf (((symbol-function 'ellama-new-session)
+                     (lambda (&rest _args)
+                       (setq started t))))
+            (should
+             (null
+              (ellama-tools-task-tool
+               (lambda (msg) (setq callback-msg msg))
+               nil
+               "explorer"
+               "../outside.md"
+               base
+               arguments)))
+            (should-not started)
+            (should (string-match-p
+                     "Template path escapes base directory"
+                     callback-msg))))
+      (delete-directory root t))))
 
 (ert-deftest test-ellama-tools-tool-scan-metadata-for-mcp ()
   (ellama-test--ensure-local-ellama-tools)
