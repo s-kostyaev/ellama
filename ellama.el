@@ -36,8 +36,10 @@
 ;;; Code:
 
 (require 'eieio)
+(require 'cl-lib)
 (require 'llm)
 (require 'llm-provider-utils)
+(require 'json)
 (require 'compat)
 (eval-when-compile (require 'rx))
 (require 'ellama-tools)
@@ -2222,6 +2224,61 @@ REASONING-BUFFER is a buffer for reasoning."
        (format "%s" (or msg "Unknown tool call error")))
      'system)))
 
+(defun ellama--json-safe-string (string)
+  "Return STRING as multibyte text safe for JSON serialization."
+  (let* ((decoded (if (multibyte-string-p string)
+                      string
+                    (decode-coding-string string 'utf-8-unix)))
+         (chars (string-to-list decoded)))
+    (if (cl-some (lambda (char) (> char #x10ffff)) chars)
+        (apply #'string
+               (mapcar (lambda (char)
+                         (if (> char #x10ffff) #xfffd char))
+                       chars))
+      decoded)))
+
+(defun ellama--json-safe-value (value)
+  "Return VALUE with strings safe for JSON serialization."
+  (cond
+   ((stringp value)
+    (ellama--json-safe-string value))
+   ((vectorp value)
+    (vconcat (mapcar #'ellama--json-safe-value value)))
+   ((consp value)
+    (mapcar (lambda (item)
+              (if (consp item)
+                  (cons (ellama--json-safe-value (car item))
+                        (ellama--json-safe-value (cdr item)))
+                (ellama--json-safe-value item)))
+            value))
+   (t value)))
+
+(defun ellama--normalize-tool-use-args (args)
+  "Normalize tool ARGS for provider request serialization."
+  (if (stringp args)
+      (let ((decoded (ellama--json-safe-string args)))
+        (condition-case nil
+            (ellama--json-safe-value
+             (json-parse-string
+              (if (= (length decoded) 0) "{}" decoded)
+              :object-type 'alist
+              :array-type 'list))
+          (error decoded)))
+    (ellama--json-safe-value args)))
+
+(defun ellama--normalize-prompt-tool-use-args (prompt)
+  "Normalize tool-use arguments in PROMPT history."
+  (when (llm-chat-prompt-p prompt)
+    (dolist (interaction (llm-chat-prompt-interactions prompt))
+      (let ((content (llm-chat-prompt-interaction-content interaction)))
+        (when (and (consp content)
+                   (llm-provider-utils-tool-use-p (car content)))
+          (dolist (tool-use content)
+            (setf (llm-provider-utils-tool-use-args tool-use)
+                  (ellama--normalize-tool-use-args
+                   (llm-provider-utils-tool-use-args tool-use))))))))
+  prompt)
+
 (defun ellama--error-handler (buffer errcb &optional prompt
                                      retry-fn request-context)
   "Error handler function.
@@ -2306,6 +2363,8 @@ inserted into the BUFFER."
                             request-context))
                           (request
                             (with-current-buffer buffer
+                              (ellama--normalize-prompt-tool-use-args
+                               llm-prompt)
                               (if async
                                   (llm-chat-async
                                    provider
@@ -2484,6 +2543,7 @@ failure (with BUFFER current).
                         #'start-request
                         request-context))
                       request)
+                 (ellama--normalize-prompt-tool-use-args llm-prompt)
                  (when (not request-started)
                    (setq request-started t)
                    (setq ellama--change-group (prepare-change-group))

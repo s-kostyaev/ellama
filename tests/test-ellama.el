@@ -1246,6 +1246,41 @@ detailed comparison to help you decide:
         (should (equal done-text "Recovered answer"))
         (should (equal (buffer-string) "Recovered answer"))))))
 
+(ert-deftest test-ellama-normalize-tool-use-args-decodes-unibyte-json ()
+  (let* ((raw-json
+          (encode-coding-string
+           "{\"content\":\"├── research_plan.md\",\"file_name\":\"x\"}"
+           'utf-8-unix))
+         (tool-use
+          (make-llm-provider-utils-tool-use
+           :id "call"
+           :name "write_file"
+           :args raw-json))
+         (prompt (llm-make-chat-prompt "continue")))
+    (setf (llm-chat-prompt-interactions prompt)
+          (append
+           (llm-chat-prompt-interactions prompt)
+           (list
+            (make-llm-chat-prompt-interaction
+             :role 'assistant
+             :content (list tool-use)))))
+    (ellama--normalize-prompt-tool-use-args prompt)
+    (let* ((args (llm-provider-utils-tool-use-args tool-use))
+           (content (cdr (assq 'content args))))
+      (should (equal content "├── research_plan.md"))
+      (should (multibyte-string-p content))
+      (should (json-serialize args)))))
+
+(ert-deftest test-ellama-normalize-tool-use-args-keeps-malformed-json-safe ()
+  (let* ((raw-json
+          (encode-coding-string
+           "{\"content\":\"├── research_plan.md\""
+           'utf-8-unix))
+         (normalized (ellama--normalize-tool-use-args raw-json)))
+    (should (stringp normalized))
+    (should (multibyte-string-p normalized))
+    (should (json-serialize normalized))))
+
 (ert-deftest test-ellama-stream-retry-tracks-latest-request-for-cancel ()
   (let* ((call-count 0)
          (cancelled-request nil)
