@@ -76,6 +76,7 @@ Assistant".  Previous sentence was written by Ellama itself.
 Configuration
 
 * Session Compaction::
+* Task Tool Subagents::
 * DLP for Tool Input/Output::
 * SRT Filesystem Policy for Tools::
 
@@ -536,6 +537,10 @@ argument generated text string.
      enabled.  Enabled by default.
    • ‘ellama-reasoning-display-action-function’: Display action function
      for reasoning.
+   • ‘ellama-display-session-buffer-on-generation’: Display the session
+     buffer whenever generation starts.  This also applies to sub-agent
+     sessions started by the ‘task’ tool, so delegated work is visible
+     while it runs.
    • ‘ellama-session-line-template’: Template for formatting the current
      session line.
    • ‘ellama-debug’: Enable debug.  When enabled, generated text is now
@@ -568,6 +573,13 @@ argument generated text string.
      The same arguments are also used to resolve the settings file path
      for local non-shell filesystem checks (default
      ‘~/.srt-settings.json’ if no ‘--settings~/’-s~ is provided).
+   • ‘ellama-tools-task-template-dirs’: Directories where the ‘task’
+     tool searches for prompt templates when no ‘template_base’ is
+     supplied.  Relative template names are resolved below these
+     directories.
+   • ‘ellama-tools-task-template-allow-absolute-paths’: Allow absolute
+     file names in the ‘task’ tool ‘template’ argument.  Disabled by
+     default.  Relative template names are still supported.
    • ‘ellama-blueprint-global-dir’: Global directory for storing
      blueprint files.
    • ‘ellama-blueprint-local-dir’: Local directory name for
@@ -582,6 +594,8 @@ argument generated text string.
      Skills.  Default value is ‘"skills"’.
    • ‘ellama-tools-subagent-default-max-steps’: Default maximum number
      of auto-continue steps for a sub-agent.  Default value is 30.
+   • ‘ellama-tools-subagent-continue-prompt’: Prompt sent to a sub-agent
+     when it finishes a turn without calling ‘report_result’.
    • ‘ellama-tools-subagent-roles’: Subagent roles with provider, system
      prompt and allowed tools.  Configuration of subagents for the
      ‘task’ tool.
@@ -589,11 +603,12 @@ argument generated text string.
 * Menu:
 
 * Session Compaction::
+* Task Tool Subagents::
 * DLP for Tool Input/Output::
 * SRT Filesystem Policy for Tools::
 
 
-File: ellama.info,  Node: Session Compaction,  Next: DLP for Tool Input/Output,  Up: Configuration
+File: ellama.info,  Node: Session Compaction,  Next: Task Tool Subagents,  Up: Configuration
 
 4.1 Session Compaction
 ======================
@@ -631,9 +646,60 @@ Example configuration:
      (setopt ellama-session-auto-compact-provider ellama-summarization-provider)
 
 
-File: ellama.info,  Node: DLP for Tool Input/Output,  Next: SRT Filesystem Policy for Tools,  Prev: Session Compaction,  Up: Configuration
+File: ellama.info,  Node: Task Tool Subagents,  Next: DLP for Tool Input/Output,  Prev: Session Compaction,  Up: Configuration
 
-4.2 DLP for Tool Input/Output
+4.2 Task Tool Subagents
+=======================
+
+The ‘task’ tool delegates work to an asynchronous sub-agent.  The parent
+model gets control back immediately, and the sub-agent reports the final
+result by calling the injected ‘report_result’ tool.  If the sub-agent
+finishes a turn without reporting a result, Ellama sends
+‘ellama-tools-subagent-continue-prompt’ until the task is complete or
+‘ellama-tools-subagent-default-max-steps’ is reached.
+
+Each sub-agent runs in its own Ellama session.  When
+‘ellama-display-session-buffer-on-generation’ is non-nil, Ellama
+displays both the main session and sub-agent session buffers as
+generation starts.  Sub-agent buffers include the delegated prompt under
+the ‘Main agent:’ label, followed by the sub-agent response.
+
+The tool accepts either a free-form ‘description’ or a prompt template:
+
+     {
+       "template": "templates/researcher.md",
+       "template_base": "/path/to/skill",
+       "arguments": {
+         "main_topic": "Example topic",
+         "subtopic_name": "Example subtopic"
+       },
+       "role": "explorer"
+     }
+
+Prompt templates are plain text files with placeholders like
+‘{main_topic}’.  The ‘arguments’ object must provide values whose keys
+match the placeholder names.  If validation fails, the tool returns an
+error with hints listing missing and unused keys and an example object
+to retry.
+
+Template resolution is intentionally scoped:
+
+   • relative ‘template’ paths are resolved under ‘template_base’ when
+     supplied
+   • otherwise relative paths are searched under
+     ‘ellama-tools-task-template-dirs’
+   • path traversal outside the selected base directory is rejected
+   • absolute template paths are rejected unless
+     ‘ellama-tools-task-template-allow-absolute-paths’ is non-nil
+
+This keeps large prompts out of the main agent context while still
+letting skills bundle reusable task prompts next to their ‘SKILL.md’
+files.
+
+
+File: ellama.info,  Node: DLP for Tool Input/Output,  Next: SRT Filesystem Policy for Tools,  Prev: Task Tool Subagents,  Up: Configuration
+
+4.3 DLP for Tool Input/Output
 =============================
 
 Ellama includes an optional DLP (Data Loss Prevention) layer for tool
@@ -959,7 +1025,7 @@ Troubleshooting:
 
 File: ellama.info,  Node: SRT Filesystem Policy for Tools,  Prev: DLP for Tool Input/Output,  Up: Configuration
 
-4.3 SRT Filesystem Policy for Tools
+4.4 SRT Filesystem Policy for Tools
 ===================================
 
 When ‘ellama-tools-use-srt’ is non-nil, the ‘srt’ settings file is the
@@ -2198,44 +2264,45 @@ their use in free software.
 
 Tag Table:
 Node: Top1379
-Node: Installation3853
-Node: Commands8867
-Node: Keymap16741
-Node: Configuration19575
-Node: Session Compaction29497
-Node: DLP for Tool Input/Output31135
-Node: SRT Filesystem Policy for Tools46036
-Node: Context Management51705
-Node: Transient Menus for Context Management52773
-Node: Managing the Context54387
-Node: Considerations55162
-Node: Minor modes55755
-Node: ellama-context-header-line-mode57743
-Node: ellama-context-header-line-global-mode58568
-Node: ellama-context-mode-line-mode59288
-Node: ellama-context-mode-line-global-mode60136
-Node: Ellama Session Header Line Mode60840
-Node: Enabling and Disabling61409
-Node: Customization61856
-Node: Ellama Session Mode Line Mode62144
-Node: Enabling and Disabling (1)62729
-Node: Customization (1)63176
-Node: Using Blueprints63470
-Node: Key Components of Ellama Blueprints64110
-Node: Creating and Managing Blueprints64717
-Node: Blueprints files65695
-Node: Variable Management66116
-Node: Keymap and Mode66569
-Node: Transient Menus67505
-Node: Running Blueprints programmatically68051
-Node: MCP Integration68638
-Node: Agent Skills69873
-Node: Directory Structure70236
-Node: Creating a Skill71263
-Node: How it works71638
-Node: Acknowledgments72029
-Node: Contributions72740
-Node: GNU Free Documentation License73126
+Node: Installation3877
+Node: Commands8891
+Node: Keymap16765
+Node: Configuration19599
+Node: Session Compaction30382
+Node: Task Tool Subagents32014
+Node: DLP for Tool Input/Output34124
+Node: SRT Filesystem Policy for Tools49026
+Node: Context Management54695
+Node: Transient Menus for Context Management55763
+Node: Managing the Context57377
+Node: Considerations58152
+Node: Minor modes58745
+Node: ellama-context-header-line-mode60733
+Node: ellama-context-header-line-global-mode61558
+Node: ellama-context-mode-line-mode62278
+Node: ellama-context-mode-line-global-mode63126
+Node: Ellama Session Header Line Mode63830
+Node: Enabling and Disabling64399
+Node: Customization64846
+Node: Ellama Session Mode Line Mode65134
+Node: Enabling and Disabling (1)65719
+Node: Customization (1)66166
+Node: Using Blueprints66460
+Node: Key Components of Ellama Blueprints67100
+Node: Creating and Managing Blueprints67707
+Node: Blueprints files68685
+Node: Variable Management69106
+Node: Keymap and Mode69559
+Node: Transient Menus70495
+Node: Running Blueprints programmatically71041
+Node: MCP Integration71628
+Node: Agent Skills72863
+Node: Directory Structure73226
+Node: Creating a Skill74253
+Node: How it works74628
+Node: Acknowledgments75019
+Node: Contributions75730
+Node: GNU Free Documentation License76116
 
 End Tag Table
 

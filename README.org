@@ -392,6 +392,9 @@ generated text string.
   by default.
 - ~ellama-reasoning-display-action-function~: Display action function for
   reasoning.
+- ~ellama-display-session-buffer-on-generation~: Display the session buffer
+  whenever generation starts. This also applies to sub-agent sessions started by
+  the ~task~ tool, so delegated work is visible while it runs.
 - ~ellama-session-line-template~: Template for formatting the current session
   line.
 - ~ellama-debug~: Enable debug. When enabled, generated text is now logged to a
@@ -419,6 +422,12 @@ generated text string.
   command (for example ~--settings /path/to/settings.json~).  The same arguments
   are also used to resolve the settings file path for local non-shell filesystem
   checks (default =~/.srt-settings.json= if no ~--settings~/~-s~ is provided).
+- ~ellama-tools-task-template-dirs~: Directories where the ~task~ tool searches
+  for prompt templates when no ~template_base~ is supplied. Relative template
+  names are resolved below these directories.
+- ~ellama-tools-task-template-allow-absolute-paths~: Allow absolute file names
+  in the ~task~ tool ~template~ argument. Disabled by default. Relative template
+  names are still supported.
 - ~ellama-blueprint-global-dir~: Global directory for storing blueprint files.
 - ~ellama-blueprint-local-dir~: Local directory name for project-specific
   blueprints.
@@ -432,6 +441,8 @@ generated text string.
   Default value is ~"skills"~.
 - ~ellama-tools-subagent-default-max-steps~: Default maximum number of
   auto-continue steps for a sub-agent. Default value is 30.
+- ~ellama-tools-subagent-continue-prompt~: Prompt sent to a sub-agent when it
+  finishes a turn without calling ~report_result~.
 - ~ellama-tools-subagent-roles~: Subagent roles with provider, system prompt and
   allowed tools. Configuration of subagents for the ~task~ tool.
 
@@ -468,6 +479,51 @@ Example configuration:
   (setopt ellama-session-auto-compact-keep-last-turns 4)
   (setopt ellama-session-auto-compact-provider ellama-summarization-provider)
 #+END_SRC
+
+** Task Tool Subagents
+
+The ~task~ tool delegates work to an asynchronous sub-agent. The parent model
+gets control back immediately, and the sub-agent reports the final result by
+calling the injected ~report_result~ tool. If the sub-agent finishes a turn
+without reporting a result, Ellama sends ~ellama-tools-subagent-continue-prompt~
+until the task is complete or ~ellama-tools-subagent-default-max-steps~ is
+reached.
+
+Each sub-agent runs in its own Ellama session. When
+~ellama-display-session-buffer-on-generation~ is non-nil, Ellama displays both
+the main session and sub-agent session buffers as generation starts. Sub-agent
+buffers include the delegated prompt under the ~Main agent:~ label, followed by
+the sub-agent response.
+
+The tool accepts either a free-form ~description~ or a prompt template:
+
+#+begin_src json
+{
+  "template": "templates/researcher.md",
+  "template_base": "/path/to/skill",
+  "arguments": {
+    "main_topic": "Example topic",
+    "subtopic_name": "Example subtopic"
+  },
+  "role": "explorer"
+}
+#+end_src
+
+Prompt templates are plain text files with placeholders like ~{main_topic}~. The
+~arguments~ object must provide values whose keys match the placeholder
+names. If validation fails, the tool returns an error with hints listing missing
+and unused keys and an example object to retry.
+
+Template resolution is intentionally scoped:
+
+- relative ~template~ paths are resolved under ~template_base~ when supplied
+- otherwise relative paths are searched under ~ellama-tools-task-template-dirs~
+- path traversal outside the selected base directory is rejected
+- absolute template paths are rejected unless
+  ~ellama-tools-task-template-allow-absolute-paths~ is non-nil
+
+This keeps large prompts out of the main agent context while still letting
+skills bundle reusable task prompts next to their ~SKILL.md~ files.
 
 ** DLP for Tool Input/Output
 
