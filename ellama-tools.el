@@ -37,6 +37,7 @@
 (declare-function llm-standard-provider-p "llm-provider-utils" (provider))
 (declare-function ellama-new-session "ellama"
                   (provider prompt &optional ephemeral))
+(declare-function ellama-session-p "ellama" (session))
 (declare-function ellama-session-extra "ellama" (session))
 (declare-function ellama-session-id "ellama" (session))
 (declare-function ellama-get-session-buffer "ellama" (id))
@@ -2317,16 +2318,40 @@ CALLBACK will be used to report result asyncronously."
     :description "Report final result and terminate the task."
     :args ((:name "result" :type string))))
 
-(defun ellama--subagent-loop-handler (_text)
-  "Internal subagent loop handler."
-  (let* ((session ellama--current-session)
-         (extra (ellama-session-extra session))
+(defun ellama-tools--subagent-system-message (system-msg)
+  "Return subagent system message from SYSTEM-MSG."
+  (format
+   "%s\n\nINSTRUCTIONS:\n\
+Work step-by-step. Use tools when needed.\n\
+When the task is COMPLETE you MUST call `report_result` exactly once."
+   (or system-msg "")))
+
+(defun ellama-tools--subagent-buffer (session &optional buffer)
+  "Return live subagent BUFFER for SESSION."
+  (or (and (buffer-live-p buffer) buffer)
+      (when-let* (((ellama-session-p session))
+                  (extra (ellama-session-extra session))
+                  (uid (plist-get extra :uid)))
+        (ellama-get-session-buffer uid))
+      (when (ellama-session-p session)
+        (ellama-get-session-buffer (ellama-session-id session)))))
+
+(defun ellama--subagent-loop-handler (_text &optional session buffer system)
+  "Continue subagent SESSION loop in BUFFER with SYSTEM message."
+  (let* ((session (or session ellama--current-session))
+         (extra (and (ellama-session-p session)
+                     (ellama-session-extra session)))
          (done (plist-get extra :task-completed))
          (steps (or (plist-get extra :step-count) 0))
          (max (or (plist-get extra :max-steps)
                   ellama-tools-subagent-default-max-steps))
-         (callback (plist-get extra :result-callback)))
+         (callback (plist-get extra :result-callback))
+         (tools (plist-get extra :tools))
+         (system (or system (plist-get extra :system)))
+         (buffer (ellama-tools--subagent-buffer session buffer)))
     (cond
+     ((not (ellama-session-p session))
+      (message "Subagent session is not available."))
      (done
       (message "Subagent finished."))
      ((>= steps max)
@@ -2340,8 +2365,20 @@ CALLBACK will be used to report result asyncronously."
        (plist-put extra :step-count (1+ steps)))
       (ellama-stream
        ellama-tools-subagent-continue-prompt
+       :buffer buffer
        :session session
-       :on-done #'ellama--subagent-loop-handler)))))
+       :tools tools
+       :system system
+       :on-done
+       (ellama-tools--make-subagent-loop-handler
+        session buffer system))))))
+
+(defun ellama-tools--make-subagent-loop-handler
+    (session &optional buffer system)
+  "Return subagent loop handler for SESSION.
+BUFFER is the session buffer.  SYSTEM is the initial system prompt."
+  (lambda (text)
+    (ellama--subagent-loop-handler text session buffer system)))
 
 (defun ellama-tools-task-tool
     (callback &optional description role template template-base arguments)
@@ -2364,6 +2401,8 @@ ARGUMENTS  – object with template substitution values."
                (provider (ellama-tools--provider-for-role role-key))
                (role-cfg   (cdr (assoc role-key ellama-tools-subagent-roles)))
                (system-msg (plist-get role-cfg :system))
+               (subagent-system
+                (ellama-tools--subagent-system-message system-msg))
 
                (steps-limit ellama-tools-subagent-default-max-steps)
 
@@ -2400,7 +2439,8 @@ ARGUMENTS  – object with template substitution values."
             :result-callback callback
             :task-completed nil
             :step-count 0
-            :max-steps steps-limit))
+            :max-steps steps-limit
+            :system subagent-system))
 
           ;; ============================================================
           ;; Start the agent loop
@@ -2411,14 +2451,10 @@ ARGUMENTS  – object with template substitution values."
            :buffer worker-buffer
            :point worker-point
            :session worker
-           :on-done #'ellama--subagent-loop-handler
+           :on-done (ellama-tools--make-subagent-loop-handler
+                     worker worker-buffer subagent-system)
            :tools all-tools
-           :system
-           (format
-            "%s\n\nINSTRUCTIONS:\n\
-Work step-by-step. Use tools when needed.\n\
-When the task is COMPLETE you MUST call `report_result` exactly once."
-            system-msg))
+           :system subagent-system)
 
           ;; ============================================================
           ;; Immediate response to parent LLM (async contract)
