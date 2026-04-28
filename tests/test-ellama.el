@@ -911,6 +911,36 @@ detailed comparison to help you decide:
       (when (buffer-live-p session-buffer)
         (kill-buffer session-buffer)))))
 
+(ert-deftest test-ellama-stream-displays-session-buffer-on-generation ()
+  (let* ((provider (make-llm-fake
+                    :chat-action-func (lambda () "Chat answer")))
+         (ellama-provider provider)
+         (ellama-response-process-method 'streaming)
+         (ellama-spinner-enabled nil)
+         (ellama-fill-paragraphs nil)
+         (ellama-display-session-buffer-on-generation t)
+         (ellama--active-sessions (make-hash-table :test #'equal))
+         (ellama--active-session-states (make-hash-table :test #'equal))
+         (session (make-ellama-session :id "display-test"
+                                       :provider provider
+                                       :prompt nil))
+         (session-buffer (generate-new-buffer " *ellama-display-test*"))
+         displayed-buffer)
+    (unwind-protect
+        (progn
+          (ellama--register-session session session-buffer t)
+          (cl-letf (((symbol-function 'sleep-for)
+                     (lambda (&rest _args) nil))
+                    ((symbol-function 'display-buffer)
+                     (lambda (buffer &optional _action)
+                       (setq displayed-buffer buffer)
+                       buffer)))
+            (with-current-buffer session-buffer
+              (ellama-stream "next prompt")))
+          (should (eq displayed-buffer session-buffer)))
+      (when (buffer-live-p session-buffer)
+        (kill-buffer session-buffer)))))
+
 (defun ellama-test--compact-session (provider)
   "Return test session with PROVIDER and compactable history."
   (let ((prompt (llm-make-chat-prompt "user 1" :context "System context")))

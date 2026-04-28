@@ -39,6 +39,7 @@
                   (provider prompt &optional ephemeral))
 (declare-function ellama-session-extra "ellama" (session))
 (declare-function ellama-session-id "ellama" (session))
+(declare-function ellama-get-session-buffer "ellama" (id))
 (declare-function ellama-stream "ellama" (prompt &rest args))
 
 (defvar ellama-provider)
@@ -2341,6 +2342,8 @@ ARGUMENTS  – object with template substitution values."
 
                ;; ---- create ephemeral worker session ----
                (worker (ellama-new-session provider description t))
+               (worker-buffer (ellama-get-session-buffer
+                               (ellama-session-id worker)))
 
                ;; ---- resolve tools for role ----
                (role-tools (ellama-tools--for-role role-key))
@@ -2375,6 +2378,7 @@ ARGUMENTS  – object with template substitution values."
 
           (ellama-stream
            description
+           :buffer worker-buffer
            :session worker
            :on-done #'ellama--subagent-loop-handler
            :tools all-tools

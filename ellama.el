@@ -522,6 +522,12 @@ It should be a function with single argument generated text string."
   "Display action function for reasoning."
   :type 'function)
 
+(defcustom ellama-display-session-buffer-on-generation nil
+  "Display session buffer when generation starts.
+This applies to any `ellama-stream' call associated with a session, including
+sub-agent sessions started by tools."
+  :type 'boolean)
+
 (defcustom ellama-show-reasoning t
   "Show reasoning in separate buffer if enabled."
   :type 'boolean)
@@ -1469,6 +1475,18 @@ If ACTIVATE is non-nil, set global active session selection."
   (or (gethash id ellama--active-sessions)
       (when-let ((session (ellama--active-session-by-id id)))
         (gethash (ellama--session-uid session) ellama--active-sessions))))
+
+(defun ellama--display-session-buffer-on-generation (session buffer)
+  "Display SESSION buffer for generation started in BUFFER when enabled."
+  (when (and ellama-display-session-buffer-on-generation
+             (ellama-session-p session))
+    (when-let ((session-buffer (or (ellama-get-session-buffer
+                                    (ellama--session-uid session))
+                                   (get-buffer buffer))))
+      (display-buffer
+       session-buffer
+       (when ellama-chat-display-action-function
+         `((ignore . (,ellama-chat-display-action-function))))))))
 
 (defconst ellama--forbidden-file-name-characters (rx (any "/\\?%*:|\"<>.;=")))
 
@@ -2435,6 +2453,7 @@ failure (with BUFFER current).
       (error "Specify both :replace-beg and :replace-end"))
     (with-current-buffer reasoning-buffer
       (org-mode))
+    (ellama--display-session-buffer-on-generation session buffer)
     (with-current-buffer buffer
       (let ((request-generation 0)
             (request-started nil)
