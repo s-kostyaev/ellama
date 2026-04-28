@@ -1281,6 +1281,25 @@ detailed comparison to help you decide:
     (should (multibyte-string-p normalized))
     (should (json-serialize normalized))))
 
+(ert-deftest test-ellama-sanitize-provider-chat-request-decodes-arguments ()
+  (let* ((arguments (json-serialize
+                     '((content . "├── research_plan.md")
+                       (file_name . "x"))))
+         (request `(:messages [(:tool_calls
+                                [(:function (:arguments ,arguments))])]))
+         (sanitized (ellama--sanitize-provider-chat-request request))
+         (sanitized-arguments
+          (plist-get
+           (plist-get
+            (aref (plist-get (aref (plist-get sanitized :messages) 0)
+                             :tool_calls)
+                  0)
+            :function)
+           :arguments)))
+    (should-not (multibyte-string-p arguments))
+    (should (multibyte-string-p sanitized-arguments))
+    (should (json-serialize sanitized))))
+
 (ert-deftest test-ellama-stream-retry-tracks-latest-request-for-cancel ()
   (let* ((call-count 0)
          (cancelled-request nil)
