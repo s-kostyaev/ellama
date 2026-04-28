@@ -40,10 +40,13 @@
 (declare-function ellama-session-extra "ellama" (session))
 (declare-function ellama-session-id "ellama" (session))
 (declare-function ellama-get-session-buffer "ellama" (id))
+(declare-function ellama-get-nick-prefix-for-mode "ellama" ())
+(declare-function ellama--fill-long-lines "ellama" (string))
 (declare-function ellama-stream "ellama" (prompt &rest args))
 
 (defvar ellama-provider)
 (defvar ellama-coding-provider)
+(defvar ellama-assistant-nick)
 (defvar ellama--current-session)
 (defvar ellama--current-session-id)
 
@@ -57,6 +60,16 @@
   "Set SESSION EXTRA."
   (with-no-warnings
     (setf (ellama-session-extra session) extra)))
+
+(defun ellama-tools--session-extra-with (session &rest pairs)
+  "Return SESSION extra plist with PAIRS applied.
+PAIRS is a flat plist of keys and values."
+  (let ((extra (if (plistp (ellama-session-extra session))
+                   (copy-sequence (ellama-session-extra session))
+                 nil)))
+    (while pairs
+      (setq extra (plist-put extra (pop pairs) (pop pairs))))
+    extra))
 
 (defcustom ellama-tools-allow-all nil
   "Allow `ellama' using all the tools without user confirmation.
@@ -2273,6 +2286,20 @@ TEMPLATE-BASE, ROLE and ARGUMENTS are used for template rendering and hints."
         (error "%s" (ellama-tools--task-template-error
                      "Either description or template is required")))))
 
+(defun ellama-tools--insert-subagent-prompt (buffer description)
+  "Insert sub-agent DESCRIPTION into BUFFER as a main-agent turn.
+Return insertion point for sub-agent response."
+  (with-current-buffer buffer
+    (save-excursion
+      (goto-char (point-max))
+      (let ((prefix (ellama-get-nick-prefix-for-mode)))
+        (unless (bobp)
+          (insert "\n"))
+        (insert prefix " Main agent:\n"
+                (ellama--fill-long-lines description) "\n\n"
+                prefix " " ellama-assistant-nick ":\n")
+        (point)))))
+
 (defun ellama-tools--make-report-result-tool (callback session)
   "Make report_result tool dynamically for SESSION.
 CALLBACK will be used to report result asyncronously."
@@ -2344,6 +2371,8 @@ ARGUMENTS  – object with template substitution values."
                (worker (ellama-new-session provider description t))
                (worker-buffer (ellama-get-session-buffer
                                (ellama-session-id worker)))
+               (worker-point (ellama-tools--insert-subagent-prompt
+                              worker-buffer description))
 
                ;; ---- resolve tools for role ----
                (role-tools (ellama-tools--for-role role-key))
@@ -2363,7 +2392,8 @@ ARGUMENTS  – object with template substitution values."
 
           (ellama-tools--set-session-extra
            worker
-           (list
+           (ellama-tools--session-extra-with
+            worker
             :parent-session parent-id
             :role role-key
             :tools all-tools
@@ -2379,6 +2409,7 @@ ARGUMENTS  – object with template substitution values."
           (ellama-stream
            description
            :buffer worker-buffer
+           :point worker-point
            :session worker
            :on-done #'ellama--subagent-loop-handler
            :tools all-tools
