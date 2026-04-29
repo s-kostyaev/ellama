@@ -40,9 +40,16 @@
 (declare-function ellama-session-p "ellama" (session))
 (declare-function ellama-session-extra "ellama" (session))
 (declare-function ellama-session-id "ellama" (session))
+(declare-function ellama-session-provider "ellama" (session))
 (declare-function ellama-get-session-buffer "ellama" (id))
 (declare-function ellama-get-nick-prefix-for-mode "ellama" ())
 (declare-function ellama--fill-long-lines "ellama" (string))
+(declare-function ellama-image-file-p "ellama" (file-name))
+(declare-function ellama--image-mime-type "ellama" (file-name))
+(declare-function ellama--file-size "ellama" (file-name))
+(declare-function ellama--provider-supports-image-input-p "ellama" (provider))
+(declare-function ellama--session-add-pending-tool-media
+                  "ellama" (session file-name))
 (declare-function ellama-stream "ellama" (prompt &rest args))
 
 (defvar ellama-provider)
@@ -56,6 +63,9 @@
 
 (defvar ellama-tools-enabled nil
   "List of tools that have been enabled.")
+
+(defvar ellama-tools--current-session nil
+  "Current Ellama session used while executing tools.")
 
 (defun ellama-tools--set-session-extra (session extra)
   "Set SESSION EXTRA."
@@ -87,6 +97,16 @@ Tools from this list will work without user confirmation."
 (defcustom ellama-tools-argument-max-length 50
   "Max length of function argument in the confirmation prompt."
   :type 'integer
+  :group 'ellama)
+
+(defcustom ellama-tools-read-file-default-mode 'auto
+  "Default mode for the `read_file' tool.
+Use `auto' to read text files as text and supported image files as media.
+Use `text' to force text reading.
+Use `image' to force image handling."
+  :type '(choice (const auto)
+                 (const text)
+                 (const image))
   :group 'ellama)
 
 (defcustom ellama-tools-use-srt nil
@@ -1617,17 +1637,79 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
       (apply #'call-process (car argv) nil t nil (cdr argv))
       (buffer-string))))
 
-(defun ellama-tools-read-file-tool (file-name)
-  "Read the file FILE-NAME."
+(defun ellama-tools--read-file-mode (mode)
+  "Return normalized read file MODE."
+  (let ((mode (or mode ellama-tools-read-file-default-mode)))
+    (cond
+     ((symbolp mode) mode)
+     ((stringp mode) (intern (downcase mode)))
+     (t 'auto))))
+
+(defun ellama-tools--binary-file-p (file-name)
+  "Return non-nil when FILE-NAME appears to be binary."
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (insert-file-contents-literally file-name nil 0 4096)
+    (goto-char (point-min))
+    (search-forward (string 0) nil t)))
+
+(defun ellama-tools--read-file-as-text (file-name)
+  "Read FILE-NAME as text for tool output."
+  (if (ellama-tools--binary-file-p file-name)
+      (format "File %s appears to be binary; text reading was not performed."
+              file-name)
+    (let ((content (with-temp-buffer
+                     (insert-file-contents file-name)
+                     (buffer-string))))
+      (ellama-tools--sanitize-tool-text-output
+       content
+       (format "File %s" file-name)))))
+
+(defun ellama-tools--read-image-file-tool (file-name)
+  "Queue image FILE-NAME for model input and return textual tool output."
+  (cond
+   ((string= (downcase (or (file-name-extension file-name) "")) "svg")
+    (format "SVG image input is not supported yet: %s" file-name))
+   ((not (ellama-image-file-p file-name))
+    (format "File %s is not a supported image file." file-name))
+   ((not (ellama-session-p
+          (or ellama--current-session ellama-tools--current-session)))
+    "Cannot attach image file: no active Ellama session.")
+   ((not (ellama--provider-supports-image-input-p
+          (ellama-session-provider
+           (or ellama--current-session ellama-tools--current-session))))
+    (format "Provider %s does not support image input."
+            (llm-name
+             (ellama-session-provider
+              (or ellama--current-session ellama-tools--current-session)))))
+   (t
+    (ellama--session-add-pending-tool-media
+     (or ellama--current-session ellama-tools--current-session)
+     file-name)
+    (format "Image file queued for model input: %s (%s, %d bytes)."
+            (expand-file-name file-name)
+            (ellama--image-mime-type file-name)
+            (ellama--file-size file-name)))))
+
+(defun ellama-tools-read-file-tool (file-name &optional mode)
+  "Read the file FILE-NAME.
+MODE can be `auto', `text' or `image'."
   (or (ellama-tools--tool-check-file-access file-name 'read)
-      (json-encode (if (not (file-exists-p file-name))
-                       (format "File %s doesn't exists." file-name)
-                     (let ((content (with-temp-buffer
-                                      (insert-file-contents file-name)
-                                      (buffer-string))))
-                       (ellama-tools--sanitize-tool-text-output
-                        content
-                        (format "File %s" file-name)))))))
+      (json-encode
+       (if (not (file-exists-p file-name))
+           (format "File %s doesn't exists." file-name)
+         (pcase (ellama-tools--read-file-mode mode)
+           ('auto
+            (if (ellama-image-file-p file-name)
+                (ellama-tools--read-image-file-tool file-name)
+              (ellama-tools--read-file-as-text file-name)))
+           ('text
+            (ellama-tools--read-file-as-text file-name))
+           ('image
+            (ellama-tools--read-image-file-tool file-name))
+           (_
+            (format "Unsupported read_file mode %S. Use auto, text or image."
+                    mode)))))))
 
 (ellama-tools-define-tool
  '(:function
@@ -1640,7 +1722,17 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
      :type
      string
      :description
-     "File name."))
+     "File name.")
+    (:name
+     "mode"
+     :type
+     string
+     :optional
+     t
+     :enum
+     ["auto" "text" "image"]
+     :description
+     "Read mode: auto, text, or image."))
    :description
    "Read the file FILE_NAME."))
 

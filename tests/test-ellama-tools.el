@@ -198,6 +198,47 @@ Return list with result and prompt."
           (buffer-string))
       "")))
 
+(defun ellama-test--with-temp-image-file (body)
+  "Call BODY with a tiny temporary PNG file."
+  (let ((file-name (make-temp-file "ellama-image-" nil ".png")))
+    (unwind-protect
+        (progn
+          (with-temp-buffer
+            (set-buffer-multibyte nil)
+            (insert "\211PNG\r\n\032\n")
+            (write-region nil nil file-name nil 'silent))
+          (funcall body file-name))
+      (when (file-exists-p file-name)
+        (delete-file file-name)))))
+
+(ert-deftest test-ellama-read-file-tool-text-mode ()
+  (let ((file-name (make-temp-file "ellama-read-file-" nil ".txt")))
+    (unwind-protect
+        (progn
+          (with-temp-file file-name
+            (insert "hello"))
+          (should (equal (json-read-from-string
+                          (ellama-tools-read-file-tool file-name "text"))
+                         "hello")))
+      (when (file-exists-p file-name)
+        (delete-file file-name)))))
+
+(ert-deftest test-ellama-read-file-tool-image-mode-queues-media ()
+  (ellama-test--with-temp-image-file
+   (lambda (file-name)
+     (let* ((provider (make-llm-fake))
+            (session (make-ellama-session :id "tool-image"
+                                          :provider provider))
+            (ellama-tools--current-session session)
+            (ellama--current-session nil))
+       (cl-letf (((symbol-function 'llm-capabilities)
+                  (lambda (_provider) '(image-input))))
+         (let ((result (json-read-from-string
+                        (ellama-tools-read-file-tool file-name "image"))))
+           (should (string-match-p "Image file queued" result))
+           (should (ellama--session-extra-get
+                    session :pending-tool-media))))))))
+
 (ert-deftest test-ellama-shell-command-tool-empty-success-output ()
   (should
    (string=

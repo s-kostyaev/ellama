@@ -31,6 +31,8 @@
 ;;; Code:
 (require 'ellama)
 
+(declare-function ellama-image-file-p "ellama" (file-name))
+
 (defcustom ellama-context-line-always-visible nil
   "Make context header or mode line always visible, even with empty context."
   :group 'ellama
@@ -50,6 +52,14 @@
   "Border width for the context buffer."
   :group 'ellama
   :type 'integer)
+
+(defcustom ellama-image-context-default-scope 'ephemeral
+  "Default scope for image context added interactively.
+Use `ephemeral' to attach images to the next request only.
+Use `persistent' to keep image context until it is removed or reset."
+  :group 'ellama
+  :type '(choice (const ephemeral)
+                 (const persistent)))
 
 (defface ellama-context-line-face '((t (:inherit (mode-line-buffer-id ellama-face))))
   "Face for ellama context line."
@@ -332,6 +342,9 @@ the context."
 (cl-defgeneric ellama-context-element-format (element mode)
   "Format the context ELEMENT for the major MODE.")
 
+(cl-defgeneric ellama-context-element-media (element)
+  "Return media file names from context ELEMENT.")
+
 (cl-defgeneric ellama-context-element-quote-p (element)
   "Return t is ELEMENT is a quote, nil otherwise.")
 
@@ -355,6 +368,10 @@ the context."
 
 (cl-defmethod ellama-context-element-quote-p ((_element ellama-context-element))
   "Return t is ELEMENT is a quote, nil otherwise."
+  nil)
+
+(cl-defmethod ellama-context-element-media ((_element ellama-context-element))
+  "Return nil when ELEMENT has no media."
   nil)
 
 ;; Buffer context element
@@ -476,6 +493,44 @@ the context."
   (ignore mode)
   (with-slots (name) element
     (format "[[file:%s][%s]]" name name)))
+
+;; Image file context element
+
+(defclass ellama-context-element-image-file (ellama-context-element)
+  ((name :initarg :name :type string))
+  "A structure for holding image file context.")
+
+(cl-defmethod ellama-context-element-extract
+  ((element ellama-context-element-image-file))
+  "Extract a text placeholder for image context ELEMENT."
+  (with-slots (name) element
+    (format "Image attached: %s" name)))
+
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-image-file))
+  "Display the image context ELEMENT."
+  (with-slots (name) element
+    (file-name-nondirectory name)))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-image-file) (mode (eql 'markdown-mode)))
+  "Format the image context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name) element
+    (format "[%s](<%s>)" (file-name-nondirectory name) name)))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-image-file) (mode (eql 'org-mode)))
+  "Format the image context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name) element
+    (format "[[file:%s][%s]]" name (file-name-nondirectory name))))
+
+(cl-defmethod ellama-context-element-media
+  ((element ellama-context-element-image-file))
+  "Return image file media from context ELEMENT."
+  (with-slots (name) element
+    (list name)))
 
 ;; Info node context element
 
@@ -758,6 +813,26 @@ For one request only if EPHEMERAL."
       (ellama-context-element-add element))))
 
 ;;;###autoload
+(defun ellama-context-add-image (&optional scope)
+  "Add image file to context.
+SCOPE controls lifetime and defaults to
+`ellama-image-context-default-scope'.  Use `ephemeral' for one request only,
+or `persistent' to keep the image context."
+  (interactive)
+  (let* ((scope (or scope ellama-image-context-default-scope))
+         (file-name (read-file-name "Select image: " nil nil t))
+         (element (ellama-context-element-image-file :name file-name)))
+    (unless (ellama-image-file-p file-name)
+      (if (string= (downcase (or (file-name-extension file-name) "")) "svg")
+          (user-error "SVG image input is not supported yet")
+        (user-error "Unsupported image file: %s" file-name)))
+    (pcase scope
+      ('persistent
+       (ellama-context-element-add element))
+      (_
+       (ellama-context-ephemeral-element-add element)))))
+
+;;;###autoload
 (defun ellama-context-add-file-quote (&optional ephemeral)
   "Add file quote to context interactively.
 For one request only if EPHEMERAL."
@@ -909,6 +984,14 @@ For one request only if EPHEMERAL."
                  "\n")
                 "\n\n")
       "")))
+
+(defun ellama-context-media ()
+  "Return media file names from current context."
+  (delete-dups
+   (apply #'append
+          (mapcar #'ellama-context-element-media
+                  (append ellama-context-global
+                          ellama-context-ephemeral)))))
 
 ;;;###autoload
 (defun ellama-context-prompt-with-context (prompt)
