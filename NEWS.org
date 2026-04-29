@@ -1,3 +1,23 @@
+* Version 1.15.0
+- Add task prompt templates for subagents.  The task tool can now render
+  relative template paths with object-based argument substitution, strict path
+  checks, validation hints, and callback-based error reporting.
+- Improve task subagent sessions.  Ellama can display session buffers when
+  session-backed generation starts, insert delegated task prompts into worker
+  session buffers, preserve worker session metadata, and keep subagent
+  continuations bound to the correct worker session after tool calls.
+- Document task subagent templates, template path resolution, argument
+  validation hints, continuation behavior, and session buffer display.  The Info
+  manual has been regenerated from ~README.org~.
+- Improve OpenAI-compatible tool-call history handling by normalizing stored
+  tool-use arguments and decoding unibyte strings before provider request
+  serialization.  This keeps retried tool-call history JSON serializable across
+  older or mixed ~llm~ versions.
+- Fix OpenAI-compatible streaming tool-call collection for multi-call batches.
+  Streaming tool calls are collected using the maximum emitted tool-call index,
+  avoiding out-of-range errors when a single chunk contains multiple tool calls.
+- Fix CI compatibility issues around the task template directory default and
+  provider request sanitization tests.
 * Version 1.14.2
 - Add project-local skill pointers for changelog and commit-message workflows.
   This makes repository-specific Codex skills discoverable from ~.codex/skills~.
