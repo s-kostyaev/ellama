@@ -1302,6 +1302,34 @@ detailed comparison to help you decide:
     (should (multibyte-string-p sanitized-arguments))
     (should (json-serialize sanitized))))
 
+(ert-deftest test-ellama-collect-openai-streaming-tool-uses-uses-max-index ()
+  (let* ((data
+          [((index . 0)
+            (id . "call-1")
+            (function
+             (name . "shell_command")
+             (arguments . "{\"cmd\":\"one\"}")))
+           ((index . 1)
+            (id . "call-2")
+            (function
+             (name . "shell_command")
+             (arguments . "{\"cmd\":\"two\"}")))])
+         (tool-uses
+          (llm-provider-utils-openai-collect-streaming-tool-uses data)))
+    (should (= (length tool-uses) 2))
+    (should (equal (llm-provider-utils-tool-use-id (nth 0 tool-uses))
+                   "call-1"))
+    (should (equal (llm-provider-utils-tool-use-id (nth 1 tool-uses))
+                   "call-2"))
+    (should (equal (cdr (assq
+                         'cmd
+                         (llm-provider-utils-tool-use-args (nth 0 tool-uses))))
+                   "one"))
+    (should (equal (cdr (assq
+                         'cmd
+                         (llm-provider-utils-tool-use-args (nth 1 tool-uses))))
+                   "two"))))
+
 (ert-deftest test-ellama-stream-retry-tracks-latest-request-for-cancel ()
   (let* ((call-count 0)
          (cancelled-request nil)

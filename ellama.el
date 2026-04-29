@@ -2262,6 +2262,47 @@ REASONING-BUFFER is a buffer for reasoning."
 (advice-add 'llm-provider-chat-request
             :filter-return #'ellama--sanitize-provider-chat-request)
 
+(defun ellama--collect-openai-streaming-tool-uses (data)
+  "Return parsed OpenAI streaming tool-call chunks from DATA."
+  (let* ((calls (append data nil))
+         (max-index
+          (cl-loop for call in calls
+                   for index = (assoc-default 'index call)
+                   when index maximize index)))
+    (when max-index
+      (let ((cvec (make-vector (1+ max-index) nil)))
+        (dotimes (i (length cvec))
+          (setf (aref cvec i) (make-llm-provider-utils-tool-use)))
+        (dolist (call calls)
+          (let* ((index (assoc-default 'index call))
+                 (id (assoc-default 'id call))
+                 (function (assoc-default 'function call))
+                 (name (assoc-default 'name function))
+                 (arguments (assoc-default 'arguments function)))
+            (when index
+              (when id
+                (setf (llm-provider-utils-tool-use-id (aref cvec index)) id))
+              (when name
+                (setf (llm-provider-utils-tool-use-name (aref cvec index))
+                      name))
+              (setf (llm-provider-utils-tool-use-args (aref cvec index))
+                    (concat
+                     (llm-provider-utils-tool-use-args (aref cvec index))
+                     (or arguments ""))))))
+        (cl-loop for call across cvec
+                 do (setf (llm-provider-utils-tool-use-args call)
+                          (json-parse-string
+                           (let ((args
+                                  (llm-provider-utils-tool-use-args call)))
+                             (if (and args (> (length args) 0)) args "{}"))
+                           :object-type 'alist))
+                 finally return (append cvec nil))))))
+
+(advice-remove 'llm-provider-utils-openai-collect-streaming-tool-uses
+               #'ellama--collect-openai-streaming-tool-uses)
+(advice-add 'llm-provider-utils-openai-collect-streaming-tool-uses
+            :override #'ellama--collect-openai-streaming-tool-uses)
+
 (defun ellama--normalize-tool-use-args (args)
   "Normalize tool ARGS for provider request serialization."
   (if (stringp args)
