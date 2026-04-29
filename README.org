@@ -129,6 +129,12 @@ More sophisticated configuration example:
 - ~ellama-chat~: Ask Ellama about something by entering a prompt in an
   interactive buffer and continue conversation. If called with universal
   argument (~C-u~) will start new session with llm model interactive selection.
+- ~ellama-chat-with-image~: Ask Ellama about one image file. If called with
+  universal argument (~C-u~) will start new session with llm model interactive
+  selection.
+- ~ellama-chat-with-images~: Ask Ellama about multiple image files. If called
+  with universal argument (~C-u~) will start new session with llm model
+  interactive selection.
 - ~ellama-write~: This command allows you to generate text using an LLM. When
   called interactively, it prompts for an instruction that is then used to
   generate text based on the context. If a region is active, the selected text
@@ -193,6 +199,7 @@ More sophisticated configuration example:
 - ~ellama-session-compact-current~: Compact current Ellama session context.
 - ~ellama-session-compact~: Select and compact an active Ellama session context.
 - ~ellama-context-add-file~: Add file to context.
+- ~ellama-context-add-image~: Add image file to context.
 - ~ellama-context-add-directory~: Add all files in directory to the context.
 - ~ellama-context-add-buffer~: Add buffer to context.
 - ~ellama-context-add-selection~: Add selected region to context.
@@ -352,6 +359,8 @@ generated text string.
   will be used if not set.
 - ~ellama-coding-provider~: LLM coding tasks provider.  ~ellama-provider~ will
   be used if not set.
+- ~ellama-image-file-extensions~: File extensions supported for image input.
+  SVG is intentionally unsupported.
 - ~ellama-summarization-provider~: LLM summarization provider.
   ~ellama-provider~ will be used if not set.
 - ~ellama-show-quotes~: Show quotes content in chat buffer. Disabled by default.
@@ -366,6 +375,9 @@ generated text string.
 - ~ellama-context-poshandler~: Position handler for displaying context buffer.
   ~posframe-poshandler-frame-top-center~ will be used if not set.
 - ~ellama-context-border-width~: Border width for the context buffer.
+- ~ellama-image-context-default-scope~: Default scope for image context added
+  interactively. Use ~ephemeral~ for one request only, or ~persistent~ to keep
+  image context until it is removed or reset.
 - ~ellama-session-remove-reasoning~: Remove internal reasoning from the session
   after ellama provide an answer. This can improve long-term communication with
   reasoning models. Enabled by default.
@@ -407,6 +419,9 @@ generated text string.
   will work without user confirmation.
 - ~ellama-tools-argument-max-length~: Max length of function argument in the
   confirmation prompt. Default value 50.
+- ~ellama-tools-read-file-default-mode~: Default mode for the ~read_file~
+  tool. Use ~auto~ to read text files as text and supported image files as
+  media, ~text~ to force text reading, or ~image~ to force image handling.
 - ~ellama-tools-use-srt~: Run shell-based tools (~shell_command~, ~grep~ and
   ~grep_in_file~) via the external ~srt~ sandbox runtime. Disabled by default.
   If enabled, non-shell file tools also perform local filesystem checks derived
@@ -479,6 +494,56 @@ Example configuration:
   (setopt ellama-session-auto-compact-keep-last-turns 4)
   (setopt ellama-session-auto-compact-provider ellama-summarization-provider)
 #+END_SRC
+
+** Image Input
+
+Ellama can send image files to providers that advertise the ~image-input~
+capability through the ~llm~ library. Image data is sent as multipart media and
+is supported for PNG, JPEG, WebP and GIF files by default.
+
+Use ~M-x ellama-chat-with-image~ to ask about one image, or ~M-x
+ellama-chat-with-images~ to attach more than one image. The main transient menu
+also includes "Chat with image". Programmatic calls can pass image files
+directly:
+
+#+BEGIN_SRC emacs-lisp
+  (ellama-chat "Describe this screenshot." nil
+               :images '("/path/to/screenshot.png"))
+
+  (ellama-stream "Extract visible text."
+                 :images '("/path/to/image.png"))
+#+END_SRC
+
+The singular ~:image~ argument is also accepted as a convenience alias.
+
+Use ~M-x ellama-context-add-image~ to add an image to context. Image context is
+ephemeral by default, so it is attached to the next request and then removed.
+Set ~ellama-image-context-default-scope~ to ~persistent~ to keep image context
+until it is removed or the context is reset. The context transient menu also
+provides "Add Image"; combine it with ~--ephemeral~ to force one-request image
+context.
+
+The built-in ~read_file~ tool supports image files through a configurable read
+mode:
+
+- ~auto~: read text files as text and queue supported image files as image input
+- ~text~: force text reading, even for files with image-like extensions
+- ~image~: force image handling and return a clear text error for unsupported
+  image types, missing sessions, or providers without ~image-input~
+
+Tool calls can request image handling explicitly:
+
+#+BEGIN_SRC json
+{
+  "file_name": "/path/to/image.png",
+  "mode": "image"
+}
+#+END_SRC
+
+Ellama does not store raw image bytes in saved session files. Multipart image
+parts are rendered as placeholders for session persistence and compaction, so
+reloading an old session will not resend previous image bytes. Attach the image
+again when continuing a saved conversation that still needs it.
 
 ** Task Tool Subagents
 
@@ -1047,6 +1112,7 @@ Context Commands:
     - “b” "Add Buffer" ~ellama-transient-add-buffer~
     - “d” "Add Directory" ~ellama-transient-add-directory~
     - “f” "Add File" ~ellama-transient-add-file~
+    - “I” "Add Image" ~ellama-transient-add-image~
     - “s” "Add Selection" ~ellama-transient-add-selection~
     - “i” "Add Info Node" ~ellama-transient-add-info-node~
 - Manage: Provides options for managing the global context.

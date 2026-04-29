@@ -76,6 +76,7 @@ Assistant".  Previous sentence was written by Ellama itself.
 Configuration
 
 * Session Compaction::
+* Image Input::
 * Task Tool Subagents::
 * DLP for Tool Input/Output::
 * SRT Filesystem Policy for Tools::
@@ -241,6 +242,12 @@ File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Top
      an interactive buffer and continue conversation.  If called with
      universal argument (‘C-u’) will start new session with llm model
      interactive selection.
+   • ‘ellama-chat-with-image’: Ask Ellama about one image file.  If
+     called with universal argument (‘C-u’) will start new session with
+     llm model interactive selection.
+   • ‘ellama-chat-with-images’: Ask Ellama about multiple image files.
+     If called with universal argument (‘C-u’) will start new session
+     with llm model interactive selection.
    • ‘ellama-write’: This command allows you to generate text using an
      LLM.  When called interactively, it prompts for an instruction that
      is then used to generate text based on the context.  If a region is
@@ -312,6 +319,7 @@ File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Top
    • ‘ellama-session-compact’: Select and compact an active Ellama
      session context.
    • ‘ellama-context-add-file’: Add file to context.
+   • ‘ellama-context-add-image’: Add image file to context.
    • ‘ellama-context-add-directory’: Add all files in directory to the
      context.
    • ‘ellama-context-add-buffer’: Add buffer to context.
@@ -491,6 +499,8 @@ argument generated text string.
      ‘ellama-provider’ will be used if not set.
    • ‘ellama-coding-provider’: LLM coding tasks provider.
      ‘ellama-provider’ will be used if not set.
+   • ‘ellama-image-file-extensions’: File extensions supported for image
+     input.  SVG is intentionally unsupported.
    • ‘ellama-summarization-provider’: LLM summarization provider.
      ‘ellama-provider’ will be used if not set.
    • ‘ellama-show-quotes’: Show quotes content in chat buffer.  Disabled
@@ -508,6 +518,9 @@ argument generated text string.
      context buffer.  ‘posframe-poshandler-frame-top-center’ will be
      used if not set.
    • ‘ellama-context-border-width’: Border width for the context buffer.
+   • ‘ellama-image-context-default-scope’: Default scope for image
+     context added interactively.  Use ‘ephemeral’ for one request only,
+     or ‘persistent’ to keep image context until it is removed or reset.
    • ‘ellama-session-remove-reasoning’: Remove internal reasoning from
      the session after ellama provide an answer.  This can improve
      long-term communication with reasoning models.  Enabled by default.
@@ -554,6 +567,10 @@ argument generated text string.
      this list will work without user confirmation.
    • ‘ellama-tools-argument-max-length’: Max length of function argument
      in the confirmation prompt.  Default value 50.
+   • ‘ellama-tools-read-file-default-mode’: Default mode for the
+     ‘read_file’ tool.  Use ‘auto’ to read text files as text and
+     supported image files as media, ‘text’ to force text reading, or
+     ‘image’ to force image handling.
    • ‘ellama-tools-use-srt’: Run shell-based tools (‘shell_command’,
      ‘grep’ and ‘grep_in_file’) via the external ‘srt’ sandbox runtime.
      Disabled by default.  If enabled, non-shell file tools also perform
@@ -603,12 +620,13 @@ argument generated text string.
 * Menu:
 
 * Session Compaction::
+* Image Input::
 * Task Tool Subagents::
 * DLP for Tool Input/Output::
 * SRT Filesystem Policy for Tools::
 
 
-File: ellama.info,  Node: Session Compaction,  Next: Task Tool Subagents,  Up: Configuration
+File: ellama.info,  Node: Session Compaction,  Next: Image Input,  Up: Configuration
 
 4.1 Session Compaction
 ======================
@@ -646,9 +664,64 @@ Example configuration:
      (setopt ellama-session-auto-compact-provider ellama-summarization-provider)
 
 
-File: ellama.info,  Node: Task Tool Subagents,  Next: DLP for Tool Input/Output,  Prev: Session Compaction,  Up: Configuration
+File: ellama.info,  Node: Image Input,  Next: Task Tool Subagents,  Prev: Session Compaction,  Up: Configuration
 
-4.2 Task Tool Subagents
+4.2 Image Input
+===============
+
+Ellama can send image files to providers that advertise the
+‘image-input’ capability through the ‘llm’ library.  Image data is sent
+as multipart media and is supported for PNG, JPEG, WebP and GIF files by
+default.
+
+Use ‘M-x ellama-chat-with-image’ to ask about one image, or ‘M-x
+ellama-chat-with-images’ to attach more than one image.  The main
+transient menu also includes "Chat with image".  Programmatic calls can
+pass image files directly:
+
+     (ellama-chat "Describe this screenshot." nil
+                  :images '("/path/to/screenshot.png"))
+
+     (ellama-stream "Extract visible text."
+                    :images '("/path/to/image.png"))
+
+The singular ‘:image’ argument is also accepted as a convenience alias.
+
+Use ‘M-x ellama-context-add-image’ to add an image to context.  Image
+context is ephemeral by default, so it is attached to the next request
+and then removed.  Set ‘ellama-image-context-default-scope’ to
+‘persistent’ to keep image context until it is removed or the context is
+reset.  The context transient menu also provides "Add Image"; combine it
+with ‘--ephemeral’ to force one-request image context.
+
+The built-in ‘read_file’ tool supports image files through a
+configurable read mode:
+
+   • ‘auto’: read text files as text and queue supported image files as
+     image input
+   • ‘text’: force text reading, even for files with image-like
+     extensions
+   • ‘image’: force image handling and return a clear text error for
+     unsupported image types, missing sessions, or providers without
+     ‘image-input’
+
+Tool calls can request image handling explicitly:
+
+     {
+       "file_name": "/path/to/image.png",
+       "mode": "image"
+     }
+
+Ellama does not store raw image bytes in saved session files.  Multipart
+image parts are rendered as placeholders for session persistence and
+compaction, so reloading an old session will not resend previous image
+bytes.  Attach the image again when continuing a saved conversation that
+still needs it.
+
+
+File: ellama.info,  Node: Task Tool Subagents,  Next: DLP for Tool Input/Output,  Prev: Image Input,  Up: Configuration
+
+4.3 Task Tool Subagents
 =======================
 
 The ‘task’ tool delegates work to an asynchronous sub-agent.  The parent
@@ -699,7 +772,7 @@ files.
 
 File: ellama.info,  Node: DLP for Tool Input/Output,  Next: SRT Filesystem Policy for Tools,  Prev: Task Tool Subagents,  Up: Configuration
 
-4.3 DLP for Tool Input/Output
+4.4 DLP for Tool Input/Output
 =============================
 
 Ellama includes an optional DLP (Data Loss Prevention) layer for tool
@@ -1025,7 +1098,7 @@ Troubleshooting:
 
 File: ellama.info,  Node: SRT Filesystem Policy for Tools,  Prev: DLP for Tool Input/Output,  Up: Configuration
 
-4.4 SRT Filesystem Policy for Tools
+4.5 SRT Filesystem Policy for Tools
 ===================================
 
 When ‘ellama-tools-use-srt’ is non-nil, the ‘srt’ settings file is the
@@ -1258,6 +1331,7 @@ Context Commands:
         • “b” "Add Buffer" ‘ellama-transient-add-buffer’
         • “d” "Add Directory" ‘ellama-transient-add-directory’
         • “f” "Add File" ‘ellama-transient-add-file’
+        • “I” "Add Image" ‘ellama-transient-add-image’
         • “s” "Add Selection" ‘ellama-transient-add-selection’
         • “i” "Add Info Node" ‘ellama-transient-add-info-node’
    • Manage: Provides options for managing the global context.
@@ -2264,45 +2338,46 @@ their use in free software.
 
 Tag Table:
 Node: Top1379
-Node: Installation3877
-Node: Commands8891
-Node: Keymap16765
-Node: Configuration19599
-Node: Session Compaction30382
-Node: Task Tool Subagents32014
-Node: DLP for Tool Input/Output34124
-Node: SRT Filesystem Policy for Tools49026
-Node: Context Management54695
-Node: Transient Menus for Context Management55763
-Node: Managing the Context57377
-Node: Considerations58152
-Node: Minor modes58745
-Node: ellama-context-header-line-mode60733
-Node: ellama-context-header-line-global-mode61558
-Node: ellama-context-mode-line-mode62278
-Node: ellama-context-mode-line-global-mode63126
-Node: Ellama Session Header Line Mode63830
-Node: Enabling and Disabling64399
-Node: Customization64846
-Node: Ellama Session Mode Line Mode65134
-Node: Enabling and Disabling (1)65719
-Node: Customization (1)66166
-Node: Using Blueprints66460
-Node: Key Components of Ellama Blueprints67100
-Node: Creating and Managing Blueprints67707
-Node: Blueprints files68685
-Node: Variable Management69106
-Node: Keymap and Mode69559
-Node: Transient Menus70495
-Node: Running Blueprints programmatically71041
-Node: MCP Integration71628
-Node: Agent Skills72863
-Node: Directory Structure73226
-Node: Creating a Skill74253
-Node: How it works74628
-Node: Acknowledgments75019
-Node: Contributions75730
-Node: GNU Free Documentation License76116
+Node: Installation3893
+Node: Commands8907
+Node: Keymap17229
+Node: Configuration20063
+Node: Session Compaction31476
+Node: Image Input33100
+Node: Task Tool Subagents35288
+Node: DLP for Tool Input/Output37391
+Node: SRT Filesystem Policy for Tools52293
+Node: Context Management57962
+Node: Transient Menus for Context Management59030
+Node: Managing the Context60709
+Node: Considerations61484
+Node: Minor modes62077
+Node: ellama-context-header-line-mode64065
+Node: ellama-context-header-line-global-mode64890
+Node: ellama-context-mode-line-mode65610
+Node: ellama-context-mode-line-global-mode66458
+Node: Ellama Session Header Line Mode67162
+Node: Enabling and Disabling67731
+Node: Customization68178
+Node: Ellama Session Mode Line Mode68466
+Node: Enabling and Disabling (1)69051
+Node: Customization (1)69498
+Node: Using Blueprints69792
+Node: Key Components of Ellama Blueprints70432
+Node: Creating and Managing Blueprints71039
+Node: Blueprints files72017
+Node: Variable Management72438
+Node: Keymap and Mode72891
+Node: Transient Menus73827
+Node: Running Blueprints programmatically74373
+Node: MCP Integration74960
+Node: Agent Skills76195
+Node: Directory Structure76558
+Node: Creating a Skill77585
+Node: How it works77960
+Node: Acknowledgments78351
+Node: Contributions79062
+Node: GNU Free Documentation License79448
 
 End Tag Table
 
