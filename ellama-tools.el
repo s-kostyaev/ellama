@@ -122,7 +122,7 @@ Plist with keys `:path', `:mtime' and `:policy'.")
   :group 'ellama)
 
 (defcustom ellama-tools-task-template-dirs
-  '("~/.emacs.d/ellama/task-templates")
+  (list (locate-user-emacs-file "ellama/task-templates"))
   "Directories used to resolve relative task template names.
 The `task' tool can render a template before spawning a sub-agent.  When
 `template_base' is omitted in the tool call, relative template names are

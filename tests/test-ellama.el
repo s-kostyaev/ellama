@@ -1282,9 +1282,11 @@ detailed comparison to help you decide:
     (should (json-serialize normalized))))
 
 (ert-deftest test-ellama-sanitize-provider-chat-request-decodes-arguments ()
-  (let* ((arguments (json-serialize
-                     '((content . "├── research_plan.md")
-                       (file_name . "x"))))
+  (let* ((arguments (encode-coding-string
+                     (json-serialize
+                      '((content . "├── research_plan.md")
+                        (file_name . "x")))
+                     'utf-8-unix))
          (request `(:messages [(:tool_calls
                                 [(:function (:arguments ,arguments))])]))
          (sanitized (ellama--sanitize-provider-chat-request request))
