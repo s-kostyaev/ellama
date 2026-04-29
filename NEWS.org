@@ -1,3 +1,15 @@
+* Version 1.16.0
+- Add image input support for prompts and context.  Ellama can now attach image
+  files to chat requests, queue image context ephemerally, and build multipart
+  prompts for providers that support image media.
+- Add image-aware tool handling.  The ~read_file~ tool can run in auto, text, or
+  image mode, and image files read by tools are bridged into the next model
+  request without persisting binary media in saved sessions or compaction
+  summaries.
+- Add transient commands and documentation for image workflows, including direct
+  image chat, image context, supported formats, read-file modes, tool-call image
+  bridging, and persistence behavior.
+
 * Version 1.15.0
 - Add task prompt templates for subagents.  The task tool can now render
   relative template paths with object-based argument substitution, strict path
