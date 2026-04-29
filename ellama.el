@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.14.2
+;; Version: 1.15.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -36,8 +36,10 @@
 ;;; Code:
 
 (require 'eieio)
+(require 'cl-lib)
 (require 'llm)
 (require 'llm-provider-utils)
+(require 'json)
 (require 'compat)
 (eval-when-compile (require 'rx))
 (require 'ellama-tools)
@@ -521,6 +523,12 @@ It should be a function with single argument generated text string."
 (defcustom ellama-reasoning-display-action-function nil
   "Display action function for reasoning."
   :type 'function)
+
+(defcustom ellama-display-session-buffer-on-generation nil
+  "Display session buffer when generation starts.
+This applies to any `ellama-stream' call associated with a session, including
+sub-agent sessions started by tools."
+  :type 'boolean)
 
 (defcustom ellama-show-reasoning t
   "Show reasoning in separate buffer if enabled."
@@ -1470,6 +1478,18 @@ If ACTIVATE is non-nil, set global active session selection."
       (when-let ((session (ellama--active-session-by-id id)))
         (gethash (ellama--session-uid session) ellama--active-sessions))))
 
+(defun ellama--display-session-buffer-on-generation (session buffer)
+  "Display SESSION buffer for generation started in BUFFER when enabled."
+  (when (and ellama-display-session-buffer-on-generation
+             (ellama-session-p session))
+    (when-let ((session-buffer (or (ellama-get-session-buffer
+                                    (ellama--session-uid session))
+                                   (get-buffer buffer))))
+      (display-buffer
+       session-buffer
+       (when ellama-chat-display-action-function
+         `((ignore . (,ellama-chat-display-action-function))))))))
+
 (defconst ellama--forbidden-file-name-characters (rx (any "/\\?%*:|\"<>.;=")))
 
 (defun ellama--fix-file-name (name)
@@ -2204,6 +2224,111 @@ REASONING-BUFFER is a buffer for reasoning."
        (format "%s" (or msg "Unknown tool call error")))
      'system)))
 
+(defun ellama--json-safe-string (string)
+  "Return STRING as multibyte text safe for JSON serialization."
+  (let* ((decoded (if (multibyte-string-p string)
+                      string
+                    (decode-coding-string string 'utf-8-unix)))
+         (chars (string-to-list decoded)))
+    (if (cl-some (lambda (char) (> char #x10ffff)) chars)
+        (apply #'string
+               (mapcar (lambda (char)
+                         (if (> char #x10ffff) #xfffd char))
+                       chars))
+      decoded)))
+
+(defun ellama--json-safe-value (value)
+  "Return VALUE with strings safe for JSON serialization."
+  (cond
+   ((stringp value)
+    (ellama--json-safe-string value))
+   ((vectorp value)
+    (vconcat (mapcar #'ellama--json-safe-value value)))
+   ((consp value)
+    (mapcar (lambda (item)
+              (if (consp item)
+                  (cons (ellama--json-safe-value (car item))
+                        (ellama--json-safe-value (cdr item)))
+                (ellama--json-safe-value item)))
+            value))
+   (t value)))
+
+(defun ellama--sanitize-provider-chat-request (request)
+  "Return provider chat REQUEST with JSON-safe strings."
+  (ellama--json-safe-value request))
+
+(advice-remove 'llm-provider-chat-request
+               #'ellama--sanitize-provider-chat-request)
+(advice-add 'llm-provider-chat-request
+            :filter-return #'ellama--sanitize-provider-chat-request)
+
+(defun ellama--collect-openai-streaming-tool-uses (data)
+  "Return parsed OpenAI streaming tool-call chunks from DATA."
+  (let* ((calls (append data nil))
+         (max-index
+          (cl-loop for call in calls
+                   for index = (assoc-default 'index call)
+                   when index maximize index)))
+    (when max-index
+      (let ((cvec (make-vector (1+ max-index) nil)))
+        (dotimes (i (length cvec))
+          (setf (aref cvec i) (make-llm-provider-utils-tool-use)))
+        (dolist (call calls)
+          (let* ((index (assoc-default 'index call))
+                 (id (assoc-default 'id call))
+                 (function (assoc-default 'function call))
+                 (name (assoc-default 'name function))
+                 (arguments (assoc-default 'arguments function)))
+            (when index
+              (when id
+                (setf (llm-provider-utils-tool-use-id (aref cvec index)) id))
+              (when name
+                (setf (llm-provider-utils-tool-use-name (aref cvec index))
+                      name))
+              (setf (llm-provider-utils-tool-use-args (aref cvec index))
+                    (concat
+                     (llm-provider-utils-tool-use-args (aref cvec index))
+                     (or arguments ""))))))
+        (cl-loop for call across cvec
+                 do (setf (llm-provider-utils-tool-use-args call)
+                          (json-parse-string
+                           (let ((args
+                                  (llm-provider-utils-tool-use-args call)))
+                             (if (and args (> (length args) 0)) args "{}"))
+                           :object-type 'alist))
+                 finally return (append cvec nil))))))
+
+(advice-remove 'llm-provider-utils-openai-collect-streaming-tool-uses
+               #'ellama--collect-openai-streaming-tool-uses)
+(advice-add 'llm-provider-utils-openai-collect-streaming-tool-uses
+            :override #'ellama--collect-openai-streaming-tool-uses)
+
+(defun ellama--normalize-tool-use-args (args)
+  "Normalize tool ARGS for provider request serialization."
+  (if (stringp args)
+      (let ((decoded (ellama--json-safe-string args)))
+        (condition-case nil
+            (ellama--json-safe-value
+             (json-parse-string
+              (if (= (length decoded) 0) "{}" decoded)
+              :object-type 'alist
+              :array-type 'list))
+          (error decoded)))
+    (ellama--json-safe-value args)))
+
+(defun ellama--normalize-prompt-tool-use-args (prompt)
+  "Normalize tool-use arguments in PROMPT history."
+  (when (llm-chat-prompt-p prompt)
+    (dolist (interaction (llm-chat-prompt-interactions prompt))
+      (let ((content (llm-chat-prompt-interaction-content interaction)))
+        (when (and (consp content)
+                   (llm-provider-utils-tool-use-p (car content)))
+          (dolist (tool-use content)
+            (setf (llm-provider-utils-tool-use-args tool-use)
+                  (ellama--normalize-tool-use-args
+                   (llm-provider-utils-tool-use-args tool-use))))))))
+  prompt)
+
 (defun ellama--error-handler (buffer errcb &optional prompt
                                      retry-fn request-context)
   "Error handler function.
@@ -2288,6 +2413,8 @@ inserted into the BUFFER."
                             request-context))
                           (request
                             (with-current-buffer buffer
+                              (ellama--normalize-prompt-tool-use-args
+                               llm-prompt)
                               (if async
                                   (llm-chat-async
                                    provider
@@ -2435,6 +2562,7 @@ failure (with BUFFER current).
       (error "Specify both :replace-beg and :replace-end"))
     (with-current-buffer reasoning-buffer
       (org-mode))
+    (ellama--display-session-buffer-on-generation session buffer)
     (with-current-buffer buffer
       (let ((request-generation 0)
             (request-started nil)
@@ -2465,6 +2593,7 @@ failure (with BUFFER current).
                         #'start-request
                         request-context))
                       request)
+                 (ellama--normalize-prompt-tool-use-args llm-prompt)
                  (when (not request-started)
                    (setq request-started t)
                    (setq ellama--change-group (prepare-change-group))

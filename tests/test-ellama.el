@@ -911,6 +911,36 @@ detailed comparison to help you decide:
       (when (buffer-live-p session-buffer)
         (kill-buffer session-buffer)))))
 
+(ert-deftest test-ellama-stream-displays-session-buffer-on-generation ()
+  (let* ((provider (make-llm-fake
+                    :chat-action-func (lambda () "Chat answer")))
+         (ellama-provider provider)
+         (ellama-response-process-method 'streaming)
+         (ellama-spinner-enabled nil)
+         (ellama-fill-paragraphs nil)
+         (ellama-display-session-buffer-on-generation t)
+         (ellama--active-sessions (make-hash-table :test #'equal))
+         (ellama--active-session-states (make-hash-table :test #'equal))
+         (session (make-ellama-session :id "display-test"
+                                       :provider provider
+                                       :prompt nil))
+         (session-buffer (generate-new-buffer " *ellama-display-test*"))
+         displayed-buffer)
+    (unwind-protect
+        (progn
+          (ellama--register-session session session-buffer t)
+          (cl-letf (((symbol-function 'sleep-for)
+                     (lambda (&rest _args) nil))
+                    ((symbol-function 'display-buffer)
+                     (lambda (buffer &optional _action)
+                       (setq displayed-buffer buffer)
+                       buffer)))
+            (with-current-buffer session-buffer
+              (ellama-stream "next prompt")))
+          (should (eq displayed-buffer session-buffer)))
+      (when (buffer-live-p session-buffer)
+        (kill-buffer session-buffer)))))
+
 (defun ellama-test--compact-session (provider)
   "Return test session with PROVIDER and compactable history."
   (let ((prompt (llm-make-chat-prompt "user 1" :context "System context")))
@@ -1215,6 +1245,90 @@ detailed comparison to help you decide:
         (should (null error-captured))
         (should (equal done-text "Recovered answer"))
         (should (equal (buffer-string) "Recovered answer"))))))
+
+(ert-deftest test-ellama-normalize-tool-use-args-decodes-unibyte-json ()
+  (let* ((raw-json
+          (encode-coding-string
+           "{\"content\":\"├── research_plan.md\",\"file_name\":\"x\"}"
+           'utf-8-unix))
+         (tool-use
+          (make-llm-provider-utils-tool-use
+           :id "call"
+           :name "write_file"
+           :args raw-json))
+         (prompt (llm-make-chat-prompt "continue")))
+    (setf (llm-chat-prompt-interactions prompt)
+          (append
+           (llm-chat-prompt-interactions prompt)
+           (list
+            (make-llm-chat-prompt-interaction
+             :role 'assistant
+             :content (list tool-use)))))
+    (ellama--normalize-prompt-tool-use-args prompt)
+    (let* ((args (llm-provider-utils-tool-use-args tool-use))
+           (content (cdr (assq 'content args))))
+      (should (equal content "├── research_plan.md"))
+      (should (multibyte-string-p content))
+      (should (json-serialize args)))))
+
+(ert-deftest test-ellama-normalize-tool-use-args-keeps-malformed-json-safe ()
+  (let* ((raw-json
+          (encode-coding-string
+           "{\"content\":\"├── research_plan.md\""
+           'utf-8-unix))
+         (normalized (ellama--normalize-tool-use-args raw-json)))
+    (should (stringp normalized))
+    (should (multibyte-string-p normalized))
+    (should (json-serialize normalized))))
+
+(ert-deftest test-ellama-sanitize-provider-chat-request-decodes-arguments ()
+  (let* ((arguments (encode-coding-string
+                     (json-serialize
+                      '((content . "├── research_plan.md")
+                        (file_name . "x")))
+                     'utf-8-unix))
+         (request `(:messages [(:tool_calls
+                                [(:function (:arguments ,arguments))])]))
+         (sanitized (ellama--sanitize-provider-chat-request request))
+         (sanitized-arguments
+          (plist-get
+           (plist-get
+            (aref (plist-get (aref (plist-get sanitized :messages) 0)
+                             :tool_calls)
+                  0)
+            :function)
+           :arguments)))
+    (should-not (multibyte-string-p arguments))
+    (should (multibyte-string-p sanitized-arguments))
+    (should (json-serialize sanitized))))
+
+(ert-deftest test-ellama-collect-openai-streaming-tool-uses-uses-max-index ()
+  (let* ((data
+          [((index . 0)
+            (id . "call-1")
+            (function
+             (name . "shell_command")
+             (arguments . "{\"cmd\":\"one\"}")))
+           ((index . 1)
+            (id . "call-2")
+            (function
+             (name . "shell_command")
+             (arguments . "{\"cmd\":\"two\"}")))])
+         (tool-uses
+          (llm-provider-utils-openai-collect-streaming-tool-uses data)))
+    (should (= (length tool-uses) 2))
+    (should (equal (llm-provider-utils-tool-use-id (nth 0 tool-uses))
+                   "call-1"))
+    (should (equal (llm-provider-utils-tool-use-id (nth 1 tool-uses))
+                   "call-2"))
+    (should (equal (cdr (assq
+                         'cmd
+                         (llm-provider-utils-tool-use-args (nth 0 tool-uses))))
+                   "one"))
+    (should (equal (cdr (assq
+                         'cmd
+                         (llm-provider-utils-tool-use-args (nth 1 tool-uses))))
+                   "two"))))
 
 (ert-deftest test-ellama-stream-retry-tracks-latest-request-for-cancel ()
   (let* ((call-count 0)
