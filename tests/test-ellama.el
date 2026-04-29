@@ -999,6 +999,35 @@ detailed comparison to help you decide:
          (should (string-match-p "Images read by tools" (car parts)))
          (should (llm-media-p (cadr parts))))))))
 
+(ert-deftest test-ellama-chat-send-last-message-displays-ephemeral-image-context ()
+  (ellama-test--with-temp-image-file
+   (lambda (file-name)
+     (let ((ellama-context-global nil)
+           (ellama-context-ephemeral
+            (list (ellama-context-element-image-file :name file-name)))
+           (ellama-major-mode 'org-mode)
+           (ellama-fill-paragraphs nil)
+           (session (make-ellama-session
+                     :id "context-image"
+                     :provider (make-llm-fake)))
+           captured-prompt)
+       (with-temp-buffer
+         (org-mode)
+         (setq ellama--current-session session)
+         (insert "** User:\nDescribe one more image")
+         (cl-letf (((symbol-function 'ellama-stream)
+                    (lambda (prompt &rest _args)
+                      (setq captured-prompt prompt))))
+           (ellama-chat-send-last-message))
+         (should (equal captured-prompt "Describe one more image"))
+         (should (string-match-p "Context:" (buffer-string)))
+         (should (string-match-p
+                  (regexp-quote
+                   (format "[[file:%s][%s]]"
+                           file-name
+                           (file-name-nondirectory file-name)))
+                  (buffer-string))))))))
+
 (ert-deftest test-ellama-stream-displays-session-buffer-on-generation ()
   (let* ((provider (make-llm-fake
                     :chat-action-func (lambda () "Chat answer")))

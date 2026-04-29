@@ -9,6 +9,8 @@
 - Add transient commands and documentation for image workflows, including direct
   image chat, image context, supported formats, read-file modes, tool-call image
   bridging, and persistence behavior.
+- Fix chat buffer rendering for ephemeral context, including image context added
+  before sending a manually typed chat message.
 
 * Version 1.15.0
 - Add task prompt templates for subagents.  The task tool can now render

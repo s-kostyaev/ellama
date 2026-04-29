@@ -3271,6 +3271,7 @@ the full response text when the request completes (with BUFFER current)."
      :system system)))
 
 (defvar ellama-context-global)
+(defvar ellama-context-ephemeral)
 
 ;;;###autoload
 (defun ellama-chat-send-last-message ()
@@ -3284,7 +3285,7 @@ the full response text when the request completes (with BUFFER current)."
                       message)))
     (goto-char (point-max))
     (insert "\n\n")
-    (when ellama-context-global
+    (when (or ellama-context-global ellama-context-ephemeral)
       (insert (ellama-context-format session)))
     (insert (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
     (ellama-stream text
