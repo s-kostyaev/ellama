@@ -148,14 +148,45 @@ Otherwise, prompt the user to enter a system message."
                                ellama-naming-provider)
   "List of providers.")
 
+(defun ellama-transient--provider-symbol (provider)
+  "Return provider variable symbol from PROVIDER."
+  (cond
+   ((symbolp provider) provider)
+   ((and (consp provider) (symbolp (cdr provider))) (cdr provider))
+   ((and (consp provider) (symbolp (car provider))) (car provider))))
+
+(defun ellama-transient--provider-label (provider)
+  "Return safe completion label for PROVIDER variable symbol."
+  (let* ((name (symbol-name provider))
+         (role (cond
+                ((string= name "ellama-provider") "default")
+                ((and (string-prefix-p "ellama-" name)
+                      (string-suffix-p "-provider" name))
+                 (substring name 7 (- (length name) 9)))
+                (t "custom"))))
+    (format "%s [%s]" role name)))
+
+(defun ellama-transient--provider-candidates ()
+  "Return safe provider completion candidates.
+Provider values are intentionally not included in the display
+strings, because they may contain API keys."
+  (mapcan (lambda (provider)
+            (when-let ((symbol (ellama-transient--provider-symbol provider)))
+              (list (cons (ellama-transient--provider-label symbol) symbol))))
+          ellama-provider-list))
+
+(defun ellama-transient--read-provider-symbol ()
+  "Read and return an Ellama provider variable symbol."
+  (let* ((candidates (ellama-transient--provider-candidates))
+         (choice (completing-read "Select provider: " candidates nil t)))
+    (or (cdr (assoc choice candidates))
+        (error "Unknown provider: %s" choice))))
+
 (transient-define-suffix ellama-transient-model-get-from-provider ()
   "Fill transient model from provider."
   (interactive)
   (ellama-fill-transient-model
-   (eval (read
-          (completing-read "Select provider: "
-                           (mapcar #'prin1-to-string
-                                   ellama-provider-list))))))
+   (symbol-value (ellama-transient--read-provider-symbol))))
 
 (transient-define-suffix ellama-transient-model-get-from-current-session ()
   "Fill transient model from current session."
@@ -167,12 +198,11 @@ Otherwise, prompt the user to enter a system message."
 (transient-define-suffix ellama-transient-set-provider ()
   "Set transient model to provider."
   (interactive)
-  (let ((provider (read
-                   (completing-read "Select provider: "
-                                    (mapcar #'prin1-to-string
-                                            ellama-provider-list)))))
+  (let* ((provider (ellama-transient--read-provider-symbol))
+         (base-provider (symbol-value provider)))
     (set provider
-         (ellama-construct-provider-from-transient (symbol-value provider)))
+         (let ((ellama-transient-provider base-provider))
+           (ellama-construct-provider-from-transient)))
     ;; if you change `ellama-provider' you probably want new chat session
     (when (equal provider 'ellama-provider)
       (setq ellama--current-session-id nil
