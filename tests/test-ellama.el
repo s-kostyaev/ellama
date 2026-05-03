@@ -31,6 +31,7 @@
 (require 'ellama-transient)
 (require 'ert)
 (require 'llm-fake)
+(require 'llm-openai)
 
 
 (defun ellama-test--fake-stream-partials (response style)
@@ -2027,6 +2028,132 @@ region, season, or type)! 🍎🍊"))))
             (should (ellama-session-p session))
             (should (equal (ellama-session-id session) "legacy"))
             (should (equal (ellama--session-uid session) "legacy"))))
+      (delete-file file-name t))))
+
+(ert-deftest test-ellama-save-session-redacts-callable-provider-key ()
+  (let* ((secret "session-secret")
+         (provider (make-llm-openai-compatible
+                    :url "https://api.example.com/v1"
+                    :chat-model "model"
+                    :key (lambda () secret)))
+         (ellama-provider provider)
+         (ellama-session-persist-provider-keys nil)
+         (file-name (make-temp-file "ellama-session-" nil ".org"))
+         (session-file-name (ellama--get-session-file-name file-name))
+         (ellama--current-session
+          (make-ellama-session
+           :id "redacted"
+           :provider provider
+           :file file-name
+           :prompt (llm-make-chat-prompt "hello")
+           :extra '(:dir "/tmp" :uid "redacted")))
+         content loaded key)
+    (unwind-protect
+        (progn
+          (ellama--save-session)
+          (setq content
+                (with-temp-buffer
+                  (insert-file-contents session-file-name)
+                  (buffer-string)))
+          (should-not (string-match-p (regexp-quote secret) content))
+          (should-not (string-match-p "#<" content))
+          (setq loaded (ellama--read-session-from-file session-file-name))
+          (setq key (llm-openai-compatible-key
+                     (ellama-session-provider loaded)))
+          (should (equal (if (functionp key) (funcall key) key) secret)))
+      (delete-file file-name t)
+      (delete-file session-file-name t))))
+
+(ert-deftest test-ellama-save-session-restores-key-from-auth-source ()
+  (let* ((secret "auth-source-secret")
+         (provider (make-llm-openai-compatible
+                    :url "https://api.example.com/v1"
+                    :chat-model "model"
+                    :key (lambda () "runtime-secret")))
+         (ellama-provider nil)
+         (ellama-session-persist-provider-keys 'auth-source)
+         (file-name (make-temp-file "ellama-session-" nil ".org"))
+         (session-file-name (ellama--get-session-file-name file-name))
+         (ellama--current-session
+          (make-ellama-session
+           :id "auth-source"
+           :provider provider
+           :file file-name
+           :prompt (llm-make-chat-prompt "hello")
+           :extra '(:dir "/tmp" :uid "auth-source")))
+         content loaded key captured-args)
+    (unwind-protect
+        (progn
+          (ellama--save-session)
+          (setq content
+                (with-temp-buffer
+                  (insert-file-contents session-file-name)
+                  (buffer-string)))
+          (should-not (string-match-p "runtime-secret" content))
+          (should (string-match-p ":provider-key-ref" content))
+          (cl-letf (((symbol-function 'auth-source-search)
+                     (lambda (&rest args)
+                       (setq captured-args args)
+                       (list (list :secret (lambda () secret))))))
+            (setq loaded (ellama--read-session-from-file session-file-name)))
+          (should (equal (plist-get captured-args :host)
+                         "api.example.com"))
+          (setq key (llm-openai-compatible-key
+                     (ellama-session-provider loaded)))
+          (should (equal (if (functionp key) (funcall key) key) secret)))
+      (delete-file file-name t)
+      (delete-file session-file-name t))))
+
+(ert-deftest test-ellama-save-session-omits-unreadable-tools ()
+  (let* ((tool (llm-make-tool
+                :function (lambda (&rest _args) "ok")
+                :name "demo_tool"
+                :description "Demo tool."
+                :args nil))
+         (ellama-tools-available (list tool))
+         (file-name (make-temp-file "ellama-session-" nil ".org"))
+         (session-file-name (ellama--get-session-file-name file-name))
+         (ellama--current-session
+          (make-ellama-session
+           :id "tools"
+           :provider (make-llm-fake)
+           :file file-name
+           :prompt (llm-make-chat-prompt "hello" :tools (list tool))
+           :extra `(:dir "/tmp" :uid "tools" :tools ,(list tool))))
+         content loaded)
+    (unwind-protect
+        (progn
+          (ellama--save-session)
+          (setq content
+                (with-temp-buffer
+                  (insert-file-contents session-file-name)
+                  (buffer-string)))
+          (should-not (string-match-p "#<" content))
+          (should-not (string-match-p "#[0-9]" content))
+          (setq loaded (ellama--read-session-from-file session-file-name))
+          (should-not (llm-chat-prompt-tools
+                       (ellama-session-prompt loaded)))
+          (should (equal (mapcar #'llm-tool-name
+                                 (plist-get (ellama-session-extra loaded)
+                                            :tools))
+                         '("demo_tool"))))
+      (delete-file file-name t)
+      (delete-file session-file-name t))))
+
+(ert-deftest test-ellama-read-session-replaces-unreadable-tool-reference ()
+  (let ((file-name (make-temp-file "ellama-session-" nil ".el")))
+    (unwind-protect
+        (progn
+          (with-temp-file file-name
+            (insert
+             "#s(ellama-session \"bad\" nil nil "
+             "#s(llm-chat-prompt nil nil nil (#1) nil nil nil nil nil nil) "
+             "nil (:dir \"/tmp\"))"))
+          (let ((session (ellama--read-session-from-file file-name)))
+            (should (ellama-session-p session))
+            (should (equal (ellama-session-id session) "bad"))
+            (should-not (llm-chat-prompt-tools
+                         (ellama-session-prompt session)))))
       (delete-file file-name t))))
 
 (ert-deftest test-ellama-session-file-candidates-newest-first ()
