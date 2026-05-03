@@ -341,6 +341,9 @@ generated text string.
 - ~ellama-major-mode~: Major mode for ellama commands. Org mode by default.
 - ~ellama-session-auto-save~: Automatically save ellama sessions if set. Enabled
   by default.
+- ~ellama-session-persist-provider-keys~: Control provider key persistence in
+  saved session files. Disabled by default; set to ~auth-source~ to restore
+  provider keys from auth-source lookup references.
 - ~ellama-session-auto-compact-enabled~: Automatically compact long chat session
   context. Enabled by default.
 - ~ellama-session-auto-compact-token-threshold~: Total token count that triggers
@@ -470,6 +473,38 @@ generated text string.
   finishes a turn without calling ~report_result~.
 - ~ellama-tools-subagent-roles~: Subagent roles with provider, system prompt and
   allowed tools. Configuration of subagents for the ~task~ tool.
+
+** Session Provider Keys
+
+Ellama does not persist provider keys as plaintext in session files.  Saved
+sessions keep provider settings such as model and URL, but provider key slots
+are removed before writing the session file.  When a session is loaded, Ellama
+restores missing keys from the configured provider when possible.
+
+If a saved provider key cannot be restored, the session still loads.  Requests
+using that provider can fail later with the provider's normal authentication
+error until the provider is configured again.
+
+Set ~ellama-session-persist-provider-keys~ to ~auth-source~ to save an
+auth-source lookup reference in the session file.  The secret itself stays in
+auth-source and is resolved when the session is loaded.  Ellama uses the
+provider URL host when available, otherwise the provider symbol or provider
+type, together with ~ellama-session-provider-key-auth-source-user~ and
+~ellama-session-provider-key-auth-source-port~.
+
+Example auth-source entry:
+
+#+BEGIN_SRC authinfo
+  machine api.example.com login ellama port api-key password example-secret
+#+END_SRC
+
+Example configuration:
+
+#+BEGIN_SRC emacs-lisp
+  (setopt ellama-session-persist-provider-keys 'auth-source)
+  (setopt ellama-session-provider-key-auth-source-user "ellama")
+  (setopt ellama-session-provider-key-auth-source-port "api-key")
+#+END_SRC
 
 ** Session Compaction
 
