@@ -655,6 +655,13 @@ If a saved provider key cannot be restored, the session still loads.
 Requests using that provider can fail later with the provider's normal
 authentication error until the provider is configured again.
 
+The upstream ‘llm’ provider-key redaction change is merged, but released
+versions such as ‘llm’ 0.30.3 may not include it yet.  Until a released
+‘llm’ version containing that change is installed, provider keys can
+still appear in debugger output produced by ‘llm’ itself.  Ellama avoids
+adding new plaintext keys to saved session files, but it cannot redact
+every ‘llm’ backtrace from older released ‘llm’ versions.
+
 Set ‘ellama-session-persist-provider-keys’ to ‘auth-source’ to save an
 auth-source lookup reference in the session file.  The secret itself
 stays in auth-source and is resolved when the session is loaded.  Ellama
@@ -2389,42 +2396,42 @@ Node: Commands8933
 Node: Keymap17562
 Node: Configuration20449
 Node: Session Provider Keys32233
-Node: Session Compaction33653
-Node: Image Input35307
-Node: Task Tool Subagents37452
-Node: DLP for Tool Input/Output39555
-Node: SRT Filesystem Policy for Tools54457
-Node: Context Management60126
-Node: Transient Menus for Context Management61194
-Node: Managing the Context62873
-Node: Considerations63648
-Node: Minor modes64241
-Node: ellama-context-header-line-mode66229
-Node: ellama-context-header-line-global-mode67054
-Node: ellama-context-mode-line-mode67774
-Node: ellama-context-mode-line-global-mode68622
-Node: Ellama Session Header Line Mode69326
-Node: Enabling and Disabling69895
-Node: Customization70342
-Node: Ellama Session Mode Line Mode70630
-Node: Enabling and Disabling (1)71215
-Node: Customization (1)71662
-Node: Using Blueprints71956
-Node: Key Components of Ellama Blueprints72596
-Node: Creating and Managing Blueprints73203
-Node: Blueprints files74181
-Node: Variable Management74602
-Node: Keymap and Mode75055
-Node: Transient Menus75991
-Node: Running Blueprints programmatically76537
-Node: MCP Integration77124
-Node: Agent Skills78359
-Node: Directory Structure78722
-Node: Creating a Skill79749
-Node: How it works80124
-Node: Acknowledgments80515
-Node: Contributions81226
-Node: GNU Free Documentation License81612
+Node: Session Compaction34094
+Node: Image Input35748
+Node: Task Tool Subagents37893
+Node: DLP for Tool Input/Output39996
+Node: SRT Filesystem Policy for Tools54898
+Node: Context Management60567
+Node: Transient Menus for Context Management61635
+Node: Managing the Context63314
+Node: Considerations64089
+Node: Minor modes64682
+Node: ellama-context-header-line-mode66670
+Node: ellama-context-header-line-global-mode67495
+Node: ellama-context-mode-line-mode68215
+Node: ellama-context-mode-line-global-mode69063
+Node: Ellama Session Header Line Mode69767
+Node: Enabling and Disabling70336
+Node: Customization70783
+Node: Ellama Session Mode Line Mode71071
+Node: Enabling and Disabling (1)71656
+Node: Customization (1)72103
+Node: Using Blueprints72397
+Node: Key Components of Ellama Blueprints73037
+Node: Creating and Managing Blueprints73644
+Node: Blueprints files74622
+Node: Variable Management75043
+Node: Keymap and Mode75496
+Node: Transient Menus76432
+Node: Running Blueprints programmatically76978
+Node: MCP Integration77565
+Node: Agent Skills78800
+Node: Directory Structure79163
+Node: Creating a Skill80190
+Node: How it works80565
+Node: Acknowledgments80956
+Node: Contributions81667
+Node: GNU Free Documentation License82053
 
 End Tag Table
 

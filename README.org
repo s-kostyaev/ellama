@@ -485,6 +485,13 @@ If a saved provider key cannot be restored, the session still loads.  Requests
 using that provider can fail later with the provider's normal authentication
 error until the provider is configured again.
 
+The upstream ~llm~ provider-key redaction change is merged, but released
+versions such as ~llm~ 0.30.3 may not include it yet.  Until a released ~llm~
+version containing that change is installed, provider keys can still appear in
+debugger output produced by ~llm~ itself.  Ellama avoids adding new plaintext
+keys to saved session files, but it cannot redact every ~llm~ backtrace from
+older released ~llm~ versions.
+
 Set ~ellama-session-persist-provider-keys~ to ~auth-source~ to save an
 auth-source lookup reference in the session file.  The secret itself stays in
 auth-source and is resolved when the session is loaded.  Ellama uses the
