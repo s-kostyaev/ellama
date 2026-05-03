@@ -75,6 +75,7 @@ Assistant".  Previous sentence was written by Ellama itself.
 
 Configuration
 
+* Session Provider Keys::
 * Session Compaction::
 * Image Input::
 * Task Tool Subagents::
@@ -478,6 +479,10 @@ argument generated text string.
      default.
    • ‘ellama-session-auto-save’: Automatically save ellama sessions if
      set.  Enabled by default.
+   • ‘ellama-session-persist-provider-keys’: Control provider key
+     persistence in saved session files.  Disabled by default; set to
+     ‘auth-source’ to restore provider keys from auth-source lookup
+     references.
    • ‘ellama-session-auto-compact-enabled’: Automatically compact long
      chat session context.  Enabled by default.
    • ‘ellama-session-auto-compact-token-threshold’: Total token count
@@ -627,6 +632,7 @@ argument generated text string.
 
 * Menu:
 
+* Session Provider Keys::
 * Session Compaction::
 * Image Input::
 * Task Tool Subagents::
@@ -634,9 +640,50 @@ argument generated text string.
 * SRT Filesystem Policy for Tools::
 
 
-File: ellama.info,  Node: Session Compaction,  Next: Image Input,  Up: Configuration
+File: ellama.info,  Node: Session Provider Keys,  Next: Session Compaction,  Up: Configuration
 
-4.1 Session Compaction
+4.1 Session Provider Keys
+=========================
+
+Ellama does not persist provider keys as plaintext in session files.
+Saved sessions keep provider settings such as model and URL, but
+provider key slots are removed before writing the session file.  When a
+session is loaded, Ellama restores missing keys from the configured
+provider when possible.
+
+If a saved provider key cannot be restored, the session still loads.
+Requests using that provider can fail later with the provider's normal
+authentication error until the provider is configured again.
+
+The upstream ‘llm’ provider-key redaction change is merged, but released
+versions such as ‘llm’ 0.30.3 may not include it yet.  Until a released
+‘llm’ version containing that change is installed, provider keys can
+still appear in debugger output produced by ‘llm’ itself.  Ellama avoids
+adding new plaintext keys to saved session files, but it cannot redact
+every ‘llm’ backtrace from older released ‘llm’ versions.
+
+Set ‘ellama-session-persist-provider-keys’ to ‘auth-source’ to save an
+auth-source lookup reference in the session file.  The secret itself
+stays in auth-source and is resolved when the session is loaded.  Ellama
+uses the provider URL host when available, otherwise the provider symbol
+or provider type, together with
+‘ellama-session-provider-key-auth-source-user’ and
+‘ellama-session-provider-key-auth-source-port’.
+
+Example auth-source entry:
+
+     machine api.example.com login ellama port api-key password example-secret
+
+Example configuration:
+
+     (setopt ellama-session-persist-provider-keys 'auth-source)
+     (setopt ellama-session-provider-key-auth-source-user "ellama")
+     (setopt ellama-session-provider-key-auth-source-port "api-key")
+
+
+File: ellama.info,  Node: Session Compaction,  Next: Image Input,  Prev: Session Provider Keys,  Up: Configuration
+
+4.2 Session Compaction
 ======================
 
 Ellama can compact long chat sessions to keep them within the provider
@@ -674,7 +721,7 @@ Example configuration:
 
 File: ellama.info,  Node: Image Input,  Next: Task Tool Subagents,  Prev: Session Compaction,  Up: Configuration
 
-4.2 Image Input
+4.3 Image Input
 ===============
 
 Ellama can send image files to providers that advertise the
@@ -727,7 +774,7 @@ Tool calls can request image handling explicitly:
 
 File: ellama.info,  Node: Task Tool Subagents,  Next: DLP for Tool Input/Output,  Prev: Image Input,  Up: Configuration
 
-4.3 Task Tool Subagents
+4.4 Task Tool Subagents
 =======================
 
 The ‘task’ tool delegates work to an asynchronous sub-agent.  The parent
@@ -778,7 +825,7 @@ files.
 
 File: ellama.info,  Node: DLP for Tool Input/Output,  Next: SRT Filesystem Policy for Tools,  Prev: Task Tool Subagents,  Up: Configuration
 
-4.4 DLP for Tool Input/Output
+4.5 DLP for Tool Input/Output
 =============================
 
 Ellama includes an optional DLP (Data Loss Prevention) layer for tool
@@ -1104,7 +1151,7 @@ Troubleshooting:
 
 File: ellama.info,  Node: SRT Filesystem Policy for Tools,  Prev: DLP for Tool Input/Output,  Up: Configuration
 
-4.5 SRT Filesystem Policy for Tools
+4.6 SRT Filesystem Policy for Tools
 ===================================
 
 When ‘ellama-tools-use-srt’ is non-nil, the ‘srt’ settings file is the
@@ -2344,46 +2391,47 @@ their use in free software.
 
 Tag Table:
 Node: Top1379
-Node: Installation3893
-Node: Commands8907
-Node: Keymap17536
-Node: Configuration20423
-Node: Session Compaction31950
-Node: Image Input33574
-Node: Task Tool Subagents35719
-Node: DLP for Tool Input/Output37822
-Node: SRT Filesystem Policy for Tools52724
-Node: Context Management58393
-Node: Transient Menus for Context Management59461
-Node: Managing the Context61140
-Node: Considerations61915
-Node: Minor modes62508
-Node: ellama-context-header-line-mode64496
-Node: ellama-context-header-line-global-mode65321
-Node: ellama-context-mode-line-mode66041
-Node: ellama-context-mode-line-global-mode66889
-Node: Ellama Session Header Line Mode67593
-Node: Enabling and Disabling68162
-Node: Customization68609
-Node: Ellama Session Mode Line Mode68897
-Node: Enabling and Disabling (1)69482
-Node: Customization (1)69929
-Node: Using Blueprints70223
-Node: Key Components of Ellama Blueprints70863
-Node: Creating and Managing Blueprints71470
-Node: Blueprints files72448
-Node: Variable Management72869
-Node: Keymap and Mode73322
-Node: Transient Menus74258
-Node: Running Blueprints programmatically74804
-Node: MCP Integration75391
-Node: Agent Skills76626
-Node: Directory Structure76989
-Node: Creating a Skill78016
-Node: How it works78391
-Node: Acknowledgments78782
-Node: Contributions79493
-Node: GNU Free Documentation License79879
+Node: Installation3919
+Node: Commands8933
+Node: Keymap17562
+Node: Configuration20449
+Node: Session Provider Keys32233
+Node: Session Compaction34094
+Node: Image Input35748
+Node: Task Tool Subagents37893
+Node: DLP for Tool Input/Output39996
+Node: SRT Filesystem Policy for Tools54898
+Node: Context Management60567
+Node: Transient Menus for Context Management61635
+Node: Managing the Context63314
+Node: Considerations64089
+Node: Minor modes64682
+Node: ellama-context-header-line-mode66670
+Node: ellama-context-header-line-global-mode67495
+Node: ellama-context-mode-line-mode68215
+Node: ellama-context-mode-line-global-mode69063
+Node: Ellama Session Header Line Mode69767
+Node: Enabling and Disabling70336
+Node: Customization70783
+Node: Ellama Session Mode Line Mode71071
+Node: Enabling and Disabling (1)71656
+Node: Customization (1)72103
+Node: Using Blueprints72397
+Node: Key Components of Ellama Blueprints73037
+Node: Creating and Managing Blueprints73644
+Node: Blueprints files74622
+Node: Variable Management75043
+Node: Keymap and Mode75496
+Node: Transient Menus76432
+Node: Running Blueprints programmatically76978
+Node: MCP Integration77565
+Node: Agent Skills78800
+Node: Directory Structure79163
+Node: Creating a Skill80190
+Node: How it works80565
+Node: Acknowledgments80956
+Node: Contributions81667
+Node: GNU Free Documentation License82053
 
 End Tag Table
 

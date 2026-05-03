@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.17.0
+;; Version: 1.17.1
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -41,6 +41,7 @@
 (require 'llm-provider-utils)
 (require 'json)
 (require 'compat)
+(require 'url-parse)
 (eval-when-compile (require 'rx))
 (require 'ellama-tools)
 (require 'ellama-skills)
@@ -124,6 +125,24 @@ When nil, use `ellama-summarization-provider', then the session provider."
 (defcustom ellama-session-auto-compact-show-message t
   "Show compaction notices in chat buffers."
   :type 'boolean)
+
+(defcustom ellama-session-persist-provider-keys nil
+  "Control provider key persistence in session files.
+When nil, provider keys are removed before saving sessions and restored
+from the configured provider when possible.
+When `auth-source', sessions save only an auth-source lookup reference
+and restore provider keys from auth-source while loading."
+  :type '(choice
+          (const :tag "Do not persist provider keys" nil)
+          (const :tag "Restore provider keys from auth-source" auth-source)))
+
+(defcustom ellama-session-provider-key-auth-source-user "ellama"
+  "User value for provider key auth-source lookups."
+  :type 'string)
+
+(defcustom ellama-session-provider-key-auth-source-port "api-key"
+  "Port value for provider key auth-source lookups."
+  :type 'string)
 
 (defcustom ellama-chat-translation-enabled nil
   "Enable chat translations."
@@ -1573,6 +1592,43 @@ If ACTIVATE is non-nil, set global active session selection."
      ellama--active-session-states)
     (delete-dups ids)))
 
+(defun ellama--replace-unreadable-sharp-numbers ()
+  "Replace unreadable sharp-number forms outside strings."
+  (goto-char (point-min))
+  (let ((in-string nil)
+        (escaped nil))
+    (while (not (eobp))
+      (let ((char (char-after)))
+        (cond
+         (escaped
+          (setq escaped nil)
+          (forward-char 1))
+         ((and in-string (eq char ?\\))
+          (setq escaped t)
+          (forward-char 1))
+         ((eq char ?\")
+          (setq in-string (not in-string))
+          (forward-char 1))
+         ((and (not in-string)
+               (eq char ?#)
+               (looking-at "#[0-9]+\\_>"))
+          (replace-match "nil"))
+         (t
+          (forward-char 1)))))))
+
+(defun ellama--read-session-data ()
+  "Read session data from current buffer."
+  (let ((start (point)))
+    (condition-case err
+        (read (current-buffer))
+      (invalid-read-syntax
+       (goto-char (point-min))
+       (ellama--replace-unreadable-sharp-numbers)
+       (goto-char start)
+       (condition-case nil
+           (read (current-buffer))
+         (error (signal (car err) (cdr err))))))))
+
 (defun ellama--read-session-from-file (session-file-name)
   "Read and normalize session from SESSION-FILE-NAME."
   (when (and session-file-name
@@ -1586,7 +1642,7 @@ If ACTIVATE is non-nil, set global active session selection."
         (forward-sexp)
         (forward-sexp)
         (skip-chars-forward " \n\t"))
-      (ellama--session-from-data (read (current-buffer))))))
+      (ellama--session-from-data (ellama--read-session-data)))))
 
 (defun ellama--session-from-data (session)
   "Create runtime session object from SESSION read from storage."
@@ -1594,11 +1650,17 @@ If ACTIVATE is non-nil, set global active session selection."
          (extra (when (> (length session)
                          offset)
                   (aref session offset)))
+         (extra (if (plistp extra)
+                    (ellama--session-restore-tools extra)
+                  extra))
          (result (make-ellama-session
                   :id (ellama-session-id session)
-                  :provider (ellama-session-provider session)
+                  :provider (ellama--restore-session-provider-key
+                             (ellama-session-provider session)
+                             extra)
                   :file (ellama-session-file session)
-                  :prompt (ellama-session-prompt session)
+                  :prompt (ellama--session-restore-prompt
+                           (ellama-session-prompt session))
                   :extra extra)))
     (ellama--ensure-session-uid result)
     result))
@@ -1890,6 +1952,171 @@ REQUEST-CONTEXT is a request context."
                      (concat "." ext))))))
     translation-file-name))
 
+(defconst ellama--provider-symbols
+  '(ellama-provider
+    ellama-coding-provider
+    ellama-translation-provider
+    ellama-extraction-provider
+    ellama-summarization-provider
+    ellama-naming-provider
+    ellama-completion-provider
+    ellama-session-auto-compact-provider)
+  "Provider variables that can rehydrate session provider keys.")
+
+(defun ellama--provider-symbol (provider)
+  "Return configured variable symbol for PROVIDER."
+  (seq-find (lambda (symbol)
+              (and (boundp symbol)
+                   (eq (symbol-value symbol) provider)))
+            ellama--provider-symbols))
+
+(defun ellama--provider-name (provider)
+  "Return configured provider name for PROVIDER."
+  (car (cl-find provider ellama-providers :key #'cdr :test #'eq)))
+
+(defun ellama--provider-slot-offset (provider slot)
+  "Return PROVIDER struct SLOT offset, or nil."
+  (condition-case nil
+      (cl-struct-slot-offset (type-of provider) slot)
+    (error nil)))
+
+(defun ellama--provider-slot-value (provider slot)
+  "Return PROVIDER struct SLOT value, or nil."
+  (when-let ((offset (ellama--provider-slot-offset provider slot)))
+    (aref provider offset)))
+
+(defun ellama--provider-with-slot-value (provider slot value)
+  "Return copy of PROVIDER with SLOT set to VALUE."
+  (if-let ((offset (ellama--provider-slot-offset provider slot)))
+      (let ((provider-copy (copy-sequence provider)))
+        (aset provider-copy offset value)
+        provider-copy)
+    provider))
+
+(defun ellama--provider-key (provider)
+  "Return PROVIDER key slot value, or nil."
+  (ellama--provider-slot-value provider 'key))
+
+(defun ellama--provider-key-usable-p (key)
+  "Return non-nil when KEY can be used by an llm provider."
+  (or (stringp key) (functionp key)))
+
+(defun ellama--provider-with-key (provider key)
+  "Return copy of PROVIDER with key slot set to KEY."
+  (ellama--provider-with-slot-value provider 'key key))
+
+(defun ellama--auth-source-host-for-provider (provider provider-symbol)
+  "Return auth-source host for PROVIDER and PROVIDER-SYMBOL."
+  (or (when-let* ((url (ellama--provider-slot-value provider 'url))
+                  ((stringp url)))
+        (or (url-host (url-generic-parse-url url))
+            url))
+      (when provider-symbol
+        (symbol-name provider-symbol))
+      (symbol-name (type-of provider))))
+
+(defun ellama--provider-key-auth-source-ref (provider provider-symbol)
+  "Return auth-source reference for PROVIDER and PROVIDER-SYMBOL."
+  (list :backend 'auth-source
+        :host (ellama--auth-source-host-for-provider provider provider-symbol)
+        :user ellama-session-provider-key-auth-source-user
+        :port ellama-session-provider-key-auth-source-port))
+
+(defun ellama--auth-source-key (ref)
+  "Return auth-source key for REF."
+  (when (eq (plist-get ref :backend) 'auth-source)
+    (require 'auth-source)
+    (when-let* ((host (plist-get ref :host))
+                (user (plist-get ref :user))
+                (port (plist-get ref :port))
+                (entry (car (auth-source-search
+                             :host host :user user :port port
+                             :require '(:secret) :max 1))))
+      (plist-get entry :secret))))
+
+(defun ellama--provider-from-session-extra (extra)
+  "Return configured provider described by EXTRA."
+  (or (when-let ((symbol (plist-get extra :provider-symbol)))
+        (when (and (symbolp symbol) (boundp symbol))
+          (symbol-value symbol)))
+      (when-let ((name (plist-get extra :provider-name)))
+        (cdr (assoc name ellama-providers)))))
+
+(defun ellama--restore-session-provider-key (provider extra)
+  "Return PROVIDER with restored key from EXTRA when possible."
+  (if (or (not (ellama--provider-slot-offset provider 'key))
+          (ellama--provider-key-usable-p (ellama--provider-key provider)))
+      provider
+    (let* ((ref (plist-get extra :provider-key-ref))
+           (configured-provider (ellama--provider-from-session-extra extra))
+           (key (or (and ref (ellama--auth-source-key ref))
+                    (and configured-provider
+                         (let ((configured-key
+                                (ellama--provider-key configured-provider)))
+                           (and (ellama--provider-key-usable-p
+                                 configured-key)
+                                configured-key))))))
+      (if key
+          (ellama--provider-with-key provider key)
+        (ellama--provider-with-key provider nil)))))
+
+(defun ellama--session-save-tools (tools)
+  "Return readable tool names for TOOLS."
+  (delq nil
+        (mapcar (lambda (tool)
+                  (condition-case nil
+                      (llm-tool-name tool)
+                    (error nil)))
+                tools)))
+
+(defun ellama--session-tools-from-names (names)
+  "Return available tools matching NAMES."
+  (delq nil
+        (mapcar (lambda (name)
+                  (seq-find (lambda (tool)
+                              (string= name (llm-tool-name tool)))
+                            ellama-tools-available))
+                names)))
+
+(defun ellama--session-restore-tools (extra)
+  "Return EXTRA with tools restored from saved tool names."
+  (let* ((names (or (plist-get extra :tool-names)
+                    (ellama--session-save-tools
+                     (plist-get extra :tools))))
+         (tools (and names (ellama--session-tools-from-names names))))
+    (when names
+      (setq extra (plist-put extra :tool-names names)))
+    (plist-put extra :tools tools)))
+
+(defun ellama--session-restore-prompt (prompt)
+  "Return PROMPT safe for runtime session use."
+  (if (not (llm-chat-prompt-p prompt))
+      prompt
+    (let ((prompt-copy (copy-sequence prompt)))
+      (setf (llm-chat-prompt-tools prompt-copy) nil)
+      prompt-copy)))
+
+(defun ellama--session-save-provider (provider extra)
+  "Return cons of PROVIDER safe for saving and updated EXTRA."
+  (let ((provider-symbol (or (plist-get extra :provider-symbol)
+                             (ellama--provider-symbol provider)))
+        (provider-name (or (plist-get extra :provider-name)
+                           (ellama--provider-name provider)))
+        (provider-copy provider))
+    (when provider-symbol
+      (setq extra (plist-put extra :provider-symbol provider-symbol)))
+    (when provider-name
+      (setq extra (plist-put extra :provider-name provider-name)))
+    (when (ellama--provider-slot-offset provider 'key)
+      (when (eq ellama-session-persist-provider-keys 'auth-source)
+        (setq extra
+              (plist-put
+               extra :provider-key-ref
+               (ellama--provider-key-auth-source-ref
+                provider provider-symbol))))
+      (setq provider-copy (ellama--provider-with-key provider nil)))
+    (cons provider-copy extra)))
+
 (defun ellama--session-save-content (content)
   "Return CONTENT safe for session persistence."
   (cond
@@ -1912,6 +2139,7 @@ REQUEST-CONTEXT is a request context."
   (if (not (llm-chat-prompt-p prompt))
       prompt
     (let ((prompt-copy (copy-sequence prompt)))
+      (setf (llm-chat-prompt-tools prompt-copy) nil)
       (setf (llm-chat-prompt-interactions prompt-copy)
             (mapcar (lambda (interaction)
                       (let ((copy (copy-sequence interaction)))
@@ -1924,14 +2152,25 @@ REQUEST-CONTEXT is a request context."
 
 (defun ellama--session-for-save (session)
   "Return copy of SESSION safe for persistence."
-  (let ((session-copy (copy-sequence session))
-        (extra (if (plistp (ellama-session-extra session))
-                   (copy-sequence (ellama-session-extra session))
-                 nil)))
+  (let* ((session-copy (copy-sequence session))
+         (extra (if (plistp (ellama-session-extra session))
+                    (copy-sequence (ellama-session-extra session))
+                  nil))
+         (tools (plist-get extra :tools))
+         provider-info)
+    (when tools
+      (setq extra (plist-put extra :tool-names
+                             (ellama--session-save-tools tools))))
+    (setq provider-info
+          (ellama--session-save-provider
+           (ellama-session-provider session)
+           extra))
+    (setq extra (cdr provider-info))
+    (setf (ellama-session-provider session-copy) (car provider-info))
     (setf (ellama-session-prompt session-copy)
           (ellama--session-save-prompt (ellama-session-prompt session)))
     (setf (ellama-session-extra session-copy)
-          (plist-put extra :pending-tool-media nil))
+          (plist-put (plist-put extra :pending-tool-media nil) :tools nil))
     session-copy))
 
 (defun ellama--save-session ()

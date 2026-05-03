@@ -1,3 +1,16 @@
+* Version 1.17.1
+- Hide provider values in transient provider selection.  Provider completion
+  candidates now show safe labels based on provider variable names instead of
+  printed provider values, so secret-bearing provider structs are not exposed.
+- Keep transient provider updates compatible with callable provider keys from
+  ~llm~.  Regression tests now cover hidden provider values, callable keys and
+  selected-provider updates.
+- Keep saved sessions loadable without persisting plaintext provider keys.
+  Session persistence now strips provider keys and unreadable tool functions
+  before writing session files, restores keys from configured providers by
+  default and can restore keys from ~auth-source~ when
+  ~ellama-session-persist-provider-keys~ is set to ~auth-source~.
+
 * Version 1.17.0
 - Add maximum output token support.  Ellama now exposes ~ellama-max-tokens~ and
   passes per-request ~:max-tokens~ values through ~llm-make-chat-prompt~, so
