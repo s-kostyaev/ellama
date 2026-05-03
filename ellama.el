@@ -1997,6 +1997,10 @@ REQUEST-CONTEXT is a request context."
   "Return PROVIDER key slot value, or nil."
   (ellama--provider-slot-value provider 'key))
 
+(defun ellama--provider-key-usable-p (key)
+  "Return non-nil when KEY can be used by an llm provider."
+  (or (stringp key) (functionp key)))
+
 (defun ellama--provider-with-key (provider key)
   "Return copy of PROVIDER with key slot set to KEY."
   (ellama--provider-with-slot-value provider 'key key))
@@ -2041,16 +2045,20 @@ REQUEST-CONTEXT is a request context."
 (defun ellama--restore-session-provider-key (provider extra)
   "Return PROVIDER with restored key from EXTRA when possible."
   (if (or (not (ellama--provider-slot-offset provider 'key))
-          (ellama--provider-key provider))
+          (ellama--provider-key-usable-p (ellama--provider-key provider)))
       provider
     (let* ((ref (plist-get extra :provider-key-ref))
            (configured-provider (ellama--provider-from-session-extra extra))
            (key (or (and ref (ellama--auth-source-key ref))
                     (and configured-provider
-                         (ellama--provider-key configured-provider)))))
+                         (let ((configured-key
+                                (ellama--provider-key configured-provider)))
+                           (and (ellama--provider-key-usable-p
+                                 configured-key)
+                                configured-key))))))
       (if key
           (ellama--provider-with-key provider key)
-        provider))))
+        (ellama--provider-with-key provider nil)))))
 
 (defun ellama--session-save-tools (tools)
   "Return readable tool names for TOOLS."

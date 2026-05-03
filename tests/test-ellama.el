@@ -2104,6 +2104,34 @@ region, season, or type)! 🍎🍊"))))
       (delete-file file-name t)
       (delete-file session-file-name t))))
 
+(ert-deftest test-ellama-read-session-treats-symbol-key-as-redacted ()
+  (let* ((secret "configured-secret")
+         (ellama-provider (make-llm-openai-compatible
+                           :url "https://api.example.com/v1"
+                           :chat-model "model"
+                           :key (lambda () secret)))
+         (file-name (make-temp-file "ellama-session-" nil ".el")))
+    (unwind-protect
+        (progn
+          (with-temp-file file-name
+            (insert
+             (prin1-to-string
+              (make-ellama-session
+               :id "symbol-key"
+               :provider (make-llm-openai-compatible
+                          :url "https://api.example.com/v1"
+                          :chat-model "model"
+                          :key 'llm-key)
+               :prompt (llm-make-chat-prompt "hello")
+               :extra '(:dir "/tmp"
+                        :uid "symbol-key"
+                        :provider-symbol ellama-provider)))))
+          (let* ((session (ellama--read-session-from-file file-name))
+                 (key (llm-openai-compatible-key
+                       (ellama-session-provider session))))
+            (should (equal (if (functionp key) (funcall key) key) secret))))
+      (delete-file file-name t))))
+
 (ert-deftest test-ellama-save-session-omits-unreadable-tools ()
   (let* ((tool (llm-make-tool
                 :function (lambda (&rest _args) "ok")
