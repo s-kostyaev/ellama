@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.17.2
+;; Version: 1.18.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -538,6 +538,25 @@ It should be a function with single argument generated text string."
   "Translate italic during markdown to org transformations."
   :type 'boolean)
 
+(defcustom ellama-markdown-to-org-converter 'builtin
+  "Markdown to Org converter used for Ellama output.
+When set to `builtin', use Ellama's internal converter.  When set
+to `pandoc', use Pandoc and fall back to the builtin converter if
+Pandoc is not available or conversion fails.  When set to `auto',
+use Pandoc when available and the builtin converter otherwise."
+  :type '(choice (const :tag "Builtin converter" builtin)
+                 (const :tag "Pandoc converter" pandoc)
+                 (const :tag "Use Pandoc when available" auto)))
+
+(defcustom ellama-pandoc-program "pandoc"
+  "Pandoc executable used for Markdown to Org conversion."
+  :type 'string)
+
+(defcustom ellama-pandoc-markdown-to-org-args
+  '("-f" "markdown-auto_identifiers" "-t" "org" "--wrap=none")
+  "Pandoc arguments used to convert Markdown input to Org output."
+  :type '(repeat string))
+
 (defcustom ellama-session-auto-save t
   "Automatically save ellama sessions if set."
   :type 'boolean)
@@ -828,7 +847,81 @@ Skip code blocks and math environments."
         (buffer-substring-no-properties (point-min) (point-max))
       (kill-buffer (current-buffer)))))
 
-(defun ellama--translate-markdown-to-org-filter (text)
+(defconst ellama--pandoc-think-begin "ELLAMA_THINK_BEGIN")
+(defconst ellama--pandoc-think-end "ELLAMA_THINK_END")
+
+(defun ellama--normalize-inline-markdown-code-fences (text)
+  "Normalize Markdown code fences in TEXT for full document converters."
+  (with-temp-buffer
+    (insert text)
+    (goto-char (point-min))
+    (while (not (eobp))
+      (let* ((line-beg (line-beginning-position))
+             (line-end (line-end-position))
+             (line (buffer-substring-no-properties line-beg line-end))
+             (fence-pos (string-match "```" line)))
+        (when (and fence-pos (> fence-pos 0))
+          (let ((prefix (substring line 0 fence-pos))
+                (suffix (substring line (+ fence-pos 3))))
+            (cond
+             ((string-match-p "\\`[A-Za-z0-9-]+\\'" suffix)
+              (goto-char line-beg)
+              (delete-region line-beg line-end)
+              (insert prefix "\n```" suffix))
+             ((not (string= suffix ""))
+              (goto-char line-beg)
+              (delete-region line-beg line-end)
+              (insert prefix "\n```\n" suffix))))))
+      (forward-line 1))
+    (buffer-substring-no-properties (point-min) (point-max))))
+
+(defun ellama--prepare-markdown-for-pandoc (text)
+  "Prepare TEXT for Pandoc Markdown to Org conversion."
+  (thread-last
+    text
+    (ellama--normalize-inline-markdown-code-fences)
+    (replace-regexp-in-string "^<!-- language: \\(.+\\) -->\n```" "```\\1")
+    (replace-regexp-in-string
+     "<think>[[:space:]\n]*"
+     (concat "\n\n" ellama--pandoc-think-begin "\n\n"))
+    (replace-regexp-in-string
+     "[[:space:]\n]*</think>[[:space:]\n]*"
+     (concat "\n\n" ellama--pandoc-think-end "\n\n"))))
+
+(defun ellama--normalize-pandoc-org-output (text)
+  "Normalize Org TEXT produced by Pandoc."
+  (thread-last
+    text
+    (replace-regexp-in-string
+     (regexp-quote ellama--pandoc-think-begin) "#+BEGIN_QUOTE")
+    (replace-regexp-in-string
+     (regexp-quote ellama--pandoc-think-end) "#+END_QUOTE")
+    (replace-regexp-in-string
+     "^#\\+\\(?:begin\\|end\\)_\\(?:src\\|quote\\)"
+     (lambda (match) (upcase match)))))
+
+(defun ellama--pandoc-available-p ()
+  "Return non-nil if Pandoc is available."
+  (executable-find ellama-pandoc-program))
+
+(defun ellama--translate-markdown-to-org-with-pandoc (text)
+  "Translate TEXT from Markdown to Org with Pandoc."
+  (unless (ellama--pandoc-available-p)
+    (error "Cannot find Pandoc executable `%s'" ellama-pandoc-program))
+  (with-temp-buffer
+    (insert (ellama--prepare-markdown-for-pandoc text))
+    (let ((exit-code (apply #'call-process-region
+                            (point-min) (point-max)
+                            ellama-pandoc-program
+                            t t nil
+                            ellama-pandoc-markdown-to-org-args)))
+      (unless (zerop exit-code)
+        (error "Pandoc exited with code %s" exit-code))
+      (ellama--normalize-pandoc-org-output
+       (string-trim-right
+        (buffer-substring-no-properties (point-min) (point-max)))))))
+
+(defun ellama--translate-markdown-to-org-builtin (text)
   "Filter to translate code blocks from markdown syntax to org syntax in TEXT.
 This filter contains only subset of markdown syntax to be good enough."
   (thread-last
@@ -845,6 +938,16 @@ This filter contains only subset of markdown syntax to be good enough."
     (replace-regexp-in-string "[\n]?</think>[\n]?" "\n#+END_QUOTE\n")
     (ellama--replace-bad-code-blocks)
     (ellama--replace-outside-of-code-blocks)))
+
+(defun ellama--translate-markdown-to-org-filter (text)
+  "Filter to translate Markdown syntax to Org syntax in TEXT."
+  (if (or (eq ellama-markdown-to-org-converter 'pandoc)
+          (and (eq ellama-markdown-to-org-converter 'auto)
+               (ellama--pandoc-available-p)))
+      (condition-case nil
+          (ellama--translate-markdown-to-org-with-pandoc text)
+        (error (ellama--translate-markdown-to-org-builtin text)))
+    (ellama--translate-markdown-to-org-builtin text)))
 
 (defcustom ellama-enable-keymap t
   "Enable or disable Ellama keymap."
