@@ -1,3 +1,9 @@
+* Version 1.17.2
+- Fix JSON request sanitization for dotted pairs in provider non-standard
+  parameters.  OpenAI-compatible providers can now pass options such as
+  ~:search_options ((search_strategy . "agent"))~ without triggering a
+  ~wrong-type-argument listp~ error.
+
 * Version 1.17.1
 - Hide provider values in transient provider selection.  Provider completion
   candidates now show safe labels based on provider variable names instead of

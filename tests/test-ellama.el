@@ -1488,6 +1488,14 @@ detailed comparison to help you decide:
     (should (multibyte-string-p sanitized-arguments))
     (should (json-serialize sanitized))))
 
+(ert-deftest test-ellama-sanitize-provider-chat-request-keeps-dotted-pairs ()
+  (let* ((request '(:model "qwen3.6-plus"
+                    :enable_search t
+                    :search_options ((search_strategy . "agent"))))
+         (sanitized (ellama--sanitize-provider-chat-request request)))
+    (should (equal sanitized request))
+    (should (json-serialize sanitized))))
+
 (ert-deftest test-ellama-collect-openai-streaming-tool-uses-uses-max-index ()
   (let* ((data
           [((index . 0)

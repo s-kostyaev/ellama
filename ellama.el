@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.17.1
+;; Version: 1.17.2
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -2693,13 +2693,16 @@ REASONING-BUFFER is a buffer for reasoning."
     (ellama--json-safe-string value))
    ((vectorp value)
     (vconcat (mapcar #'ellama--json-safe-value value)))
-   ((consp value)
+   ((proper-list-p value)
     (mapcar (lambda (item)
               (if (consp item)
                   (cons (ellama--json-safe-value (car item))
                         (ellama--json-safe-value (cdr item)))
                 (ellama--json-safe-value item)))
             value))
+   ((consp value)
+    (cons (ellama--json-safe-value (car value))
+          (ellama--json-safe-value (cdr value))))
    (t value)))
 
 (defun ellama--sanitize-provider-chat-request (request)
