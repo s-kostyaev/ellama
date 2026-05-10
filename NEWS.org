@@ -1,3 +1,9 @@
+* Version 1.18.0
+- Add optional Pandoc-backed Markdown to Org conversion.  Users can configure
+  ~ellama-markdown-to-org-converter~ to use the builtin converter, Pandoc, or
+  automatic Pandoc detection while Ellama keeps the builtin converter as the
+  default fallback when Pandoc is unavailable or conversion fails.
+
 * Version 1.17.2
 - Fix JSON request sanitization for dotted pairs in provider non-standard
   parameters.  OpenAI-compatible providers can now pass options such as
