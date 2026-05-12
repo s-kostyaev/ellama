@@ -12,6 +12,7 @@ ELLAMA_COMPILE_ORDER = \
 	ellama-tools.el \
 	ellama-skills.el \
 	ellama.el \
+	ellama-eval.el \
 	ellama-context.el \
 	ellama-transient.el \
 	ellama-blueprint.el \
@@ -32,6 +33,7 @@ test:
 		--eval "(setq load-path (cl-remove-if (lambda (dir) (string-match-p \"/elpa/org-[^/]+/?$$\" dir)) load-path))" \
 		-l ellama.el \
 		-l tests/test-ellama.el \
+		-l tests/test-ellama-eval.el \
 		-l tests/test-ellama-context.el \
 		-l tests/test-ellama-tools.el \
 		-l tests/test-ellama-tools-dlp.el \
@@ -49,6 +51,7 @@ test-detailed:
 		--eval "(setq load-path (cl-remove-if (lambda (dir) (string-match-p \"/elpa/org-[^/]+/?$$\" dir)) load-path))" \
 		-l ellama.el \
 		-l tests/test-ellama.el \
+		-l tests/test-ellama-eval.el \
 		-l tests/test-ellama-context.el \
 		-l tests/test-ellama-tools.el \
 		-l tests/test-ellama-tools-dlp.el \
