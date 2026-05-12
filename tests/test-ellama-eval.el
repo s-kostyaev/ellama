@@ -101,6 +101,55 @@
         (should
          (= (plist-get result :tool-call-count) 0))))))
 
+(ert-deftest test-ellama-eval-async-suite-calls-progress-and-completion ()
+  (let ((completed nil)
+        (progress nil)
+        (deadline (+ (float-time) 2.0)))
+    (cl-letf (((symbol-function 'ellama-eval-start-case)
+               (lambda (case profile callback &optional _provider)
+                 (funcall callback
+                          (list :case-id (plist-get case :id)
+                                :suite (plist-get case :suite)
+                                :profile profile
+                                :status 'passed
+                                :success t
+                                :steps 1
+                                :tool-call-count 2)))))
+      (ellama-eval-run-hypothesis-suite-async
+       nil '(baseline)
+       '((:id "one" :suite edit)
+         (:id "two" :suite explore))
+       (lambda (results)
+         (setq completed results))
+       (lambda (_results count total _latest)
+         (push (list count total) progress)))
+      (while (and (null completed)
+                  (< (float-time) deadline))
+        (accept-process-output nil 0.01))
+      (should (= (length completed) 2))
+      (should (equal (nreverse progress)
+                     '((0 2) (1 2) (2 2)))))))
+
+(ert-deftest test-ellama-eval-timeout-run-finalizes-state ()
+  (let* ((workspace (make-temp-file "ellama-eval-timeout-" t))
+         (callback-result nil)
+         (state
+          (make-ellama-eval--run-state
+           :status 'pending
+           :trace nil
+           :started-at (float-time)
+           :workspace workspace
+           :case '(:id "timeout" :suite edit)
+           :profile 'baseline
+           :callback (lambda (result)
+                       (setq callback-result result)))))
+    (let ((ellama-eval--active-run state))
+      (ellama-eval--timeout-run state)
+      (should (null ellama-eval--active-run)))
+    (should (eq (plist-get callback-result :status) 'timeout))
+    (should-not (plist-get callback-result :success))
+    (should-not (file-directory-p workspace))))
+
 (ert-deftest test-ellama-eval-summarize-results ()
   (let* ((results
           '((:suite edit :profile baseline :success t
@@ -114,6 +163,35 @@
     (should (= (plist-get row :success-rate) 0.5))
     (should (= (plist-get row :mean-steps) 3.0))
     (should (= (plist-get row :mean-tool-calls) 4.0))))
+
+(ert-deftest test-ellama-eval-render-summary-buffer ()
+  (let* ((results
+          '((:case-id "one" :suite edit :profile baseline :status passed
+                      :success t :steps 2 :tool-call-count 3
+                      :elapsed-ms 40)))
+         (buffer
+          (ellama-eval--render-summary-buffer results 1 4 "/tmp/out.jsonl")))
+    (unwind-protect
+        (with-current-buffer buffer
+          (let ((text (buffer-string)))
+            (should (string-match-p "Progress: 1/4 completed" text))
+            (should (string-match-p "JSONL target: /tmp/out.jsonl" text))
+            (should (string-match-p "Aggregate summary" text))
+            (should (string-match-p "one" text))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest test-ellama-eval-cases-for-suite-selection ()
+  (let ((edit-cases (ellama-eval--cases-for-suite-selection 'edit))
+        (all-cases (ellama-eval--cases-for-suite-selection 'all)))
+    (should edit-cases)
+    (should
+     (cl-every
+      (lambda (case)
+        (eq (plist-get case :suite) 'edit))
+      edit-cases))
+    (should (= (length all-cases)
+               (length ellama-eval-hypothesis-cases)))))
 
 (provide 'test-ellama-eval)
 

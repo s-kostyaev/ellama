@@ -52,11 +52,18 @@
 
 (cl-defstruct ellama-eval--run-state
   "Mutable state for one active evaluation run."
-  status result trace worker started-at)
+  status result trace worker started-at workspace case profile callback
+  timeout-timer)
 
 (defvar ellama-eval--active-run nil
   "Current evaluation run state.
 Only one evaluation run is supported at a time.")
+
+(defvar ellama-eval-last-results nil
+  "Results from the most recent interactive evaluation suite.")
+
+(defconst ellama-eval--summary-buffer-name "*Ellama Eval Summary*"
+  "Name of the interactive evaluation summary buffer.")
 
 (defconst ellama-eval--base-tool-names
   '("read_file" "lines_range" "grep" "grep_in_file"
@@ -451,16 +458,6 @@ MODE follows the same contract as `ellama-tools-read-file-tool'."
      (member (plist-get entry :name) names))
    trace))
 
-(defun ellama-eval--run-status (state deadline)
-  "Return run status from STATE and DEADLINE."
-  (cond
-   ((not (eq (ellama-eval--run-state-status state) 'pending))
-    (ellama-eval--run-state-status state))
-   ((>= (float-time) deadline)
-    'timeout)
-   (t
-    'pending)))
-
 (defun ellama-eval--provider-role-plist (provider system tool-names)
   "Return eval role plist for PROVIDER, SYSTEM and TOOL-NAMES."
   (append (list :system system :tools tool-names)
@@ -479,12 +476,88 @@ oracle results."
    (t
     'failed)))
 
-(defun ellama-eval-run-case (case profile &optional provider)
-  "Run CASE under PROFILE with optional PROVIDER."
-  (let* ((workspace (make-temp-file "ellama-eval-" t))
-         (files (plist-get case :files))
+(defun ellama-eval--cancel-timeout-timer (state)
+  "Cancel timeout timer stored in STATE."
+  (when-let* ((timer (ellama-eval--run-state-timeout-timer state)))
+    (cancel-timer timer)
+    (setf (ellama-eval--run-state-timeout-timer state) nil)))
+
+(defun ellama-eval--cleanup-workspace (state)
+  "Delete STATE workspace unless retention is enabled."
+  (let ((workspace (ellama-eval--run-state-workspace state)))
+    (unless (and ellama-eval-keep-workspaces
+                 (file-directory-p workspace))
+      (when (file-directory-p workspace)
+        (delete-directory workspace t)))))
+
+(defun ellama-eval--build-result (state run-status)
+  "Build result plist for STATE and RUN-STATUS."
+  (let* ((case (ellama-eval--run-state-case state))
+         (workspace (ellama-eval--run-state-workspace state))
          (expected-files (plist-get case :expected-files))
          (answer-regexps (plist-get case :answer-regexps))
+         (trace (nreverse (ellama-eval--run-state-trace state)))
+         (file-checks
+          (ellama-eval--file-checks workspace expected-files))
+         (answer-checks
+          (ellama-eval--answer-checks
+           (ellama-eval--run-state-result state)
+           answer-regexps))
+         (status
+          (ellama-eval--result-status
+           run-status file-checks answer-checks))
+         (worker (ellama-eval--run-state-worker state))
+         (extra (and worker (ellama-session-extra worker))))
+    (list
+     :case-id (plist-get case :id)
+     :suite (plist-get case :suite)
+     :profile (ellama-eval--run-state-profile state)
+     :status status
+     :success (eq status 'passed)
+     :report-result (ellama-eval--run-state-result state)
+     :elapsed-ms
+     (round (* 1000
+               (- (float-time)
+                  (ellama-eval--run-state-started-at state))))
+     :steps (or (plist-get extra :step-count) 0)
+     :tool-call-count (length trace)
+     :read-call-count
+     (ellama-eval--tool-count trace '("read_file" "lines_range"))
+     :edit-call-count
+     (ellama-eval--tool-count trace '("edit_file" "edit_lines"))
+     :tool-trace trace
+     :file-checks file-checks
+     :answer-checks answer-checks
+     :workspace (when ellama-eval-keep-workspaces workspace))))
+
+(defun ellama-eval--finish-run (state run-status &optional task-result)
+  "Finalize STATE with RUN-STATUS and optional TASK-RESULT."
+  (when (eq (ellama-eval--run-state-status state) 'pending)
+    (when task-result
+      (setf (ellama-eval--run-state-result state) task-result))
+    (setf (ellama-eval--run-state-status state) run-status)
+    (ellama-eval--cancel-timeout-timer state)
+    (let ((result (ellama-eval--build-result state run-status))
+          (callback (ellama-eval--run-state-callback state)))
+      (when (eq ellama-eval--active-run state)
+        (setq ellama-eval--active-run nil))
+      (ellama-eval--cleanup-workspace state)
+      (when callback
+        (funcall callback result))
+      result)))
+
+(defun ellama-eval--timeout-run (state)
+  "Finalize STATE as timed out."
+  (ellama-eval--finish-run state 'timeout))
+
+(defun ellama-eval-start-case
+    (case profile callback &optional provider)
+  "Start CASE under PROFILE and call CALLBACK with its result.
+PROVIDER overrides the provider used by the eval role."
+  (when ellama-eval--active-run
+    (error "An Ellama evaluation run is already active"))
+  (let* ((workspace (make-temp-file "ellama-eval-" t))
+         (files (plist-get case :files))
          (system (or (plist-get case :system)
                      ellama-eval--coder-system))
          (tool-names (ellama-eval--profile-tool-names profile))
@@ -493,13 +566,18 @@ oracle results."
           (make-ellama-eval--run-state
            :status 'pending
            :trace nil
-           :started-at (float-time)))
-         (deadline (+ (float-time) ellama-eval-timeout-seconds))
-         (result nil)
+           :started-at (float-time)
+           :workspace workspace
+           :case case
+           :profile profile
+           :callback callback))
          (original-new-session (symbol-function 'ellama-new-session)))
-    (unwind-protect
+    (setq ellama-eval--active-run state)
+    (setf (ellama-eval--run-state-timeout-timer state)
+          (run-at-time ellama-eval-timeout-seconds nil
+                       #'ellama-eval--timeout-run state))
+    (condition-case err
         (let ((default-directory workspace)
-              (ellama-eval--active-run state)
               (ellama-tools-allow-all t)
               (ellama-tools-allowed nil)
               (ellama-tools-confirm-allowed (make-hash-table))
@@ -521,55 +599,27 @@ oracle results."
                          session))))
             (ellama-tools-task-tool
              (lambda (task-result)
-               (setf (ellama-eval--run-state-result state) task-result)
-               (setf (ellama-eval--run-state-status state) 'completed))
+               (ellama-eval--finish-run state 'completed task-result))
              (plist-get case :prompt)
              "eval"))
-          (while (eq (ellama-eval--run-status state deadline) 'pending)
-            (accept-process-output nil 0.05))
-          (when (eq (ellama-eval--run-status state deadline) 'timeout)
-            (setf (ellama-eval--run-state-status state) 'timeout))
-          (let* ((trace (nreverse (ellama-eval--run-state-trace state)))
-                 (run-status (ellama-eval--run-state-status state))
-                 (file-checks
-                  (ellama-eval--file-checks workspace expected-files))
-                 (answer-checks
-                  (ellama-eval--answer-checks
-                   (ellama-eval--run-state-result state)
-                   answer-regexps))
-                 (status
-                  (ellama-eval--result-status
-                   run-status file-checks answer-checks))
-                 (worker (ellama-eval--run-state-worker state))
-                 (extra (and worker (ellama-session-extra worker))))
-            (setq result
-                  (list
-                   :case-id (plist-get case :id)
-                   :suite (plist-get case :suite)
-                   :profile profile
-                   :status status
-                   :success (eq status 'passed)
-                   :report-result (ellama-eval--run-state-result state)
-                   :elapsed-ms
-                   (round (* 1000
-                             (- (float-time)
-                                (ellama-eval--run-state-started-at state))))
-                   :steps (or (plist-get extra :step-count) 0)
-                   :tool-call-count (length trace)
-                   :read-call-count
-                   (ellama-eval--tool-count
-                    trace '("read_file" "lines_range"))
-                   :edit-call-count
-                   (ellama-eval--tool-count
-                    trace '("edit_file" "edit_lines"))
-                   :tool-trace trace
-                   :file-checks file-checks
-                   :answer-checks answer-checks
-                   :workspace (when ellama-eval-keep-workspaces workspace)))))
-      (unless (and ellama-eval-keep-workspaces
-                   (file-directory-p workspace))
-        (when (file-directory-p workspace)
-          (delete-directory workspace t))))
+          state)
+      (error
+       (ellama-eval--cancel-timeout-timer state)
+       (when (eq ellama-eval--active-run state)
+         (setq ellama-eval--active-run nil))
+       (ellama-eval--cleanup-workspace state)
+       (signal (car err) (cdr err))))))
+
+(defun ellama-eval-run-case (case profile &optional provider)
+  "Run CASE under PROFILE with optional PROVIDER."
+  (let ((result :pending))
+    (ellama-eval-start-case
+     case profile
+     (lambda (case-result)
+       (setq result case-result))
+     provider)
+    (while (eq result :pending)
+      (accept-process-output nil 0.05))
     result))
 
 (defun ellama-eval-run-hypothesis-suite
@@ -584,6 +634,48 @@ allow partial runs."
       (dolist (profile profiles)
         (push (ellama-eval-run-case case profile provider) results)))
     (nreverse results)))
+
+(defun ellama-eval--hypothesis-jobs (profiles cases)
+  "Return ordered hypothesis jobs for PROFILES and CASES."
+  (let (jobs)
+    (dolist (case cases)
+      (dolist (profile profiles)
+        (push (list :case case :profile profile) jobs)))
+    (nreverse jobs)))
+
+(defun ellama-eval-run-hypothesis-suite-async
+    (provider profiles cases callback &optional progress-callback)
+  "Run the hypothesis suite asynchronously.
+PROVIDER, PROFILES and CASES mirror `ellama-eval-run-hypothesis-suite'.
+Call CALLBACK with all results.  Call PROGRESS-CALLBACK with partial results,
+completed count, total count and the latest result."
+  (let* ((profiles (or profiles ellama-eval-hypothesis-profiles))
+         (cases (or cases ellama-eval-hypothesis-cases))
+         (jobs (ellama-eval--hypothesis-jobs profiles cases))
+         (total (length jobs))
+         (completed 0)
+         results)
+    (cl-labels
+        ((start-next ()
+           (if (null jobs)
+               (funcall callback (nreverse results))
+             (let* ((job (pop jobs))
+                    (case (plist-get job :case))
+                    (profile (plist-get job :profile)))
+               (ellama-eval-start-case
+                case profile
+                (lambda (result)
+                  (push result results)
+                  (setq completed (1+ completed))
+                  (when progress-callback
+                    (funcall progress-callback
+                             (reverse results) completed total result))
+                  (run-at-time 0 nil #'start-next))
+                provider)))))
+      (when progress-callback
+        (funcall progress-callback nil 0 total nil))
+      (run-at-time 0 nil #'start-next)
+      total)))
 
 (defun ellama-eval-summarize-results (results)
   "Return aggregate summary rows for RESULTS."
@@ -636,6 +728,142 @@ allow partial runs."
   (with-temp-file file-name
     (dolist (result results)
       (insert (json-encode result) "\n"))))
+
+(defun ellama-eval--provider-candidates ()
+  "Return interactive provider candidates for evaluation."
+  (append
+   `(("coding provider" . ellama-coding-provider)
+     ("default model" . ellama-provider)
+     ("ollama model" . (ellama-get-ollama-local-model)))
+   ellama-providers))
+
+(defun ellama-eval--read-provider ()
+  "Read evaluation provider from the minibuffer."
+  (let* ((providers (ellama-eval--provider-candidates))
+         (choice
+          (completing-read
+           "Evaluation provider: "
+           (mapcar #'car providers)
+           nil t nil nil "coding provider")))
+    (eval (alist-get choice providers nil nil #'string=))))
+
+(defun ellama-eval--read-suite-selection ()
+  "Read suite selection from the minibuffer."
+  (intern
+   (completing-read
+    "Evaluation suite: "
+    '("all" "edit" "explore")
+    nil t nil nil "all")))
+
+(defun ellama-eval--cases-for-suite-selection (selection)
+  "Return cases selected by SELECTION."
+  (if (eq selection 'all)
+      ellama-eval-hypothesis-cases
+    (seq-filter
+     (lambda (case)
+       (eq (plist-get case :suite) selection))
+     ellama-eval-hypothesis-cases)))
+
+(defun ellama-eval--read-profile-selection ()
+  "Read evaluation profiles from the minibuffer."
+  (let* ((choices (mapcar #'symbol-name ellama-eval-hypothesis-profiles))
+         (selected
+          (completing-read-multiple
+           "Evaluation profiles, comma separated (empty means all): "
+           choices nil t)))
+    (if selected
+        (mapcar #'intern selected)
+      ellama-eval-hypothesis-profiles)))
+
+(defun ellama-eval--read-results-file ()
+  "Read optional JSONL results file for the interactive command."
+  (when (y-or-n-p "Write evaluation results to JSONL after completion? ")
+    (read-file-name "Evaluation JSONL file: " nil nil nil
+                    "ellama-eval-results.jsonl")))
+
+(defun ellama-eval--insert-summary-rows (rows)
+  "Insert aggregate summary ROWS into the current buffer."
+  (insert
+   (format "%-10s %-22s %8s %8s %10s %10s\n"
+           "Suite" "Profile" "Runs" "Passed" "MeanSteps" "MeanCalls"))
+  (insert (make-string 78 ?-) "\n")
+  (dolist (row rows)
+    (insert
+     (format "%-10s %-22s %8d %8d %10.2f %10.2f\n"
+             (plist-get row :suite)
+             (plist-get row :profile)
+             (plist-get row :runs)
+             (plist-get row :passed)
+             (plist-get row :mean-steps)
+             (plist-get row :mean-tool-calls)))))
+
+(defun ellama-eval--insert-result-rows (results)
+  "Insert per-run RESULTS into the current buffer."
+  (insert
+   (format "%-30s %-22s %-10s %7s %7s %9s\n"
+           "Case" "Profile" "Status" "Steps" "Calls" "Elapsed"))
+  (insert (make-string 92 ?-) "\n")
+  (dolist (result results)
+    (insert
+     (format "%-30s %-22s %-10s %7d %7d %8dms\n"
+             (plist-get result :case-id)
+             (plist-get result :profile)
+             (plist-get result :status)
+             (plist-get result :steps)
+             (plist-get result :tool-call-count)
+             (plist-get result :elapsed-ms)))))
+
+(defun ellama-eval--render-summary-buffer
+    (results completed total &optional results-file)
+  "Render RESULTS summary with COMPLETED and TOTAL progress.
+RESULTS-FILE is shown when JSONL export is configured."
+  (let ((buffer (get-buffer-create ellama-eval--summary-buffer-name)))
+    (with-current-buffer buffer
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert "Ellama evaluation\n\n")
+        (insert (format "Progress: %d/%d completed\n" completed total))
+        (when results-file
+          (insert (format "JSONL target: %s\n" results-file)))
+        (insert "\n")
+        (if results
+            (progn
+              (insert "Aggregate summary\n\n")
+              (ellama-eval--insert-summary-rows
+               (ellama-eval-summarize-results results))
+              (insert "\nLatest results\n\n")
+              (ellama-eval--insert-result-rows results))
+          (insert "No completed cases yet.\n"))
+        (goto-char (point-min))
+        (special-mode)))
+    (display-buffer buffer)
+    buffer))
+
+;;;###autoload
+(defun ellama-eval-run-hypothesis-suite-interactive
+    (provider suite profiles results-file)
+  "Start the built-in hypothesis suite without blocking Emacs.
+PROVIDER is used for eval roles.  SUITE narrows the built-in cases.  PROFILES
+select experiment profiles.  RESULTS-FILE receives JSONL output when non-nil."
+  (interactive
+   (list (ellama-eval--read-provider)
+         (ellama-eval--read-suite-selection)
+         (ellama-eval--read-profile-selection)
+         (ellama-eval--read-results-file)))
+  (let ((cases (ellama-eval--cases-for-suite-selection suite)))
+    (ellama-eval-run-hypothesis-suite-async
+     provider profiles cases
+     (lambda (results)
+       (setq ellama-eval-last-results results)
+       (when results-file
+         (ellama-eval-write-results-jsonl results results-file))
+       (ellama-eval--render-summary-buffer
+        results (length results) (length results) results-file)
+       (message "Ellama evaluation finished: %d runs." (length results)))
+     (lambda (results completed total _latest)
+       (ellama-eval--render-summary-buffer
+        results completed total results-file)))
+    (message "Ellama evaluation started.")))
 
 (provide 'ellama-eval)
 
