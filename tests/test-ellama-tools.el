@@ -106,10 +106,16 @@
     (should spinner-stop-called)))
 (defun ellama-test--ensure-local-ellama-tools ()
   "Load local `ellama-tools.el' from project root when needed."
-  (unless (and (fboundp 'ellama-tools--sanitize-tool-text-output)
-               (fboundp 'ellama-tools--command-argv)
-               (fboundp 'ellama-tools--task-description))
-    (load-file (expand-file-name "ellama-tools.el" ellama-test-root))))
+  (let ((loaded-file
+         (symbol-file 'ellama-tools-directory-tree-tool 'defun)))
+    (unless (and loaded-file
+                 (string-prefix-p
+                  (file-truename ellama-test-root)
+                  (file-truename loaded-file))
+                 (fboundp 'ellama-tools--sanitize-tool-text-output)
+                 (fboundp 'ellama-tools--command-argv)
+                 (fboundp 'ellama-tools--task-description))
+      (load-file (expand-file-name "ellama-tools.el" ellama-test-root)))))
 
 (defun ellama-test--clear-srt-policy-cache ()
   "Clear local `srt' policy cache for tool test helpers."
@@ -2018,6 +2024,20 @@ Return list with result and prompt."
           (should-not (string-match-p "\\.hidden" result))
           (should (< (string-match-p "a\\.txt" result)
                      (string-match-p "b\\.txt" result))))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest test-ellama-tools-directory-tree-omits-prefix-for-single-entry ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-tree-single-" t))
+         (file (expand-file-name "only.txt" dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "x"))
+          (should
+           (equal (ellama-tools-directory-tree-tool dir)
+                  "only.txt\n")))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 

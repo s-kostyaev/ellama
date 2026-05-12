@@ -1830,17 +1830,22 @@ DEPTH is the current recursion depth, used internally."
   (or (ellama-tools--tool-check-file-access dir 'list)
       (if (not (file-exists-p dir))
           (format "Directory %s doesn't exists" dir)
-        (let ((indent (make-string (* (or depth 0) 2) ? ))
-              (tree ""))
-          (dolist (f (sort (cl-remove-if
-                            (lambda (f)
-                              (string-prefix-p "." f))
-                            (directory-files dir))
-                           #'string-lessp))
+        (let* ((indent (make-string (* (or depth 0) 2) ? ))
+               (entries
+                (sort (cl-remove-if
+                       (lambda (f)
+                         (string-prefix-p "." f))
+                       (directory-files dir))
+                      #'string-lessp))
+               (single-entry-p (= (length entries) 1))
+               (tree ""))
+          (dolist (f entries)
             (let* ((full   (expand-file-name f dir))
                    (name   (file-name-nondirectory f))
                    (type   (if (file-directory-p full) "|-" "`-"))
-                   (line   (concat indent type name "\n")))
+                   (line   (concat indent
+                                   (unless single-entry-p type)
+                                   name "\n")))
               (setq tree (concat tree line))
               (when (file-directory-p full)
                 (setq tree (concat tree
