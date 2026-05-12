@@ -778,8 +778,20 @@ completed count, total count and the latest result."
 (defun ellama-eval--read-results-file ()
   "Read optional JSONL results file for the interactive command."
   (when (y-or-n-p "Write evaluation results to JSONL after completion? ")
-    (read-file-name "Evaluation JSONL file: " nil nil nil
-                    "ellama-eval-results.jsonl")))
+    (let* ((directory default-directory)
+           (default-file
+            (expand-file-name "ellama-eval-results.jsonl" directory))
+           (selected
+            (read-file-name "Evaluation JSONL file: "
+                            directory default-file nil
+                            "ellama-eval-results.jsonl"))
+           (expanded (expand-file-name selected directory)))
+      (when (and buffer-file-name
+                 (equal (file-truename expanded)
+                        (file-truename buffer-file-name)))
+        (user-error
+         "Refusing to overwrite the current buffer file with eval JSONL"))
+      expanded)))
 
 (defun ellama-eval--insert-summary-rows (rows)
   "Insert aggregate summary ROWS into the current buffer."

@@ -193,6 +193,48 @@
     (should (= (length all-cases)
                (length ellama-eval-hypothesis-cases)))))
 
+(ert-deftest test-ellama-eval-read-results-file-expands-relative-selection ()
+  (let* ((dir (make-temp-file "ellama-eval-results-dir-" t))
+         (default-directory dir)
+         (buffer-file-name (expand-file-name "active.el" dir))
+         captured-args)
+    (unwind-protect
+        (cl-letf (((symbol-function 'y-or-n-p)
+                   (lambda (&rest _args) t))
+                  ((symbol-function 'read-file-name)
+                   (lambda (&rest args)
+                     (setq captured-args args)
+                     "ellama-eval-results-baseline.jsonl")))
+          (should
+           (equal
+            (ellama-eval--read-results-file)
+            (expand-file-name "ellama-eval-results-baseline.jsonl" dir)))
+          (should
+           (equal (nth 1 captured-args) dir))
+          (should
+           (equal (nth 2 captured-args)
+                  (expand-file-name "ellama-eval-results.jsonl" dir))))
+      (when (file-directory-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest test-ellama-eval-read-results-file-refuses-current-buffer-file ()
+  (let* ((dir (make-temp-file "ellama-eval-results-dir-" t))
+         (default-directory dir)
+         (buffer-file-name (expand-file-name "active.el" dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file buffer-file-name
+            (insert "keep me"))
+          (cl-letf (((symbol-function 'y-or-n-p)
+                     (lambda (&rest _args) t))
+                    ((symbol-function 'read-file-name)
+                     (lambda (&rest _args) buffer-file-name)))
+            (should-error
+             (ellama-eval--read-results-file)
+             :type 'user-error)))
+      (when (file-directory-p dir)
+        (delete-directory dir t)))))
+
 (provide 'test-ellama-eval)
 
 ;;; test-ellama-eval.el ends here
