@@ -266,6 +266,17 @@ STYLE controls partial message shape.  Default value is `word-leading'."
      '((read_file . "\"one\\ntwo\"")))
     "read_file\n  one\n  two")))
 
+(ert-deftest test-ellama-default-stream-filter-translates-org-think ()
+  (with-temp-buffer
+    (org-mode)
+    (let ((result
+           (funcall
+            (ellama--default-stream-filter (current-buffer))
+            "<think>\ngrep\n  ./router.el:1:match\n</think>\n")))
+      (should (string-match-p "#\\+BEGIN_QUOTE" result))
+      (should (string-match-p "#\\+END_QUOTE" result))
+      (should-not (string-match-p "<think>" result)))))
+
 (ert-deftest test-ellama-ask-about-add-selection-ephemeral ()
   (let (captured-ephemeral)
     (with-temp-buffer

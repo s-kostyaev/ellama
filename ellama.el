@@ -3082,6 +3082,13 @@ session state, never the globally active session selection."
           (ellama--ensure-session-uid ellama--current-session)
           ellama--current-session))))
 
+(defun ellama--default-stream-filter (buffer)
+  "Return default stream insertion filter for BUFFER."
+  (with-current-buffer buffer
+    (if (derived-mode-p 'org-mode)
+        #'ellama--translate-markdown-to-org-filter
+      #'identity)))
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
@@ -3146,7 +3153,8 @@ failure (with BUFFER current).
          (replace-beg (plist-get args :replace-beg))
          (replace-end (plist-get args :replace-end))
          (replace-region-p (and replace-beg replace-end))
-         (filter (or (plist-get args :filter) #'identity))
+         (filter (or (plist-get args :filter)
+                     (ellama--default-stream-filter buffer)))
          (errcb (or (plist-get args :on-error)
                     (lambda (msg)
                       (error "Error calling the LLM: %s" msg))))
