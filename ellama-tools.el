@@ -2028,7 +2028,8 @@ CALLBACK – function called once with the result string."
 
 (defun ellama-tools-grep-tool (dir search-string)
   "Grep SEARCH-STRING in DIR files."
-  (let ((default-directory dir))
+  (let* ((search-dir (expand-file-name dir))
+         (default-directory (file-name-as-directory search-dir)))
     (json-encode
      (ellama-tools--grep-output
       (ellama-tools--call-command
@@ -2036,7 +2037,7 @@ CALLBACK – function called once with the result string."
        "grep" "--color=never" "-nH" "-e" search-string "{}" "+")
       (format "No matches for %S in %s."
               search-string
-              (expand-file-name dir))))))
+              search-dir)))))
 
 (ellama-tools-define-tool
  '(:function

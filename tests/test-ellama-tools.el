@@ -696,6 +696,21 @@ Return list with result and prompt."
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
+(ert-deftest test-ellama-tools-grep-tool-resolves-relative-dir ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-grep-relative-" t))
+         (file (expand-file-name "sample.el" dir))
+         (default-directory (file-name-as-directory dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "(defun ellama-test-target () nil)\n"))
+          (should
+           (equal (ellama-tools-grep-tool "." "ellama-test-target")
+                  "\"./sample.el:1:(defun ellama-test-target () nil)\"")))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
 (ert-deftest test-ellama-tools-grep-in-file-tool-uses-shared-command-helper ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((file (make-temp-file "ellama-grep-in-file-"))
