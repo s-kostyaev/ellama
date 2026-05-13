@@ -94,7 +94,10 @@ then return the clamped value multiplied by WEIGHT."
          :files
          (("sample.el" . "(defun ellama-eval-score-value (value limit weight)\n  \"Return VALUE scaled by WEIGHT, clamped to LIMIT.\"\n  (* value weight))\n"))
          :expected-files
-         (("sample.el" . "(defun ellama-eval-score-value (value limit weight)\n  \"Return VALUE scaled by WEIGHT, clamped to LIMIT.\"\n  (* (min value limit) weight))\n")))
+         (("sample.el" . "(defun ellama-eval-score-value (value limit weight)\n  \"Return VALUE scaled by WEIGHT, clamped to LIMIT.\"\n  (* (min value limit) weight))\n"))
+         :ignore-docstrings t
+         :file-regexps
+         (("sample.el" . ("\"[^\"]*VALUE[^\"]*LIMIT[^\"]*WEIGHT[^\"]*\""))))
     (:id "edit-update-target-branch"
          :suite edit
          :system ,ellama-eval--coder-system
@@ -424,20 +427,76 @@ MODE follows the same contract as `ellama-tools-read-file-tool'."
       (insert-file-contents-literally file-name)
       (buffer-string))))
 
-(defun ellama-eval--file-checks (workspace expected-files)
-  "Return file check entries for WORKSPACE and EXPECTED-FILES."
+(defun ellama-eval--strip-defun-docstrings (text)
+  "Return TEXT with top-level defun docstrings replaced."
+  (when text
+    (with-temp-buffer
+      (emacs-lisp-mode)
+      (insert text)
+      (goto-char (point-min))
+      (while (re-search-forward "^(defun\\_>" nil t)
+        (goto-char (match-beginning 0))
+        (condition-case nil
+            (progn
+              (forward-char 1)
+              (forward-sexp 1)
+              (skip-chars-forward " \t\r\n")
+              (forward-sexp 1)
+              (skip-chars-forward " \t\r\n")
+              (forward-sexp 1)
+              (skip-chars-forward " \t\r\n")
+              (when (eq (char-after) ?\")
+                (let ((start (point)))
+                  (forward-sexp 1)
+                  (delete-region start (point))
+                  (insert "\"<docstring>\""))))
+          (scan-error
+           (goto-char (line-end-position)))))
+      (buffer-string))))
+
+(defun ellama-eval--file-checks
+    (workspace expected-files &optional ignore-docstrings)
+  "Return file check entries for WORKSPACE and EXPECTED-FILES.
+When IGNORE-DOCSTRINGS is non-nil, ignore defun docstring wording."
   (mapcar
    (lambda (entry)
      (let* ((relative (car entry))
             (expected (cdr entry))
             (actual
              (ellama-eval--read-file-string
-              (expand-file-name relative workspace))))
+              (expand-file-name relative workspace)))
+            (expected-for-check
+             (if ignore-docstrings
+                 (ellama-eval--strip-defun-docstrings expected)
+               expected))
+            (actual-for-check
+             (if ignore-docstrings
+                 (ellama-eval--strip-defun-docstrings actual)
+               actual)))
        (list :path relative
              :expected expected
              :actual actual
-             :matched (equal expected actual))))
+             :ignore-docstrings (and ignore-docstrings t)
+             :matched (equal expected-for-check actual-for-check))))
    expected-files))
+
+(defun ellama-eval--file-regexp-checks (workspace file-regexps)
+  "Return file regexp check entries for WORKSPACE and FILE-REGEXPS."
+  (apply
+   #'append
+   (mapcar
+    (lambda (entry)
+      (let* ((relative (car entry))
+             (actual
+              (ellama-eval--read-file-string
+               (expand-file-name relative workspace))))
+        (mapcar
+         (lambda (regexp)
+           (list :path relative
+                 :regexp regexp
+                 :matched (and actual (string-match-p regexp actual))))
+         (cdr entry))))
+    file-regexps)))
 
 (defun ellama-eval--answer-checks (answer regexps)
   "Return regexp check entries for ANSWER and REGEXPS."
@@ -464,13 +523,14 @@ MODE follows the same contract as `ellama-tools-read-file-tool'."
           (when provider (list :provider provider))))
 
 (defun ellama-eval--result-status
-    (run-status file-checks answer-checks)
+    (run-status file-checks file-regexp-checks answer-checks)
   "Return final evaluation status.
-RUN-STATUS is the execution status.  FILE-CHECKS and ANSWER-CHECKS contain
-oracle results."
+RUN-STATUS is the execution status.  FILE-CHECKS, FILE-REGEXP-CHECKS
+and ANSWER-CHECKS contain oracle results."
   (cond
    ((eq run-status 'timeout) 'timeout)
    ((and (ellama-eval--checks-pass-p file-checks)
+         (ellama-eval--checks-pass-p file-regexp-checks)
          (ellama-eval--checks-pass-p answer-checks))
     'passed)
    (t
@@ -495,17 +555,22 @@ oracle results."
   (let* ((case (ellama-eval--run-state-case state))
          (workspace (ellama-eval--run-state-workspace state))
          (expected-files (plist-get case :expected-files))
+         (ignore-docstrings (plist-get case :ignore-docstrings))
+         (file-regexps (plist-get case :file-regexps))
          (answer-regexps (plist-get case :answer-regexps))
          (trace (nreverse (ellama-eval--run-state-trace state)))
          (file-checks
-          (ellama-eval--file-checks workspace expected-files))
+          (ellama-eval--file-checks
+           workspace expected-files ignore-docstrings))
+         (file-regexp-checks
+          (ellama-eval--file-regexp-checks workspace file-regexps))
          (answer-checks
           (ellama-eval--answer-checks
            (ellama-eval--run-state-result state)
            answer-regexps))
          (status
           (ellama-eval--result-status
-           run-status file-checks answer-checks))
+           run-status file-checks file-regexp-checks answer-checks))
          (worker (ellama-eval--run-state-worker state))
          (extra (and worker (ellama-session-extra worker)))
          (continuation-steps (or (plist-get extra :step-count) 0)))
@@ -529,6 +594,7 @@ oracle results."
      (ellama-eval--tool-count trace '("edit_file" "edit_lines"))
      :tool-trace trace
      :file-checks file-checks
+     :file-regexp-checks file-regexp-checks
      :answer-checks answer-checks
      :workspace (when ellama-eval-keep-workspaces workspace))))
 
@@ -727,7 +793,8 @@ completed count, total count and the latest result."
 
 (defun ellama-eval--plist-p (value)
   "Return non-nil when VALUE is a property list."
-  (and (proper-list-p value)
+  (and (consp value)
+       (proper-list-p value)
        (zerop (mod (length value) 2))
        (cl-loop for (key _value) on value by #'cddr
                 always (keywordp key))))
@@ -744,7 +811,8 @@ KEY is the property list key that contains VALUE."
   (cond
    ((memq key '(:success :matched))
     (if value t json-false))
-   ((memq key '(:tool-trace :file-checks :answer-checks))
+   ((memq key '(:tool-trace :file-checks
+                            :file-regexp-checks :answer-checks))
     (vconcat (mapcar #'ellama-eval--json-value value)))
    ((ellama-eval--plist-p value)
     (ellama-eval--json-object value))

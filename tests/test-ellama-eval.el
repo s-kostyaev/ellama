@@ -101,6 +101,38 @@
         (should
          (= (plist-get result :tool-call-count) 0))))))
 
+(ert-deftest test-ellama-eval-run-case-can-ignore-docstring-wording ()
+  (let ((case
+         '(:id "docstring-case"
+               :suite edit
+               :prompt "Patch the file."
+               :files
+               (("sample.el" . "(defun sample (value limit weight)\n  \"Return VALUE scaled by WEIGHT, clamped to LIMIT.\"\n  (* value weight))\n"))
+               :expected-files
+               (("sample.el" . "(defun sample (value limit weight)\n  \"Return VALUE scaled by WEIGHT, clamped to LIMIT.\"\n  (* (min value limit) weight))\n"))
+               :ignore-docstrings t
+               :file-regexps
+               (("sample.el" . ("\"[^\"]*VALUE[^\"]*LIMIT[^\"]*WEIGHT[^\"]*\""))))))
+    (cl-letf (((symbol-function 'ellama-tools-task-tool)
+               (lambda (callback &optional _description _role
+                                 _template _template-base _arguments)
+                 (with-temp-file
+                     (expand-file-name "sample.el" default-directory)
+                   (insert
+                    "(defun sample (value limit weight)\n"
+                    "  \"Return VALUE clamped to LIMIT, multiplied by WEIGHT.\"\n"
+                    "  (* (min value limit) weight))\n"))
+                 (funcall callback "done")
+                 nil)))
+      (let* ((result (ellama-eval-run-case case 'baseline))
+             (file-check (car (plist-get result :file-checks)))
+             (regexp-check (car (plist-get result :file-regexp-checks))))
+        (should (eq (plist-get result :status) 'passed))
+        (should (plist-get result :success))
+        (should (plist-get file-check :ignore-docstrings))
+        (should (plist-get file-check :matched))
+        (should (plist-get regexp-check :matched))))))
+
 (ert-deftest test-ellama-eval-async-suite-calls-progress-and-completion ()
   (let ((completed nil)
         (progress nil)
@@ -198,13 +230,17 @@
                        (:name "read_file"
                               :args ("sample.el" nil)
                               :status ok
-                              :result "content"
+                              :result nil
                               :finished-at 2.0))
                       :file-checks
                       ((:path "sample.el"
                               :expected "expected"
                               :actual "actual"
                               :matched nil))
+                      :file-regexp-checks
+                      ((:path "sample.el"
+                              :regexp "VALUE"
+                              :matched t))
                       :answer-checks
                       ((:regexp "string"
                                 :matched t))
@@ -224,14 +260,24 @@
                    :false-object json-false))
                  (trace (alist-get 'tool-trace parsed))
                  (file-checks (alist-get 'file-checks parsed))
+                 (file-regexp-checks
+                  (alist-get 'file-regexp-checks parsed))
                  (answer-checks (alist-get 'answer-checks parsed)))
             (should (eq (alist-get 'success parsed) json-false))
+            (should (assq 'workspace parsed))
+            (should (null (alist-get 'workspace parsed)))
             (should (= (length trace) 2))
             (should (equal (alist-get 'name (car trace)) "grep"))
             (should (equal (alist-get 'args (car trace))
                            '("." "needle")))
+            (should (equal (alist-get 'args (cadr trace))
+                           '("sample.el" nil)))
+            (should (assq 'result (cadr trace)))
+            (should (null (alist-get 'result (cadr trace))))
             (should (eq (alist-get 'matched (car file-checks))
                         json-false))
+            (should (eq (alist-get 'matched (car file-regexp-checks))
+                        t))
             (should (eq (alist-get 'matched (car answer-checks))
                         t))))
       (when (file-exists-p file-name)
