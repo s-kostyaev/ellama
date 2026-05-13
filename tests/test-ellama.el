@@ -249,6 +249,16 @@ STYLE controls partial message shape.  Default value is `word-leading'."
      '((grep_in_file . "90:first line\n97:second line")))
     "grep_in_file\n  90:first line\n  97:second line")))
 
+(ert-deftest test-ellama-format-tool-results-readable-string-name ()
+  (let ((entry (cons "grep" "\"./router.el:1:(defun route (status)\""))
+        (expected "grep\n  ./router.el:1:(defun route (status)"))
+    (should
+     (equal (ellama--format-tool-results (list entry))
+            expected))
+    (should
+     (equal (ellama--format-tool-results entry)
+            expected))))
+
 (ert-deftest test-ellama-format-tool-results-decodes-json-string ()
   (should
    (equal

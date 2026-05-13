@@ -1338,9 +1338,13 @@ CONTEXT will be ignored.  Use global context instead.
 
 (defun ellama--format-tool-result-entry (entry)
   "Return formatted tool result ENTRY."
-  (if (and (consp entry) (symbolp (car entry)))
+  (if (and (consp entry)
+           (or (symbolp (car entry))
+               (stringp (car entry))))
       (format "%s\n%s"
-              (symbol-name (car entry))
+              (if (symbolp (car entry))
+                  (symbol-name (car entry))
+                (car entry))
               (ellama--indent-lines
                (ellama--format-tool-result-value (cdr entry))))
     (ellama--indent-lines
@@ -1351,7 +1355,8 @@ CONTEXT will be ignored.  Use global context instead.
   (string-join
    (mapcar #'ellama--format-tool-result-entry
            (if (and (listp tool-results)
-                    (not (stringp tool-results)))
+                    (not (stringp tool-results))
+                    (proper-list-p tool-results))
                tool-results
              (list tool-results)))
    "\n\n"))
