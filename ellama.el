@@ -1312,6 +1312,50 @@ CONTEXT will be ignored.  Use global context instead.
      "\n"))
    (t (format "%S" content))))
 
+(defun ellama--decode-json-string (value)
+  "Return decoded JSON string VALUE when possible."
+  (if (not (stringp value))
+      value
+    (condition-case nil
+        (let ((decoded (json-parse-string value)))
+          (if (stringp decoded) decoded value))
+      (json-parse-error value))))
+
+(defun ellama--format-tool-result-value (value)
+  "Return human-readable representation of tool result VALUE."
+  (let ((value (ellama--decode-json-string value)))
+    (cond
+     ((stringp value) value)
+     ((null value) "")
+     (t (format "%S" value)))))
+
+(defun ellama--indent-lines (text &optional prefix)
+  "Return TEXT with PREFIX inserted before each line."
+  (let ((prefix (or prefix "  ")))
+    (mapconcat (lambda (line) (concat prefix line))
+               (split-string text "\n")
+               "\n")))
+
+(defun ellama--format-tool-result-entry (entry)
+  "Return formatted tool result ENTRY."
+  (if (and (consp entry) (symbolp (car entry)))
+      (format "%s\n%s"
+              (symbol-name (car entry))
+              (ellama--indent-lines
+               (ellama--format-tool-result-value (cdr entry))))
+    (ellama--indent-lines
+     (ellama--format-tool-result-value entry))))
+
+(defun ellama--format-tool-results (tool-results)
+  "Return human-readable TOOL-RESULTS."
+  (string-join
+   (mapcar #'ellama--format-tool-result-entry
+           (if (and (listp tool-results)
+                    (not (stringp tool-results)))
+               tool-results
+             (list tool-results)))
+   "\n\n"))
+
 (defun ellama--session-compact-render-interaction (interaction)
   "Render INTERACTION for summary generation."
   (let ((role (llm-chat-prompt-interaction-role interaction))
@@ -1325,7 +1369,8 @@ CONTEXT will be ignored.  Use global context instead.
                     (capitalize (symbol-name role))
                     (ellama--session-compact-content-to-string content))
             (when tool-results
-              (format "Tool results:\n%S" tool-results))))
+              (format "Tool results:\n%s"
+                      (ellama--format-tool-results tool-results)))))
      "\n")))
 
 (defun ellama--session-compact-render-interactions (interactions)
@@ -2756,7 +2801,7 @@ REASONING-BUFFER is a buffer for reasoning."
               nil)))
         (when tool-results
           (format "\n<think>\n%s\n</think>\n"
-                  tool-results))
+                  (ellama--format-tool-results tool-results)))
         (when text
           (string-trim text)))))))
 

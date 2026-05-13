@@ -242,6 +242,20 @@ STYLE controls partial message shape.  Default value is `word-leading'."
       (when (buffer-live-p reasoning-buffer)
         (kill-buffer reasoning-buffer)))))
 
+(ert-deftest test-ellama-format-tool-results-readable-alist ()
+  (should
+   (equal
+    (ellama--format-tool-results
+     '((grep_in_file . "90:first line\n97:second line")))
+    "grep_in_file\n  90:first line\n  97:second line")))
+
+(ert-deftest test-ellama-format-tool-results-decodes-json-string ()
+  (should
+   (equal
+    (ellama--format-tool-results
+     '((read_file . "\"one\\ntwo\"")))
+    "read_file\n  one\n  two")))
+
 (ert-deftest test-ellama-ask-about-add-selection-ephemeral ()
   (let (captured-ephemeral)
     (with-temp-buffer
@@ -1291,6 +1305,21 @@ detailed comparison to help you decide:
           "user 3" "assistant 3"
           "user 4" "assistant 4"
           "user 5" "assistant 5"))))))
+
+(ert-deftest test-ellama-session-compact-renders-tool-results-readably ()
+  (let* ((prompt (llm-make-chat-prompt "user"))
+         (interaction
+          (make-llm-chat-prompt-interaction
+           :role 'assistant
+           :content "assistant"
+           :tool-results
+           '((grep_in_file . "90:first line\n97:second line")))))
+    (push interaction (llm-chat-prompt-interactions prompt))
+    (let ((rendered
+           (ellama--session-compact-render-interaction interaction)))
+      (should (string-match-p "Tool results:" rendered))
+      (should (string-match-p "grep_in_file\n  90:first line" rendered))
+      (should-not (string-match-p "((grep_in_file" rendered)))))
 
 (ert-deftest test-ellama-session-compact-uses-stored-token-count ()
   (let* ((provider (make-llm-fake))
