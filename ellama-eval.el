@@ -119,12 +119,12 @@ then return the clamped value multiplied by WEIGHT."
          :suite edit
          :system ,ellama-eval--coder-system
          :prompt
-         "Update `ellama-eval-guarded-join` so it reject both nil ITEMS and empty \
-ITEMS before calling `string-join`."
+         "Update `ellama-eval-guarded-join` so it reject both nil ITEMS and \
+non-list ITEMS before calling `string-join`."
          :files
          (("strings.el" . "(defun ellama-eval-guarded-join (items)\n  (if (null items)\n      \"\"\n    (string-join items \", \")))\n"))
          :expected-files
-         (("strings.el" . "(defun ellama-eval-guarded-join (items)\n  (if (or (null items) (equal items '()))\n      \"\"\n    (string-join items \", \")))\n")))
+         (("strings.el" . "(defun ellama-eval-guarded-join (items)\n  (if (or (null items) (not (listp items)))\n      \"\"\n    (string-join items \", \")))\n")))
     (:id "explore-locate-provider"
          :suite explore
          :system ,ellama-eval--explorer-system
