@@ -1490,8 +1490,8 @@ detailed comparison to help you decide:
 
 (ert-deftest test-ellama-sanitize-provider-chat-request-keeps-dotted-pairs ()
   (let* ((request '(:model "qwen3.6-plus"
-                    :enable_search t
-                    :search_options ((search_strategy . "agent"))))
+                           :enable_search t
+                           :search_options ((search_strategy . "agent"))))
          (sanitized (ellama--sanitize-provider-chat-request request)))
     (should (equal sanitized request))
     (should (json-serialize sanitized))))
@@ -2168,8 +2168,8 @@ region, season, or type)! 🍎🍊"))))
                           :key 'llm-key)
                :prompt (llm-make-chat-prompt "hello")
                :extra '(:dir "/tmp"
-                        :uid "symbol-key"
-                        :provider-symbol ellama-provider)))))
+                             :uid "symbol-key"
+                             :provider-symbol ellama-provider)))))
           (let* ((session (ellama--read-session-from-file file-name))
                  (key (llm-openai-compatible-key
                        (ellama-session-provider session))))
