@@ -97,7 +97,9 @@ then return the clamped value multiplied by WEIGHT."
          (("sample.el" . "(defun ellama-eval-score-value (value limit weight)\n  \"Return VALUE scaled by WEIGHT, clamped to LIMIT.\"\n  (* (min value limit) weight))\n"))
          :ignore-docstrings t
          :file-regexps
-         (("sample.el" . ("\"[^\"]*VALUE[^\"]*LIMIT[^\"]*WEIGHT[^\"]*\""))))
+         (("sample.el" . ("\"[^\"]*VALUE[^\"]*\""))
+          ("sample.el" . ("\"[^\"]*LIMIT[^\"]*\""))
+          ("sample.el" . ("\"[^\"]*WEIGHT[^\"]*\""))))
     (:id "edit-update-target-branch"
          :suite edit
          :system ,ellama-eval--coder-system
