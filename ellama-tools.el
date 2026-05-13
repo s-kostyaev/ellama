@@ -2495,15 +2495,22 @@ When the task is COMPLETE you MUST call `report_result` exactly once."
       (ellama-tools--set-session-extra
        session
        (plist-put extra :step-count (1+ steps)))
-      (ellama-stream
-       ellama-tools-subagent-continue-prompt
-       :buffer buffer
-       :session session
-       :tools tools
-       :system system
-       :on-done
-       (ellama-tools--make-subagent-loop-handler
-        session buffer system))))))
+      (let ((point (when (buffer-live-p buffer)
+                     (ellama-tools--insert-subagent-prompt
+                      buffer ellama-tools-subagent-continue-prompt))))
+        (apply
+         #'ellama-stream
+         ellama-tools-subagent-continue-prompt
+         (append
+          (list :buffer buffer
+                :session session
+                :tools tools
+                :system system
+                :on-done
+                (ellama-tools--make-subagent-loop-handler
+                 session buffer system))
+          (when point
+            (list :point point)))))))))
 
 (defun ellama-tools--make-subagent-loop-handler
     (session &optional buffer system)

@@ -2213,34 +2213,47 @@ Return list with result and prompt."
                         :system system
                         :result-callback #'ignore))))
     (unwind-protect
-        (cl-letf (((symbol-function 'ellama-get-session-buffer)
-                   (lambda (id)
-                     (and (member id '("worker-loop" "worker-loop-uid"))
-                          worker-buffer)))
-                  ((symbol-function 'ellama-tools--set-session-extra)
-                   (lambda (_session extra)
-                     (setq updated-extra extra)))
-                  ((symbol-function 'ellama-stream)
-                   (lambda (prompt &rest args)
-                     (setq stream-call (list prompt args)))))
-          (with-temp-buffer
-            (let ((ellama--current-session nil))
-              (funcall
-               (ellama-tools--make-subagent-loop-handler
-                session worker-buffer system)
-               "ignored")))
-          (should (equal (plist-get updated-extra :step-count) 1))
-          (should (equal (car stream-call)
-                         ellama-tools-subagent-continue-prompt))
-          (should (eq (plist-get (cadr stream-call) :buffer)
-                      worker-buffer))
-          (should (eq (plist-get (cadr stream-call) :session)
-                      session))
-          (should (equal (plist-get (cadr stream-call) :tools)
-                         (list role-tool)))
-          (should (equal (plist-get (cadr stream-call) :system)
-                         system))
-          (should (functionp (plist-get (cadr stream-call) :on-done))))
+        (progn
+          (with-current-buffer worker-buffer
+            (insert "Previous response")
+            (goto-char (point-min)))
+          (cl-letf (((symbol-function 'ellama-get-session-buffer)
+                     (lambda (id)
+                       (and (member id '("worker-loop" "worker-loop-uid"))
+                            worker-buffer)))
+                    ((symbol-function 'ellama-tools--set-session-extra)
+                     (lambda (_session extra)
+                       (setq updated-extra extra)))
+                    ((symbol-function 'ellama-stream)
+                     (lambda (prompt &rest args)
+                       (setq stream-call (list prompt args)))))
+            (with-temp-buffer
+              (let ((ellama--current-session nil))
+                (funcall
+                 (ellama-tools--make-subagent-loop-handler
+                  session worker-buffer system)
+                 "ignored")))
+            (should (equal (plist-get updated-extra :step-count) 1))
+            (should (equal (car stream-call)
+                           ellama-tools-subagent-continue-prompt))
+            (should (eq (plist-get (cadr stream-call) :buffer)
+                        worker-buffer))
+            (should (eq (plist-get (cadr stream-call) :session)
+                        session))
+            (should (equal (plist-get (cadr stream-call) :tools)
+                           (list role-tool)))
+            (should (equal (plist-get (cadr stream-call) :system)
+                           system))
+            (should (functionp (plist-get (cadr stream-call) :on-done)))
+            (with-current-buffer worker-buffer
+              (should (string-match-p "Previous response"
+                                      (buffer-string)))
+              (should (string-match-p "Main agent:"
+                                      (buffer-string)))
+              (should (string-match-p "Task not marked complete"
+                                      (buffer-string)))
+              (should (= (plist-get (cadr stream-call) :point)
+                         (point-max))))))
       (when (buffer-live-p worker-buffer)
         (kill-buffer worker-buffer)))))
 
