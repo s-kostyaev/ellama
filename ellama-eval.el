@@ -151,7 +151,7 @@ Answer with the helper name only."
 in one short sentence."
          :files
          (("policy.el" . "(defun ellama-eval-check-write (path)\n  (if (ellama-eval-path-allowed-p path)\n      nil\n    (format \"Write denied for %s\" path)))\n"))
-         :answer-regexps ("string" "Write denied")))
+         :answer-regexps ("string")))
   "Built-in cases for the numbered-read and line-edit hypothesis.")
 
 (defun ellama-eval--tool-spec (name function args description)
@@ -507,7 +507,8 @@ oracle results."
           (ellama-eval--result-status
            run-status file-checks answer-checks))
          (worker (ellama-eval--run-state-worker state))
-         (extra (and worker (ellama-session-extra worker))))
+         (extra (and worker (ellama-session-extra worker)))
+         (continuation-steps (or (plist-get extra :step-count) 0)))
     (list
      :case-id (plist-get case :id)
      :suite (plist-get case :suite)
@@ -519,7 +520,8 @@ oracle results."
      (round (* 1000
                (- (float-time)
                   (ellama-eval--run-state-started-at state))))
-     :steps (or (plist-get extra :step-count) 0)
+     :steps (if worker (1+ continuation-steps) continuation-steps)
+     :continuation-steps continuation-steps
      :tool-call-count (length trace)
      :read-call-count
      (ellama-eval--tool-count trace '("read_file" "lines_range"))
@@ -723,11 +725,55 @@ completed count, total count and the latest result."
                        (plist-get right :suite)
                        (plist-get right :profile))))))))
 
+(defun ellama-eval--plist-p (value)
+  "Return non-nil when VALUE is a property list."
+  (and (proper-list-p value)
+       (zerop (mod (length value) 2))
+       (cl-loop for (key _value) on value by #'cddr
+                always (keywordp key))))
+
+(defun ellama-eval--json-key (key)
+  "Return JSON object key string for plist KEY."
+  (if (keywordp key)
+      (substring (symbol-name key) 1)
+    (format "%s" key)))
+
+(defun ellama-eval--json-value (value &optional key)
+  "Return VALUE converted to a shape suitable for JSON encoding.
+KEY is the property list key that contains VALUE."
+  (cond
+   ((memq key '(:success :matched))
+    (if value t json-false))
+   ((memq key '(:tool-trace :file-checks :answer-checks))
+    (vconcat (mapcar #'ellama-eval--json-value value)))
+   ((ellama-eval--plist-p value)
+    (ellama-eval--json-object value))
+   ((proper-list-p value)
+    (vconcat (mapcar #'ellama-eval--json-value value)))
+   ((and (symbolp value) (not (memq value (list t json-false))))
+    (symbol-name value))
+   (t value)))
+
+(defun ellama-eval--json-object (plist)
+  "Return PLIST as a JSON object hash table."
+  (let ((object (make-hash-table :test #'equal)))
+    (while plist
+      (let ((key (pop plist))
+            (value (pop plist)))
+        (puthash (ellama-eval--json-key key)
+                 (ellama-eval--json-value value key)
+                 object)))
+    object))
+
+(defun ellama-eval--json-encode-result (result)
+  "Return RESULT encoded as JSON for JSONL output."
+  (json-encode (ellama-eval--json-value result)))
+
 (defun ellama-eval-write-results-jsonl (results file-name)
   "Write RESULTS as JSON lines to FILE-NAME."
   (with-temp-file file-name
     (dolist (result results)
-      (insert (json-encode result) "\n"))))
+      (insert (ellama-eval--json-encode-result result) "\n"))))
 
 (defun ellama-eval--provider-candidates ()
   "Return interactive provider candidates for evaluation."

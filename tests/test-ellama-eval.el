@@ -181,6 +181,62 @@
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
 
+(ert-deftest test-ellama-eval-write-results-jsonl-uses-arrays-and-booleans ()
+  (let* ((file-name (make-temp-file "ellama-eval-results-" nil ".jsonl"))
+         (results
+          '((:case-id "case"
+                      :suite edit
+                      :profile baseline
+                      :status failed
+                      :success nil
+                      :tool-trace
+                      ((:name "grep"
+                              :args ("." "needle")
+                              :status ok
+                              :result "match"
+                              :finished-at 1.0)
+                       (:name "read_file"
+                              :args ("sample.el" nil)
+                              :status ok
+                              :result "content"
+                              :finished-at 2.0))
+                      :file-checks
+                      ((:path "sample.el"
+                              :expected "expected"
+                              :actual "actual"
+                              :matched nil))
+                      :answer-checks
+                      ((:regexp "string"
+                                :matched t))
+                      :workspace nil))))
+    (unwind-protect
+        (progn
+          (ellama-eval-write-results-jsonl results file-name)
+          (let* ((json-false :false)
+                 (parsed
+                  (json-parse-string
+                   (with-temp-buffer
+                     (insert-file-contents file-name)
+                     (buffer-substring-no-properties
+                      (point-min) (line-end-position)))
+                   :object-type 'alist
+                   :array-type 'list
+                   :false-object json-false))
+                 (trace (alist-get 'tool-trace parsed))
+                 (file-checks (alist-get 'file-checks parsed))
+                 (answer-checks (alist-get 'answer-checks parsed)))
+            (should (eq (alist-get 'success parsed) json-false))
+            (should (= (length trace) 2))
+            (should (equal (alist-get 'name (car trace)) "grep"))
+            (should (equal (alist-get 'args (car trace))
+                           '("." "needle")))
+            (should (eq (alist-get 'matched (car file-checks))
+                        json-false))
+            (should (eq (alist-get 'matched (car answer-checks))
+                        t))))
+      (when (file-exists-p file-name)
+        (delete-file file-name)))))
+
 (ert-deftest test-ellama-eval-cases-for-suite-selection ()
   (let ((edit-cases (ellama-eval--cases-for-suite-selection 'edit))
         (all-cases (ellama-eval--cases-for-suite-selection 'all)))
