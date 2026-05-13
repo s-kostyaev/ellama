@@ -2263,6 +2263,8 @@ Return list with result and prompt."
             (with-current-buffer worker-buffer
               (should (string-match-p "Previous response"
                                       (buffer-string)))
+              (should (string-match-p "Previous response\n\n"
+                                      (buffer-string)))
               (should (string-match-p "Main agent:"
                                       (buffer-string)))
               (should (string-match-p "Task not marked complete"

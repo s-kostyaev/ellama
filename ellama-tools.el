@@ -2428,7 +2428,12 @@ Return insertion point for sub-agent response."
       (goto-char (point-max))
       (let ((prefix (ellama-get-nick-prefix-for-mode)))
         (unless (bobp)
-          (insert "\n"))
+          (unless (bolp)
+            (insert "\n"))
+          (unless (save-excursion
+                    (forward-line -1)
+                    (looking-at-p "[[:space:]]*$"))
+            (insert "\n")))
         (insert prefix " Main agent:\n"
                 (ellama--fill-long-lines description) "\n\n"
                 prefix " " ellama-assistant-nick ":\n")
