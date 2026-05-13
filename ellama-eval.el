@@ -92,9 +92,9 @@ question precisely without changing files."
          "Update `ellama-eval-score-value` so it clamp VALUE to LIMIT with `min`, \
 then return the clamped value multiplied by WEIGHT."
          :files
-         (("sample.el" . "(defun ellama-eval-score-value (value limit weight)\n  \"Return VALUE scaled by WEIGHT.\"\n  (* value weight))\n"))
+         (("sample.el" . "(defun ellama-eval-score-value (value limit weight)\n  \"Return VALUE scaled by WEIGHT, clamped to LIMIT.\"\n  (* value weight))\n"))
          :expected-files
-         (("sample.el" . "(defun ellama-eval-score-value (value limit weight)\n  \"Return VALUE scaled by WEIGHT.\"\n  (* (min value limit) weight))\n")))
+         (("sample.el" . "(defun ellama-eval-score-value (value limit weight)\n  \"Return VALUE scaled by WEIGHT, clamped to LIMIT.\"\n  (* (min value limit) weight))\n")))
     (:id "edit-update-target-branch"
          :suite edit
          :system ,ellama-eval--coder-system
