@@ -1,3 +1,26 @@
+* Version 1.19.0
+- Add an evaluation harness for comparing agent tool designs with local
+  models.  The new suite covers numbered read output, line-range editing, trace
+  collection, JSONL export, profile comparisons, summaries, and interactive
+  nonblocking runs.
+- Improve evaluation reliability by stabilizing JSONL output paths, avoiding
+  active buffer overwrites, serializing nested result data correctly, counting
+  worker steps consistently, and relaxing docstring checks so valid
+  implementation edits are not rejected for harmless wording changes.
+- Improve tool output for local models by rendering single-entry
+  ~directory_tree~ results without misleading branch prefixes and by formatting
+  tool-result alists as readable named blocks instead of raw S-expressions.
+- Fix search and project tools by returning ~default-directory~ from
+  ~project_root~ when no project is detected, explaining empty ~grep~ results,
+  supporting string tool result names, and resolving relative grep directories
+  against the current buffer directory.
+- Fix subagent buffer insertion so continuation turns append to the worker
+  buffer, leave a blank line before each ~Main agent:~ prompt, and render
+  ~<think>~ blocks as Org quote blocks in Org buffers.
+- Prefer newer Elisp source files during batch jobs to prevent stale bytecode
+  from shadowing local edits in build, test, documentation, formatting, and
+  refill targets.
+
 * Version 1.18.0
 - Add optional Pandoc-backed Markdown to Org conversion.  Users can configure
   ~ellama-markdown-to-org-converter~ to use the builtin converter, Pandoc, or

@@ -1632,10 +1632,34 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
 
 (defun ellama-tools--call-command-to-string (program &rest args)
   "Run PROGRAM with ARGS and return stdout as a string."
+  (cdr (apply #'ellama-tools--call-command program args)))
+
+(defun ellama-tools--call-command (program &rest args)
+  "Run PROGRAM with ARGS and return cons of exit status and stdout."
   (let ((argv (apply #'ellama-tools--command-argv program args)))
     (with-temp-buffer
-      (apply #'call-process (car argv) nil t nil (cdr argv))
-      (buffer-string))))
+      (let ((status (apply #'call-process (car argv) nil t nil (cdr argv))))
+        (cons status (buffer-string))))))
+
+(defun ellama-tools--command-failure-output (program status output)
+  "Return diagnostic text for PROGRAM failure with STATUS and OUTPUT."
+  (let ((trimmed (string-trim-right output "\n")))
+    (if (string-empty-p trimmed)
+        (format "%s failed with exit status %s." program status)
+      (format "%s failed with exit status %s:\n%s"
+              program status trimmed))))
+
+(defun ellama-tools--grep-output (result no-matches-message)
+  "Return grep RESULT output or NO-MATCHES-MESSAGE."
+  (let ((status (car result))
+        (output (string-trim-right (cdr result) "\n")))
+    (cond
+     ((and (integerp status) (zerop status)) output)
+     ((and (integerp status)
+           (= status 1)
+           (string-empty-p output))
+      no-matches-message)
+     (t (ellama-tools--command-failure-output "grep" status output)))))
 
 (defun ellama-tools--read-file-mode (mode)
   "Return normalized read file MODE."
@@ -1830,17 +1854,22 @@ DEPTH is the current recursion depth, used internally."
   (or (ellama-tools--tool-check-file-access dir 'list)
       (if (not (file-exists-p dir))
           (format "Directory %s doesn't exists" dir)
-        (let ((indent (make-string (* (or depth 0) 2) ? ))
-              (tree ""))
-          (dolist (f (sort (cl-remove-if
-                            (lambda (f)
-                              (string-prefix-p "." f))
-                            (directory-files dir))
-                           #'string-lessp))
+        (let* ((indent (make-string (* (or depth 0) 2) ? ))
+               (entries
+                (sort (cl-remove-if
+                       (lambda (f)
+                         (string-prefix-p "." f))
+                       (directory-files dir))
+                      #'string-lessp))
+               (single-entry-p (= (length entries) 1))
+               (tree ""))
+          (dolist (f entries)
             (let* ((full   (expand-file-name f dir))
                    (name   (file-name-nondirectory f))
                    (type   (if (file-directory-p full) "|-" "`-"))
-                   (line   (concat indent type name "\n")))
+                   (line   (concat indent
+                                   (unless single-entry-p type)
+                                   name "\n")))
               (setq tree (concat tree line))
               (when (file-directory-p full)
                 (setq tree (concat tree
@@ -1999,13 +2028,16 @@ CALLBACK – function called once with the result string."
 
 (defun ellama-tools-grep-tool (dir search-string)
   "Grep SEARCH-STRING in DIR files."
-  (let ((default-directory dir))
+  (let* ((search-dir (expand-file-name dir))
+         (default-directory (file-name-as-directory search-dir)))
     (json-encode
-     (string-trim-right
-      (ellama-tools--call-command-to-string
+     (ellama-tools--grep-output
+      (ellama-tools--call-command
        "find" "." "-type" "f" "-exec"
        "grep" "--color=never" "-nH" "-e" search-string "{}" "+")
-      "\n"))))
+      (format "No matches for %S in %s."
+              search-string
+              search-dir)))))
 
 (ellama-tools-define-tool
  '(:function
@@ -2031,8 +2063,12 @@ CALLBACK – function called once with the result string."
 (defun ellama-tools-grep-in-file-tool (search-string file)
   "Grep SEARCH-STRING in FILE."
   (json-encode
-   (ellama-tools--call-command-to-string
-    "grep" "--color=never" "-nh" search-string (file-truename file))))
+   (let ((truename (file-truename file)))
+     (ellama-tools--grep-output
+      (ellama-tools--call-command
+       "grep" "--color=never" "-nh" search-string truename)
+      (format "No matches for %S in %s."
+              search-string truename)))))
 
 (ellama-tools-define-tool
  '(:function
@@ -2058,8 +2094,9 @@ CALLBACK – function called once with the result string."
 
 (defun ellama-tools-project-root-tool ()
   "Return current project root directory."
-  (when (project-current)
-    (project-root (project-current))))
+  (if-let* ((project (project-current nil)))
+      (project-root project)
+    (expand-file-name default-directory)))
 
 (ellama-tools-define-tool
  '(:function
@@ -2391,7 +2428,12 @@ Return insertion point for sub-agent response."
       (goto-char (point-max))
       (let ((prefix (ellama-get-nick-prefix-for-mode)))
         (unless (bobp)
-          (insert "\n"))
+          (unless (bolp)
+            (insert "\n"))
+          (unless (save-excursion
+                    (forward-line -1)
+                    (looking-at-p "[[:space:]]*$"))
+            (insert "\n")))
         (insert prefix " Main agent:\n"
                 (ellama--fill-long-lines description) "\n\n"
                 prefix " " ellama-assistant-nick ":\n")
@@ -2459,15 +2501,22 @@ When the task is COMPLETE you MUST call `report_result` exactly once."
       (ellama-tools--set-session-extra
        session
        (plist-put extra :step-count (1+ steps)))
-      (ellama-stream
-       ellama-tools-subagent-continue-prompt
-       :buffer buffer
-       :session session
-       :tools tools
-       :system system
-       :on-done
-       (ellama-tools--make-subagent-loop-handler
-        session buffer system))))))
+      (let ((point (when (buffer-live-p buffer)
+                     (ellama-tools--insert-subagent-prompt
+                      buffer ellama-tools-subagent-continue-prompt))))
+        (apply
+         #'ellama-stream
+         ellama-tools-subagent-continue-prompt
+         (append
+          (list :buffer buffer
+                :session session
+                :tools tools
+                :system system
+                :on-done
+                (ellama-tools--make-subagent-loop-handler
+                 session buffer system))
+          (when point
+            (list :point point)))))))))
 
 (defun ellama-tools--make-subagent-loop-handler
     (session &optional buffer system)

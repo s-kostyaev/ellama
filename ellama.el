@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.18.0
+;; Version: 1.19.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -1312,6 +1312,55 @@ CONTEXT will be ignored.  Use global context instead.
      "\n"))
    (t (format "%S" content))))
 
+(defun ellama--decode-json-string (value)
+  "Return decoded JSON string VALUE when possible."
+  (if (not (stringp value))
+      value
+    (condition-case nil
+        (let ((decoded (json-parse-string value)))
+          (if (stringp decoded) decoded value))
+      (json-parse-error value))))
+
+(defun ellama--format-tool-result-value (value)
+  "Return human-readable representation of tool result VALUE."
+  (let ((value (ellama--decode-json-string value)))
+    (cond
+     ((stringp value) value)
+     ((null value) "")
+     (t (format "%S" value)))))
+
+(defun ellama--indent-lines (text &optional prefix)
+  "Return TEXT with PREFIX inserted before each line."
+  (let ((prefix (or prefix "  ")))
+    (mapconcat (lambda (line) (concat prefix line))
+               (split-string text "\n")
+               "\n")))
+
+(defun ellama--format-tool-result-entry (entry)
+  "Return formatted tool result ENTRY."
+  (if (and (consp entry)
+           (or (symbolp (car entry))
+               (stringp (car entry))))
+      (format "%s\n%s"
+              (if (symbolp (car entry))
+                  (symbol-name (car entry))
+                (car entry))
+              (ellama--indent-lines
+               (ellama--format-tool-result-value (cdr entry))))
+    (ellama--indent-lines
+     (ellama--format-tool-result-value entry))))
+
+(defun ellama--format-tool-results (tool-results)
+  "Return human-readable TOOL-RESULTS."
+  (string-join
+   (mapcar #'ellama--format-tool-result-entry
+           (if (and (listp tool-results)
+                    (not (stringp tool-results))
+                    (proper-list-p tool-results))
+               tool-results
+             (list tool-results)))
+   "\n\n"))
+
 (defun ellama--session-compact-render-interaction (interaction)
   "Render INTERACTION for summary generation."
   (let ((role (llm-chat-prompt-interaction-role interaction))
@@ -1325,7 +1374,8 @@ CONTEXT will be ignored.  Use global context instead.
                     (capitalize (symbol-name role))
                     (ellama--session-compact-content-to-string content))
             (when tool-results
-              (format "Tool results:\n%S" tool-results))))
+              (format "Tool results:\n%s"
+                      (ellama--format-tool-results tool-results)))))
      "\n")))
 
 (defun ellama--session-compact-render-interactions (interactions)
@@ -2756,7 +2806,7 @@ REASONING-BUFFER is a buffer for reasoning."
               nil)))
         (when tool-results
           (format "\n<think>\n%s\n</think>\n"
-                  tool-results))
+                  (ellama--format-tool-results tool-results)))
         (when text
           (string-trim text)))))))
 
@@ -3032,6 +3082,13 @@ session state, never the globally active session selection."
           (ellama--ensure-session-uid ellama--current-session)
           ellama--current-session))))
 
+(defun ellama--default-stream-filter (buffer)
+  "Return default stream insertion filter for BUFFER."
+  (with-current-buffer buffer
+    (if (derived-mode-p 'org-mode)
+        #'ellama--translate-markdown-to-org-filter
+      #'identity)))
+
 (defun ellama-stream (prompt &rest args)
   "Query ellama for PROMPT.
 ARGS contains keys for fine control.
@@ -3096,7 +3153,8 @@ failure (with BUFFER current).
          (replace-beg (plist-get args :replace-beg))
          (replace-end (plist-get args :replace-end))
          (replace-region-p (and replace-beg replace-end))
-         (filter (or (plist-get args :filter) #'identity))
+         (filter (or (plist-get args :filter)
+                     (ellama--default-stream-filter buffer)))
          (errcb (or (plist-get args :on-error)
                     (lambda (msg)
                       (error "Error calling the LLM: %s" msg))))

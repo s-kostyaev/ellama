@@ -242,6 +242,41 @@ STYLE controls partial message shape.  Default value is `word-leading'."
       (when (buffer-live-p reasoning-buffer)
         (kill-buffer reasoning-buffer)))))
 
+(ert-deftest test-ellama-format-tool-results-readable-alist ()
+  (should
+   (equal
+    (ellama--format-tool-results
+     '((grep_in_file . "90:first line\n97:second line")))
+    "grep_in_file\n  90:first line\n  97:second line")))
+
+(ert-deftest test-ellama-format-tool-results-readable-string-name ()
+  (let ((entry (cons "grep" "\"./router.el:1:(defun route (status)\""))
+        (expected "grep\n  ./router.el:1:(defun route (status)"))
+    (should
+     (equal (ellama--format-tool-results (list entry))
+            expected))
+    (should
+     (equal (ellama--format-tool-results entry)
+            expected))))
+
+(ert-deftest test-ellama-format-tool-results-decodes-json-string ()
+  (should
+   (equal
+    (ellama--format-tool-results
+     '((read_file . "\"one\\ntwo\"")))
+    "read_file\n  one\n  two")))
+
+(ert-deftest test-ellama-default-stream-filter-translates-org-think ()
+  (with-temp-buffer
+    (org-mode)
+    (let ((result
+           (funcall
+            (ellama--default-stream-filter (current-buffer))
+            "<think>\ngrep\n  ./router.el:1:match\n</think>\n")))
+      (should (string-match-p "#\\+BEGIN_QUOTE" result))
+      (should (string-match-p "#\\+END_QUOTE" result))
+      (should-not (string-match-p "<think>" result)))))
+
 (ert-deftest test-ellama-ask-about-add-selection-ephemeral ()
   (let (captured-ephemeral)
     (with-temp-buffer
@@ -1292,6 +1327,21 @@ detailed comparison to help you decide:
           "user 4" "assistant 4"
           "user 5" "assistant 5"))))))
 
+(ert-deftest test-ellama-session-compact-renders-tool-results-readably ()
+  (let* ((prompt (llm-make-chat-prompt "user"))
+         (interaction
+          (make-llm-chat-prompt-interaction
+           :role 'assistant
+           :content "assistant"
+           :tool-results
+           '((grep_in_file . "90:first line\n97:second line")))))
+    (push interaction (llm-chat-prompt-interactions prompt))
+    (let ((rendered
+           (ellama--session-compact-render-interaction interaction)))
+      (should (string-match-p "Tool results:" rendered))
+      (should (string-match-p "grep_in_file\n  90:first line" rendered))
+      (should-not (string-match-p "((grep_in_file" rendered)))))
+
 (ert-deftest test-ellama-session-compact-uses-stored-token-count ()
   (let* ((provider (make-llm-fake))
          (session (ellama-test--compact-session provider))
@@ -1490,8 +1540,8 @@ detailed comparison to help you decide:
 
 (ert-deftest test-ellama-sanitize-provider-chat-request-keeps-dotted-pairs ()
   (let* ((request '(:model "qwen3.6-plus"
-                    :enable_search t
-                    :search_options ((search_strategy . "agent"))))
+                           :enable_search t
+                           :search_options ((search_strategy . "agent"))))
          (sanitized (ellama--sanitize-provider-chat-request request)))
     (should (equal sanitized request))
     (should (json-serialize sanitized))))
@@ -2168,8 +2218,8 @@ region, season, or type)! 🍎🍊"))))
                           :key 'llm-key)
                :prompt (llm-make-chat-prompt "hello")
                :extra '(:dir "/tmp"
-                        :uid "symbol-key"
-                        :provider-symbol ellama-provider)))))
+                             :uid "symbol-key"
+                             :provider-symbol ellama-provider)))))
           (let* ((session (ellama--read-session-from-file file-name))
                  (key (llm-openai-compatible-key
                        (ellama-session-provider session))))

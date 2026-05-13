@@ -106,10 +106,16 @@
     (should spinner-stop-called)))
 (defun ellama-test--ensure-local-ellama-tools ()
   "Load local `ellama-tools.el' from project root when needed."
-  (unless (and (fboundp 'ellama-tools--sanitize-tool-text-output)
-               (fboundp 'ellama-tools--command-argv)
-               (fboundp 'ellama-tools--task-description))
-    (load-file (expand-file-name "ellama-tools.el" ellama-test-root))))
+  (let ((loaded-file
+         (symbol-file 'ellama-tools-directory-tree-tool 'defun)))
+    (unless (and loaded-file
+                 (string-prefix-p
+                  (file-truename ellama-test-root)
+                  (file-truename loaded-file))
+                 (fboundp 'ellama-tools--sanitize-tool-text-output)
+                 (fboundp 'ellama-tools--command-argv)
+                 (fboundp 'ellama-tools--task-description))
+      (load-file (expand-file-name "ellama-tools.el" ellama-test-root)))))
 
 (defun ellama-test--clear-srt-policy-cache ()
   "Clear local `srt' policy cache for tool test helpers."
@@ -664,15 +670,46 @@ Return list with result and prompt."
 (ert-deftest test-ellama-tools-grep-tool-uses-shared-command-helper ()
   (ellama-test--ensure-local-ellama-tools)
   (let (captured)
-    (cl-letf (((symbol-function 'ellama-tools--call-command-to-string)
+    (cl-letf (((symbol-function 'ellama-tools--call-command)
                (lambda (&rest args)
                  (setq captured args)
-                 "a:1:match\n")))
+                 '(0 . "a:1:match\n"))))
       (should (equal (ellama-tools-grep-tool default-directory "match")
                      "\"a:1:match\"")))
     (should (equal captured
                    '("find" "." "-type" "f" "-exec"
                      "grep" "--color=never" "-nH" "-e" "match" "{}" "+")))))
+
+(ert-deftest test-ellama-tools-grep-tool-explains-no-matches ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-grep-dir-" t))
+         (file (expand-file-name "a.txt" dir))
+         (expected (format "No matches for %S in %s."
+                           "needle"
+                           (expand-file-name dir))))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "haystack\n"))
+          (should (equal (ellama-tools-grep-tool dir "needle")
+                         (json-encode expected))))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest test-ellama-tools-grep-tool-resolves-relative-dir ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-grep-relative-" t))
+         (file (expand-file-name "sample.el" dir))
+         (default-directory (file-name-as-directory dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "(defun ellama-test-target () nil)\n"))
+          (should
+           (equal (ellama-tools-grep-tool "." "ellama-test-target")
+                  "\"./sample.el:1:(defun ellama-test-target () nil)\"")))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
 
 (ert-deftest test-ellama-tools-grep-in-file-tool-uses-shared-command-helper ()
   (ellama-test--ensure-local-ellama-tools)
@@ -684,17 +721,31 @@ Return list with result and prompt."
           (with-temp-file file
             (insert "hello\n"))
           (setq truename (file-truename file))
-          (cl-letf (((symbol-function 'ellama-tools--call-command-to-string)
+          (cl-letf (((symbol-function 'ellama-tools--call-command)
                      (lambda (&rest args)
                        (setq captured args)
-                       "1:hello\n")))
+                       '(0 . "1:hello\n"))))
             (should (equal (ellama-tools-grep-in-file-tool "hello" file)
-                           "\"1:hello\\n\""))))
+                           "\"1:hello\""))))
       (when (file-exists-p file)
         (delete-file file)))
     (should (equal captured
                    (list "grep" "--color=never" "-nh"
                          "hello" truename)))))
+
+(ert-deftest test-ellama-tools-grep-in-file-tool-explains-no-matches ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-grep-in-file-")))
+    (unwind-protect
+        (let ((expected (format "No matches for %S in %s."
+                                "needle"
+                                (file-truename file))))
+          (with-temp-file file
+            (insert "haystack\n"))
+          (should (equal (ellama-tools-grep-in-file-tool "needle" file)
+                         (json-encode expected))))
+      (when (file-exists-p file)
+        (delete-file file)))))
 
 (ert-deftest test-ellama-read-file-tool-rejects-binary-content ()
   (ellama-test--ensure-local-ellama-tools)
@@ -2021,6 +2072,46 @@ Return list with result and prompt."
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
+(ert-deftest test-ellama-tools-directory-tree-omits-prefix-for-single-entry ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-tree-single-" t))
+         (file (expand-file-name "only.txt" dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "x"))
+          (should
+           (equal (ellama-tools-directory-tree-tool dir)
+                  "only.txt\n")))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest test-ellama-tools-project-root-falls-back-to-default-directory ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((default-directory temporary-file-directory))
+    (cl-letf (((symbol-function 'project-current)
+               (lambda (&rest _args) nil)))
+      (should
+       (equal (ellama-tools-project-root-tool)
+              (expand-file-name temporary-file-directory))))))
+
+(ert-deftest test-ellama-tools-project-root-wrapped-never-returns-done ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((default-directory temporary-file-directory)
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        (ellama-tools-confirm-allowed (make-hash-table)))
+    (cl-letf (((symbol-function 'project-current)
+               (lambda (&rest _args) nil)))
+      (let* ((tool-plist '(:function ellama-tools-project-root-tool
+                                     :name "project_root"
+                                     :args nil))
+             (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+             (function (plist-get wrapped :function)))
+        (should
+         (equal (funcall function)
+                (expand-file-name temporary-file-directory)))))))
+
 (ert-deftest test-ellama-tools-move-file-success-and-error ()
   (ellama-test--ensure-local-ellama-tools)
   (let* ((src (make-temp-file "ellama-move-src-"))
@@ -2137,34 +2228,49 @@ Return list with result and prompt."
                         :system system
                         :result-callback #'ignore))))
     (unwind-protect
-        (cl-letf (((symbol-function 'ellama-get-session-buffer)
-                   (lambda (id)
-                     (and (member id '("worker-loop" "worker-loop-uid"))
-                          worker-buffer)))
-                  ((symbol-function 'ellama-tools--set-session-extra)
-                   (lambda (_session extra)
-                     (setq updated-extra extra)))
-                  ((symbol-function 'ellama-stream)
-                   (lambda (prompt &rest args)
-                     (setq stream-call (list prompt args)))))
-          (with-temp-buffer
-            (let ((ellama--current-session nil))
-              (funcall
-               (ellama-tools--make-subagent-loop-handler
-                session worker-buffer system)
-               "ignored")))
-          (should (equal (plist-get updated-extra :step-count) 1))
-          (should (equal (car stream-call)
-                         ellama-tools-subagent-continue-prompt))
-          (should (eq (plist-get (cadr stream-call) :buffer)
-                      worker-buffer))
-          (should (eq (plist-get (cadr stream-call) :session)
-                      session))
-          (should (equal (plist-get (cadr stream-call) :tools)
-                         (list role-tool)))
-          (should (equal (plist-get (cadr stream-call) :system)
-                         system))
-          (should (functionp (plist-get (cadr stream-call) :on-done))))
+        (progn
+          (with-current-buffer worker-buffer
+            (insert "Previous response")
+            (goto-char (point-min)))
+          (cl-letf (((symbol-function 'ellama-get-session-buffer)
+                     (lambda (id)
+                       (and (member id '("worker-loop" "worker-loop-uid"))
+                            worker-buffer)))
+                    ((symbol-function 'ellama-tools--set-session-extra)
+                     (lambda (_session extra)
+                       (setq updated-extra extra)))
+                    ((symbol-function 'ellama-stream)
+                     (lambda (prompt &rest args)
+                       (setq stream-call (list prompt args)))))
+            (with-temp-buffer
+              (let ((ellama--current-session nil))
+                (funcall
+                 (ellama-tools--make-subagent-loop-handler
+                  session worker-buffer system)
+                 "ignored")))
+            (should (equal (plist-get updated-extra :step-count) 1))
+            (should (equal (car stream-call)
+                           ellama-tools-subagent-continue-prompt))
+            (should (eq (plist-get (cadr stream-call) :buffer)
+                        worker-buffer))
+            (should (eq (plist-get (cadr stream-call) :session)
+                        session))
+            (should (equal (plist-get (cadr stream-call) :tools)
+                           (list role-tool)))
+            (should (equal (plist-get (cadr stream-call) :system)
+                           system))
+            (should (functionp (plist-get (cadr stream-call) :on-done)))
+            (with-current-buffer worker-buffer
+              (should (string-match-p "Previous response"
+                                      (buffer-string)))
+              (should (string-match-p "Previous response\n\n"
+                                      (buffer-string)))
+              (should (string-match-p "Main agent:"
+                                      (buffer-string)))
+              (should (string-match-p "Task not marked complete"
+                                      (buffer-string)))
+              (should (= (plist-get (cadr stream-call) :point)
+                         (point-max))))))
       (when (buffer-live-p worker-buffer)
         (kill-buffer worker-buffer)))))
 
