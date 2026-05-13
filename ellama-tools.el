@@ -2063,8 +2063,9 @@ CALLBACK – function called once with the result string."
 
 (defun ellama-tools-project-root-tool ()
   "Return current project root directory."
-  (when (project-current)
-    (project-root (project-current))))
+  (if-let* ((project (project-current nil)))
+      (project-root project)
+    (expand-file-name default-directory)))
 
 (ellama-tools-define-tool
  '(:function

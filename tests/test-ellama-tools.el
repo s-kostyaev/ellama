@@ -2041,6 +2041,32 @@ Return list with result and prompt."
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
+(ert-deftest test-ellama-tools-project-root-falls-back-to-default-directory ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((default-directory temporary-file-directory))
+    (cl-letf (((symbol-function 'project-current)
+               (lambda (&rest _args) nil)))
+      (should
+       (equal (ellama-tools-project-root-tool)
+              (expand-file-name temporary-file-directory))))))
+
+(ert-deftest test-ellama-tools-project-root-wrapped-never-returns-done ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((default-directory temporary-file-directory)
+        (ellama-tools-allow-all t)
+        (ellama-tools-allowed nil)
+        (ellama-tools-confirm-allowed (make-hash-table)))
+    (cl-letf (((symbol-function 'project-current)
+               (lambda (&rest _args) nil)))
+      (let* ((tool-plist '(:function ellama-tools-project-root-tool
+                                     :name "project_root"
+                                     :args nil))
+             (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+             (function (plist-get wrapped :function)))
+        (should
+         (equal (funcall function)
+                (expand-file-name temporary-file-directory)))))))
+
 (ert-deftest test-ellama-tools-move-file-success-and-error ()
   (ellama-test--ensure-local-ellama-tools)
   (let* ((src (make-temp-file "ellama-move-src-"))
