@@ -848,8 +848,8 @@ KEY is the property list key that contains VALUE."
 (defun ellama-eval--provider-candidates ()
   "Return interactive provider candidates for evaluation."
   (append
-   `(("coding provider" . ellama-coding-provider)
-     ("default model" . ellama-provider)
+   `(("default model" . ellama-provider)
+     ("coding provider" . ellama-coding-provider)
      ("ollama model" . (ellama-get-ollama-local-model)))
    ellama-providers))
 
