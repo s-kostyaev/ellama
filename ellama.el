@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.30.2") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.19.1
+;; Version: 1.19.2
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -110,6 +110,13 @@ provider context limit."
 (defcustom ellama-session-auto-compact-keep-last-turns 3
   "Number of recent user turns to keep verbatim during compaction."
   :type 'integer)
+
+(defcustom ellama-session-auto-compact-allow-fewer-kept-turns t
+  "Allow compaction to keep fewer recent turns when needed.
+When non-nil, session compaction may reduce
+`ellama-session-auto-compact-keep-last-turns' for short but oversized
+sessions so compaction can still proceed."
+  :type 'boolean)
 
 (defcustom ellama-session-auto-compact-target-token-threshold nil
   "Preferred target token count after compaction.
@@ -1384,21 +1391,37 @@ CONTEXT will be ignored.  Use global context instead.
    (mapcar #'ellama--session-compact-render-interaction interactions)
    "\n\n"))
 
-(defun ellama--session-compact-split-interactions (interactions keep-turns)
-  "Split INTERACTIONS into old and recent parts keeping KEEP-TURNS."
-  (let ((index nil)
-        (turns 0)
-        (pos (1- (length interactions))))
-    (while (and (>= pos 0) (< turns keep-turns))
-      (when (eq (llm-chat-prompt-interaction-role
-                 (nth pos interactions))
-                'user)
-        (setq turns (1+ turns))
-        (setq index pos))
-      (setq pos (1- pos)))
-    (when (and index (> index 0))
-      (cons (cl-subseq interactions 0 index)
-            (cl-subseq interactions index)))))
+(defun ellama--session-compact-split-interactions
+    (interactions keep-turns &optional allow-fewer-turns)
+  "Split INTERACTIONS into old and recent parts keeping KEEP-TURNS.
+When ALLOW-FEWER-TURNS is non-nil, keep fewer recent user turns
+when needed so the old part is non-empty."
+  (let ((keep-turns (max 0 keep-turns)))
+    (cond
+     ((null interactions) nil)
+     ((zerop keep-turns)
+      (cons interactions nil))
+     (t
+      (let ((index nil)
+            (turns 0)
+            (pos (1- (length interactions))))
+        (while (and (>= pos 0) (< turns keep-turns))
+          (when (eq (llm-chat-prompt-interaction-role
+                     (nth pos interactions))
+                    'user)
+            (setq turns (1+ turns))
+            (setq index pos))
+          (setq pos (1- pos)))
+        (cond
+         ((and index (> index 0))
+          (cons (cl-subseq interactions 0 index)
+                (cl-subseq interactions index)))
+         (allow-fewer-turns
+          (let ((turn-count
+                 (ellama--session-compact-turn-count interactions)))
+            (when (> turn-count 0)
+              (ellama--session-compact-split-interactions
+               interactions (1- turn-count)))))))))))
 
 (defun ellama--session-summary-interaction-content (summary)
   "Return synthetic interaction content for SUMMARY."
@@ -1504,26 +1527,43 @@ ORIGINAL-INTERACTIONS."
     (cl-subseq current-interactions original-length)))
 
 (defun ellama--session-insert-compaction-message
-    (buffer summarized-turns kept-turns before-tokens after-tokens)
+    (buffer summarized-turns kept-turns before-tokens after-tokens
+            &optional requested-kept-turns recent-kept-turns)
   "Insert compaction message into BUFFER.
 SUMMARIZED-TURNS is count of summarized user turns.
 KEPT-TURNS is count of kept recent user turns.
-BEFORE-TOKENS and AFTER-TOKENS are token estimates."
+BEFORE-TOKENS and AFTER-TOKENS are token estimates.
+REQUESTED-KEPT-TURNS is the configured keep count.
+RECENT-KEPT-TURNS is count kept before in-flight additions."
   (when (and ellama-session-auto-compact-show-message
              (buffer-live-p buffer))
     (with-current-buffer buffer
       (save-excursion
         (goto-char (point-max))
         (insert
-         (format
-          (concat
-           "\n\n[Ellama compacted conversation context: summarized %d "
-           "earlier turns, kept %d recent turns, estimated context "
-           "%s -> %s tokens.]\n")
-          summarized-turns
-          kept-turns
-          (or before-tokens "unknown")
-          (or after-tokens "unknown")))))))
+         (if (and requested-kept-turns
+                  recent-kept-turns
+                  (< recent-kept-turns requested-kept-turns))
+             (format
+              (concat
+               "\n\n[Ellama compacted oversized conversation context: "
+               "configured to keep %d recent turns, kept %d turn(s) "
+               "so short history could still be compacted; summarized "
+               "%d turn(s), estimated context %s -> %s tokens.]\n")
+              requested-kept-turns
+              recent-kept-turns
+              summarized-turns
+              (or before-tokens "unknown")
+              (or after-tokens "unknown"))
+           (format
+            (concat
+             "\n\n[Ellama compacted conversation context: summarized %d "
+             "earlier turns, kept %d recent turns, estimated context "
+             "%s -> %s tokens.]\n")
+            summarized-turns
+            kept-turns
+            (or before-tokens "unknown")
+            (or after-tokens "unknown"))))))))
 
 (defun ellama--session-compact-build-summary-prompt
     (previous-summary old-interactions target-tokens)
@@ -1537,13 +1577,15 @@ TARGET-TOKENS is the approximate target size."
 
 (defun ellama--session-compact-apply
     (session prompt provider buffer original-context interactions
-             old-interactions recent-interactions token-count summary)
+             old-interactions recent-interactions token-count summary
+             &optional requested-kept-turns)
   "Apply completed compaction for SESSION to PROMPT.
 PROVIDER estimates resulting token count.  BUFFER receives notices.
 ORIGINAL-CONTEXT stays as the system message.
 INTERACTIONS is the pre-compaction interaction snapshot.
 OLD-INTERACTIONS and RECENT-INTERACTIONS are the compaction split.
-TOKEN-COUNT is the pre-compaction estimate.  SUMMARY is the new summary."
+TOKEN-COUNT is the pre-compaction estimate.  SUMMARY is the new summary.
+REQUESTED-KEPT-TURNS is the configured recent turn count."
   (let* ((current-prompt (ellama-session-prompt session)))
     (unless (and (eq current-prompt prompt)
                  (llm-chat-prompt-p current-prompt))
@@ -1557,6 +1599,8 @@ TOKEN-COUNT is the pre-compaction estimate.  SUMMARY is the new summary."
            (kept-interactions (append recent-interactions new-interactions))
            (summarized-turns
             (ellama--session-compact-turn-count old-interactions))
+           (recent-kept-turns
+            (ellama--session-compact-turn-count recent-interactions))
            (kept-turns
             (ellama--session-compact-turn-count kept-interactions)))
       (setf (llm-chat-prompt-context current-prompt)
@@ -1582,7 +1626,8 @@ TOKEN-COUNT is the pre-compaction estimate.  SUMMARY is the new summary."
               provider current-prompt)))
         (ellama--session-set-token-count session after-tokens)
         (ellama--session-insert-compaction-message
-         buffer summarized-turns kept-turns token-count after-tokens))
+         buffer summarized-turns kept-turns token-count after-tokens
+         requested-kept-turns recent-kept-turns))
       t)))
 
 (defun ellama--session-compact-handle-async-error (session err)
@@ -1592,11 +1637,12 @@ TOKEN-COUNT is the pre-compaction estimate.  SUMMARY is the new summary."
   (message "Ellama context compaction failed: %s" err))
 
 (cl-defun ellama--session-compact
-    (session &key provider buffer token-count automatic)
+    (session &key provider buffer token-count automatic on-done)
   "Compact SESSION conversation context.
 PROVIDER is the current session provider.
 BUFFER is the chat buffer that should receive a notice.
 TOKEN-COUNT is the estimated context size before compaction.
+ON-DONE is called after asynchronous compaction succeeds or fails.
 If AUTOMATIC is non-nil, fail quietly and return nil."
   (condition-case err
       (let* ((provider (or provider (ellama-session-provider session)))
@@ -1613,9 +1659,12 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
           (error "No provider available for Ellama session compaction"))
         (let* ((interactions
                 (ellama--session-compact-base-interactions session prompt))
+               (requested-keep-turns
+                (max 0 ellama-session-auto-compact-keep-last-turns))
                (split (ellama--session-compact-split-interactions
                        interactions
-                       (max 0 ellama-session-auto-compact-keep-last-turns))))
+                       requested-keep-turns
+                       ellama-session-auto-compact-allow-fewer-kept-turns)))
           (unless split
             (error "Not enough session history to compact"))
           (ellama--session-extra-put
@@ -1654,20 +1703,25 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
                           before-token-count
                           (if (stringp response)
                               response
-                            (plist-get response :text)))
+                            (plist-get response :text))
+                          requested-keep-turns)
                        (error
                         (ellama--session-compact-handle-async-error
                          session (error-message-string compact-err))))
                      (ellama--session-set-compaction-mode
                       session buffer nil)
                      (ellama--session-extra-put
-                      session :auto-compact-in-progress nil))
+                      session :auto-compact-in-progress nil)
+                     (when on-done
+                       (funcall on-done)))
                    (lambda (&rest err)
                      (ellama--session-compact-handle-async-error
                       session
                       (mapconcat
                        (lambda (item) (format "%s" item))
-                       err " ")))
+                       err " "))
+                     (when on-done
+                       (funcall on-done)))
                    t)
                   t)
               (error
@@ -1683,10 +1737,11 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
            nil)
        (signal (car err) (cdr err))))))
 
-(defun ellama--session-auto-compact-maybe
-    (session provider response text buffer)
+(cl-defun ellama--session-auto-compact-maybe
+    (session provider response text buffer &key on-done)
   "Compact SESSION when RESPONSE token use for TEXT crosses threshold.
-PROVIDER is the session provider.  BUFFER is the chat buffer."
+PROVIDER is the session provider.  BUFFER is the chat buffer.
+ON-DONE is called after asynchronous compaction succeeds or fails."
   (when-let ((token-count
               (ellama--session-auto-compact-needed-p
                session provider response text)))
@@ -1695,7 +1750,8 @@ PROVIDER is the session provider.  BUFFER is the chat buffer."
      :provider provider
      :buffer buffer
      :token-count token-count
-     :automatic t)))
+     :automatic t
+     :on-done on-done)))
 
 (defun ellama--active-session-by-id (id)
   "Return active session matching display ID."
@@ -2947,6 +3003,14 @@ REQUEST-CONTEXT is request context."
         (funcall errcb msg)
         (ellama--deactivate-current-request request-context)))))
 
+(defun ellama--run-done-callback (donecb text)
+  "Call DONECB with TEXT."
+  (if (and (listp donecb)
+           (functionp (car donecb)))
+      (mapc (lambda (fn) (funcall fn text))
+            donecb)
+    (funcall donecb text)))
+
 (defun ellama--response-handler (result-handler reasoning-buffer buffer donecb
                                                 errcb provider llm-prompt async filter
                                                 &optional request-context)
@@ -3047,20 +3111,26 @@ inserted into the BUFFER."
           (accept-change-group ellama--change-group)
           (when ellama-spinner-enabled
             (spinner-stop))
-          (when (and (not tool-result)
+          (let ((finish-response
+                 (lambda ()
+                   (when (buffer-live-p buffer)
+                     (with-current-buffer buffer
+                       (ellama--run-done-callback donecb text)
+                       (when ellama-session-hide-org-quotes
+                         (ellama-collapse-org-quotes))
+                       (ellama--deactivate-current-request
+                        request-context))))))
+            (if (and (not tool-result)
                      (ellama-session-p ellama--current-session))
-            (ellama--session-store-response-token-count
-             ellama--current-session provider response text)
-            (ellama--session-auto-compact-maybe
-             ellama--current-session provider response text buffer))
-          (if (and (listp donecb)
-                   (functionp (car donecb)))
-              (mapc (lambda (fn) (funcall fn text))
-                    donecb)
-            (funcall donecb text))
-          (when ellama-session-hide-org-quotes
-            (ellama-collapse-org-quotes))
-          (ellama--deactivate-current-request request-context))))))
+                (progn
+                  (ellama--session-store-response-token-count
+                   ellama--current-session provider response text)
+                  (unless
+                      (ellama--session-auto-compact-maybe
+                       ellama--current-session provider response text buffer
+                       :on-done finish-response)
+                    (funcall finish-response)))
+              (funcall finish-response))))))))
 
 (defun ellama--resolve-stream-session (buffer &optional session session-id)
   "Resolve session for `ellama-stream' in BUFFER.
