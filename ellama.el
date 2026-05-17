@@ -1637,11 +1637,12 @@ REQUESTED-KEPT-TURNS is the configured recent turn count."
   (message "Ellama context compaction failed: %s" err))
 
 (cl-defun ellama--session-compact
-    (session &key provider buffer token-count automatic)
+    (session &key provider buffer token-count automatic on-done)
   "Compact SESSION conversation context.
 PROVIDER is the current session provider.
 BUFFER is the chat buffer that should receive a notice.
 TOKEN-COUNT is the estimated context size before compaction.
+ON-DONE is called after asynchronous compaction succeeds or fails.
 If AUTOMATIC is non-nil, fail quietly and return nil."
   (condition-case err
       (let* ((provider (or provider (ellama-session-provider session)))
@@ -1710,13 +1711,17 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
                      (ellama--session-set-compaction-mode
                       session buffer nil)
                      (ellama--session-extra-put
-                      session :auto-compact-in-progress nil))
+                      session :auto-compact-in-progress nil)
+                     (when on-done
+                       (funcall on-done)))
                    (lambda (&rest err)
                      (ellama--session-compact-handle-async-error
                       session
                       (mapconcat
                        (lambda (item) (format "%s" item))
-                       err " ")))
+                       err " "))
+                     (when on-done
+                       (funcall on-done)))
                    t)
                   t)
               (error
@@ -1732,10 +1737,11 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
            nil)
        (signal (car err) (cdr err))))))
 
-(defun ellama--session-auto-compact-maybe
-    (session provider response text buffer)
+(cl-defun ellama--session-auto-compact-maybe
+    (session provider response text buffer &key on-done)
   "Compact SESSION when RESPONSE token use for TEXT crosses threshold.
-PROVIDER is the session provider.  BUFFER is the chat buffer."
+PROVIDER is the session provider.  BUFFER is the chat buffer.
+ON-DONE is called after asynchronous compaction succeeds or fails."
   (when-let ((token-count
               (ellama--session-auto-compact-needed-p
                session provider response text)))
@@ -1744,7 +1750,8 @@ PROVIDER is the session provider.  BUFFER is the chat buffer."
      :provider provider
      :buffer buffer
      :token-count token-count
-     :automatic t)))
+     :automatic t
+     :on-done on-done)))
 
 (defun ellama--active-session-by-id (id)
   "Return active session matching display ID."
@@ -2996,6 +3003,14 @@ REQUEST-CONTEXT is request context."
         (funcall errcb msg)
         (ellama--deactivate-current-request request-context)))))
 
+(defun ellama--run-done-callback (donecb text)
+  "Call DONECB with TEXT."
+  (if (and (listp donecb)
+           (functionp (car donecb)))
+      (mapc (lambda (fn) (funcall fn text))
+            donecb)
+    (funcall donecb text)))
+
 (defun ellama--response-handler (result-handler reasoning-buffer buffer donecb
                                                 errcb provider llm-prompt async filter
                                                 &optional request-context)
@@ -3096,20 +3111,26 @@ inserted into the BUFFER."
           (accept-change-group ellama--change-group)
           (when ellama-spinner-enabled
             (spinner-stop))
-          (when (and (not tool-result)
+          (let ((finish-response
+                 (lambda ()
+                   (when (buffer-live-p buffer)
+                     (with-current-buffer buffer
+                       (ellama--run-done-callback donecb text)
+                       (when ellama-session-hide-org-quotes
+                         (ellama-collapse-org-quotes))
+                       (ellama--deactivate-current-request
+                        request-context))))))
+            (if (and (not tool-result)
                      (ellama-session-p ellama--current-session))
-            (ellama--session-store-response-token-count
-             ellama--current-session provider response text)
-            (ellama--session-auto-compact-maybe
-             ellama--current-session provider response text buffer))
-          (if (and (listp donecb)
-                   (functionp (car donecb)))
-              (mapc (lambda (fn) (funcall fn text))
-                    donecb)
-            (funcall donecb text))
-          (when ellama-session-hide-org-quotes
-            (ellama-collapse-org-quotes))
-          (ellama--deactivate-current-request request-context))))))
+                (progn
+                  (ellama--session-store-response-token-count
+                   ellama--current-session provider response text)
+                  (unless
+                      (ellama--session-auto-compact-maybe
+                       ellama--current-session provider response text buffer
+                       :on-done finish-response)
+                    (funcall finish-response)))
+              (funcall finish-response))))))))
 
 (defun ellama--resolve-stream-session (buffer &optional session session-id)
   "Resolve session for `ellama-stream' in BUFFER.
