@@ -2858,10 +2858,6 @@ REASONING-BUFFER is a buffer for reasoning."
           (ellama--json-safe-value (cdr value))))
    (t value)))
 
-(defun ellama--sanitize-provider-chat-request (request)
-  "Return provider chat REQUEST with JSON-safe strings."
-  (ellama--json-safe-value request))
-
 (defun ellama--collect-openai-streaming-tool-uses (data)
   "Return parsed OpenAI streaming tool-call chunks from DATA."
   (let* ((calls (append data nil))

@@ -1517,7 +1517,7 @@ detailed comparison to help you decide:
     (should (multibyte-string-p normalized))
     (should (json-serialize normalized))))
 
-(ert-deftest test-ellama-sanitize-provider-chat-request-decodes-arguments ()
+(ert-deftest test-ellama-json-safe-value-decodes-arguments ()
   (let* ((arguments (encode-coding-string
                      (json-serialize
                       '((content . "├── research_plan.md")
@@ -1525,7 +1525,7 @@ detailed comparison to help you decide:
                      'utf-8-unix))
          (request `(:messages [(:tool_calls
                                 [(:function (:arguments ,arguments))])]))
-         (sanitized (ellama--sanitize-provider-chat-request request))
+         (sanitized (ellama--json-safe-value request))
          (sanitized-arguments
           (plist-get
            (plist-get
@@ -1538,18 +1538,23 @@ detailed comparison to help you decide:
     (should (multibyte-string-p sanitized-arguments))
     (should (json-serialize sanitized))))
 
-(ert-deftest test-ellama-sanitize-provider-chat-request-keeps-dotted-pairs ()
+(ert-deftest test-ellama-json-safe-value-keeps-dotted-pairs ()
   (let* ((request '(:model "qwen3.6-plus"
                            :enable_search t
                            :search_options ((search_strategy . "agent"))))
-         (sanitized (ellama--sanitize-provider-chat-request request)))
+         (sanitized (ellama--json-safe-value request)))
     (should (equal sanitized request))
     (should (json-serialize sanitized))))
 
 (ert-deftest test-ellama-does-not-advise-provider-chat-request ()
-  (should-not
-   (advice-member-p #'ellama--sanitize-provider-chat-request
-                    'llm-provider-chat-request)))
+  (let (ellama-advice)
+    (advice-mapc
+     (lambda (advice _props)
+       (when (and (symbolp advice)
+                  (string-prefix-p "ellama-" (symbol-name advice)))
+         (push advice ellama-advice)))
+     'llm-provider-chat-request)
+    (should-not ellama-advice)))
 
 (ert-deftest test-ellama-collect-openai-streaming-tool-uses-uses-max-index ()
   (let* ((data
