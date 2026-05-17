@@ -1273,7 +1273,7 @@ detailed comparison to help you decide:
           "Ellama compacted conversation context"
           (buffer-string)))))))
 
-(ert-deftest test-ellama-session-auto-compact-reduces-kept-turns ()
+(ert-deftest test-ellama-session-compact-reduces-kept-turns ()
   (let* ((provider (make-llm-fake))
          (session (ellama-test--short-compact-session provider))
          (prompt (ellama-session-prompt session))
@@ -1295,8 +1295,7 @@ detailed comparison to help you decide:
           session
           :provider provider
           :buffer (current-buffer)
-          :token-count 50000
-          :automatic t))
+          :token-count 50000))
         (should
          (equal
           (mapcar #'llm-chat-prompt-interaction-content
@@ -1314,7 +1313,7 @@ detailed comparison to help you decide:
           "configured to keep 3 recent turns, kept 0"
           (buffer-string)))))))
 
-(ert-deftest test-ellama-session-auto-compact-keeps-opt-out-strict ()
+(ert-deftest test-ellama-session-compact-keeps-opt-out-strict ()
   (let* ((provider (make-llm-fake))
          (session (ellama-test--short-compact-session provider))
          (prompt (ellama-session-prompt session))
@@ -1329,6 +1328,12 @@ detailed comparison to help you decide:
                (lambda (format-string &rest args)
                  (setq message-text
                        (apply #'format format-string args)))))
+      (should-error
+       (ellama--session-compact
+        session
+        :provider provider
+        :token-count 50000)
+       :type 'error)
       (should-not
        (ellama--session-compact
         session

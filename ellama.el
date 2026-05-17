@@ -112,8 +112,8 @@ provider context limit."
   :type 'integer)
 
 (defcustom ellama-session-auto-compact-allow-fewer-kept-turns t
-  "Allow automatic compaction to keep fewer recent turns when needed.
-When non-nil, automatic compaction may reduce
+  "Allow compaction to keep fewer recent turns when needed.
+When non-nil, session compaction may reduce
 `ellama-session-auto-compact-keep-last-turns' for short but oversized
 sessions so compaction can still proceed."
   :type 'boolean)
@@ -1663,8 +1663,7 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
                (split (ellama--session-compact-split-interactions
                        interactions
                        requested-keep-turns
-                       (and automatic
-                            ellama-session-auto-compact-allow-fewer-kept-turns))))
+                       ellama-session-auto-compact-allow-fewer-kept-turns)))
           (unless split
             (error "Not enough session history to compact"))
           (ellama--session-extra-put
