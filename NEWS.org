@@ -1,3 +1,10 @@
+* Version 1.19.1
+- Stop installing global ~llm-provider-chat-request~ sanitizer advice.  Ellama
+  now avoids rewriting request payloads from unrelated ~llm~ clients after
+  Ellama is loaded.
+- Require ~llm~ 0.30.2 so Ellama can rely on upstream JSON serialization and
+  OpenAI-compatible tool-call argument fixes instead of a global compatibility
+  workaround.
 * Version 1.19.0
 - Add an evaluation harness for comparing agent tool designs with local
   models.  The new suite covers numbered read output, line-range editing, trace

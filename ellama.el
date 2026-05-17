@@ -5,8 +5,8 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (llm "0.24.0") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.19.0
+;; Package-Requires: ((emacs "28.1") (llm "0.30.2") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
+;; Version: 1.19.1
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -2857,15 +2857,6 @@ REASONING-BUFFER is a buffer for reasoning."
     (cons (ellama--json-safe-value (car value))
           (ellama--json-safe-value (cdr value))))
    (t value)))
-
-(defun ellama--sanitize-provider-chat-request (request)
-  "Return provider chat REQUEST with JSON-safe strings."
-  (ellama--json-safe-value request))
-
-(advice-remove 'llm-provider-chat-request
-               #'ellama--sanitize-provider-chat-request)
-(advice-add 'llm-provider-chat-request
-            :filter-return #'ellama--sanitize-provider-chat-request)
 
 (defun ellama--collect-openai-streaming-tool-uses (data)
   "Return parsed OpenAI streaming tool-call chunks from DATA."
