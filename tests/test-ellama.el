@@ -1546,6 +1546,11 @@ detailed comparison to help you decide:
     (should (equal sanitized request))
     (should (json-serialize sanitized))))
 
+(ert-deftest test-ellama-does-not-advise-provider-chat-request ()
+  (should-not
+   (advice-member-p #'ellama--sanitize-provider-chat-request
+                    'llm-provider-chat-request)))
+
 (ert-deftest test-ellama-collect-openai-streaming-tool-uses-uses-max-index ()
   (let* ((data
           [((index . 0)
