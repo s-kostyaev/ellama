@@ -2466,13 +2466,16 @@ When the task is COMPLETE you MUST call `report_result` exactly once."
 
 (defun ellama-tools--subagent-buffer (session &optional buffer)
   "Return live subagent BUFFER for SESSION."
-  (or (and (buffer-live-p buffer) buffer)
-      (when-let* (((ellama-session-p session))
+  (or (when-let* (((ellama-session-p session))
                   (extra (ellama-session-extra session))
-                  (uid (plist-get extra :uid)))
-        (ellama-get-session-buffer uid))
-      (when (ellama-session-p session)
-        (ellama-get-session-buffer (ellama-session-id session)))))
+                  (uid (plist-get extra :uid))
+                  (session-buffer (ellama-get-session-buffer uid)))
+        (and (buffer-live-p session-buffer) session-buffer))
+      (when-let* (((ellama-session-p session))
+                  (session-buffer
+                   (ellama-get-session-buffer (ellama-session-id session))))
+        (and (buffer-live-p session-buffer) session-buffer))
+      (and (buffer-live-p buffer) buffer)))
 
 (defun ellama--subagent-loop-handler (_text &optional session buffer system)
   "Continue subagent SESSION loop in BUFFER with SYSTEM message."

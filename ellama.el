@@ -701,6 +701,15 @@ sub-agent sessions started by tools."
         (buffer-substring-no-properties (point-min) (point-max)))
     text))
 
+(defun ellama--fill-paragraphs-p ()
+  "Return non-nil when Ellama should fill paragraphs."
+  (and
+   ellama-fill-paragraphs
+   (pcase ellama-fill-paragraphs
+     ((cl-type function) (funcall ellama-fill-paragraphs))
+     ((cl-type boolean) ellama-fill-paragraphs)
+     ((cl-type list) (and (apply #'derived-mode-p ellama-fill-paragraphs))))))
+
 (defun ellama--replace-first-begin-src (text)
   "Replace first begin src in TEXT."
   (if (not (string-match-p (rx (literal "#+BEGIN_SRC")) text))
@@ -1228,6 +1237,16 @@ CONTEXT will be ignored.  Use global context instead.
         (let ((session-buffer (ellama-get-session-buffer uid)))
           (and (buffer-live-p session-buffer) session-buffer)))))
 
+(defun ellama--session-registered-buffer (session)
+  "Return live registered buffer for SESSION."
+  (when (ellama-session-p session)
+    (or (when-let* ((uid (ellama--session-uid session))
+                    (session-buffer (ellama-get-session-buffer uid)))
+          (and (buffer-live-p session-buffer) session-buffer))
+        (when-let* ((id (ellama-session-id session))
+                    (session-buffer (ellama-get-session-buffer id)))
+          (and (buffer-live-p session-buffer) session-buffer)))))
+
 (defun ellama--session-set-compaction-mode (session buffer enabled)
   "Set compaction lighter for SESSION BUFFER to ENABLED."
   (when-let ((target-buffer
@@ -1540,30 +1559,35 @@ RECENT-KEPT-TURNS is count kept before in-flight additions."
     (with-current-buffer buffer
       (save-excursion
         (goto-char (point-max))
-        (insert
-         (if (and requested-kept-turns
-                  recent-kept-turns
-                  (< recent-kept-turns requested-kept-turns))
+        (let ((beg (point)))
+          (insert
+           (if (and requested-kept-turns
+                    recent-kept-turns
+                    (< recent-kept-turns requested-kept-turns))
+               (format
+                (concat
+                 "\n\n[Ellama compacted oversized conversation context: "
+                 "configured to keep %d recent turns, kept %d turn(s) "
+                 "so short history could still be compacted; summarized "
+                 "%d turn(s), estimated context %s -> %s tokens.]\n")
+                requested-kept-turns
+                recent-kept-turns
+                summarized-turns
+                (or before-tokens "unknown")
+                (or after-tokens "unknown"))
              (format
               (concat
-               "\n\n[Ellama compacted oversized conversation context: "
-               "configured to keep %d recent turns, kept %d turn(s) "
-               "so short history could still be compacted; summarized "
-               "%d turn(s), estimated context %s -> %s tokens.]\n")
-              requested-kept-turns
-              recent-kept-turns
+               "\n\n[Ellama compacted conversation context: summarized %d "
+               "earlier turns, kept %d recent turns, estimated context "
+               "%s -> %s tokens.]\n")
               summarized-turns
+              kept-turns
               (or before-tokens "unknown")
-              (or after-tokens "unknown"))
-           (format
-            (concat
-             "\n\n[Ellama compacted conversation context: summarized %d "
-             "earlier turns, kept %d recent turns, estimated context "
-             "%s -> %s tokens.]\n")
-            summarized-turns
-            kept-turns
-            (or before-tokens "unknown")
-            (or after-tokens "unknown"))))))))
+              (or after-tokens "unknown"))))
+          (when (ellama--fill-paragraphs-p)
+            (let ((use-hard-newlines t))
+              (set-hard-newline-properties beg (point))
+              (fill-region beg (point) nil t t))))))))
 
 (defun ellama--session-compact-build-summary-prompt
     (previous-summary old-interactions target-tokens)
@@ -3111,15 +3135,22 @@ inserted into the BUFFER."
           (accept-change-group ellama--change-group)
           (when ellama-spinner-enabled
             (spinner-stop))
-          (let ((finish-response
-                 (lambda ()
-                   (when (buffer-live-p buffer)
-                     (with-current-buffer buffer
-                       (ellama--run-done-callback donecb text)
-                       (when ellama-session-hide-org-quotes
-                         (ellama-collapse-org-quotes))
-                       (ellama--deactivate-current-request
-                        request-context))))))
+          (let* ((session ellama--current-session)
+                 (finish-response
+                  (lambda ()
+                    (when-let
+                        ((target-buffer
+                          (or
+                           (and
+                            (ellama-session-p session)
+                            (ellama--session-registered-buffer session))
+                           (and (buffer-live-p buffer) buffer))))
+                      (with-current-buffer target-buffer
+                        (ellama--run-done-callback donecb text)
+                        (when ellama-session-hide-org-quotes
+                          (ellama-collapse-org-quotes))
+                        (ellama--deactivate-current-request
+                         request-context))))))
             (if (and (not tool-result)
                      (ellama-session-p ellama--current-session))
                 (progn

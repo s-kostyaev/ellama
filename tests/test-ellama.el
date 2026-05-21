@@ -1248,6 +1248,8 @@ detailed comparison to help you decide:
                           '(:text "Summary of earlier durable facts."))
                  'request)))
       (with-temp-buffer
+        (text-mode)
+        (setq-local fill-column 80)
         (insert "assistant output")
         (should
          (ellama--session-compact
@@ -1271,7 +1273,11 @@ detailed comparison to help you decide:
         (should
          (string-match-p
           "Ellama compacted conversation context"
-          (buffer-string)))))))
+          (buffer-string)))
+        (should-not
+         (cl-some (lambda (line)
+                    (> (length line) fill-column))
+                  (split-string (buffer-string) "\n")))))))
 
 (ert-deftest test-ellama-session-compact-reduces-kept-turns ()
   (let* ((provider (make-llm-fake))
@@ -1290,6 +1296,8 @@ detailed comparison to help you decide:
                  (funcall response-callback '(:text "Short summary."))
                  'request)))
       (with-temp-buffer
+        (text-mode)
+        (setq-local fill-column 80)
         (should
          (ellama--session-compact
           session
@@ -1310,8 +1318,12 @@ detailed comparison to help you decide:
           (buffer-string)))
         (should
          (string-match-p
-          "configured to keep 3 recent turns, kept 0"
-          (buffer-string)))))))
+          "configured to keep 3 recent[[:space:]\n]+turns, kept 0"
+          (buffer-string)))
+        (should-not
+         (cl-some (lambda (line)
+                    (> (length line) fill-column))
+                  (split-string (buffer-string) "\n")))))))
 
 (ert-deftest test-ellama-session-compact-keeps-opt-out-strict ()
   (let* ((provider (make-llm-fake))
@@ -1378,6 +1390,51 @@ detailed comparison to help you decide:
         (should-not done-text)
         (funcall compact-response-callback '(:text "Summary"))
         (should (equal done-text "answer"))))))
+
+(ert-deftest test-ellama-response-handler-runs-deferred-done-in-session-buffer ()
+  (let* ((provider (make-llm-fake))
+         (session (ellama-test--compact-session provider))
+         (old-buffer (generate-new-buffer " *ellama-old-compact-test*"))
+         (new-buffer (generate-new-buffer " *ellama-new-compact-test*"))
+         (compact-response-callback nil)
+         (done-buffer nil)
+         (done-text nil)
+         (ellama--active-sessions (make-hash-table :test #'equal))
+         (ellama-session-auto-compact-enabled t)
+         (ellama-session-auto-compact-token-threshold 100)
+         (ellama-session-auto-compact-provider (make-llm-fake))
+         (ellama-session-auto-compact-keep-last-turns 2)
+         (ellama-session-auto-compact-show-message nil)
+         (ellama-session-hide-org-quotes nil)
+         (ellama-spinner-enabled nil))
+    (unwind-protect
+        (cl-letf (((symbol-function 'llm-chat-async)
+                   (lambda (_provider _summary-prompt response-callback
+                                      _error-callback &optional _multi-output)
+                     (setq compact-response-callback response-callback)
+                     'compact-request)))
+          (puthash "compact-test" new-buffer ellama--active-sessions)
+          (with-current-buffer old-buffer
+            (setq-local ellama--current-session session)
+            (setq-local ellama--change-group (prepare-change-group))
+            (activate-change-group ellama--change-group))
+          (funcall
+           (ellama--response-handler
+            #'ignore nil old-buffer
+            (lambda (text)
+              (setq done-text text)
+              (setq done-buffer (current-buffer)))
+            #'ignore provider (ellama-session-prompt session) t #'identity)
+           '(:text "answer" :input-tokens 90 :output-tokens 20))
+          (should compact-response-callback)
+          (should-not done-text)
+          (funcall compact-response-callback '(:text "Summary"))
+          (should (equal done-text "answer"))
+          (should (eq done-buffer new-buffer)))
+      (when (buffer-live-p old-buffer)
+        (kill-buffer old-buffer))
+      (when (buffer-live-p new-buffer)
+        (kill-buffer new-buffer)))))
 
 (ert-deftest test-ellama-response-handler-resumes-after-auto-compact-error ()
   (let* ((provider (make-llm-fake))
