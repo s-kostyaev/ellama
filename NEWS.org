@@ -11,6 +11,11 @@
   Ellama kept fewer recent turns than configured.
 - Deferred response completion callbacks until automatic compaction finishes.
   This keeps sub-agent loops running after compaction succeeds or fails.
+- Resolved deferred compaction callbacks against the current registered session
+  buffer before running done handlers.  This prevents stale chat buffers from
+  being reused after compaction rewrites or replaces session buffers.
+- Wrapped inserted compaction notices using the same paragraph filling behavior
+  as chat output, so long compaction messages no longer appear as one long line.
 
 * Version 1.19.1
 - Stop installing global ~llm-provider-chat-request~ sanitizer advice.  Ellama
