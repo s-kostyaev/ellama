@@ -16,6 +16,9 @@
   being reused after compaction rewrites or replaces session buffers.
 - Wrapped inserted compaction notices using the same paragraph filling behavior
   as chat output, so long compaction messages no longer appear as one long line.
+- Prevented duplicate session requests while a generation or compaction is
+  already active.  Repeating ~C-c C-c~ in a chat buffer now leaves the buffer
+  unchanged instead of sending the same prompt twice.
 
 * Version 1.19.1
 - Stop installing global ~llm-provider-chat-request~ sanitizer advice.  Ellama
