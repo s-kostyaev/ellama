@@ -530,6 +530,9 @@ determine or estimate token usage and the session crosses the configured
 threshold.  Use ~ellama-session-auto-compact-token-threshold~ for an absolute
 token threshold, or leave it unset to use
 ~ellama-session-auto-compact-threshold-percent~ of the provider context limit.
+While a session request or compaction is still running, Ellama rejects another
+request for the same session.  This prevents accidental duplicate sends, for
+example by pressing ~C-c C-c~ twice in a chat buffer.
 
 You can compact sessions manually:
 

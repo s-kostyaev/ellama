@@ -242,6 +242,32 @@ STYLE controls partial message shape.  Default value is `word-leading'."
       (when (buffer-live-p reasoning-buffer)
         (kill-buffer reasoning-buffer)))))
 
+(ert-deftest test-ellama-response-handler-clears-request-before-done ()
+  (let ((request-active-in-done t)
+        (ellama-spinner-enabled nil)
+        request-context)
+    (with-temp-buffer
+      (setq-local ellama--change-group (prepare-change-group))
+      (activate-change-group ellama--change-group)
+      (setq request-context
+            (ellama--set-current-request 'request (list (current-buffer))))
+      (funcall
+       (ellama--response-handler
+        #'ignore
+        nil
+        (current-buffer)
+        (lambda (_text)
+          (setq request-active-in-done ellama--current-request))
+        #'ignore
+        'provider
+        'prompt
+        t
+        #'identity
+        request-context)
+       '(:text "answer"))
+      (should-not request-active-in-done)
+      (should-not ellama--current-request))))
+
 (ert-deftest test-ellama-format-tool-results-readable-alist ()
   (should
    (equal
@@ -1132,6 +1158,26 @@ detailed comparison to help you decide:
                            (file-name-nondirectory file-name)))
                   (buffer-string))))))))
 
+(ert-deftest test-ellama-chat-send-last-message-refuses-active-request ()
+  (let ((session (make-ellama-session
+                  :id "busy-chat"
+                  :provider (make-llm-fake)))
+        (ellama-context-global nil)
+        (ellama-context-ephemeral nil))
+    (with-temp-buffer
+      (org-mode)
+      (setq-local ellama--current-session session)
+      (setq-local ellama--current-request 'request)
+      (insert "** User:\nRepeat this")
+      (let ((before (buffer-string)))
+        (cl-letf (((symbol-function 'ellama-stream)
+                   (lambda (&rest _args)
+                     (ert-fail "Unexpected duplicate request"))))
+          (should-error
+           (ellama-chat-send-last-message)
+           :type 'user-error))
+        (should (equal before (buffer-string)))))))
+
 (ert-deftest test-ellama-stream-displays-session-buffer-on-generation ()
   (let* ((provider (make-llm-fake
                     :chat-action-func (lambda () "Chat answer")))
@@ -1161,6 +1207,42 @@ detailed comparison to help you decide:
           (should (eq displayed-buffer session-buffer)))
       (when (buffer-live-p session-buffer)
         (kill-buffer session-buffer)))))
+
+(ert-deftest test-ellama-stream-refuses-active-session-request ()
+  (let* ((provider (make-llm-fake))
+         (session (ellama-test--compact-session provider))
+         (prompt (ellama-session-prompt session)))
+    (with-temp-buffer
+      (setq-local ellama--current-session session)
+      (setq-local ellama--current-request 'request)
+      (cl-letf (((symbol-function 'llm-chat-streaming)
+                 (lambda (&rest _args)
+                   (ert-fail "Unexpected duplicate request"))))
+        (should-error
+         (ellama-stream "new request" :session session)
+         :type 'user-error))
+      (should-not
+       (member "new request"
+               (mapcar #'llm-chat-prompt-interaction-content
+                       (llm-chat-prompt-interactions prompt)))))))
+
+(ert-deftest test-ellama-stream-refuses-session-compaction ()
+  (let* ((provider (make-llm-fake))
+         (session (ellama-test--compact-session provider))
+         (prompt (ellama-session-prompt session)))
+    (ellama--session-extra-put session :auto-compact-in-progress t)
+    (with-temp-buffer
+      (setq-local ellama--current-session session)
+      (cl-letf (((symbol-function 'llm-chat-streaming)
+                 (lambda (&rest _args)
+                   (ert-fail "Unexpected request during compaction"))))
+        (should-error
+         (ellama-stream "new request" :session session)
+         :type 'user-error))
+      (should-not
+       (member "new request"
+               (mapcar #'llm-chat-prompt-interaction-content
+                       (llm-chat-prompt-interactions prompt)))))))
 
 (defun ellama-test--compact-session (provider)
   "Return test session with PROVIDER and compactable history."

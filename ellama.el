@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.30.2") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.19.2
+;; Version: 1.19.3
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -1103,6 +1103,30 @@ CONTEXT will be ignored.  Use global context instead.
   "Return latest known token count stored for SESSION."
   (or (ellama--session-extra-get session :token-count)
       (ellama--session-extra-get session :auto-compact-last-token-count)))
+
+(defun ellama--session-compacting-p (session)
+  "Return non-nil when SESSION compaction is active."
+  (and (ellama-session-p session)
+       (ellama--session-extra-get session :auto-compact-in-progress)))
+
+(defun ellama--buffer-request-active-p (buffer)
+  "Return non-nil when BUFFER has an active LLM request."
+  (when-let ((buffer (and buffer (get-buffer buffer))))
+    (with-current-buffer buffer
+      ellama--current-request)))
+
+(defun ellama--session-request-active-p (session &optional buffer)
+  "Return non-nil when SESSION or BUFFER has an active request."
+  (or (ellama--session-compacting-p session)
+      (ellama--buffer-request-active-p buffer)
+      (when-let ((session-buffer
+                  (ellama--session-registered-buffer session)))
+        (ellama--buffer-request-active-p session-buffer))))
+
+(defun ellama--ensure-session-request-idle (session &optional buffer)
+  "Signal user error when SESSION or BUFFER has an active request."
+  (when (ellama--session-request-active-p session buffer)
+    (user-error "Ellama session request is already running")))
 
 (defun ellama-image-file-p (file-name)
   "Return non-nil when FILE-NAME is a supported image file."
@@ -3144,13 +3168,13 @@ inserted into the BUFFER."
                            (and
                             (ellama-session-p session)
                             (ellama--session-registered-buffer session))
-                           (and (buffer-live-p buffer) buffer))))
-                      (with-current-buffer target-buffer
-                        (ellama--run-done-callback donecb text)
-                        (when ellama-session-hide-org-quotes
-                          (ellama-collapse-org-quotes))
-                        (ellama--deactivate-current-request
-                         request-context))))))
+	                           (and (buffer-live-p buffer) buffer))))
+	                      (with-current-buffer target-buffer
+	                        (ellama--deactivate-current-request
+	                         request-context)
+	                        (ellama--run-done-callback donecb text)
+	                        (when ellama-session-hide-org-quotes
+	                          (ellama-collapse-org-quotes)))))))
             (if (and (not tool-result)
                      (ellama-session-p ellama--current-session))
                 (progn
@@ -3237,13 +3261,14 @@ failure (with BUFFER current).
                          (ellama-get-first-ollama-chat-model))))
          (max-tokens (or (plist-get args :max-tokens)
                          ellama-max-tokens))
-         (reasoning-buffer (get-buffer-create
-                            (concat (make-temp-name "*ellama-reasoning-")
-                                    "*")))
          (point (or (plist-get args :point)
                     (with-current-buffer buffer (point))))
          (replace-beg (plist-get args :replace-beg))
          (replace-end (plist-get args :replace-end))
+         (_ (ellama--ensure-session-request-idle session buffer))
+         (reasoning-buffer (get-buffer-create
+                            (concat (make-temp-name "*ellama-reasoning-")
+                                    "*")))
          (replace-region-p (and replace-beg replace-end))
          (filter (or (plist-get args :filter)
                      (ellama--default-stream-filter buffer)))
@@ -3758,6 +3783,7 @@ the full response text when the request completes (with BUFFER current)."
                      (if-let ((session-file (ellama-session-file session)))
                          (find-file-noselect session-file)
                        (get-buffer-create (ellama-session-id session)))))
+         (_ (ellama--ensure-session-request-idle session buffer))
          (_ (with-current-buffer buffer
               (setq ellama--current-session session)
               (unless ellama-session-mode
@@ -3846,6 +3872,7 @@ the full response text when the request completes (with BUFFER current)."
               (text (if (derived-mode-p 'org-mode)
                         (ellama-convert-org-to-md message)
                       message)))
+    (ellama--ensure-session-request-idle session (current-buffer))
     (goto-char (point-max))
     (insert "\n\n")
     (when (or ellama-context-global ellama-context-ephemeral)
