@@ -494,6 +494,10 @@ argument generated text string.
      value is 80.
    • ‘ellama-session-auto-compact-keep-last-turns’: Number of recent
      user turns to keep verbatim during compaction.  Default value is 3.
+   • ‘ellama-session-auto-compact-allow-fewer-kept-turns’: Allow
+     compaction to keep fewer recent user turns when the configured keep
+     count would otherwise prevent short but oversized sessions from
+     being compacted.  Enabled by default.
    • ‘ellama-session-auto-compact-target-token-threshold’: Preferred
      target token count after compaction.  If not set, Ellama targets
      half of the compaction threshold.
@@ -706,6 +710,13 @@ You can compact sessions manually:
    • ‘M-x ellama-session-compact’ prompts for an active session and
      compacts it.
 
+Ellama keeps ‘ellama-session-auto-compact-keep-last-turns’ recent user
+turns by default.  When
+‘ellama-session-auto-compact-allow-fewer-kept-turns’ is non-nil, short
+oversized sessions may keep fewer recent turns so there is still older
+history to summarize.  Disable this option when compaction should fail
+instead of reducing the kept-turn count.
+
 The system message is not summarized by the compaction LLM.  Ellama
 restores the original system message in the compacted session prompt
 context, including when an LLM provider moved the system message into a
@@ -716,6 +727,7 @@ Example configuration:
      (setopt ellama-session-auto-compact-enabled t)
      (setopt ellama-session-auto-compact-threshold-percent 75)
      (setopt ellama-session-auto-compact-keep-last-turns 4)
+     (setopt ellama-session-auto-compact-allow-fewer-kept-turns t)
      (setopt ellama-session-auto-compact-provider ellama-summarization-provider)
 
 
@@ -2395,43 +2407,43 @@ Node: Installation3919
 Node: Commands8933
 Node: Keymap17562
 Node: Configuration20449
-Node: Session Provider Keys32233
-Node: Session Compaction34094
-Node: Image Input35748
-Node: Task Tool Subagents37893
-Node: DLP for Tool Input/Output39996
-Node: SRT Filesystem Policy for Tools54898
-Node: Context Management60567
-Node: Transient Menus for Context Management61635
-Node: Managing the Context63314
-Node: Considerations64089
-Node: Minor modes64682
-Node: ellama-context-header-line-mode66670
-Node: ellama-context-header-line-global-mode67495
-Node: ellama-context-mode-line-mode68215
-Node: ellama-context-mode-line-global-mode69063
-Node: Ellama Session Header Line Mode69767
-Node: Enabling and Disabling70336
-Node: Customization70783
-Node: Ellama Session Mode Line Mode71071
-Node: Enabling and Disabling (1)71656
-Node: Customization (1)72103
-Node: Using Blueprints72397
-Node: Key Components of Ellama Blueprints73037
-Node: Creating and Managing Blueprints73644
-Node: Blueprints files74622
-Node: Variable Management75043
-Node: Keymap and Mode75496
-Node: Transient Menus76432
-Node: Running Blueprints programmatically76978
-Node: MCP Integration77565
-Node: Agent Skills78800
-Node: Directory Structure79163
-Node: Creating a Skill80190
-Node: How it works80565
-Node: Acknowledgments80956
-Node: Contributions81667
-Node: GNU Free Documentation License82053
+Node: Session Provider Keys32489
+Node: Session Compaction34350
+Node: Image Input36429
+Node: Task Tool Subagents38574
+Node: DLP for Tool Input/Output40677
+Node: SRT Filesystem Policy for Tools55579
+Node: Context Management61248
+Node: Transient Menus for Context Management62316
+Node: Managing the Context63995
+Node: Considerations64770
+Node: Minor modes65363
+Node: ellama-context-header-line-mode67351
+Node: ellama-context-header-line-global-mode68176
+Node: ellama-context-mode-line-mode68896
+Node: ellama-context-mode-line-global-mode69744
+Node: Ellama Session Header Line Mode70448
+Node: Enabling and Disabling71017
+Node: Customization71464
+Node: Ellama Session Mode Line Mode71752
+Node: Enabling and Disabling (1)72337
+Node: Customization (1)72784
+Node: Using Blueprints73078
+Node: Key Components of Ellama Blueprints73718
+Node: Creating and Managing Blueprints74325
+Node: Blueprints files75303
+Node: Variable Management75724
+Node: Keymap and Mode76177
+Node: Transient Menus77113
+Node: Running Blueprints programmatically77659
+Node: MCP Integration78246
+Node: Agent Skills79481
+Node: Directory Structure79844
+Node: Creating a Skill80871
+Node: How it works81246
+Node: Acknowledgments81637
+Node: Contributions82348
+Node: GNU Free Documentation License82734
 
 End Tag Table
 

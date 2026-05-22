@@ -2274,6 +2274,51 @@ Return list with result and prompt."
       (when (buffer-live-p worker-buffer)
         (kill-buffer worker-buffer)))))
 
+(ert-deftest test-ellama-subagent-loop-handler-uses-current-session-buffer ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((stale-buffer (generate-new-buffer " *ellama-worker-stale-test*"))
+         (worker-buffer (generate-new-buffer " *ellama-worker-current-test*"))
+         (stream-call nil)
+         (session
+          (make-ellama-session
+           :id "worker-current"
+           :extra (list :uid "worker-current-uid"
+                        :task-completed nil
+                        :step-count 0
+                        :max-steps 3
+                        :result-callback #'ignore))))
+    (unwind-protect
+        (progn
+          (with-current-buffer stale-buffer
+            (insert "stale"))
+          (with-current-buffer worker-buffer
+            (insert "current"))
+          (cl-letf (((symbol-function 'ellama-get-session-buffer)
+                     (lambda (id)
+                       (and (member id '("worker-current"
+                                         "worker-current-uid"))
+                            worker-buffer)))
+                    ((symbol-function 'ellama-tools--set-session-extra)
+                     #'ignore)
+                    ((symbol-function 'ellama-stream)
+                     (lambda (prompt &rest args)
+                       (setq stream-call (list prompt args)))))
+            (funcall
+             (ellama-tools--make-subagent-loop-handler
+              session stale-buffer "System")
+             "ignored")
+            (should (eq (plist-get (cadr stream-call) :buffer)
+                        worker-buffer))
+            (with-current-buffer worker-buffer
+              (should (string-match-p "current\n\n" (buffer-string)))
+              (should (string-match-p "Main agent:" (buffer-string))))
+            (with-current-buffer stale-buffer
+              (should (equal (buffer-string) "stale")))))
+      (when (buffer-live-p stale-buffer)
+        (kill-buffer stale-buffer))
+      (when (buffer-live-p worker-buffer)
+        (kill-buffer worker-buffer)))))
+
 (ert-deftest test-ellama-tools-task-tool-role-fallback-and-report-priority ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((ellama--current-session-id "parent-1")
