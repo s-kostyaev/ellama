@@ -151,6 +151,67 @@ the rejected and invalid branches unchanged."
          (("request-router.el" . "(defun ellama-eval-route-request (request)\n  (let* ((headers (plist-get request :headers))\n         (auth (alist-get \"authorization\" headers nil nil #'string=)))\n    (cond\n     ((and auth\n           (string-prefix-p \"Bearer \" auth))\n      (let ((token (substring auth 7)))\n        (if (string-empty-p token)\n            (list :status 'invalid\n                  :reason \"empty token\")\n          (list :status 'accepted\n                :token token))))\n     ((plist-get request :public)\n      (list :status 'accepted\n            :token nil))\n     (t\n      (list :status 'rejected\n            :reason \"missing token\")))))\n"))
          :expected-files
          (("request-router.el" . "(defun ellama-eval-route-request (request)\n  (let* ((headers (plist-get request :headers))\n         (auth (alist-get \"authorization\" headers nil nil #'string=)))\n    (cond\n     ((and auth\n           (string-prefix-p \"Bearer \" auth))\n      (let ((token (substring auth 7)))\n        (if (string-empty-p token)\n            (list :status 'invalid\n                  :reason \"empty token\")\n          (list :status 'accepted\n                :source 'bearer\n                :token token))))\n     ((plist-get request :public)\n      (list :status 'accepted\n            :source 'public\n            :token nil))\n     (t\n      (list :status 'rejected\n            :reason \"missing token\")))))\n")))
+    (:id "edit-nested-backquote-template"
+         :suite edit
+         :system ,ellama-eval--coder-system
+         :prompt
+         "Update `ellama-eval-build-dashboard` so each item plist include \
+`:status` from ROW, defaulting to `unknown`, between `:id` and `:label`."
+         :files
+         (("dashboard.el" . "(defun ellama-eval-build-dashboard (rows)\n  (let ((visible (seq-filter\n                  (lambda (row)\n                    (plist-get row :visible))\n                  rows)))\n    `(:count ,(length visible)\n      :items ,(mapcar\n                (lambda (row)\n                  `(:id ,(plist-get row :id)\n                    :label ,(or (plist-get row :label) \"untitled\")))\n                visible))))\n"))
+         :expected-files
+         (("dashboard.el" . "(defun ellama-eval-build-dashboard (rows)\n  (let ((visible (seq-filter\n                  (lambda (row)\n                    (plist-get row :visible))\n                  rows)))\n    `(:count ,(length visible)\n      :items ,(mapcar\n                (lambda (row)\n                  `(:id ,(plist-get row :id)\n                    :status ,(or (plist-get row :status) 'unknown)\n                    :label ,(or (plist-get row :label) \"untitled\")))\n                visible))))\n")))
+    (:id "edit-nested-filter-lambda"
+         :suite edit
+         :system ,ellama-eval--coder-system
+         :prompt
+         "Update `ellama-eval-active-items` so archived items are excluded in \
+addition to disabled items. Keep the result mapping unchanged."
+         :files
+         (("items.el" . "(defun ellama-eval-active-items (items)\n  (mapcar\n   (lambda (item)\n     (let ((meta (plist-get item :meta)))\n       (list :id (plist-get item :id)\n             :label (or (plist-get meta :label)\n                        (plist-get item :fallback)))))\n   (seq-filter\n    (lambda (item)\n      (let ((flags (plist-get item :flags)))\n        (and (not (memq 'disabled flags))\n             (plist-get item :id))))\n    items)))\n"))
+         :expected-files
+         (("items.el" . "(defun ellama-eval-active-items (items)\n  (mapcar\n   (lambda (item)\n     (let ((meta (plist-get item :meta)))\n       (list :id (plist-get item :id)\n             :label (or (plist-get meta :label)\n                        (plist-get item :fallback)))))\n   (seq-filter\n    (lambda (item)\n      (let ((flags (plist-get item :flags)))\n        (and (not (memq 'disabled flags))\n             (not (memq 'archived flags))\n             (plist-get item :id))))\n    items)))\n")))
+    (:id "edit-nested-condition-case"
+         :suite edit
+         :system ,ellama-eval--coder-system
+         :prompt
+         "Update `ellama-eval-load-record` so only the `file-error` branch \
+include `:recoverable t`. Do not change the generic error branch."
+         :files
+         (("loader.el" . "(defun ellama-eval-load-record (reader path)\n  (condition-case err\n      (let ((record (funcall reader path)))\n        (if (and (listp record)\n                 (plist-get record :id))\n            (list :ok t\n                  :record record)\n          (list :ok nil\n                :error 'invalid-record)))\n    (file-error\n     (list :ok nil\n           :error (car err)\n           :path path))\n    (error\n     (list :ok nil\n           :error (car err)\n           :path path))))\n"))
+         :expected-files
+         (("loader.el" . "(defun ellama-eval-load-record (reader path)\n  (condition-case err\n      (let ((record (funcall reader path)))\n        (if (and (listp record)\n                 (plist-get record :id))\n            (list :ok t\n                  :record record)\n          (list :ok nil\n                :error 'invalid-record)))\n    (file-error\n     (list :ok nil\n           :recoverable t\n           :error (car err)\n           :path path))\n    (error\n     (list :ok nil\n           :error (car err)\n           :path path))))\n")))
+    (:id "edit-nested-pcase-branch"
+         :suite edit
+         :system ,ellama-eval--coder-system
+         :prompt
+         "Update `ellama-eval-describe-message` so the event branch include \
+`:source` from PAYLOAD with default `internal`. Leave the metric branch \
+unchanged."
+         :files
+         (("message.el" . "(defun ellama-eval-describe-message (message)\n  (pcase message\n    (`(:type event :payload ,payload)\n     (let ((name (plist-get payload :name)))\n       (if name\n           (list :kind 'event\n                 :name name)\n         (list :kind 'event\n               :name \"unknown\"))))\n    (`(:type metric :payload ,payload)\n     (list :kind 'metric\n           :value (plist-get payload :value)))\n    (_\n     (list :kind 'unknown))))\n"))
+         :expected-files
+         (("message.el" . "(defun ellama-eval-describe-message (message)\n  (pcase message\n    (`(:type event :payload ,payload)\n     (let ((name (plist-get payload :name)))\n       (if name\n           (list :kind 'event\n                 :source (or (plist-get payload :source) 'internal)\n                 :name name)\n         (list :kind 'event\n               :source (or (plist-get payload :source) 'internal)\n               :name \"unknown\"))))\n    (`(:type metric :payload ,payload)\n     (list :kind 'metric\n           :value (plist-get payload :value)))\n    (_\n     (list :kind 'unknown))))\n")))
+    (:id "edit-nested-accumulator"
+         :suite edit
+         :system ,ellama-eval--coder-system
+         :prompt
+         "Update `ellama-eval-collect-errors` so warning entries are ignored. \
+Keep the order of collected non-warning errors unchanged."
+         :files
+         (("errors.el" . "(defun ellama-eval-collect-errors (entries)\n  (let (errors)\n    (dolist (entry entries)\n      (let ((details (plist-get entry :details)))\n        (when (and details\n                   (plist-get details :error))\n          (push (list :id (plist-get entry :id)\n                      :message (plist-get details :error))\n                errors))))\n    (nreverse errors)))\n"))
+         :expected-files
+         (("errors.el" . "(defun ellama-eval-collect-errors (entries)\n  (let (errors)\n    (dolist (entry entries)\n      (let ((details (plist-get entry :details)))\n        (when (and details\n                   (plist-get details :error)\n                   (not (eq (plist-get details :level) 'warning)))\n          (push (list :id (plist-get entry :id)\n                      :message (plist-get details :error))\n                errors))))\n    (nreverse errors)))\n")))
+    (:id "edit-nested-state-machine"
+         :suite edit
+         :system ,ellama-eval--coder-system
+         :prompt
+         "Update `ellama-eval-next-state` so an expired active state returns \
+`expired` instead of `stale`. Leave all other branches unchanged."
+         :files
+         (("state.el" . "(defun ellama-eval-next-state (state event)\n  (let ((kind (plist-get event :kind)))\n    (cond\n     ((eq state 'idle)\n      (if (eq kind 'start)\n          'active\n        'idle))\n     ((eq state 'active)\n      (cond\n       ((plist-get event :cancelled)\n        'cancelled)\n       ((plist-get event :expired)\n        'stale)\n       ((eq kind 'finish)\n        'done)\n       (t\n        'active)))\n     (t\n      state))))\n"))
+         :expected-files
+         (("state.el" . "(defun ellama-eval-next-state (state event)\n  (let ((kind (plist-get event :kind)))\n    (cond\n     ((eq state 'idle)\n      (if (eq kind 'start)\n          'active\n        'idle))\n     ((eq state 'active)\n      (cond\n       ((plist-get event :cancelled)\n        'cancelled)\n       ((plist-get event :expired)\n        'expired)\n       ((eq kind 'finish)\n        'done)\n       (t\n        'active)))\n     (t\n      state))))\n")))
     (:id "explore-locate-provider"
          :suite explore
          :system ,ellama-eval--explorer-system

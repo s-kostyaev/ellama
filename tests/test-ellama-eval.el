@@ -360,10 +360,22 @@
                (length ellama-eval-hypothesis-cases)))))
 
 (ert-deftest test-ellama-eval-cases-include-nested-edit-cases ()
-  (let ((ids (mapcar (lambda (case) (plist-get case :id))
-                     ellama-eval-hypothesis-cases)))
-    (should (member "edit-nested-plist-construction" ids))
-    (should (member "edit-nested-branch-plists" ids))))
+  (let* ((ids (mapcar (lambda (case) (plist-get case :id))
+                      ellama-eval-hypothesis-cases))
+         (nested-ids (seq-filter
+                      (lambda (id)
+                        (string-prefix-p "edit-nested-" id))
+                      ids)))
+    (should (>= (length nested-ids) 8))
+    (dolist (id '("edit-nested-plist-construction"
+                  "edit-nested-branch-plists"
+                  "edit-nested-backquote-template"
+                  "edit-nested-filter-lambda"
+                  "edit-nested-condition-case"
+                  "edit-nested-pcase-branch"
+                  "edit-nested-accumulator"
+                  "edit-nested-state-machine"))
+      (should (member id ids)))))
 
 (ert-deftest test-ellama-eval-read-results-file-expands-relative-selection ()
   (let* ((dir (make-temp-file "ellama-eval-results-dir-" t))
