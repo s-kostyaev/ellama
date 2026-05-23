@@ -121,8 +121,10 @@
                (ellama-eval--active-run state))
           (with-temp-file file
             (insert old))
-          (should-not
-           (ellama-eval-monitored-edit-file-tool file old new nil))
+          (should
+           (string-match-p
+            "Edited "
+            (ellama-eval-monitored-edit-file-tool file old new nil)))
           (let ((entry
                  (car
                   (ellama-eval--run-state-edit-validation-trace state))))
@@ -145,9 +147,11 @@
         (let ((ellama-eval--active-run state))
           (with-temp-file file
             (insert "(defun sample () nil)\n"))
-          (should-not
-           (ellama-eval-monitored-edit-file-tool
-            file "(defun missing () nil)\n" "(defun sample () t)\n" nil))
+          (should
+           (string-match-p
+            "No replacement made"
+            (ellama-eval-monitored-edit-file-tool
+             file "(defun missing () nil)\n" "(defun sample () t)\n" nil)))
           (let ((entry
                  (car
                   (ellama-eval--run-state-edit-validation-trace state))))

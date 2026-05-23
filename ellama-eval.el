@@ -847,17 +847,6 @@ NEW-VALIDATION are syntax validation results."
     (plist-get candidate-validation :balance))
    (plist-get candidate-validation :mode)))
 
-(defun ellama-eval--write-file-buffer-content (file-name content)
-  "Write CONTENT to FILE-NAME and its visiting buffer."
-  (let ((buffer (find-file-noselect file-name)))
-    (with-current-buffer buffer
-      (let ((coding-system-for-write 'raw-text)
-            (buffer-undo-list t)
-            (inhibit-read-only t))
-        (erase-buffer)
-        (insert content)
-        (save-buffer)))))
-
 (defun ellama-eval-monitored-edit-file-tool
     (file-name oldcontent newcontent &optional block-invalid)
   "Replace OLDCONTENT with NEWCONTENT in FILE-NAME with validation.
@@ -872,9 +861,11 @@ When BLOCK-INVALID is non-nil, reject invalid resulting buffers."
               (ellama-eval--record-edit-validation
                (ellama-eval--edit-validation-entry
                 "edit_file" file-name nil nil nil nil nil nil nil))
-              (when block-invalid
-                (format "Edit rejected: old content was not found in %s."
-                        file-name)))
+              (if block-invalid
+                  (format "Edit rejected: old content was not found in %s."
+                          file-name)
+                (ellama-tools--edit-file-old-content-not-found-message
+                 file-name)))
           (let* ((candidate (replace-match newcontent t t content))
                  (candidate-validation
                   (ellama-eval--validate-text-in-file-buffer
@@ -902,11 +893,11 @@ When BLOCK-INVALID is non-nil, reject invalid resulting buffers."
                  original-validation
                  old-validation
                  new-validation)
-              (ellama-eval--write-file-buffer-content
+              (ellama-tools--write-file-buffer-content
                file-name candidate)
-              (when block-invalid
-                (format "Edited %s after syntax validation."
-                        file-name))))))))
+              (if block-invalid
+                  (format "Edited %s after syntax validation." file-name)
+                (format "Edited %s." file-name))))))))
 
 (defun ellama-eval-balanced-edit-file-tool
     (file-name oldcontent newcontent)
@@ -994,7 +985,7 @@ invalid resulting buffers."
                original-validation
                old-validation
                new-validation)
-            (ellama-eval--write-file-buffer-content
+            (ellama-tools--write-file-buffer-content
              file-name candidate)
             (format "Replaced lines %d-%d in %s."
                     from to file-name))))))

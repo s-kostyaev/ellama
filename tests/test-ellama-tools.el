@@ -1935,6 +1935,23 @@ Return list with result and prompt."
       (when (file-exists-p file)
         (delete-file file)))))
 
+(ert-deftest test-ellama-tools-edit-file-tool-reports-missing-content ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-edit-missing-")))
+    (unwind-protect
+        (let (result)
+          (with-temp-file file
+            (insert "alpha\nbeta\n"))
+          (setq result
+                (ellama-tools-edit-file-tool file "alpha\\nbeta" "changed"))
+          (should (string-match-p "No replacement made" result))
+          (should (string-match-p "escaped \\\\n sequences" result))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (equal (buffer-string) "alpha\nbeta\n"))))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
 (ert-deftest
     test-ellama-tools-enable-by-name-tool-missing-name-does-not-add-nil ()
   (ellama-test--ensure-local-ellama-tools)

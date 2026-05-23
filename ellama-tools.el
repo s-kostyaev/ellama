@@ -1923,6 +1923,26 @@ DEPTH is the current recursion depth, used internally."
    :description
    "Move the file from the specified FILE_NAME to the NEW_FILE_NAME."))
 
+(defun ellama-tools--edit-file-old-content-not-found-message (file-name)
+  "Return edit failure message for missing old content in FILE-NAME."
+  (format
+   (concat
+    "No replacement made: old content was not found in %s. "
+    "Ensure oldcontent matches the file text exactly, including actual "
+    "newline characters rather than escaped \\n sequences.")
+   file-name))
+
+(defun ellama-tools--write-file-buffer-content (file-name content)
+  "Write CONTENT to FILE-NAME and update any visiting buffer."
+  (let ((buffer (find-file-noselect file-name)))
+    (with-current-buffer buffer
+      (let ((coding-system-for-write 'raw-text)
+            (buffer-undo-list t)
+            (inhibit-read-only t))
+        (erase-buffer)
+        (insert content)
+        (save-buffer)))))
+
 (defun ellama-tools-edit-file-tool (file-name oldcontent newcontent)
   "Edit file FILE-NAME.
 Replace OLDCONTENT with NEWCONTENT."
@@ -1930,12 +1950,13 @@ Replace OLDCONTENT with NEWCONTENT."
       (ellama-tools--tool-check-file-access file-name 'write)
       (let ((content (with-temp-buffer
                        (insert-file-contents-literally file-name)
-                       (buffer-string)))
-            (coding-system-for-write 'raw-text))
-        (when (string-match (regexp-quote oldcontent) content)
-          (with-temp-buffer
-            (insert (replace-match newcontent t t content))
-            (write-region (point-min) (point-max) file-name))))))
+                       (buffer-string))))
+        (if (not (string-match (regexp-quote oldcontent) content))
+            (ellama-tools--edit-file-old-content-not-found-message file-name)
+          (ellama-tools--write-file-buffer-content
+           file-name
+           (replace-match newcontent t t content))
+          (format "Edited %s." file-name)))))
 
 (ellama-tools-define-tool
  '(:function
