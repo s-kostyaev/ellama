@@ -643,7 +643,7 @@ Return list with result and prompt."
          (src-dir (expand-file-name "src" dir))
          (src (expand-file-name "a.txt" src-dir))
          (dst (expand-file-name "deep/path/b.txt" dir))
-         err-sym)
+         msg)
     (unwind-protect
         (progn
           (make-directory src-dir)
@@ -655,15 +655,12 @@ Return list with result and prompt."
            (let ((default-directory dir)
                  (ellama-tools-use-srt t)
                  (ellama-tools-srt-args (list "--settings" settings-file)))
-             (setq err-sym
-                   (car (should-error
-                         (ellama-tools-move-file-tool src dst))))
+             (setq msg (ellama-tools-move-file-tool src dst))
              ;; Missing destination directories should fail in rename-file,
              ;; not in local SRT policy checks.
-             (should (memq 'file-error
-                           (get err-sym 'error-conditions)))
-             (should-not (memq 'user-error
-                               (get err-sym 'error-conditions))))))
+             (should (string-match-p "Cannot move" msg))
+             (should (string-match-p (regexp-quote dst) msg))
+             (should-not (string-match-p "srt policy denied" msg)))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
@@ -755,7 +752,7 @@ Return list with result and prompt."
       (delete-file file))
     (should (equal (ellama-tools-grep-in-file-tool "needle" file)
                    (json-encode
-                    (format "File %s doesn't exists." file))))))
+                    (format "File %s does not exist." file))))))
 
 (ert-deftest test-ellama-read-file-tool-rejects-binary-content ()
   (ellama-test--ensure-local-ellama-tools)
@@ -2063,7 +2060,7 @@ Return list with result and prompt."
   (let ((missing-file
          (expand-file-name "missing-file-ellama-test.txt"
                            (make-temp-name temporary-file-directory))))
-    (should (string-match-p "doesn't exists"
+    (should (string-match-p "does not exist"
                             (ellama-tools-read-file-tool missing-file)))))
 
 (ert-deftest test-ellama-tools-write-append-prepend-roundtrip ()
@@ -2071,14 +2068,60 @@ Return list with result and prompt."
   (let ((file (make-temp-file "ellama-file-tools-")))
     (unwind-protect
         (progn
-          (ellama-tools-write-file-tool file "middle")
-          (ellama-tools-append-file-tool file "-tail")
-          (ellama-tools-prepend-file-tool file "head-")
+          (should (string-match-p
+                   (format "Wrote 6 characters to %s\\." (regexp-quote file))
+                   (ellama-tools-write-file-tool file "middle")))
+          (should (string-match-p
+                   (format "Appended 5 characters to %s\\."
+                           (regexp-quote file))
+                   (ellama-tools-append-file-tool file "-tail")))
+          (should (string-match-p
+                   (format "Prepended 5 characters to %s\\."
+                           (regexp-quote file))
+                   (ellama-tools-prepend-file-tool file "head-")))
           (with-temp-buffer
             (insert-file-contents file)
             (should (equal (buffer-string) "head-middle-tail"))))
       (when (file-exists-p file)
         (delete-file file)))))
+
+(ert-deftest test-ellama-tools-write-file-explains-missing-directory ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-name
+               (expand-file-name "ellama-write-missing-dir-"
+                                 temporary-file-directory)))
+         (file (expand-file-name "note.txt" dir)))
+    (when (file-exists-p dir)
+      (delete-directory dir t))
+    (let ((msg (ellama-tools-write-file-tool file "x")))
+      (should (string-match-p "Cannot write" msg))
+      (should (string-match-p (regexp-quote file) msg)))))
+
+(ert-deftest test-ellama-tools-file-tools-explain-directory-path ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((dir (make-temp-file "ellama-file-tool-dir-" t)))
+    (unwind-protect
+        (progn
+          (should (string-match-p
+                   "is a directory, not a file"
+                   (json-parse-string
+                    (ellama-tools-read-file-tool dir))))
+          (should (string-match-p
+                   "path is a directory"
+                   (ellama-tools-write-file-tool dir "x")))
+          (should (string-match-p
+                   "is a directory, not a file"
+                   (json-parse-string
+                    (ellama-tools-grep-in-file-tool "x" dir))))
+          (should (string-match-p
+                   "is a directory, not a file"
+                   (ellama-tools-count-lines-tool dir)))
+          (should (string-match-p
+                   "is a directory, not a file"
+                   (json-parse-string
+                    (ellama-tools-lines-range-tool dir 1 1)))))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
 
 (ert-deftest test-ellama-tools-directory-tree-excludes-dotfiles-and-sorts ()
   (ellama-test--ensure-local-ellama-tools)
@@ -2113,6 +2156,27 @@ Return list with result and prompt."
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
+(ert-deftest test-ellama-tools-grep-explains-missing-directory ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((dir (make-temp-name
+              (expand-file-name "ellama-grep-missing-dir-"
+                                temporary-file-directory))))
+    (when (file-exists-p dir)
+      (delete-directory dir t))
+    (should
+     (equal (ellama-tools-grep-tool dir "needle")
+            (json-encode
+             (format "Directory %s does not exist." dir))))))
+
+(ert-deftest test-ellama-tools-directory-tree-explains-file-path ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-tree-file-")))
+    (unwind-protect
+        (should (equal (ellama-tools-directory-tree-tool file)
+                       (format "%s is not a directory." file)))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
 (ert-deftest test-ellama-tools-project-root-falls-back-to-default-directory ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((default-directory temporary-file-directory))
@@ -2146,10 +2210,14 @@ Return list with result and prompt."
     (unwind-protect
         (progn
           (with-temp-file src (insert "x"))
-          (ellama-tools-move-file-tool src dst)
+          (should (equal (ellama-tools-move-file-tool src dst)
+                         (format "Moved %s to %s." src dst)))
           (should (file-exists-p dst))
           (should-not (file-exists-p src))
-          (should-error (ellama-tools-move-file-tool src dst) :type 'error))
+          (should (equal (ellama-tools-move-file-tool src dst)
+                         (format
+                          "Cannot move file: source file does not exist: %s."
+                          src))))
       (when (file-exists-p src)
         (delete-file src))
       (when (file-exists-p dst)
@@ -2170,6 +2238,37 @@ Return list with result and prompt."
                   (ellama-tools-lines-range-tool file 1 3))))
             (should (equal single-line "beta"))
             (should (equal full-range "alpha\nbeta\ngamma"))))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-tools-count-lines-missing-file ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (expand-file-name "ellama-missing-lines-file"
+                                temporary-file-directory)))
+    (when (file-exists-p file)
+      (delete-file file))
+    (should (equal (ellama-tools-count-lines-tool file)
+                   (format "File %s does not exist." file)))))
+
+(ert-deftest test-ellama-tools-lines-range-explains-invalid-input ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-lines-range-invalid-")))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "alpha\nbeta\n"))
+          (should
+           (equal
+            (json-parse-string (ellama-tools-lines-range-tool file 3 2))
+            (format
+             "Invalid line range for %s: from (3) is greater than to (2)."
+             file)))
+          (should
+           (equal
+            (json-parse-string (ellama-tools-lines-range-tool file 1 3))
+            (format
+             "Invalid line range for %s: to (3) exceeds line count (2)."
+             file))))
       (when (file-exists-p file)
         (delete-file file)))))
 

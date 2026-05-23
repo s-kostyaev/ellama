@@ -1725,19 +1725,21 @@ MODE can be `auto', `text' or `image'."
   (or (ellama-tools--tool-check-file-access file-name 'read)
       (json-encode
        (if (not (file-exists-p file-name))
-           (format "File %s doesn't exists." file-name)
-         (pcase (ellama-tools--read-file-mode mode)
-           ('auto
-            (if (ellama-image-file-p file-name)
-                (ellama-tools--read-image-file-tool file-name)
-              (ellama-tools--read-file-as-text file-name)))
-           ('text
-            (ellama-tools--read-file-as-text file-name))
-           ('image
-            (ellama-tools--read-image-file-tool file-name))
-           (_
-            (format "Unsupported read_file mode %S. Use auto, text or image."
-                    mode)))))))
+           (format "File %s does not exist." file-name)
+         (if (file-directory-p file-name)
+             (format "%s is a directory, not a file." file-name)
+           (pcase (ellama-tools--read-file-mode mode)
+             ('auto
+              (if (ellama-image-file-p file-name)
+                  (ellama-tools--read-image-file-tool file-name)
+                (ellama-tools--read-file-as-text file-name)))
+             ('text
+              (ellama-tools--read-file-as-text file-name))
+             ('image
+              (ellama-tools--read-image-file-tool file-name))
+             (_
+              (format "Unsupported read_file mode %S. Use auto, text or image."
+                      mode))))))))
 
 (ellama-tools-define-tool
  '(:function
@@ -1764,10 +1766,32 @@ MODE can be `auto', `text' or `image'."
    :description
    "Read the file FILE_NAME."))
 
+(defun ellama-tools--file-parent-directory-error-message (operation file-name)
+  "Return parent directory error for OPERATION on FILE-NAME."
+  (let ((dir (file-name-directory (expand-file-name file-name))))
+    (when (and dir
+               (not (file-directory-p dir)))
+      (format "Cannot %s %s: parent directory does not exist: %s."
+              operation
+              file-name
+              dir))))
+
 (defun ellama-tools-write-file-tool (file-name content)
   "Write CONTENT to the file FILE-NAME."
   (or (ellama-tools--tool-check-file-access file-name 'write)
-      (write-region content nil file-name nil 'silent)))
+      (ellama-tools--file-parent-directory-error-message "write" file-name)
+      (when (file-directory-p file-name)
+        (format "Cannot write %s: path is a directory." file-name))
+      (condition-case err
+          (progn
+            (ellama-tools--write-file-buffer-content file-name content)
+            (format "Wrote %d characters to %s."
+                    (length content)
+                    file-name))
+        (file-error
+         (format "Cannot write %s: %s"
+                 file-name
+                 (error-message-string err))))))
 
 (ellama-tools-define-tool
  '(:function
@@ -1793,10 +1817,23 @@ MODE can be `auto', `text' or `image'."
 (defun ellama-tools-append-file-tool (file-name content)
   "Append CONTENT to the file FILE-NAME."
   (or (ellama-tools--tool-check-file-access file-name 'write)
-      (with-current-buffer (find-file-noselect file-name)
-        (goto-char (point-max))
-        (insert content)
-        (save-buffer))))
+      (ellama-tools--file-parent-directory-error-message "append to" file-name)
+      (when (file-directory-p file-name)
+        (format "Cannot append to %s: path is a directory." file-name))
+      (condition-case err
+          (with-current-buffer (find-file-noselect file-name)
+            (let ((buffer-undo-list t)
+                  (inhibit-read-only t))
+              (goto-char (point-max))
+              (insert content)
+              (save-buffer)
+              (format "Appended %d characters to %s."
+                      (length content)
+                      file-name)))
+        (file-error
+         (format "Cannot append to %s: %s"
+                 file-name
+                 (error-message-string err))))))
 
 (ellama-tools-define-tool
  '(:function
@@ -1822,10 +1859,23 @@ MODE can be `auto', `text' or `image'."
 (defun ellama-tools-prepend-file-tool (file-name content)
   "Prepend CONTENT to the file FILE-NAME."
   (or (ellama-tools--tool-check-file-access file-name 'write)
-      (with-current-buffer (find-file-noselect file-name)
-        (goto-char (point-min))
-        (insert content)
-        (save-buffer))))
+      (ellama-tools--file-parent-directory-error-message "prepend to" file-name)
+      (when (file-directory-p file-name)
+        (format "Cannot prepend to %s: path is a directory." file-name))
+      (condition-case err
+          (with-current-buffer (find-file-noselect file-name)
+            (let ((buffer-undo-list t)
+                  (inhibit-read-only t))
+              (goto-char (point-min))
+              (insert content)
+              (save-buffer)
+              (format "Prepended %d characters to %s."
+                      (length content)
+                      file-name)))
+        (file-error
+         (format "Cannot prepend to %s: %s"
+                 file-name
+                 (error-message-string err))))))
 
 (ellama-tools-define-tool
  '(:function
@@ -1853,28 +1903,32 @@ MODE can be `auto', `text' or `image'."
 DEPTH is the current recursion depth, used internally."
   (or (ellama-tools--tool-check-file-access dir 'list)
       (if (not (file-exists-p dir))
-          (format "Directory %s doesn't exists" dir)
-        (let* ((indent (make-string (* (or depth 0) 2) ? ))
-               (entries
-                (sort (cl-remove-if
-                       (lambda (f)
-                         (string-prefix-p "." f))
-                       (directory-files dir))
-                      #'string-lessp))
-               (single-entry-p (= (length entries) 1))
-               (tree ""))
-          (dolist (f entries)
-            (let* ((full   (expand-file-name f dir))
-                   (name   (file-name-nondirectory f))
-                   (type   (if (file-directory-p full) "|-" "`-"))
-                   (line   (concat indent
-                                   (unless single-entry-p type)
-                                   name "\n")))
-              (setq tree (concat tree line))
-              (when (file-directory-p full)
-                (setq tree (concat tree
-                                   (ellama-tools-directory-tree-tool full (+ (or depth 0) 1)))))))
-          tree))))
+          (format "Directory %s does not exist." dir)
+        (if (not (file-directory-p dir))
+            (format "%s is not a directory." dir)
+          (let* ((indent (make-string (* (or depth 0) 2) ? ))
+                 (entries
+                  (sort (cl-remove-if
+                         (lambda (f)
+                           (string-prefix-p "." f))
+                         (directory-files dir))
+                        #'string-lessp))
+                 (single-entry-p (= (length entries) 1))
+                 (tree ""))
+            (dolist (f entries)
+              (let* ((full   (expand-file-name f dir))
+                     (name   (file-name-nondirectory f))
+                     (type   (if (file-directory-p full) "|-" "`-"))
+                     (line   (concat indent
+                                     (unless single-entry-p type)
+                                     name "\n")))
+                (setq tree (concat tree line))
+                (when (file-directory-p full)
+                  (setq tree (concat tree
+                                     (ellama-tools-directory-tree-tool
+                                      full
+                                      (+ (or depth 0) 1)))))))
+            tree)))))
 
 (ellama-tools-define-tool
  '(:function
@@ -1896,11 +1950,23 @@ DEPTH is the current recursion depth, used internally."
   (or (ellama-tools--tool-check-file-access file-name 'read)
       (ellama-tools--tool-check-file-access file-name 'write)
       (ellama-tools--tool-check-file-access new-file-name 'write)
-      (if (and (file-exists-p file-name)
-               (not (file-exists-p new-file-name)))
-          (progn
-            (rename-file file-name new-file-name))
-        (error "Cannot move file: source file does not exist or destination already exists"))))
+      (cond
+       ((not (file-exists-p file-name))
+        (format "Cannot move file: source file does not exist: %s."
+                file-name))
+       ((file-exists-p new-file-name)
+        (format "Cannot move file: destination already exists: %s."
+                new-file-name))
+       (t
+        (condition-case err
+            (progn
+              (rename-file file-name new-file-name)
+              (format "Moved %s to %s." file-name new-file-name))
+          (file-error
+           (format "Cannot move %s to %s: %s"
+                   file-name
+                   new-file-name
+                   (error-message-string err))))))))
 
 (ellama-tools-define-tool
  '(:function
@@ -2049,16 +2115,22 @@ CALLBACK – function called once with the result string."
 
 (defun ellama-tools-grep-tool (dir search-string)
   "Grep SEARCH-STRING in DIR files."
-  (let* ((search-dir (expand-file-name dir))
-         (default-directory (file-name-as-directory search-dir)))
+  (let ((search-dir (expand-file-name dir)))
     (json-encode
-     (ellama-tools--grep-output
-      (ellama-tools--call-command
-       "find" "." "-type" "f" "-exec"
-       "grep" "--color=never" "-nH" "-e" search-string "{}" "+")
-      (format "No matches for %S in %s."
-              search-string
-              search-dir)))))
+     (cond
+      ((not (file-exists-p search-dir))
+       (format "Directory %s does not exist." search-dir))
+      ((not (file-directory-p search-dir))
+       (format "%s is not a directory." search-dir))
+      (t
+       (let ((default-directory (file-name-as-directory search-dir)))
+         (ellama-tools--grep-output
+          (ellama-tools--call-command
+           "find" "." "-type" "f" "-exec"
+           "grep" "--color=never" "-nH" "-e" search-string "{}" "+")
+          (format "No matches for %S in %s."
+                  search-string
+                  search-dir))))))))
 
 (ellama-tools-define-tool
  '(:function
@@ -2085,14 +2157,18 @@ CALLBACK – function called once with the result string."
   "Grep SEARCH-STRING in FILE."
   (or (ellama-tools--tool-check-file-access file 'read)
       (json-encode
-       (if (not (file-exists-p file))
-           (format "File %s doesn't exists." file)
+       (cond
+        ((not (file-exists-p file))
+         (format "File %s does not exist." file))
+        ((file-directory-p file)
+         (format "%s is a directory, not a file." file))
+        (t
          (let ((truename (file-truename file)))
            (ellama-tools--grep-output
             (ellama-tools--call-command
              "grep" "--color=never" "-nh" search-string truename)
             (format "No matches for %S in %s."
-                    search-string truename)))))))
+                    search-string truename))))))))
 
 (ellama-tools-define-tool
  '(:function
@@ -2165,8 +2241,12 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
 (defun ellama-tools-count-lines-tool (file-name)
   "Count lines in file FILE-NAME."
   (or (ellama-tools--tool-check-file-access file-name 'read)
-      (with-current-buffer (find-file-noselect file-name)
-        (count-lines (point-min) (point-max)))))
+      (if (not (file-exists-p file-name))
+          (format "File %s does not exist." file-name)
+        (if (file-directory-p file-name)
+            (format "%s is a directory, not a file." file-name)
+          (with-current-buffer (find-file-noselect file-name)
+            (count-lines (point-min) (point-max)))))))
 
 (ellama-tools-define-tool
  '(:function
@@ -2186,21 +2266,44 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
 (defun ellama-tools-lines-range-tool (file-name from to)
   "Return content of file FILE-NAME lines in range FROM TO."
   (or (ellama-tools--tool-check-file-access file-name 'read)
-      (json-encode (with-current-buffer (find-file-noselect file-name)
-                     (save-excursion
-                       (let ((start (progn
-                                      (goto-char (point-min))
-                                      (forward-line (1- from))
-                                      (beginning-of-line)
-                                      (point)))
-                             (end (progn
-                                    (goto-char (point-min))
-                                    (forward-line (1- to))
-                                    (end-of-line)
-                                    (point))))
-                         (ellama-tools--sanitize-tool-text-output
-                          (buffer-substring-no-properties start end)
-                          (format "File %s" file-name))))))))
+      (json-encode
+       (cond
+        ((not (file-exists-p file-name))
+         (format "File %s does not exist." file-name))
+        ((file-directory-p file-name)
+         (format "%s is a directory, not a file." file-name))
+        ((> from to)
+         (format "Invalid line range for %s: from (%s) is greater than to (%s)."
+                 file-name
+                 from
+                 to))
+        ((< from 1)
+         (format "Invalid line range for %s: from (%s) must be at least 1."
+                 file-name
+                 from))
+        (t
+         (with-current-buffer (find-file-noselect file-name)
+           (save-excursion
+             (let ((line-count (count-lines (point-min) (point-max))))
+               (if (> to line-count)
+                   (format
+                    "Invalid line range for %s: to (%s) exceeds line count (%s)."
+                    file-name
+                    to
+                    line-count)
+                 (let ((start (progn
+                                (goto-char (point-min))
+                                (forward-line (1- from))
+                                (beginning-of-line)
+                                (point)))
+                       (end (progn
+                              (goto-char (point-min))
+                              (forward-line (1- to))
+                              (end-of-line)
+                              (point))))
+                   (ellama-tools--sanitize-tool-text-output
+                    (buffer-substring-no-properties start end)
+                    (format "File %s" file-name))))))))))))
 
 (ellama-tools-define-tool
  '(:function
