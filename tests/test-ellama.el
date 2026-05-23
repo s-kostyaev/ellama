@@ -2120,6 +2120,23 @@ reasoning
 #+END_QUOTE
 After"))))
 
+(ert-deftest test-ellama-streaming-think-skipped-line-break ()
+  (with-temp-buffer
+    (org-mode)
+    (let ((ellama-markdown-to-org-converter 'builtin)
+          (insert-text
+           (ellama--insert
+            (current-buffer) (point) #'ellama--translate-markdown-to-org-filter)))
+      (dolist (text '("Before<th"
+                      "Before<think>reasoning"
+                      "Before<think>reasoning</think>After"))
+        (funcall insert-text text))
+      (should (string-equal (buffer-string) "Before
+#+BEGIN_QUOTE
+reasoning
+#+END_QUOTE
+After")))))
+
 (ert-deftest test-ellama-normalize-org-block-markers ()
   (let ((result (ellama--normalize-org-block-markers
                  "Before#+begin_center

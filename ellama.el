@@ -2830,6 +2830,19 @@ EVENT is an argument for mweel scroll."
                             s))))
    "\n"))
 
+(defun ellama--fill-streaming-response-p (delta)
+  "Return non-nil when streaming DELTA should trigger filling."
+  (and ellama-fill-paragraphs
+       (pcase ellama-fill-paragraphs
+         ((cl-type function) (funcall ellama-fill-paragraphs))
+         ((cl-type boolean) ellama-fill-paragraphs)
+         ((cl-type list) (and (apply #'derived-mode-p
+                                     ellama-fill-paragraphs))))
+       (not (and (derived-mode-p 'org-mode)
+                 (string-match-p
+                  "#\\+\\(?:BEGIN\\|END\\)_[[:alnum:]_-]+"
+                  delta)))))
+
 (defun ellama--insert (buffer point filter)
   "Insert text during streaming.
 
@@ -2874,13 +2887,7 @@ FILTER is a function for text transformation."
                     (progn
                       (delete-char (- wrong-chars-cnt))
                       (when delta (insert (propertize delta 'hard t))
-                            (when (and
-                                   ellama-fill-paragraphs
-                                   (pcase ellama-fill-paragraphs
-                                     ((cl-type function) (funcall ellama-fill-paragraphs))
-                                     ((cl-type boolean) ellama-fill-paragraphs)
-                                     ((cl-type list) (and (apply #'derived-mode-p
-                                                                 ellama-fill-paragraphs)))))
+                            (when (ellama--fill-streaming-response-p delta)
                               (if (not (derived-mode-p 'org-mode))
                                   (fill-paragraph)
                                 (when (not (save-excursion
@@ -2902,13 +2909,7 @@ FILTER is a function for text transformation."
                          (delta (string-remove-prefix common-prefix filtered-text)))
                     (delete-char (- wrong-chars-cnt))
                     (when delta (insert (propertize delta 'hard t))
-                          (when (and
-                                 ellama-fill-paragraphs
-                                 (pcase ellama-fill-paragraphs
-                                   ((cl-type function) (funcall ellama-fill-paragraphs))
-                                   ((cl-type boolean) ellama-fill-paragraphs)
-                                   ((cl-type list) (and (apply #'derived-mode-p
-                                                               ellama-fill-paragraphs)))))
+                          (when (ellama--fill-streaming-response-p delta)
                             (if (not (derived-mode-p 'org-mode))
                                 (fill-paragraph)
                               (when (not (save-excursion
