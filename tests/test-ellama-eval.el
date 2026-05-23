@@ -598,6 +598,36 @@
       (when (file-directory-p dir)
         (delete-directory dir t)))))
 
+(ert-deftest test-ellama-eval-select-model-uses-generic-selector ()
+  (let ((ellama-coding-provider 'base-provider)
+        (ellama-provider nil)
+        filled-provider
+        read-provider
+        constructed-provider
+        required-feature)
+    (cl-letf (((symbol-function 'require)
+               (lambda (feature &optional _filename _noerror)
+                 (setq required-feature feature)
+                 t))
+              ((symbol-function 'ellama-fill-transient-model)
+               (lambda (provider)
+                 (setq filled-provider provider)))
+              ((symbol-function 'ellama-transient-read-model-name)
+               (lambda (provider)
+                 (setq read-provider provider)
+                 "selected-model"))
+              ((symbol-function 'ellama-construct-provider-from-transient)
+               (lambda (provider)
+                 (setq constructed-provider provider)
+                 (list :provider provider
+                       :model ellama-transient-model-name))))
+      (should (equal (ellama-eval--select-model-provider)
+                     '(:provider base-provider :model "selected-model")))
+      (should (eq required-feature 'ellama-transient))
+      (should (eq filled-provider 'base-provider))
+      (should (eq read-provider 'base-provider))
+      (should (eq constructed-provider 'base-provider)))))
+
 (provide 'test-ellama-eval)
 
 ;;; test-ellama-eval.el ends here

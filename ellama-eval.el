@@ -31,6 +31,14 @@
 (require 'ellama)
 (require 'ellama-tools)
 
+(declare-function ellama-construct-provider-from-transient
+                  "ellama-transient" (&optional base-provider))
+(declare-function ellama-fill-transient-model
+                  "ellama-transient" (provider))
+(declare-function ellama-transient-read-model-name
+                  "ellama-transient" (&optional provider))
+(defvar ellama-transient-model-name)
+
 (defgroup ellama-eval nil
   "Evaluation harness for Ellama agent and tool experiments."
   :group 'ellama)
@@ -1561,8 +1569,18 @@ KEY is the property list key that contains VALUE."
   (append
    `(("default model" . ellama-provider)
      ("coding provider" . ellama-coding-provider)
-     ("ollama model" . (ellama-get-ollama-local-model)))
+     ("select model" . (ellama-eval--select-model-provider)))
    ellama-providers))
+
+(defun ellama-eval--select-model-provider ()
+  "Return provider selected with the generic model selector."
+  (require 'ellama-transient)
+  (let* ((base-provider (or ellama-coding-provider ellama-provider))
+         (ellama-transient-model-name ""))
+    (ellama-fill-transient-model base-provider)
+    (setq ellama-transient-model-name
+          (ellama-transient-read-model-name base-provider))
+    (ellama-construct-provider-from-transient base-provider)))
 
 (defun ellama-eval--read-provider ()
   "Read evaluation provider from the minibuffer."
