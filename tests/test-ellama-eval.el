@@ -50,16 +50,80 @@
       (when (file-exists-p file)
         (delete-file file)))))
 
+(ert-deftest test-ellama-eval-balanced-edit-file-tool-rejects-broken-elisp ()
+  (let ((file (make-temp-file "ellama-eval-balanced-edit-" nil ".el")))
+    (unwind-protect
+        (let* ((old "(defun sample ()\n  (message \"ok\"))\n")
+               (new "(defun sample ()\n  (message \"ok\")\n")
+               result)
+          (with-temp-file file
+            (insert old))
+          (setq result
+                (ellama-eval-balanced-edit-file-tool file old new))
+          (should (string-match-p "Edit rejected" result))
+          (should (string-match-p "Mode: emacs-lisp-mode" result))
+          (should (string-match-p "Replacement fragment" result))
+          (should (string-match-p "Missing closers" result))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (equal (buffer-string) old))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-eval-balanced-edit-file-tool-applies-valid-elisp ()
+  (let ((file (make-temp-file "ellama-eval-balanced-edit-" nil ".el")))
+    (unwind-protect
+        (let* ((old "(defun sample ()\n  (message \"old\"))\n")
+               (new "(defun sample ()\n  (message \"new\"))\n")
+               result)
+          (with-temp-file file
+            (insert old))
+          (setq result
+                (ellama-eval-balanced-edit-file-tool file old new))
+          (should (string-match-p "after syntax validation" result))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (equal (buffer-string) new)))
+          (with-current-buffer (find-file-noselect file)
+            (should (equal (buffer-string) new))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-eval-balanced-edit-uses-existing-buffer-mode ()
+  (let ((file (make-temp-file "ellama-eval-balanced-edit-" nil ".txt")))
+    (unwind-protect
+        (let* ((old "(defun sample ()\n  (message \"ok\"))\n")
+               (new "(defun sample ()\n  (message \"ok\")\n")
+               result)
+          (with-temp-file file
+            (insert old))
+          (with-current-buffer (find-file-noselect file)
+            (emacs-lisp-mode))
+          (setq result
+                (ellama-eval-balanced-edit-file-tool file old new))
+          (should (string-match-p "Mode: emacs-lisp-mode" result)))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
 (ert-deftest test-ellama-eval-profile-tools-switch-read-and-edit-shapes ()
   (let ((ellama-tools-allow-all t)
         (ellama-tools-allowed nil)
         (ellama-tools-confirm-allowed (make-hash-table))
         (baseline (ellama-eval--make-profile-tools 'baseline))
-        (numbered (ellama-eval--make-profile-tools 'numbered-line-edit)))
+        (numbered (ellama-eval--make-profile-tools 'numbered-line-edit))
+        (balanced (ellama-eval--make-profile-tools 'balanced-edit)))
     (should (member "edit_file" (mapcar #'llm-tool-name baseline)))
     (should-not (member "edit_lines" (mapcar #'llm-tool-name baseline)))
     (should (member "edit_lines" (mapcar #'llm-tool-name numbered)))
     (should-not (member "edit_file" (mapcar #'llm-tool-name numbered)))
+    (should (member "edit_file" (mapcar #'llm-tool-name balanced)))
+    (should-not (member "edit_lines" (mapcar #'llm-tool-name balanced)))
     (let* ((tool
             (seq-find
              (lambda (item)

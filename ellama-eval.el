@@ -71,8 +71,8 @@ Only one evaluation run is supported at a time.")
   "Tool names included in every hypothesis profile.")
 
 (defconst ellama-eval-hypothesis-profiles
-  '(baseline numbered-read line-edit numbered-line-edit)
-  "Profiles used by the line-edit and numbered-read hypothesis suite.")
+  '(baseline numbered-read line-edit numbered-line-edit balanced-edit)
+  "Profiles used by hypothesis suites.")
 
 (defconst ellama-eval--coder-system
   "You are a careful coding agent. Inspect the project, make the requested \
@@ -247,6 +247,10 @@ in one short sentence."
   "Return non-nil when PROFILE use line-based editing."
   (memq profile '(line-edit numbered-line-edit)))
 
+(defun ellama-eval--profile-balanced-edit-p (profile)
+  "Return non-nil when PROFILE validate edits before applying them."
+  (eq profile 'balanced-edit))
+
 (defun ellama-eval--profile-tool-names (profile)
   "Return tool names for PROFILE."
   (unless (memq profile ellama-eval-hypothesis-profiles)
@@ -267,6 +271,17 @@ in one short sentence."
       ("lines_range"
        (plist-put (copy-sequence spec)
                   :function #'ellama-eval-numbered-lines-range-tool))
+      (_
+       spec))))
+
+(defun ellama-eval--replace-profile-edit-specs (spec profile)
+  "Return SPEC adjusted for balanced edit PROFILE."
+  (if (not (ellama-eval--profile-balanced-edit-p profile))
+      spec
+    (pcase (plist-get spec :name)
+      ("edit_file"
+       (plist-put (copy-sequence spec)
+                  :function #'ellama-eval-balanced-edit-file-tool))
       (_
        spec))))
 
@@ -304,8 +319,10 @@ in one short sentence."
      (let* ((spec (ellama-eval--tool-spec-by-name name))
             (read-spec
              (ellama-eval--replace-profile-read-specs spec profile))
+            (edit-spec
+             (ellama-eval--replace-profile-edit-specs read-spec profile))
             (instrumented
-             (ellama-eval--instrument-tool-spec read-spec)))
+             (ellama-eval--instrument-tool-spec edit-spec)))
        (apply #'llm-make-tool
               (ellama-tools-wrap-with-confirm instrumented))))
    (ellama-eval--profile-tool-names profile)))
@@ -377,6 +394,276 @@ MODE follows the same contract as `ellama-tools-read-file-tool'."
   (save-excursion
     (goto-char (point-max))
     (line-number-at-pos)))
+
+(defun ellama-eval--diagnostic-location (pos)
+  "Return location plist for POS in the current buffer."
+  (save-excursion
+    (goto-char (max (point-min) (min pos (point-max))))
+    (list :pos (point)
+          :line (line-number-at-pos)
+          :column (current-column))))
+
+(defun ellama-eval--syntax-diagnostic (check err)
+  "Return diagnostic for CHECK and ERR at point."
+  (append
+   (list :check check
+         :error (error-message-string err))
+   (ellama-eval--diagnostic-location (point))))
+
+(defun ellama-eval--check-parens-diagnostic ()
+  "Return `check-parens' diagnostic for the current buffer."
+  (condition-case err
+      (let ((inhibit-message t))
+        (check-parens)
+        nil)
+    (error
+     (ellama-eval--syntax-diagnostic "check-parens" err))))
+
+(defun ellama-eval--elisp-reader-diagnostic ()
+  "Return Elisp reader diagnostic for the current buffer."
+  (when (derived-mode-p 'emacs-lisp-mode 'lisp-interaction-mode)
+    (save-excursion
+      (goto-char (point-min))
+      (catch 'done
+        (while t
+          (condition-case err
+              (read (current-buffer))
+            (end-of-file
+             (throw 'done nil))
+            (error
+             (throw
+              'done
+              (ellama-eval--syntax-diagnostic "elisp-reader" err)))))))))
+
+(defun ellama-eval--char-location (char pos)
+  "Return plist for delimiter CHAR at POS."
+  (append (list :char char)
+          (ellama-eval--diagnostic-location pos)))
+
+(defun ellama-eval--delimiter-balance-current-buffer ()
+  "Return delimiter balance for the current buffer syntax table."
+  (let (opens unexpected)
+    (save-excursion
+      (goto-char (point-min))
+      (while (not (eobp))
+        (let* ((pos (point))
+               (char (char-after))
+               (syntax (syntax-after pos))
+               (class (and syntax (syntax-class syntax)))
+               (state (syntax-ppss pos)))
+          (unless (or (nth 3 state)
+                      (nth 4 state))
+            (pcase class
+              (4
+               (push (ellama-eval--char-location char pos) opens))
+              (5
+               (let ((expected (matching-paren char)))
+                 (if (and opens
+                          expected
+                          (= expected (plist-get (car opens) :char)))
+                     (pop opens)
+                   (push (ellama-eval--char-location char pos)
+                         unexpected)))))))
+        (forward-char 1)))
+    (list :opens opens :unexpected (nreverse unexpected))))
+
+(defun ellama-eval--format-delimiter-location (entry)
+  "Return formatted delimiter balance ENTRY."
+  (format "%c at line %d, column %d"
+          (plist-get entry :char)
+          (plist-get entry :line)
+          (plist-get entry :column)))
+
+(defun ellama-eval--format-missing-closer (entry)
+  "Return formatted missing closer description for ENTRY."
+  (let* ((open (plist-get entry :char))
+         (close (matching-paren open)))
+    (format "%s for %s"
+            (if close (format "%c" close) "matching closer")
+            (ellama-eval--format-delimiter-location entry))))
+
+(defun ellama-eval--format-delimiter-balance (balance)
+  "Return human-readable delimiter BALANCE."
+  (let ((opens (plist-get balance :opens))
+        (unexpected (plist-get balance :unexpected)))
+    (concat
+     "Delimiter balance:\n"
+     (if opens
+         (concat
+          "- Missing closers: "
+          (string-join
+           (mapcar #'ellama-eval--format-missing-closer
+                   (seq-take opens 5))
+           "; ")
+          "\n")
+       "- Missing closers: none\n")
+     (if unexpected
+         (concat
+          "- Unexpected closers: "
+          (string-join
+           (mapcar #'ellama-eval--format-delimiter-location
+                   (seq-take unexpected 5))
+           "; ")
+          "\n")
+       "- Unexpected closers: none\n"))))
+
+(defun ellama-eval--nearby-text (pos)
+  "Return nearby text around POS in the current buffer."
+  (save-excursion
+    (let* ((safe-pos (max (point-min) (min pos (point-max))))
+           (line (progn
+                   (goto-char safe-pos)
+                   (line-number-at-pos)))
+           (column (current-column))
+           (last-line (progn
+                        (goto-char (point-max))
+                        (line-number-at-pos)))
+           (from (max 1 (- line 2)))
+           (to (min last-line (+ line 2)))
+           (width (length (number-to-string to)))
+           rows)
+      (dotimes (offset (1+ (- to from)))
+        (let ((current (+ from offset)))
+          (goto-char (point-min))
+          (forward-line (1- current))
+          (push
+           (format (format "%%%dd | %%s" width)
+                   current
+                   (buffer-substring-no-properties
+                    (line-beginning-position)
+                    (line-end-position)))
+           rows)
+          (when (= current line)
+            (push
+             (format "%s | %s^"
+                     (make-string width ? )
+                     (make-string column ? ))
+             rows))))
+      (concat "Nearby text:\n"
+              (string-join (nreverse rows) "\n")))))
+
+(defun ellama-eval--syntax-validation-current-buffer ()
+  "Return syntax validation result for the current buffer."
+  (when (fboundp 'syntax-propertize)
+    (syntax-propertize (point-max)))
+  (if-let* ((diagnostic (or (ellama-eval--check-parens-diagnostic)
+                            (ellama-eval--elisp-reader-diagnostic))))
+      (append (list :valid nil
+                    :mode major-mode
+                    :balance
+                    (ellama-eval--delimiter-balance-current-buffer)
+                    :nearby
+                    (ellama-eval--nearby-text
+                     (plist-get diagnostic :pos)))
+              diagnostic)
+    (list :valid t :mode major-mode)))
+
+(defun ellama-eval--validate-text-in-file-buffer (file-name text)
+  "Validate TEXT using the existing Emacs buffer setup for FILE-NAME."
+  (let ((buffer (find-file-noselect file-name)))
+    (with-current-buffer buffer
+      (let ((original (buffer-string))
+            (modified (buffer-modified-p))
+            (point-pos (point))
+            (buffer-undo-list t)
+            (inhibit-modification-hooks t)
+            (inhibit-read-only t))
+        (unwind-protect
+            (progn
+              (erase-buffer)
+              (insert text)
+              (ellama-eval--syntax-validation-current-buffer))
+          (erase-buffer)
+          (insert original)
+          (goto-char (max (point-min) (min point-pos (point-max))))
+          (set-buffer-modified-p modified))))))
+
+(defun ellama-eval--validation-status (validation)
+  "Return short status string for VALIDATION."
+  (if (plist-get validation :valid)
+      "balanced"
+    (format "unbalanced (%s at line %d, column %d: %s)"
+            (plist-get validation :check)
+            (plist-get validation :line)
+            (plist-get validation :column)
+            (plist-get validation :error))))
+
+(defun ellama-eval--format-edit-rejection
+    (file-name candidate-validation original-validation
+               old-validation new-validation)
+  "Return edit rejection for FILE-NAME and VALIDATION results.
+CANDIDATE-VALIDATION, ORIGINAL-VALIDATION, OLD-VALIDATION and
+NEW-VALIDATION are syntax validation results."
+  (format
+   (concat
+    "Edit rejected: resulting buffer has unbalanced delimiters or "
+    "invalid syntax.\n\n"
+    "File: %s\n"
+    "Mode: %s\n"
+    "Check: %s\n"
+    "Error: %s\n"
+    "Position: line %d, column %d\n\n"
+    "%s\n\n"
+    "Original file status: %s\n"
+    "Old fragment standalone status: %s\n"
+    "Replacement fragment standalone status: %s\n\n"
+    "%s\n"
+    "Instruction: retry the edit. Keep the requested semantic change, "
+    "but return replacement text whose delimiters are balanced in %s.")
+   file-name
+   (plist-get candidate-validation :mode)
+   (plist-get candidate-validation :check)
+   (plist-get candidate-validation :error)
+   (plist-get candidate-validation :line)
+   (plist-get candidate-validation :column)
+   (plist-get candidate-validation :nearby)
+   (ellama-eval--validation-status original-validation)
+   (ellama-eval--validation-status old-validation)
+   (ellama-eval--validation-status new-validation)
+   (ellama-eval--format-delimiter-balance
+    (plist-get candidate-validation :balance))
+   (plist-get candidate-validation :mode)))
+
+(defun ellama-eval--write-file-buffer-content (file-name content)
+  "Write CONTENT to FILE-NAME and its visiting buffer."
+  (let ((buffer (find-file-noselect file-name)))
+    (with-current-buffer buffer
+      (let ((coding-system-for-write 'raw-text)
+            (buffer-undo-list t)
+            (inhibit-read-only t))
+        (erase-buffer)
+        (insert content)
+        (save-buffer)))))
+
+(defun ellama-eval-balanced-edit-file-tool
+    (file-name oldcontent newcontent)
+  "Replace OLDCONTENT with NEWCONTENT in FILE-NAME after validation."
+  (or (ellama-tools--tool-check-file-access file-name 'read)
+      (ellama-tools--tool-check-file-access file-name 'write)
+      (let ((content (with-temp-buffer
+                       (insert-file-contents-literally file-name)
+                       (buffer-string))))
+        (if (not (string-match (regexp-quote oldcontent) content))
+            (format "Edit rejected: old content was not found in %s."
+                    file-name)
+          (let* ((candidate (replace-match newcontent t t content))
+                 (candidate-validation
+                  (ellama-eval--validate-text-in-file-buffer
+                   file-name candidate)))
+            (if (plist-get candidate-validation :valid)
+                (progn
+                  (ellama-eval--write-file-buffer-content
+                   file-name candidate)
+                  (format "Edited %s after syntax validation." file-name))
+              (ellama-eval--format-edit-rejection
+               file-name
+               candidate-validation
+               (ellama-eval--validate-text-in-file-buffer
+                file-name content)
+               (ellama-eval--validate-text-in-file-buffer
+                file-name oldcontent)
+               (ellama-eval--validate-text-in-file-buffer
+                file-name newcontent))))))))
 
 (defun ellama-eval-edit-lines-tool (file-name from to replacement)
   "Replace FILE-NAME lines FROM through TO with REPLACEMENT."
