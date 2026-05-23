@@ -2111,6 +2111,33 @@ That's it."))))
 (message \"ok\")
 #+END_SRC"))))
 
+(ert-deftest test-ellama-md-to-org-think-skipped-line-break ()
+  (let ((result (ellama--translate-markdown-to-org-filter
+                 "Before<think>reasoning</think>After")))
+    (should (string-equal result "Before
+#+BEGIN_QUOTE
+reasoning
+#+END_QUOTE
+After"))))
+
+(ert-deftest test-ellama-normalize-org-block-markers ()
+  (let ((result (ellama--normalize-org-block-markers
+                 "Before#+begin_center
+body
+After#+end_center")))
+    (should (string-equal result "Before
+#+BEGIN_CENTER
+body
+After
+#+END_CENTER"))))
+
+(ert-deftest test-ellama-normalize-org-block-markers-skip-src ()
+  (let ((text "#+BEGIN_SRC text
+literal#+BEGIN_QUOTE
+literal#+END_QUOTE
+#+END_SRC"))
+    (should (string-equal (ellama--normalize-org-block-markers text) text))))
+
 (ert-deftest test-ellama-md-to-org-inline-fence-long-line ()
   (let* ((long-part (make-string 150000 ?a))
          (text (concat "<think>\n" long-part "```text\nbody\n```\n</think>"))
