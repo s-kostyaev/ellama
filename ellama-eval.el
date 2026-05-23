@@ -149,8 +149,40 @@ non-list ITEMS before calling `string-join`."
 the rejected and invalid branches unchanged."
          :files
          (("request-router.el" . "(defun ellama-eval-route-request (request)\n  (let* ((headers (plist-get request :headers))\n         (auth (alist-get \"authorization\" headers nil nil #'string=)))\n    (cond\n     ((and auth\n           (string-prefix-p \"Bearer \" auth))\n      (let ((token (substring auth 7)))\n        (if (string-empty-p token)\n            (list :status 'invalid\n                  :reason \"empty token\")\n          (list :status 'accepted\n                :token token))))\n     ((plist-get request :public)\n      (list :status 'accepted\n            :token nil))\n     (t\n      (list :status 'rejected\n            :reason \"missing token\")))))\n"))
-         :expected-files
-         (("request-router.el" . "(defun ellama-eval-route-request (request)\n  (let* ((headers (plist-get request :headers))\n         (auth (alist-get \"authorization\" headers nil nil #'string=)))\n    (cond\n     ((and auth\n           (string-prefix-p \"Bearer \" auth))\n      (let ((token (substring auth 7)))\n        (if (string-empty-p token)\n            (list :status 'invalid\n                  :reason \"empty token\")\n          (list :status 'accepted\n                :source 'bearer\n                :token token))))\n     ((plist-get request :public)\n      (list :status 'accepted\n            :source 'public\n            :token nil))\n     (t\n      (list :status 'rejected\n            :reason \"missing token\")))))\n")))
+         :syntax-files ("request-router.el")
+         :elisp-checks
+         (("request-router.el"
+           ("Bearer requests keep token and include bearer source"
+            (let ((result
+                   (ellama-eval-route-request
+                    (list :headers
+                          '(("authorization" . "Bearer secret"))))))
+              (and (eq (plist-get result :status) 'accepted)
+                   (eq (plist-get result :source) 'bearer)
+                   (equal (plist-get result :token) "secret"))))
+           ("Public requests keep nil token and include public source"
+            (let ((result
+                   (ellama-eval-route-request
+                    (list :headers nil :public t))))
+              (and (eq (plist-get result :status) 'accepted)
+                   (eq (plist-get result :source) 'public)
+                   (plist-member result :token)
+                   (null (plist-get result :token)))))
+           ("Empty bearer token branch stays invalid"
+            (let ((result
+                   (ellama-eval-route-request
+                    (list :headers
+                          '(("authorization" . "Bearer "))))))
+              (and (eq (plist-get result :status) 'invalid)
+                   (equal (plist-get result :reason) "empty token")
+                   (not (plist-member result :source)))))
+           ("Missing token branch stays rejected"
+            (let ((result
+                   (ellama-eval-route-request
+                    (list :headers nil))))
+              (and (eq (plist-get result :status) 'rejected)
+                   (equal (plist-get result :reason) "missing token")
+                   (not (plist-member result :source))))))))
     (:id "edit-nested-backquote-template"
          :suite edit
          :system ,ellama-eval--coder-system
@@ -703,41 +735,33 @@ CANDIDATE-FOUND-P is non-nil when a candidate replacement was built.
 CANDIDATE-VALIDATION, ORIGINAL-VALIDATION, OLD-VALIDATION and
 NEW-VALIDATION are syntax validation results.  APPLIED-P and BLOCKED-P
 describe the tool decision."
-  (let ((valid-p (and candidate-validation
-                      (plist-get candidate-validation :valid))))
-    (list :tool tool
-          :file file-name
-          :mode (and candidate-validation
-                     (plist-get candidate-validation :mode))
-          :candidate-found candidate-found-p
-          :applied applied-p
-          :blocked blocked-p
-          :valid valid-p
-          :check (and candidate-validation
-                      (plist-get candidate-validation :check))
-          :error (and candidate-validation
-                      (plist-get candidate-validation :error))
-          :line (and candidate-validation
-                     (plist-get candidate-validation :line))
-          :column (and candidate-validation
-                       (plist-get candidate-validation :column))
-          :missing-closers
-          (if candidate-validation
-              (ellama-eval--validation-missing-closer-count
-               candidate-validation)
-            0)
-          :unexpected-closers
-          (if candidate-validation
-              (ellama-eval--validation-unexpected-closer-count
-               candidate-validation)
-            0)
-          :original-valid (and original-validation
-                               (plist-get original-validation :valid))
-          :old-fragment-valid (and old-validation
-                                   (plist-get old-validation :valid))
-          :new-fragment-valid (and new-validation
-                                   (plist-get new-validation :valid))
-          :finished-at (float-time))))
+  (append
+   (list :tool tool
+         :file file-name
+         :candidate-found candidate-found-p
+         :applied applied-p
+         :blocked blocked-p)
+   (when candidate-validation
+     (list
+      :mode (plist-get candidate-validation :mode)
+      :valid (plist-get candidate-validation :valid)
+      :check (plist-get candidate-validation :check)
+      :error (plist-get candidate-validation :error)
+      :line (plist-get candidate-validation :line)
+      :column (plist-get candidate-validation :column)
+      :missing-closers
+      (ellama-eval--validation-missing-closer-count
+       candidate-validation)
+      :unexpected-closers
+      (ellama-eval--validation-unexpected-closer-count
+       candidate-validation)))
+   (list :original-valid (and original-validation
+                              (plist-get original-validation :valid))
+         :old-fragment-valid (and old-validation
+                                  (plist-get old-validation :valid))
+         :new-fragment-valid (and new-validation
+                                  (plist-get new-validation :valid))
+         :finished-at (float-time))))
 
 (defun ellama-eval--format-edit-rejection
     (file-name candidate-validation original-validation
@@ -1018,6 +1042,36 @@ When IGNORE-DOCSTRINGS is non-nil, ignore defun docstring wording."
          (cdr entry))))
     file-regexps)))
 
+(defun ellama-eval--elisp-checks (workspace elisp-checks)
+  "Return semantic Elisp check entries for WORKSPACE and ELISP-CHECKS."
+  (apply
+   #'append
+   (mapcar
+    (lambda (entry)
+      (let ((relative (car entry)))
+        (mapcar
+         (lambda (check)
+           (let ((description (car check))
+                 (form (cadr check))
+                 (path (expand-file-name relative workspace)))
+             (condition-case err
+                 (let ((default-directory workspace))
+                   (load path nil t)
+                   (let ((result (eval form t)))
+                     (list :path relative
+                           :description description
+                           :form (prin1-to-string form)
+                           :result (prin1-to-string result)
+                           :matched (and result t))))
+               (error
+                (list :path relative
+                      :description description
+                      :form (prin1-to-string form)
+                      :matched nil
+                      :error (error-message-string err))))))
+         (cdr entry))))
+    elisp-checks)))
+
 (defun ellama-eval--answer-checks (answer regexps)
   "Return regexp check entries for ANSWER and REGEXPS."
   (mapcar
@@ -1043,14 +1097,15 @@ When IGNORE-DOCSTRINGS is non-nil, ignore defun docstring wording."
           (when provider (list :provider provider))))
 
 (defun ellama-eval--result-status
-    (run-status file-checks file-regexp-checks answer-checks)
+    (run-status file-checks file-regexp-checks elisp-checks answer-checks)
   "Return final evaluation status.
-RUN-STATUS is the execution status.  FILE-CHECKS, FILE-REGEXP-CHECKS
-and ANSWER-CHECKS contain oracle results."
+RUN-STATUS is the execution status.  FILE-CHECKS, FILE-REGEXP-CHECKS,
+ELISP-CHECKS and ANSWER-CHECKS contain oracle results."
   (cond
    ((eq run-status 'timeout) 'timeout)
    ((and (ellama-eval--checks-pass-p file-checks)
          (ellama-eval--checks-pass-p file-regexp-checks)
+         (ellama-eval--checks-pass-p elisp-checks)
          (ellama-eval--checks-pass-p answer-checks))
     'passed)
    (t
@@ -1072,11 +1127,19 @@ and ANSWER-CHECKS contain oracle results."
             (setq pending (remove file pending)))))))
     count))
 
-(defun ellama-eval--final-syntax-checks (workspace expected-files)
-  "Return syntax check entries for EXPECTED-FILES in WORKSPACE."
+(defun ellama-eval--final-syntax-check-paths (expected-files syntax-files)
+  "Return relative paths from EXPECTED-FILES and SYNTAX-FILES."
+  (delete-dups
+   (append (mapcar #'car expected-files)
+           (copy-sequence syntax-files))))
+
+(defun ellama-eval--final-syntax-checks
+    (workspace expected-files syntax-files)
+  "Return syntax check entries for WORKSPACE files.
+EXPECTED-FILES and SYNTAX-FILES define the relative file paths to check."
   (mapcar
-   (lambda (entry)
-     (let* ((relative (car entry))
+   (lambda (relative)
+     (let* ((relative relative)
             (path (expand-file-name relative workspace)))
        (if (not (file-exists-p path))
            (list :path relative
@@ -1098,7 +1161,7 @@ and ANSWER-CHECKS contain oracle results."
                  :unexpected-closers
                  (ellama-eval--validation-unexpected-closer-count
                   validation))))))
-   expected-files))
+   (ellama-eval--final-syntax-check-paths expected-files syntax-files)))
 
 (defun ellama-eval--syntax-check-count (entries valid-p)
   "Return count of ENTRIES whose validity is VALID-P."
@@ -1126,8 +1189,10 @@ and ANSWER-CHECKS contain oracle results."
   (let* ((case (ellama-eval--run-state-case state))
          (workspace (ellama-eval--run-state-workspace state))
          (expected-files (plist-get case :expected-files))
+         (syntax-files (plist-get case :syntax-files))
          (ignore-docstrings (plist-get case :ignore-docstrings))
          (file-regexps (plist-get case :file-regexps))
+         (elisp-checks (plist-get case :elisp-checks))
          (answer-regexps (plist-get case :answer-regexps))
          (trace (nreverse (ellama-eval--run-state-trace state)))
          (validation-trace
@@ -1138,15 +1203,19 @@ and ANSWER-CHECKS contain oracle results."
            workspace expected-files ignore-docstrings))
          (file-regexp-checks
           (ellama-eval--file-regexp-checks workspace file-regexps))
+         (elisp-check-results
+          (ellama-eval--elisp-checks workspace elisp-checks))
          (final-syntax-checks
-          (ellama-eval--final-syntax-checks workspace expected-files))
+          (ellama-eval--final-syntax-checks
+           workspace expected-files syntax-files))
          (answer-checks
           (ellama-eval--answer-checks
            (ellama-eval--run-state-result state)
            answer-regexps))
          (status
           (ellama-eval--result-status
-           run-status file-checks file-regexp-checks answer-checks))
+           run-status file-checks file-regexp-checks
+           elisp-check-results answer-checks))
          (worker (ellama-eval--run-state-worker state))
          (extra (and worker (ellama-session-extra worker)))
          (continuation-steps (or (plist-get extra :step-count) 0)))
@@ -1174,6 +1243,15 @@ and ANSWER-CHECKS contain oracle results."
      (cl-count-if (lambda (entry)
                     (plist-get entry :blocked))
                   validation-trace)
+     :edit-invalid-candidate-count
+     (cl-count-if (lambda (entry)
+                    (and (plist-get entry :candidate-found)
+                         (not (plist-get entry :valid))))
+                  validation-trace)
+     :edit-missing-candidate-count
+     (cl-count-if (lambda (entry)
+                    (not (plist-get entry :candidate-found)))
+                  validation-trace)
      :edit-recovery-count
      (ellama-eval--edit-recovery-count validation-trace)
      :syntax-valid-final-files
@@ -1184,6 +1262,7 @@ and ANSWER-CHECKS contain oracle results."
      :final-syntax-checks final-syntax-checks
      :file-checks file-checks
      :file-regexp-checks file-regexp-checks
+     :elisp-checks elisp-check-results
      :answer-checks answer-checks
      :workspace (when ellama-eval-keep-workspaces workspace))))
 
@@ -1404,7 +1483,8 @@ KEY is the property list key that contains VALUE."
                          :new-fragment-valid))
     (if value t json-false))
    ((memq key '(:tool-trace :file-checks
-                            :file-regexp-checks :answer-checks
+                            :file-regexp-checks :elisp-checks
+                            :answer-checks
                             :edit-validation-trace
                             :final-syntax-checks))
     (vconcat (mapcar #'ellama-eval--json-value value)))
