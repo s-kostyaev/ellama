@@ -127,6 +127,26 @@ prose that happens to contain unmatched delimiter characters."
   :type '(repeat symbol)
   :group 'ellama)
 
+(defcustom ellama-tools-edit-before-shell-commands nil
+  "Project-local shell commands to run before edit tools mutate files.
+Each entry must be a plist with a required `:command' string.  When
+`:show-output' is non-nil, successful hook output is returned to the agent.
+Failing hooks are always returned to the agent and block the edit."
+  :type '(repeat (plist :options ((:command string)
+                                  (:show-output boolean)
+                                  (:name string))))
+  :group 'ellama)
+
+(defcustom ellama-tools-edit-after-shell-commands nil
+  "Project-local shell commands to run after edit tools mutate files.
+Each entry must be a plist with a required `:command' string.  When
+`:show-output' is non-nil, successful hook output is returned to the agent.
+Failing hooks are always returned to the agent and do not roll back the edit."
+  :type '(repeat (plist :options ((:command string)
+                                  (:show-output boolean)
+                                  (:name string))))
+  :group 'ellama)
+
 (defcustom ellama-tools-use-srt nil
   "Run shell-based tools via `srt'.
 When non-nil, `shell_command', `grep' and `grep_in_file' run inside the
@@ -196,6 +216,10 @@ The guard applies before output is sent back to the LLM."
   "Save full overflowing output to a temp file when source is unknown."
   :type 'boolean
   :group 'ellama)
+
+(defconst ellama-tools--output-sections-property
+  'ellama-tools-output-sections
+  "Text property storing independently processed output sections.")
 
 (defcustom ellama-tools-subagent-continue-prompt "Task not marked complete. Continue working. If you are done, YOU MUST use the `report_result` tool."
   "Prompt sent to sub-agent to keep the loop going."
@@ -694,6 +718,76 @@ TOOL-METADATA may provide tool identity details for DLP scans."
     (ellama-tools--apply-output-line-budget
      tool-name dlp-filtered output-context)))
 
+(defun ellama-tools--make-output-section
+    (kind text &optional scan-output output-context)
+  "Return output section plist with KIND and TEXT.
+SCAN-OUTPUT controls whether DLP scan is applied to the section.
+OUTPUT-CONTEXT controls line-budget source notices."
+  (list :kind kind
+        :text text
+        :scan-output scan-output
+        :output-context output-context))
+
+(defun ellama-tools--sectioned-output (sections)
+  "Return a string containing independently processed SECTIONS.
+SECTIONS are stored as a text property for the output wrapper."
+  (let* ((texts (delq nil
+                      (mapcar (lambda (section)
+                                (let ((text (plist-get section :text)))
+                                  (and (stringp text)
+                                       (not (string-empty-p text))
+                                       text)))
+                              sections)))
+         (text (string-join texts "\n\n")))
+    (when (> (length text) 0)
+      (put-text-property
+       0 (length text) ellama-tools--output-sections-property sections text))
+    text))
+
+(defun ellama-tools--output-sections (text)
+  "Return output sections stored on TEXT, or nil."
+  (and (stringp text)
+       (> (length text) 0)
+       (get-text-property 0 ellama-tools--output-sections-property text)))
+
+(defun ellama-tools--postprocess-output-section
+    (tool-name section &optional tool-metadata)
+  "Apply output guards to SECTION for TOOL-NAME.
+TOOL-METADATA may provide tool identity details for DLP scans."
+  (let* ((kind (or (plist-get section :kind) 'section))
+         (text (or (plist-get section :text) ""))
+         (scan-output (plist-get section :scan-output))
+         (output-context (plist-get section :output-context))
+         (section-tool-name (format "%s/%s" tool-name kind))
+         (dlp-filtered
+          (if (and scan-output ellama-tools-dlp-enabled)
+              (ellama-tools--dlp-handle-output-string
+               section-tool-name text tool-metadata)
+            text)))
+    (ellama-tools--apply-output-line-budget
+     section-tool-name dlp-filtered output-context)))
+
+(defun ellama-tools--postprocess-output-sections
+    (tool-name sections &optional tool-metadata)
+  "Apply output guards to SECTIONS for TOOL-NAME independently."
+  (string-join
+   (mapcar (lambda (section)
+             (ellama-tools--postprocess-output-section
+              tool-name section tool-metadata))
+           sections)
+   "\n\n"))
+
+(defun ellama-tools--postprocess-output-result
+    (tool-name result &optional output-context tool-metadata)
+  "Apply output guards to RESULT for TOOL-NAME.
+Sectioned strings are processed section by section.  Plain strings keep the
+historical single-budget behavior."
+  (if-let* ((sections (ellama-tools--output-sections result)))
+      (ellama-tools--postprocess-output-sections
+       tool-name sections tool-metadata)
+    (ellama-tools--postprocess-output-string
+     tool-name result output-context tool-metadata)))
+
 (defconst ellama-tools--dlp-input-max-walk-depth 24
   "Maximum nested depth traversed when scanning structured tool inputs.")
 
@@ -1078,7 +1172,7 @@ Return one of symbols `allow', `redact' or `block'."
   (lambda (result)
     (funcall callback
              (if (stringp result)
-                 (ellama-tools--postprocess-output-string
+                 (ellama-tools--postprocess-output-result
                   tool-name result output-context tool-metadata)
                result))))
 
@@ -1110,7 +1204,7 @@ return nil."
         (if (not ellama-tools-dlp-enabled)
             (let ((result (apply func wrapped-args)))
               (if (and (not async) (stringp result))
-                  (ellama-tools--postprocess-output-string
+                  (ellama-tools--postprocess-output-result
                    tool-name result output-context tool-metadata)
                 result))
           (let* ((decision (ellama-tools--dlp-input-decision
@@ -1136,7 +1230,7 @@ return nil."
                                   tool-name))
                        (let ((result (apply func wrapped-args)))
                          (if (and (not async) (stringp result))
-                             (ellama-tools--postprocess-output-string
+                             (ellama-tools--postprocess-output-result
                               tool-name result output-context tool-metadata)
                            result))))
                  (ellama-tools--dlp-return-message
@@ -1151,7 +1245,7 @@ return nil."
                             tool-name))
                  (let ((result (apply func wrapped-args)))
                    (if (and (not async) (stringp result))
-                       (ellama-tools--postprocess-output-string
+                       (ellama-tools--postprocess-output-result
                         tool-name result output-context tool-metadata)
                      result))))
               ('warn-strong
@@ -1168,13 +1262,13 @@ return nil."
                               tool-name))
                    (let ((result (apply func wrapped-args)))
                      (if (and (not async) (stringp result))
-                         (ellama-tools--postprocess-output-string
+                         (ellama-tools--postprocess-output-result
                           tool-name result output-context tool-metadata)
                        result)))))
               (_
                (let ((result (apply func wrapped-args)))
                  (if (and (not async) (stringp result))
-                     (ellama-tools--postprocess-output-string
+                     (ellama-tools--postprocess-output-result
                       tool-name result output-context tool-metadata)
                    result))))))))))
 
@@ -2077,6 +2171,201 @@ ORIGINAL, OLD-FRAGMENT and NEW-FRAGMENT provide optional diagnostic context."
       " after syntax validation"
     ""))
 
+(defun ellama-tools--edit-shell-hooks-buffer (file-name)
+  "Return buffer used to read edit shell hooks for FILE-NAME."
+  (find-file-noselect file-name))
+
+(defun ellama-tools--edit-shell-hooks-for-file (file-name phase)
+  "Return configured edit shell hooks for FILE-NAME and PHASE."
+  (with-current-buffer (ellama-tools--edit-shell-hooks-buffer file-name)
+    (if (eq phase 'before)
+        ellama-tools-edit-before-shell-commands
+      ellama-tools-edit-after-shell-commands)))
+
+(defun ellama-tools--edit-project-root (file-name)
+  "Return project root used for edit shell hooks on FILE-NAME."
+  (let* ((expanded (expand-file-name file-name))
+         (dir (or (file-name-directory expanded) default-directory))
+         (default-directory (file-name-as-directory dir)))
+    (if-let* ((project (project-current nil)))
+        (project-root project)
+      default-directory)))
+
+(defun ellama-tools--edit-shell-hook-normalize (spec)
+  "Return normalized edit shell hook SPEC."
+  (cond
+   ((stringp spec)
+    (list :command spec :show-output nil))
+   ((and (plistp spec)
+         (stringp (plist-get spec :command)))
+    spec)
+   (t
+    (list :error
+          (format "Invalid edit shell hook configuration: %S" spec)))))
+
+(defun ellama-tools--edit-shell-hook-env
+    (phase file-name operation tool-name root spec)
+  "Return process environment for edit shell hook SPEC.
+PHASE is `before' or `after'.  FILE-NAME, OPERATION, TOOL-NAME and ROOT
+describe the edit."
+  (append
+   (list
+    (format "ELLAMA_HOOK_PHASE=%s" phase)
+    (format "ELLAMA_EDIT_OPERATION=%s" operation)
+    (format "ELLAMA_TOOL_NAME=%s" tool-name)
+    (format "ELLAMA_FILE_NAME=%s" (expand-file-name file-name))
+    (format "ELLAMA_PROJECT_ROOT=%s" root)
+    (format "ELLAMA_HOOK_NAME=%s" (or (plist-get spec :name) "")))
+   process-environment))
+
+(defun ellama-tools--run-edit-shell-hook
+    (phase file-name operation tool-name spec)
+  "Run edit shell hook SPEC for PHASE and FILE-NAME.
+OPERATION and TOOL-NAME describe the edit.  Return result plist."
+  (let* ((hook (ellama-tools--edit-shell-hook-normalize spec))
+         (command (plist-get hook :command))
+         (error-message (plist-get hook :error))
+         (root (ellama-tools--edit-project-root file-name)))
+    (if error-message
+        (list :phase phase
+              :status 1
+              :output error-message
+              :show-output t)
+      (let* ((default-directory (file-name-as-directory root))
+             (process-environment
+              (ellama-tools--edit-shell-hook-env
+               phase file-name operation tool-name root hook))
+             (argv (ellama-tools--command-argv
+                    shell-file-name
+                    shell-command-switch
+                    (concat "exec 2>&1; " command)))
+             status
+             output)
+        (condition-case err
+            (with-temp-buffer
+              (setq status
+                    (apply #'call-process
+                           (car argv) nil t nil (cdr argv)))
+              (setq output
+                    (string-trim-right (buffer-string) "\n")))
+          (error
+           (setq status 1)
+           (setq output
+                 (format "Failed to run edit shell hook: %s"
+                         (error-message-string err)))))
+        (list :phase phase
+              :command command
+              :name (plist-get hook :name)
+              :status status
+              :output output
+              :show-output (plist-get hook :show-output))))))
+
+(defun ellama-tools--edit-shell-hook-failed-p (result)
+  "Return non-nil when edit shell hook RESULT fail."
+  (not (equal (plist-get result :status) 0)))
+
+(defun ellama-tools--format-edit-shell-hook-result (result)
+  "Return user-facing text for edit shell hook RESULT."
+  (let* ((phase (if (eq (plist-get result :phase) 'before)
+                    "Before"
+                  "After"))
+         (name (plist-get result :name))
+         (command (plist-get result :command))
+         (status (plist-get result :status))
+         (output (or (plist-get result :output) ""))
+         (failed-p (ellama-tools--edit-shell-hook-failed-p result))
+         (subject (if (and (stringp name) (not (string-empty-p name)))
+                      (format "%s edit hook `%s`" phase name)
+                    (format "%s edit hook" phase))))
+    (string-join
+     (delq nil
+           (list
+            (if failed-p
+                (format "%s failed with exit status %s:" subject status)
+              (format "%s completed:" subject))
+            (when command
+              (format "Command: %s" command))
+            (unless (string-empty-p output)
+              output)))
+     "\n\n")))
+
+(defun ellama-tools--edit-shell-hook-visible-p (result)
+  "Return non-nil when edit shell hook RESULT should be returned."
+  (or (ellama-tools--edit-shell-hook-failed-p result)
+      (and (plist-get result :show-output)
+           (not (string-empty-p (or (plist-get result :output) ""))))))
+
+(defun ellama-tools--edit-shell-hook-section (_tool-name result)
+  "Return output section for edit shell hook RESULT."
+  (ellama-tools--make-output-section
+   (if (eq (plist-get result :phase) 'before)
+       'edit-before-hook
+     'edit-after-hook)
+   (ellama-tools--format-edit-shell-hook-result result)
+   nil))
+
+(defun ellama-tools--run-edit-shell-hooks
+    (phase file-name operation tool-name)
+  "Run edit shell hooks for PHASE and FILE-NAME.
+OPERATION and TOOL-NAME describe the edit.  Before hooks stop on the first
+failure.  After hooks run all commands."
+  (let ((hooks (ellama-tools--edit-shell-hooks-for-file file-name phase))
+        sections
+        failed)
+    (catch 'blocked
+      (dolist (hook hooks)
+        (let ((result (ellama-tools--run-edit-shell-hook
+                       phase file-name operation tool-name hook)))
+          (when (ellama-tools--edit-shell-hook-visible-p result)
+            (push (ellama-tools--edit-shell-hook-section tool-name result)
+                  sections))
+          (when (ellama-tools--edit-shell-hook-failed-p result)
+            (setq failed t)
+            (when (eq phase 'before)
+              (throw 'blocked nil))))))
+    (list :failed failed :sections (nreverse sections))))
+
+(defun ellama-tools--refresh-file-buffer-after-hooks (file-name)
+  "Refresh unmodified visiting buffer for FILE-NAME after shell hooks."
+  (let ((expanded (expand-file-name file-name)))
+    (when-let* ((buffer (get-file-buffer expanded)))
+      (with-current-buffer buffer
+        (when (and (not (buffer-modified-p))
+                   (file-exists-p expanded))
+          (revert-buffer t t t))))))
+
+(defun ellama-tools--edit-output
+    (main-message before-sections after-sections)
+  "Return edit output with MAIN-MESSAGE and hook sections.
+BEFORE-SECTIONS and AFTER-SECTIONS are visible shell hook output sections."
+  (let ((sections
+         (append
+          before-sections
+          (list (ellama-tools--make-output-section
+                 'tool-result main-message t))
+          after-sections)))
+    (if (or before-sections after-sections)
+        (ellama-tools--sectioned-output sections)
+      main-message)))
+
+(defun ellama-tools--run-edit-with-shell-hooks
+    (tool-name operation file-name edit-fn success-message)
+  "Run edit shell hooks around EDIT-FN for FILE-NAME.
+TOOL-NAME and OPERATION describe the edit.  SUCCESS-MESSAGE is returned on
+successful edit, optionally combined with visible hook output."
+  (let* ((before (ellama-tools--run-edit-shell-hooks
+                  'before file-name operation tool-name))
+         (before-sections (plist-get before :sections)))
+    (if (plist-get before :failed)
+        (ellama-tools--sectioned-output before-sections)
+      (funcall edit-fn)
+      (let* ((after (ellama-tools--run-edit-shell-hooks
+                     'after file-name operation tool-name))
+             (after-sections (plist-get after :sections)))
+        (ellama-tools--refresh-file-buffer-after-hooks file-name)
+        (ellama-tools--edit-output
+         success-message before-sections after-sections)))))
+
 (defun ellama-tools--current-file-content (file-name)
   "Return current FILE-NAME content, or an empty string when missing.
 Prefer an existing visiting buffer so append and prepend preserve unsaved
@@ -2105,12 +2394,15 @@ buffer contents, matching their historical behavior."
                  (rejection (plist-get decision :rejection)))
             (if rejection
                 rejection
-              (ellama-tools--write-file-buffer-content file-name content)
-              (format "Wrote %d characters to %s%s."
-                      (length content)
-                      file-name
-                      (ellama-tools--balanced-edit-success-suffix
-                       decision))))
+              (ellama-tools--run-edit-with-shell-hooks
+               "write_file" "write" file-name
+               (lambda ()
+                 (ellama-tools--write-file-buffer-content file-name content))
+               (format "Wrote %d characters to %s%s."
+                       (length content)
+                       file-name
+                       (ellama-tools--balanced-edit-success-suffix
+                        decision)))))
         (file-error
          (format "Cannot write %s: %s"
                  file-name
@@ -2152,12 +2444,15 @@ buffer contents, matching their historical behavior."
                  (rejection (plist-get decision :rejection)))
             (if rejection
                 rejection
-              (ellama-tools--write-file-buffer-content file-name candidate)
-              (format "Appended %d characters to %s%s."
-                      (length content)
-                      file-name
-                      (ellama-tools--balanced-edit-success-suffix
-                       decision))))
+              (ellama-tools--run-edit-with-shell-hooks
+               "append_file" "append" file-name
+               (lambda ()
+                 (ellama-tools--write-file-buffer-content file-name candidate))
+               (format "Appended %d characters to %s%s."
+                       (length content)
+                       file-name
+                       (ellama-tools--balanced-edit-success-suffix
+                        decision)))))
         (file-error
          (format "Cannot append to %s: %s"
                  file-name
@@ -2199,12 +2494,15 @@ buffer contents, matching their historical behavior."
                  (rejection (plist-get decision :rejection)))
             (if rejection
                 rejection
-              (ellama-tools--write-file-buffer-content file-name candidate)
-              (format "Prepended %d characters to %s%s."
-                      (length content)
-                      file-name
-                      (ellama-tools--balanced-edit-success-suffix
-                       decision))))
+              (ellama-tools--run-edit-with-shell-hooks
+               "prepend_file" "prepend" file-name
+               (lambda ()
+                 (ellama-tools--write-file-buffer-content file-name candidate))
+               (format "Prepended %d characters to %s%s."
+                       (length content)
+                       file-name
+                       (ellama-tools--balanced-edit-success-suffix
+                        decision)))))
         (file-error
          (format "Cannot prepend to %s: %s"
                  file-name
@@ -2359,12 +2657,15 @@ Replace OLDCONTENT with NEWCONTENT."
                  (rejection (plist-get decision :rejection)))
             (if rejection
                 rejection
-              (ellama-tools--write-file-buffer-content
-               file-name candidate)
-              (format "Edited %s%s."
-                      file-name
-                      (ellama-tools--balanced-edit-success-suffix
-                       decision))))))))
+              (ellama-tools--run-edit-with-shell-hooks
+               "edit_file" "edit" file-name
+               (lambda ()
+                 (ellama-tools--write-file-buffer-content
+                  file-name candidate))
+               (format "Edited %s%s."
+                       file-name
+                       (ellama-tools--balanced-edit-success-suffix
+                        decision)))))))))
 
 (ellama-tools-define-tool
  '(:function

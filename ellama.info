@@ -79,6 +79,7 @@ Configuration
 * Session Compaction::
 * Image Input::
 * Task Tool Subagents::
+* Edit Tool Shell Hooks::
 * DLP for Tool Input/Output::
 * SRT Filesystem Policy for Tools::
 
@@ -588,6 +589,10 @@ argument generated text string.
      ‘read_file’ tool.  Use ‘auto’ to read text files as text and
      supported image files as media, ‘text’ to force text reading, or
      ‘image’ to force image handling.
+   • ‘ellama-tools-edit-before-shell-commands’: Shell hook plists to run
+     before mutating edit tools write files.
+   • ‘ellama-tools-edit-after-shell-commands’: Shell hook plists to run
+     after mutating edit tools write files.
    • ‘ellama-tools-use-srt’: Run shell-based tools (‘shell_command’,
      ‘grep’ and ‘grep_in_file’) via the external ‘srt’ sandbox runtime.
      Disabled by default.  If enabled, non-shell file tools also perform
@@ -640,6 +645,7 @@ argument generated text string.
 * Session Compaction::
 * Image Input::
 * Task Tool Subagents::
+* Edit Tool Shell Hooks::
 * DLP for Tool Input/Output::
 * SRT Filesystem Policy for Tools::
 
@@ -787,7 +793,7 @@ Tool calls can request image handling explicitly:
      }
 
 
-File: ellama.info,  Node: Task Tool Subagents,  Next: DLP for Tool Input/Output,  Prev: Image Input,  Up: Configuration
+File: ellama.info,  Node: Task Tool Subagents,  Next: Edit Tool Shell Hooks,  Prev: Image Input,  Up: Configuration
 
 4.4 Task Tool Subagents
 =======================
@@ -838,9 +844,52 @@ letting skills bundle reusable task prompts next to their ‘SKILL.md’
 files.
 
 
-File: ellama.info,  Node: DLP for Tool Input/Output,  Next: SRT Filesystem Policy for Tools,  Prev: Task Tool Subagents,  Up: Configuration
+File: ellama.info,  Node: Edit Tool Shell Hooks,  Next: DLP for Tool Input/Output,  Prev: Task Tool Subagents,  Up: Configuration
 
-4.5 DLP for Tool Input/Output
+4.5 Edit Tool Shell Hooks
+=========================
+
+Projects can define shell commands that run around mutating edit tools:
+‘write_file’, ‘append_file’, ‘prepend_file’ and ‘edit_file’.  Hooks are
+read from the target file buffer, so project-local values from
+‘.dir-locals.el’ apply to the file being edited.
+
+Each hook entry is a plist with a required ‘:command’ string.  A
+non-zero exit status is always returned to the agent.  Successful hook
+output is returned only when that hook has ‘:show-output t’ and produced
+non-empty output.
+
+Before hooks run after access checks and syntax validation, but before
+the file is written.  A failing before hook blocks the edit.  After
+hooks run after a successful write; failure is reported to the agent and
+does not roll back the edit.
+
+Example project-local configuration:
+
+     ((nil . ((ellama-tools-edit-before-shell-commands
+               . ((:command "git diff --quiet")))
+              (ellama-tools-edit-after-shell-commands
+               . ((:command "make format-elisp" :show-output t)
+                  (:command "make test"))))))
+
+Hook commands run from the target file's project root, or from the file
+directory when no project is found.  The command environment includes:
+
+   • ‘ELLAMA_HOOK_PHASE’: ‘before’ or ‘after’
+   • ‘ELLAMA_EDIT_OPERATION’: ‘write’, ‘append’, ‘prepend’ or ‘edit’
+   • ‘ELLAMA_TOOL_NAME’: tool name such as ‘write_file’
+   • ‘ELLAMA_FILE_NAME’: absolute target file name
+   • ‘ELLAMA_PROJECT_ROOT’: directory used as hook working directory
+   • ‘ELLAMA_HOOK_NAME’: optional ‘:name’ value
+
+Hook diagnostics use their own output line budget instead of sharing one
+limit with the main tool result.  Hook output is operational feedback
+and is not scanned by tool output DLP.
+
+
+File: ellama.info,  Node: DLP for Tool Input/Output,  Next: SRT Filesystem Policy for Tools,  Prev: Edit Tool Shell Hooks,  Up: Configuration
+
+4.6 DLP for Tool Input/Output
 =============================
 
 Ellama includes an optional DLP (Data Loss Prevention) layer for tool
@@ -1166,7 +1215,7 @@ Troubleshooting:
 
 File: ellama.info,  Node: SRT Filesystem Policy for Tools,  Prev: DLP for Tool Input/Output,  Up: Configuration
 
-4.6 SRT Filesystem Policy for Tools
+4.7 SRT Filesystem Policy for Tools
 ===================================
 
 When ‘ellama-tools-use-srt’ is non-nil, the ‘srt’ settings file is the
@@ -2406,47 +2455,48 @@ their use in free software.
 
 Tag Table:
 Node: Top1379
-Node: Installation3919
-Node: Commands8933
-Node: Keymap17562
-Node: Configuration20449
-Node: Session Provider Keys32489
-Node: Session Compaction34350
-Node: Image Input36644
-Node: Task Tool Subagents38789
-Node: DLP for Tool Input/Output40892
-Node: SRT Filesystem Policy for Tools55794
-Node: Context Management61463
-Node: Transient Menus for Context Management62531
-Node: Managing the Context64210
-Node: Considerations64985
-Node: Minor modes65578
-Node: ellama-context-header-line-mode67566
-Node: ellama-context-header-line-global-mode68391
-Node: ellama-context-mode-line-mode69111
-Node: ellama-context-mode-line-global-mode69959
-Node: Ellama Session Header Line Mode70663
-Node: Enabling and Disabling71232
-Node: Customization71679
-Node: Ellama Session Mode Line Mode71967
-Node: Enabling and Disabling (1)72552
-Node: Customization (1)72999
-Node: Using Blueprints73293
-Node: Key Components of Ellama Blueprints73933
-Node: Creating and Managing Blueprints74540
-Node: Blueprints files75518
-Node: Variable Management75939
-Node: Keymap and Mode76392
-Node: Transient Menus77328
-Node: Running Blueprints programmatically77874
-Node: MCP Integration78461
-Node: Agent Skills79696
-Node: Directory Structure80059
-Node: Creating a Skill81086
-Node: How it works81461
-Node: Acknowledgments81852
-Node: Contributions82563
-Node: GNU Free Documentation License82949
+Node: Installation3945
+Node: Commands8959
+Node: Keymap17588
+Node: Configuration20475
+Node: Session Provider Keys32787
+Node: Session Compaction34648
+Node: Image Input36942
+Node: Task Tool Subagents39087
+Node: Edit Tool Shell Hooks41186
+Node: DLP for Tool Input/Output43170
+Node: SRT Filesystem Policy for Tools58074
+Node: Context Management63743
+Node: Transient Menus for Context Management64811
+Node: Managing the Context66490
+Node: Considerations67265
+Node: Minor modes67858
+Node: ellama-context-header-line-mode69846
+Node: ellama-context-header-line-global-mode70671
+Node: ellama-context-mode-line-mode71391
+Node: ellama-context-mode-line-global-mode72239
+Node: Ellama Session Header Line Mode72943
+Node: Enabling and Disabling73512
+Node: Customization73959
+Node: Ellama Session Mode Line Mode74247
+Node: Enabling and Disabling (1)74832
+Node: Customization (1)75279
+Node: Using Blueprints75573
+Node: Key Components of Ellama Blueprints76213
+Node: Creating and Managing Blueprints76820
+Node: Blueprints files77798
+Node: Variable Management78219
+Node: Keymap and Mode78672
+Node: Transient Menus79608
+Node: Running Blueprints programmatically80154
+Node: MCP Integration80741
+Node: Agent Skills81976
+Node: Directory Structure82339
+Node: Creating a Skill83366
+Node: How it works83741
+Node: Acknowledgments84132
+Node: Contributions84843
+Node: GNU Free Documentation License85229
 
 End Tag Table
 

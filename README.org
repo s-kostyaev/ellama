@@ -438,6 +438,10 @@ generated text string.
 - ~ellama-tools-read-file-default-mode~: Default mode for the ~read_file~
   tool. Use ~auto~ to read text files as text and supported image files as
   media, ~text~ to force text reading, or ~image~ to force image handling.
+- ~ellama-tools-edit-before-shell-commands~: Shell hook plists to run before
+  mutating edit tools write files.
+- ~ellama-tools-edit-after-shell-commands~: Shell hook plists to run after
+  mutating edit tools write files.
 - ~ellama-tools-use-srt~: Run shell-based tools (~shell_command~, ~grep~ and
   ~grep_in_file~) via the external ~srt~ sandbox runtime. Disabled by default.
   If enabled, non-shell file tools also perform local filesystem checks derived
@@ -653,6 +657,46 @@ Template resolution is intentionally scoped:
 
 This keeps large prompts out of the main agent context while still letting
 skills bundle reusable task prompts next to their ~SKILL.md~ files.
+
+** Edit Tool Shell Hooks
+
+Projects can define shell commands that run around mutating edit tools:
+~write_file~, ~append_file~, ~prepend_file~ and ~edit_file~.  Hooks are read
+from the target file buffer, so project-local values from ~.dir-locals.el~
+apply to the file being edited.
+
+Each hook entry is a plist with a required ~:command~ string.  A non-zero exit
+status is always returned to the agent.  Successful hook output is returned
+only when that hook has ~:show-output t~ and produced non-empty output.
+
+Before hooks run after access checks and syntax validation, but before the file
+is written.  A failing before hook blocks the edit.  After hooks run after a
+successful write; failure is reported to the agent and does not roll back the
+edit.
+
+Example project-local configuration:
+
+#+BEGIN_SRC emacs-lisp
+  ((nil . ((ellama-tools-edit-before-shell-commands
+            . ((:command "git diff --quiet")))
+           (ellama-tools-edit-after-shell-commands
+            . ((:command "make format-elisp" :show-output t)
+               (:command "make test"))))))
+#+END_SRC
+
+Hook commands run from the target file's project root, or from the file
+directory when no project is found.  The command environment includes:
+
+- ~ELLAMA_HOOK_PHASE~: ~before~ or ~after~
+- ~ELLAMA_EDIT_OPERATION~: ~write~, ~append~, ~prepend~ or ~edit~
+- ~ELLAMA_TOOL_NAME~: tool name such as ~write_file~
+- ~ELLAMA_FILE_NAME~: absolute target file name
+- ~ELLAMA_PROJECT_ROOT~: directory used as hook working directory
+- ~ELLAMA_HOOK_NAME~: optional ~:name~ value
+
+Hook diagnostics use their own output line budget instead of sharing one limit
+with the main tool result.  Hook output is operational feedback and is not
+scanned by tool output DLP.
 
 ** DLP for Tool Input/Output
 

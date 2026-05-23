@@ -2085,6 +2085,144 @@ Return list with result and prompt."
       (when (file-exists-p file)
         (delete-file file)))))
 
+(ert-deftest test-ellama-tools-edit-after-hook-shows-enabled-output ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-after-hook-show-"))
+        (ellama-tools-edit-before-shell-commands nil)
+        (ellama-tools-edit-after-shell-commands
+         '((:command "printf after-ok" :show-output t))))
+    (unwind-protect
+        (let ((msg (ellama-tools-write-file-tool file "x")))
+          (should (string-match-p "Wrote 1 characters" msg))
+          (should (string-match-p "After edit hook completed" msg))
+          (should (string-match-p "after-ok" msg))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (equal (buffer-string) "x"))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-tools-edit-after-hook-hides-success-by-default ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-after-hook-hide-"))
+        (ellama-tools-edit-before-shell-commands nil)
+        (ellama-tools-edit-after-shell-commands
+         '((:command "printf hidden"))))
+    (unwind-protect
+        (let ((msg (ellama-tools-write-file-tool file "x")))
+          (should (string-match-p "Wrote 1 characters" msg))
+          (should-not (string-match-p "After edit hook completed" msg))
+          (should-not (string-match-p "hidden" msg)))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-tools-edit-after-hook-failure-keeps-edit ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-after-hook-fail-"))
+        (ellama-tools-edit-before-shell-commands nil)
+        (ellama-tools-edit-after-shell-commands
+         '((:command "printf after-fail; exit 3"))))
+    (unwind-protect
+        (let ((msg (ellama-tools-write-file-tool file "x")))
+          (should (string-match-p "Wrote 1 characters" msg))
+          (should (string-match-p
+                   "After edit hook failed with exit status 3" msg))
+          (should (string-match-p "after-fail" msg))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (equal (buffer-string) "x"))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-tools-edit-before-hook-failure-blocks-edit ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-before-hook-fail-"))
+        (ellama-tools-edit-before-shell-commands
+         '((:command "printf before-fail; exit 4")))
+        (ellama-tools-edit-after-shell-commands nil))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "old"))
+          (let ((msg (ellama-tools-write-file-tool file "new")))
+            (should (string-match-p
+                     "Before edit hook failed with exit status 4" msg))
+            (should (string-match-p "before-fail" msg))
+            (should-not (string-match-p "Wrote 3 characters" msg)))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (equal (buffer-string) "old"))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-tools-edit-before-hook-shows-enabled-output ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-before-hook-show-"))
+        (ellama-tools-edit-before-shell-commands
+         '((:command "printf before-ok" :show-output t)))
+        (ellama-tools-edit-after-shell-commands nil))
+    (unwind-protect
+        (let ((msg (ellama-tools-write-file-tool file "x")))
+          (should (string-match-p "Before edit hook completed" msg))
+          (should (string-match-p "before-ok" msg))
+          (should (string-match-p "Wrote 1 characters" msg)))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-tools-edit-hook-receives-context ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-hook-context-" t))
+         (file (expand-file-name "note.txt" dir))
+         (hook-command
+          (concat
+           "printf \"%s|%s|%s\" "
+           "\"$ELLAMA_EDIT_OPERATION\" "
+           "\"$ELLAMA_TOOL_NAME\" \"$PWD\""))
+         (ellama-tools-edit-before-shell-commands nil)
+         (ellama-tools-edit-after-shell-commands
+          `((:command ,hook-command :show-output t))))
+    (unwind-protect
+        (let ((msg (ellama-tools-write-file-tool file "x")))
+          (should (string-match-p "write|write_file" msg))
+          (should (string-match-p (regexp-quote dir) msg)))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file))
+      (when (file-directory-p dir)
+        (delete-directory dir)))))
+
+(ert-deftest test-ellama-tools-edit-hook-output-has-separate-budget ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-hook-budget-"))
+        (ellama-tools-edit-before-shell-commands nil)
+        (ellama-tools-edit-after-shell-commands
+         '((:command "printf 'line1\\nline2\\n'" :show-output t)))
+        (ellama-tools-output-line-budget-enabled t)
+        (ellama-tools-output-line-budget-max-lines 1)
+        (ellama-tools-output-line-budget-max-line-length 200)
+        (ellama-tools-output-line-budget-save-overflow-file nil))
+    (unwind-protect
+        (let* ((raw (ellama-tools-write-file-tool file "x"))
+               (msg (ellama-tools--postprocess-output-result
+                     "write_file" raw nil nil)))
+          (should (string-match-p "Wrote 1 characters" msg))
+          (should (string-match-p "\\[ELLAMA OUTPUT TRUNCATED\\]" msg)))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
 (ert-deftest test-ellama-tools-append-uses-visiting-buffer-content ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((file (make-temp-file "ellama-append-buffer-")))
