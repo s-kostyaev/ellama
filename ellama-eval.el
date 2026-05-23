@@ -53,7 +53,7 @@
 (cl-defstruct ellama-eval--run-state
   "Mutable state for one active evaluation run."
   status result trace worker started-at workspace case profile callback
-  timeout-timer)
+  timeout-timer edit-validation-trace)
 
 (defvar ellama-eval--active-run nil
   "Current evaluation run state.
@@ -357,15 +357,25 @@ in one short sentence."
        spec))))
 
 (defun ellama-eval--replace-profile-edit-specs (spec profile)
-  "Return SPEC adjusted for balanced edit PROFILE."
-  (if (not (ellama-eval--profile-balanced-edit-p profile))
-      spec
-    (pcase (plist-get spec :name)
-      ("edit_file"
-       (plist-put (copy-sequence spec)
-                  :function #'ellama-eval-balanced-edit-file-tool))
-      (_
-       spec))))
+  "Return SPEC adjusted for edit validation in PROFILE."
+  (pcase (plist-get spec :name)
+    ("edit_file"
+     (plist-put
+      (copy-sequence spec)
+      :function
+      (lambda (file-name oldcontent newcontent)
+        (ellama-eval-monitored-edit-file-tool
+         file-name oldcontent newcontent
+         (ellama-eval--profile-balanced-edit-p profile)))))
+    ("edit_lines"
+     (plist-put
+      (copy-sequence spec)
+      :function
+      (lambda (file-name from to replacement)
+        (ellama-eval-monitored-edit-lines-tool
+         file-name from to replacement nil))))
+    (_
+     spec)))
 
 (defun ellama-eval--trace-tool-call (name args status result)
   "Record a tool call with NAME, ARGS, STATUS and RESULT."
@@ -589,6 +599,14 @@ MODE follows the same contract as `ellama-tools-read-file-tool'."
           "\n")
        "- Unexpected closers: none\n"))))
 
+(defun ellama-eval--validation-missing-closer-count (validation)
+  "Return missing closer count from VALIDATION."
+  (length (plist-get (plist-get validation :balance) :opens)))
+
+(defun ellama-eval--validation-unexpected-closer-count (validation)
+  "Return unexpected closer count from VALIDATION."
+  (length (plist-get (plist-get validation :balance) :unexpected)))
+
 (defun ellama-eval--nearby-text (pos)
   "Return nearby text around POS in the current buffer."
   (save-excursion
@@ -670,6 +688,57 @@ MODE follows the same contract as `ellama-tools-read-file-tool'."
             (plist-get validation :column)
             (plist-get validation :error))))
 
+(defun ellama-eval--record-edit-validation (entry)
+  "Record edit validation ENTRY in the active run."
+  (when-let* ((state ellama-eval--active-run))
+    (push entry
+          (ellama-eval--run-state-edit-validation-trace state))))
+
+(defun ellama-eval--edit-validation-entry
+    (tool file-name candidate-found-p candidate-validation original-validation
+          old-validation new-validation applied-p blocked-p)
+  "Return compact edit validation entry.
+TOOL is the edit tool name.  FILE-NAME identifies the edited file.
+CANDIDATE-FOUND-P is non-nil when a candidate replacement was built.
+CANDIDATE-VALIDATION, ORIGINAL-VALIDATION, OLD-VALIDATION and
+NEW-VALIDATION are syntax validation results.  APPLIED-P and BLOCKED-P
+describe the tool decision."
+  (let ((valid-p (and candidate-validation
+                      (plist-get candidate-validation :valid))))
+    (list :tool tool
+          :file file-name
+          :mode (and candidate-validation
+                     (plist-get candidate-validation :mode))
+          :candidate-found candidate-found-p
+          :applied applied-p
+          :blocked blocked-p
+          :valid valid-p
+          :check (and candidate-validation
+                      (plist-get candidate-validation :check))
+          :error (and candidate-validation
+                      (plist-get candidate-validation :error))
+          :line (and candidate-validation
+                     (plist-get candidate-validation :line))
+          :column (and candidate-validation
+                       (plist-get candidate-validation :column))
+          :missing-closers
+          (if candidate-validation
+              (ellama-eval--validation-missing-closer-count
+               candidate-validation)
+            0)
+          :unexpected-closers
+          (if candidate-validation
+              (ellama-eval--validation-unexpected-closer-count
+               candidate-validation)
+            0)
+          :original-valid (and original-validation
+                               (plist-get original-validation :valid))
+          :old-fragment-valid (and old-validation
+                                   (plist-get old-validation :valid))
+          :new-fragment-valid (and new-validation
+                                   (plist-get new-validation :valid))
+          :finished-at (float-time))))
+
 (defun ellama-eval--format-edit-rejection
     (file-name candidate-validation original-validation
                old-validation new-validation)
@@ -717,38 +786,100 @@ NEW-VALIDATION are syntax validation results."
         (insert content)
         (save-buffer)))))
 
-(defun ellama-eval-balanced-edit-file-tool
-    (file-name oldcontent newcontent)
-  "Replace OLDCONTENT with NEWCONTENT in FILE-NAME after validation."
+(defun ellama-eval-monitored-edit-file-tool
+    (file-name oldcontent newcontent &optional block-invalid)
+  "Replace OLDCONTENT with NEWCONTENT in FILE-NAME with validation.
+When BLOCK-INVALID is non-nil, reject invalid resulting buffers."
   (or (ellama-tools--tool-check-file-access file-name 'read)
       (ellama-tools--tool-check-file-access file-name 'write)
       (let ((content (with-temp-buffer
                        (insert-file-contents-literally file-name)
                        (buffer-string))))
         (if (not (string-match (regexp-quote oldcontent) content))
-            (format "Edit rejected: old content was not found in %s."
-                    file-name)
+            (progn
+              (ellama-eval--record-edit-validation
+               (ellama-eval--edit-validation-entry
+                "edit_file" file-name nil nil nil nil nil nil nil))
+              (when block-invalid
+                (format "Edit rejected: old content was not found in %s."
+                        file-name)))
           (let* ((candidate (replace-match newcontent t t content))
                  (candidate-validation
                   (ellama-eval--validate-text-in-file-buffer
-                   file-name candidate)))
-            (if (plist-get candidate-validation :valid)
-                (progn
-                  (ellama-eval--write-file-buffer-content
-                   file-name candidate)
-                  (format "Edited %s after syntax validation." file-name))
-              (ellama-eval--format-edit-rejection
-               file-name
-               candidate-validation
-               (ellama-eval--validate-text-in-file-buffer
-                file-name content)
-               (ellama-eval--validate-text-in-file-buffer
-                file-name oldcontent)
-               (ellama-eval--validate-text-in-file-buffer
-                file-name newcontent))))))))
+                   file-name candidate))
+                 (original-validation
+                  (ellama-eval--validate-text-in-file-buffer
+                   file-name content))
+                 (old-validation
+                  (ellama-eval--validate-text-in-file-buffer
+                   file-name oldcontent))
+                 (new-validation
+                  (ellama-eval--validate-text-in-file-buffer
+                   file-name newcontent))
+                 (valid-p (plist-get candidate-validation :valid))
+                 (blocked-p (and block-invalid (not valid-p))))
+            (ellama-eval--record-edit-validation
+             (ellama-eval--edit-validation-entry
+              "edit_file" file-name t candidate-validation
+              original-validation old-validation new-validation
+              (not blocked-p) blocked-p))
+            (if blocked-p
+                (ellama-eval--format-edit-rejection
+                 file-name
+                 candidate-validation
+                 original-validation
+                 old-validation
+                 new-validation)
+              (ellama-eval--write-file-buffer-content
+               file-name candidate)
+              (when block-invalid
+                (format "Edited %s after syntax validation."
+                        file-name))))))))
 
-(defun ellama-eval-edit-lines-tool (file-name from to replacement)
-  "Replace FILE-NAME lines FROM through TO with REPLACEMENT."
+(defun ellama-eval-balanced-edit-file-tool
+    (file-name oldcontent newcontent)
+  "Replace OLDCONTENT with NEWCONTENT in FILE-NAME after validation."
+  (ellama-eval-monitored-edit-file-tool
+   file-name oldcontent newcontent t))
+
+(defun ellama-eval--line-edit-candidate
+    (file-name from to replacement)
+  "Return line edit data after replacing FILE-NAME lines FROM TO.
+REPLACEMENT is inserted for the inclusive line range.  Returned plist
+contains `:candidate' and `:old-fragment'."
+  (with-temp-buffer
+    (insert-file-contents-literally file-name)
+    (let ((line-count (ellama-eval--line-count)))
+      (when (> to line-count)
+        (error "Line range %d-%d exceeds file line count %d"
+               from to line-count)))
+    (goto-char (point-min))
+    (forward-line (1- from))
+    (let ((start (line-beginning-position))
+          end
+          old-fragment
+          suffix-p)
+      (goto-char (point-min))
+      (forward-line to)
+      (setq end (point))
+      (setq old-fragment
+            (buffer-substring-no-properties start end))
+      (setq suffix-p (< end (point-max)))
+      (delete-region start end)
+      (goto-char start)
+      (insert replacement)
+      (when (and suffix-p
+                 (not (string-empty-p replacement))
+                 (not (string-suffix-p "\n" replacement)))
+        (insert "\n"))
+      (list :candidate (buffer-string)
+            :old-fragment old-fragment))))
+
+(defun ellama-eval-monitored-edit-lines-tool
+    (file-name from to replacement &optional block-invalid)
+  "Replace FILE-NAME lines FROM through TO with validation.
+REPLACEMENT is the inserted text.  When BLOCK-INVALID is non-nil, reject
+invalid resulting buffers."
   (or (ellama-tools--tool-check-file-access file-name 'read)
       (ellama-tools--tool-check-file-access file-name 'write)
       (progn
@@ -757,31 +888,49 @@ NEW-VALIDATION are syntax validation results."
                      (<= 1 from)
                      (<= from to))
           (error "Line range must use positive integers with FROM <= TO"))
-        (with-temp-buffer
-          (insert-file-contents-literally file-name)
-          (let ((line-count (ellama-eval--line-count)))
-            (when (> to line-count)
-              (error "Line range %d-%d exceeds file line count %d"
-                     from to line-count)))
-          (goto-char (point-min))
-          (forward-line (1- from))
-          (let ((start (line-beginning-position))
-                end
-                suffix-p)
-            (goto-char (point-min))
-            (forward-line to)
-            (setq end (point))
-            (setq suffix-p (< end (point-max)))
-            (delete-region start end)
-            (goto-char start)
-            (insert replacement)
-            (when (and suffix-p
-                       (not (string-empty-p replacement))
-                       (not (string-suffix-p "\n" replacement)))
-              (insert "\n")))
-          (let ((coding-system-for-write 'raw-text))
-            (write-region (point-min) (point-max) file-name nil 'silent))))
-      (format "Replaced lines %d-%d in %s." from to file-name)))
+        (let* ((content (with-temp-buffer
+                          (insert-file-contents-literally file-name)
+                          (buffer-string)))
+               (line-edit-data
+                (ellama-eval--line-edit-candidate
+                 file-name from to replacement))
+               (candidate (plist-get line-edit-data :candidate))
+               (old-fragment (plist-get line-edit-data :old-fragment))
+               (candidate-validation
+                (ellama-eval--validate-text-in-file-buffer
+                 file-name candidate))
+               (original-validation
+                (ellama-eval--validate-text-in-file-buffer
+                 file-name content))
+               (old-validation
+                (ellama-eval--validate-text-in-file-buffer
+                 file-name old-fragment))
+               (new-validation
+                (ellama-eval--validate-text-in-file-buffer
+                 file-name replacement))
+               (valid-p (plist-get candidate-validation :valid))
+               (blocked-p (and block-invalid (not valid-p))))
+          (ellama-eval--record-edit-validation
+           (ellama-eval--edit-validation-entry
+            "edit_lines" file-name t candidate-validation
+            original-validation old-validation new-validation
+            (not blocked-p) blocked-p))
+          (if blocked-p
+              (ellama-eval--format-edit-rejection
+               file-name
+               candidate-validation
+               original-validation
+               old-validation
+               new-validation)
+            (ellama-eval--write-file-buffer-content
+             file-name candidate)
+            (format "Replaced lines %d-%d in %s."
+                    from to file-name))))))
+
+(defun ellama-eval-edit-lines-tool (file-name from to replacement)
+  "Replace FILE-NAME lines FROM through TO with REPLACEMENT."
+  (ellama-eval-monitored-edit-lines-tool
+   file-name from to replacement nil))
 
 (defun ellama-eval--write-case-files (workspace files)
   "Write FILES into WORKSPACE."
@@ -907,6 +1056,57 @@ and ANSWER-CHECKS contain oracle results."
    (t
     'failed)))
 
+(defun ellama-eval--edit-recovery-count (validation-trace)
+  "Return count of blocked edits recovered later in VALIDATION-TRACE."
+  (let ((count 0)
+        pending)
+    (dolist (entry validation-trace)
+      (cond
+       ((plist-get entry :blocked)
+        (push (plist-get entry :file) pending))
+       ((and (plist-get entry :applied)
+             (plist-get entry :valid))
+        (let ((file (plist-get entry :file)))
+          (when (member file pending)
+            (setq count (1+ count))
+            (setq pending (remove file pending)))))))
+    count))
+
+(defun ellama-eval--final-syntax-checks (workspace expected-files)
+  "Return syntax check entries for EXPECTED-FILES in WORKSPACE."
+  (mapcar
+   (lambda (entry)
+     (let* ((relative (car entry))
+            (path (expand-file-name relative workspace)))
+       (if (not (file-exists-p path))
+           (list :path relative
+                 :valid nil
+                 :error "File does not exist")
+         (let ((validation
+                (ellama-eval--validate-text-in-file-buffer
+                 path
+                 (ellama-eval--read-file-string path))))
+           (list :path relative
+                 :valid (plist-get validation :valid)
+                 :mode (plist-get validation :mode)
+                 :check (plist-get validation :check)
+                 :error (plist-get validation :error)
+                 :line (plist-get validation :line)
+                 :column (plist-get validation :column)
+                 :missing-closers
+                 (ellama-eval--validation-missing-closer-count validation)
+                 :unexpected-closers
+                 (ellama-eval--validation-unexpected-closer-count
+                  validation))))))
+   expected-files))
+
+(defun ellama-eval--syntax-check-count (entries valid-p)
+  "Return count of ENTRIES whose validity is VALID-P."
+  (cl-count-if
+   (lambda (entry)
+     (eq (and (plist-get entry :valid) t) valid-p))
+   entries))
+
 (defun ellama-eval--cancel-timeout-timer (state)
   "Cancel timeout timer stored in STATE."
   (when-let* ((timer (ellama-eval--run-state-timeout-timer state)))
@@ -930,11 +1130,16 @@ and ANSWER-CHECKS contain oracle results."
          (file-regexps (plist-get case :file-regexps))
          (answer-regexps (plist-get case :answer-regexps))
          (trace (nreverse (ellama-eval--run-state-trace state)))
+         (validation-trace
+          (nreverse
+           (ellama-eval--run-state-edit-validation-trace state)))
          (file-checks
           (ellama-eval--file-checks
            workspace expected-files ignore-docstrings))
          (file-regexp-checks
           (ellama-eval--file-regexp-checks workspace file-regexps))
+         (final-syntax-checks
+          (ellama-eval--final-syntax-checks workspace expected-files))
          (answer-checks
           (ellama-eval--answer-checks
            (ellama-eval--run-state-result state)
@@ -964,6 +1169,19 @@ and ANSWER-CHECKS contain oracle results."
      :edit-call-count
      (ellama-eval--tool-count trace '("edit_file" "edit_lines"))
      :tool-trace trace
+     :edit-validation-count (length validation-trace)
+     :edit-rejection-count
+     (cl-count-if (lambda (entry)
+                    (plist-get entry :blocked))
+                  validation-trace)
+     :edit-recovery-count
+     (ellama-eval--edit-recovery-count validation-trace)
+     :syntax-valid-final-files
+     (ellama-eval--syntax-check-count final-syntax-checks t)
+     :syntax-invalid-final-files
+     (ellama-eval--syntax-check-count final-syntax-checks nil)
+     :edit-validation-trace validation-trace
+     :final-syntax-checks final-syntax-checks
      :file-checks file-checks
      :file-regexp-checks file-regexp-checks
      :answer-checks answer-checks
@@ -1005,6 +1223,7 @@ PROVIDER overrides the provider used by the eval role."
           (make-ellama-eval--run-state
            :status 'pending
            :trace nil
+           :edit-validation-trace nil
            :started-at (float-time)
            :workspace workspace
            :case case
@@ -1180,10 +1399,14 @@ completed count, total count and the latest result."
   "Return VALUE converted to a shape suitable for JSON encoding.
 KEY is the property list key that contains VALUE."
   (cond
-   ((memq key '(:success :matched))
+   ((memq key '(:success :matched :valid :candidate-found :applied
+                         :blocked :original-valid :old-fragment-valid
+                         :new-fragment-valid))
     (if value t json-false))
    ((memq key '(:tool-trace :file-checks
-                            :file-regexp-checks :answer-checks))
+                            :file-regexp-checks :answer-checks
+                            :edit-validation-trace
+                            :final-syntax-checks))
     (vconcat (mapcar #'ellama-eval--json-value value)))
    ((ellama-eval--plist-p value)
     (ellama-eval--json-object value))

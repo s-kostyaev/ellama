@@ -111,6 +111,32 @@
       (when (file-exists-p file)
         (delete-file file)))))
 
+(ert-deftest test-ellama-eval-monitored-edit-file-logs-invalid-edit ()
+  (let ((file (make-temp-file "ellama-eval-monitored-edit-" nil ".el"))
+        (state (make-ellama-eval--run-state
+                :edit-validation-trace nil)))
+    (unwind-protect
+        (let* ((old "(defun sample ()\n  (message \"ok\"))\n")
+               (new "(defun sample ()\n  (message \"ok\")\n")
+               (ellama-eval--active-run state))
+          (with-temp-file file
+            (insert old))
+          (should-not
+           (ellama-eval-monitored-edit-file-tool file old new nil))
+          (let ((entry
+                 (car
+                  (ellama-eval--run-state-edit-validation-trace state))))
+            (should (equal (plist-get entry :tool) "edit_file"))
+            (should (plist-get entry :candidate-found))
+            (should (plist-get entry :applied))
+            (should-not (plist-get entry :blocked))
+            (should-not (plist-get entry :valid))
+            (should (= (plist-get entry :missing-closers) 1))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
 (ert-deftest test-ellama-eval-profile-tools-switch-read-and-edit-shapes ()
   (let ((ellama-tools-allow-all t)
         (ellama-tools-allowed nil)
@@ -196,6 +222,52 @@
         (should (plist-get file-check :ignore-docstrings))
         (should (plist-get file-check :matched))
         (should (plist-get regexp-check :matched))))))
+
+(ert-deftest test-ellama-eval-build-result-includes-edit-validation-summary ()
+  (let* ((workspace (make-temp-file "ellama-eval-result-" t))
+         (file (expand-file-name "sample.el" workspace))
+         (state
+          (make-ellama-eval--run-state
+           :status 'pending
+           :trace nil
+           :edit-validation-trace
+           (list
+            (list :tool "edit_file"
+                  :file "sample.el"
+                  :candidate-found t
+                  :applied t
+                  :blocked nil
+                  :valid t)
+            (list :tool "edit_file"
+                  :file "sample.el"
+                  :candidate-found t
+                  :applied nil
+                  :blocked t
+                  :valid nil))
+           :started-at (float-time)
+           :workspace workspace
+           :case '(:id "validation-summary"
+                       :suite edit
+                       :expected-files
+                       (("sample.el" . "(defun sample () nil)\n")))
+           :profile 'balanced-edit))
+         result)
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "(defun sample () nil)\n"))
+          (setq result (ellama-eval--build-result state 'completed))
+          (should (= (plist-get result :edit-validation-count) 2))
+          (should (= (plist-get result :edit-rejection-count) 1))
+          (should (= (plist-get result :edit-recovery-count) 1))
+          (should (= (plist-get result :syntax-valid-final-files) 1))
+          (should (= (plist-get result :syntax-invalid-final-files) 0))
+          (should (= (length (plist-get result :edit-validation-trace)) 2))
+          (should (= (length (plist-get result :final-syntax-checks)) 1)))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-directory-p workspace)
+        (delete-directory workspace t)))))
 
 (ert-deftest test-ellama-eval-async-suite-calls-progress-and-completion ()
   (let ((completed nil)
@@ -308,6 +380,20 @@
                       :answer-checks
                       ((:regexp "string"
                                 :matched t))
+                      :edit-validation-trace
+                      ((:tool "edit_file"
+                              :file "sample.el"
+                              :candidate-found t
+                              :applied nil
+                              :blocked t
+                              :valid nil
+                              :original-valid t
+                              :old-fragment-valid t
+                              :new-fragment-valid nil))
+                      :final-syntax-checks
+                      ((:path "sample.el"
+                              :valid nil
+                              :error "Unbalanced"))
                       :workspace nil))))
     (unwind-protect
         (progn
@@ -326,7 +412,11 @@
                  (file-checks (alist-get 'file-checks parsed))
                  (file-regexp-checks
                   (alist-get 'file-regexp-checks parsed))
-                 (answer-checks (alist-get 'answer-checks parsed)))
+                 (answer-checks (alist-get 'answer-checks parsed))
+                 (validation-trace
+                  (alist-get 'edit-validation-trace parsed))
+                 (final-syntax-checks
+                  (alist-get 'final-syntax-checks parsed)))
             (should (eq (alist-get 'success parsed) json-false))
             (should (assq 'workspace parsed))
             (should (null (alist-get 'workspace parsed)))
@@ -343,7 +433,21 @@
             (should (eq (alist-get 'matched (car file-regexp-checks))
                         t))
             (should (eq (alist-get 'matched (car answer-checks))
-                        t))))
+                        t))
+            (should (= (length validation-trace) 1))
+            (should (eq (alist-get 'candidate-found (car validation-trace))
+                        t))
+            (should (eq (alist-get 'applied (car validation-trace))
+                        json-false))
+            (should (eq (alist-get 'blocked (car validation-trace))
+                        t))
+            (should (eq (alist-get 'valid (car validation-trace))
+                        json-false))
+            (should (eq (alist-get 'new-fragment-valid
+                                   (car validation-trace))
+                        json-false))
+            (should (eq (alist-get 'valid (car final-syntax-checks))
+                        json-false))))
       (when (file-exists-p file-name)
         (delete-file file-name)))))
 
