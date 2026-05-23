@@ -130,6 +130,27 @@ non-list ITEMS before calling `string-join`."
          (("strings.el" . "(defun ellama-eval-guarded-join (items)\n  (if (null items)\n      \"\"\n    (string-join items \", \")))\n"))
          :expected-files
          (("strings.el" . "(defun ellama-eval-guarded-join (items)\n  (if (or (null items) (not (listp items)))\n      \"\"\n    (string-join items \", \")))\n")))
+    (:id "edit-nested-plist-construction"
+         :suite edit
+         :system ,ellama-eval--coder-system
+         :prompt
+         "Update `ellama-eval-normalize-event` so the returned plist include \
+`:kind` from PAYLOAD between `:id` and `:name`. Keep all guards unchanged."
+         :files
+         (("event.el" . "(defun ellama-eval-normalize-event (event)\n  (let ((payload (plist-get event :payload)))\n    (when (and payload\n               (listp payload))\n      (let ((meta (plist-get payload :meta)))\n        (when (and meta\n                   (plist-get meta :enabled))\n          (list :id (plist-get event :id)\n                :name (plist-get payload :name)))))))\n"))
+         :expected-files
+         (("event.el" . "(defun ellama-eval-normalize-event (event)\n  (let ((payload (plist-get event :payload)))\n    (when (and payload\n               (listp payload))\n      (let ((meta (plist-get payload :meta)))\n        (when (and meta\n                   (plist-get meta :enabled))\n          (list :id (plist-get event :id)\n                :kind (plist-get payload :kind)\n                :name (plist-get payload :name)))))))\n")))
+    (:id "edit-nested-branch-plists"
+         :suite edit
+         :system ,ellama-eval--coder-system
+         :prompt
+         "Update `ellama-eval-route-request` so accepted Bearer requests return \
+`:source 'bearer` and accepted public requests return `:source 'public`. Keep \
+the rejected and invalid branches unchanged."
+         :files
+         (("request-router.el" . "(defun ellama-eval-route-request (request)\n  (let* ((headers (plist-get request :headers))\n         (auth (alist-get \"authorization\" headers nil nil #'string=)))\n    (cond\n     ((and auth\n           (string-prefix-p \"Bearer \" auth))\n      (let ((token (substring auth 7)))\n        (if (string-empty-p token)\n            (list :status 'invalid\n                  :reason \"empty token\")\n          (list :status 'accepted\n                :token token))))\n     ((plist-get request :public)\n      (list :status 'accepted\n            :token nil))\n     (t\n      (list :status 'rejected\n            :reason \"missing token\")))))\n"))
+         :expected-files
+         (("request-router.el" . "(defun ellama-eval-route-request (request)\n  (let* ((headers (plist-get request :headers))\n         (auth (alist-get \"authorization\" headers nil nil #'string=)))\n    (cond\n     ((and auth\n           (string-prefix-p \"Bearer \" auth))\n      (let ((token (substring auth 7)))\n        (if (string-empty-p token)\n            (list :status 'invalid\n                  :reason \"empty token\")\n          (list :status 'accepted\n                :source 'bearer\n                :token token))))\n     ((plist-get request :public)\n      (list :status 'accepted\n            :source 'public\n            :token nil))\n     (t\n      (list :status 'rejected\n            :reason \"missing token\")))))\n")))
     (:id "explore-locate-provider"
          :suite explore
          :system ,ellama-eval--explorer-system

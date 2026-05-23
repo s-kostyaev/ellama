@@ -359,6 +359,12 @@
     (should (= (length all-cases)
                (length ellama-eval-hypothesis-cases)))))
 
+(ert-deftest test-ellama-eval-cases-include-nested-edit-cases ()
+  (let ((ids (mapcar (lambda (case) (plist-get case :id))
+                     ellama-eval-hypothesis-cases)))
+    (should (member "edit-nested-plist-construction" ids))
+    (should (member "edit-nested-branch-plists" ids))))
+
 (ert-deftest test-ellama-eval-read-results-file-expands-relative-selection ()
   (let* ((dir (make-temp-file "ellama-eval-results-dir-" t))
          (default-directory dir)
