@@ -1,3 +1,15 @@
+* Version 1.20.0
+- Add ~balanced-edit~ evaluation profile to validate edits in real Emacs
+  buffers.
+- Improve tool diagnostics, providing clearer messages for missing files, paths,
+  and invalid line ranges.
+- Expand and improve test coverage for nested Elisp edit evaluation cases.
+- Refactor evaluation harness to use a generic model selector.
+- Enhance file-mutating tools with default-on syntax validation.
+- Normalize Org block markers in translated output.
+- Move evaluation fixtures out of the main code.
+- Fix indentation in response handler callbacks.
+
 * Version 1.19.3
 - Prevented duplicate session requests while a generation or compaction is
   already active.  Repeating ~C-c C-c~ in a chat buffer now leaves the buffer
