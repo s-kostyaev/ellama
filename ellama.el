@@ -3168,13 +3168,13 @@ inserted into the BUFFER."
                            (and
                             (ellama-session-p session)
                             (ellama--session-registered-buffer session))
-	                           (and (buffer-live-p buffer) buffer))))
-	                      (with-current-buffer target-buffer
-	                        (ellama--deactivate-current-request
-	                         request-context)
-	                        (ellama--run-done-callback donecb text)
-	                        (when ellama-session-hide-org-quotes
-	                          (ellama-collapse-org-quotes)))))))
+                           (and (buffer-live-p buffer) buffer))))
+                      (with-current-buffer target-buffer
+                        (ellama--deactivate-current-request
+                         request-context)
+                        (ellama--run-done-callback donecb text)
+                        (when ellama-session-hide-org-quotes
+                          (ellama-collapse-org-quotes)))))))
             (if (and (not tool-result)
                      (ellama-session-p ellama--current-session))
                 (progn
