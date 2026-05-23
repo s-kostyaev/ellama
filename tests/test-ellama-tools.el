@@ -2085,6 +2085,109 @@ Return list with result and prompt."
       (when (file-exists-p file)
         (delete-file file)))))
 
+(ert-deftest test-ellama-tools-append-uses-visiting-buffer-content ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-append-buffer-")))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "disk"))
+          (with-current-buffer (find-file-noselect file)
+            (erase-buffer)
+            (insert "buffer"))
+          (ellama-tools-append-file-tool file "-tail")
+          (with-current-buffer (find-file-noselect file)
+            (should (equal (buffer-string) "buffer-tail")))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (equal (buffer-string) "buffer-tail"))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-tools-edit-file-rejects-invalid-elisp ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-edit-invalid-" nil ".el"))
+        (original "(defun sample ()\n  (message \"ok\"))\n"))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert original))
+          (let ((msg (ellama-tools-edit-file-tool
+                      file
+                      "(defun sample ()\n  (message \"ok\"))"
+                      "(defun sample ()\n  (message \"ok\")")))
+            (should (string-match-p "Edit rejected" msg))
+            (should (string-match-p "Missing closers" msg)))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (equal (buffer-string) original))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-tools-write-file-rejects-invalid-elisp ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-write-invalid-" nil ".el")))
+    (unwind-protect
+        (progn
+          (delete-file file)
+          (let ((msg (ellama-tools-write-file-tool
+                      file
+                      "(defun sample ()\n  (message \"ok\")\n")))
+            (should (string-match-p "Write rejected" msg))
+            (should (string-match-p "Mode: emacs-lisp-mode" msg))
+            (should-not (file-exists-p file))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-tools-append-prepend-reject-invalid-elisp ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((append-file (make-temp-file "ellama-append-invalid-" nil ".el"))
+        (prepend-file (make-temp-file "ellama-prepend-invalid-" nil ".el"))
+        (original "(defun sample ()\n  (message \"ok\"))\n"))
+    (unwind-protect
+        (progn
+          (with-temp-file append-file
+            (insert original))
+          (with-temp-file prepend-file
+            (insert original))
+          (let ((msg (ellama-tools-append-file-tool append-file ")")))
+            (should (string-match-p "Append rejected" msg))
+            (should (string-match-p "Unexpected closers" msg)))
+          (let ((msg (ellama-tools-prepend-file-tool prepend-file "(")))
+            (should (string-match-p "Prepend rejected" msg))
+            (should (string-match-p "Missing closers" msg)))
+          (dolist (file (list append-file prepend-file))
+            (with-temp-buffer
+              (insert-file-contents file)
+              (should (equal (buffer-string) original)))))
+      (dolist (file (list append-file prepend-file))
+        (when-let* ((buffer (get-file-buffer file)))
+          (kill-buffer buffer))
+        (when (file-exists-p file)
+          (delete-file file))))))
+
+(ert-deftest test-ellama-tools-write-file-skips-balance-for-text-mode ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-write-text-" nil ".txt")))
+    (unwind-protect
+        (progn
+          (let ((msg (ellama-tools-write-file-tool file "plain text (\n")))
+            (should (string-match-p "Wrote 13 characters" msg))
+            (should-not (string-match-p "syntax validation" msg)))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (equal (buffer-string) "plain text (\n"))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
 (ert-deftest test-ellama-tools-write-file-explains-missing-directory ()
   (ellama-test--ensure-local-ellama-tools)
   (let* ((dir (make-temp-name
