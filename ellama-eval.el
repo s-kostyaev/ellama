@@ -31,6 +31,14 @@
 (require 'ellama)
 (require 'ellama-tools)
 
+(declare-function ellama-construct-provider-from-transient
+                  "ellama-transient" (&optional base-provider))
+(declare-function ellama-fill-transient-model
+                  "ellama-transient" (provider))
+(declare-function ellama-transient-read-model-name
+                  "ellama-transient" (&optional provider))
+(defvar ellama-transient-model-name)
+
 (defgroup ellama-eval nil
   "Evaluation harness for Ellama agent and tool experiments."
   :group 'ellama)
@@ -53,7 +61,7 @@
 (cl-defstruct ellama-eval--run-state
   "Mutable state for one active evaluation run."
   status result trace worker started-at workspace case profile callback
-  timeout-timer)
+  timeout-timer edit-validation-trace)
 
 (defvar ellama-eval--active-run nil
   "Current evaluation run state.
@@ -71,8 +79,8 @@ Only one evaluation run is supported at a time.")
   "Tool names included in every hypothesis profile.")
 
 (defconst ellama-eval-hypothesis-profiles
-  '(baseline numbered-read line-edit numbered-line-edit)
-  "Profiles used by the line-edit and numbered-read hypothesis suite.")
+  '(baseline numbered-read line-edit numbered-line-edit balanced-edit)
+  "Profiles used by hypothesis suites.")
 
 (defconst ellama-eval--coder-system
   "You are a careful coding agent. Inspect the project, make the requested \
@@ -84,6 +92,43 @@ change, then report the final result."
 question precisely without changing files."
   "System prompt for read-oriented evaluation cases.")
 
+(defconst ellama-eval--fixtures-directory
+  (expand-file-name
+   "tests/fixtures/ellama-eval"
+   (file-name-directory (or load-file-name buffer-file-name)))
+  "Directory containing eval fixture data.")
+
+(defun ellama-eval--fixture-path (case-id file-name)
+  "Return fixture FILE-NAME path for CASE-ID."
+  (expand-file-name file-name
+                    (expand-file-name case-id
+                                      (expand-file-name
+                                       "cases"
+                                       ellama-eval--fixtures-directory))))
+
+(defun ellama-eval--fixture-file (case-id file-name)
+  "Return fixture FILE-NAME content for CASE-ID."
+  (with-temp-buffer
+    (insert-file-contents (ellama-eval--fixture-path case-id file-name))
+    (buffer-string)))
+
+(defun ellama-eval--fixture-files (case-id file-names)
+  "Return workspace files FILE-NAMES loaded from CASE-ID fixtures."
+  (mapcar
+   (lambda (file-name)
+     (cons file-name
+           (ellama-eval--fixture-file
+            case-id
+            (concat "workspace/" file-name))))
+   file-names))
+
+(defun ellama-eval--fixture-data (case-id file-name)
+  "Return Lisp data from fixture FILE-NAME for CASE-ID."
+  (with-temp-buffer
+    (insert-file-contents (ellama-eval--fixture-path case-id file-name))
+    (goto-char (point-min))
+    (read (current-buffer))))
+
 (defconst ellama-eval-hypothesis-cases
   `((:id "edit-replace-function-body"
          :suite edit
@@ -92,14 +137,15 @@ question precisely without changing files."
          "Update `ellama-eval-score-value` so it clamp VALUE to LIMIT with `min`, \
 then return the clamped value multiplied by WEIGHT."
          :files
-         (("sample.el" . "(defun ellama-eval-score-value (value limit weight)\n  \"Return VALUE scaled by WEIGHT, clamped to LIMIT.\"\n  (* value weight))\n"))
-         :expected-files
-         (("sample.el" . "(defun ellama-eval-score-value (value limit weight)\n  \"Return VALUE scaled by WEIGHT, clamped to LIMIT.\"\n  (* (min value limit) weight))\n"))
-         :ignore-docstrings t
+         ,(ellama-eval--fixture-files
+           "edit-replace-function-body" '("sample.el"))
+         :syntax-files ("sample.el")
+         :elisp-checks
+         ,(ellama-eval--fixture-data "edit-replace-function-body"
+                                     "checks.eld")
          :file-regexps
-         (("sample.el" . ("\"[^\"]*VALUE[^\"]*\""))
-          ("sample.el" . ("\"[^\"]*LIMIT[^\"]*\""))
-          ("sample.el" . ("\"[^\"]*WEIGHT[^\"]*\""))))
+         ,(ellama-eval--fixture-data "edit-replace-function-body"
+                                     "file-regexps.eld"))
     (:id "edit-update-target-branch"
          :suite edit
          :system ,ellama-eval--coder-system
@@ -107,9 +153,12 @@ then return the clamped value multiplied by WEIGHT."
          "In `ellama-eval-route-status`, only the `stale` branch should return \
 `retry`. Leave the `failed` branch unchanged."
          :files
-         (("router.el" . "(defun ellama-eval-route-status (status)\n  (cond\n   ((eq status 'ready) 'run)\n   ((eq status 'stale) 'skip)\n   ((eq status 'failed) 'skip)\n   (t 'ignore)))\n"))
-         :expected-files
-         (("router.el" . "(defun ellama-eval-route-status (status)\n  (cond\n   ((eq status 'ready) 'run)\n   ((eq status 'stale) 'retry)\n   ((eq status 'failed) 'skip)\n   (t 'ignore)))\n")))
+         ,(ellama-eval--fixture-files
+           "edit-update-target-branch" '("router.el"))
+         :syntax-files ("router.el")
+         :elisp-checks
+         ,(ellama-eval--fixture-data "edit-update-target-branch"
+                                     "checks.eld"))
     (:id "edit-remove-obsolete-binding"
          :suite edit
          :system ,ellama-eval--coder-system
@@ -117,9 +166,12 @@ then return the clamped value multiplied by WEIGHT."
          "Remove the obsolete local variable `legacy-mode` from \
 `ellama-eval-build-request` and keep the returned plist behavior the same."
          :files
-         (("request.el" . "(defun ellama-eval-build-request (payload kind)\n  (let ((legacy-mode nil)\n        (request-id (format \"%s-%s\" kind payload)))\n    (list :id request-id :payload payload)))\n"))
-         :expected-files
-         (("request.el" . "(defun ellama-eval-build-request (payload kind)\n  (let ((request-id (format \"%s-%s\" kind payload)))\n    (list :id request-id :payload payload)))\n")))
+         ,(ellama-eval--fixture-files
+           "edit-remove-obsolete-binding" '("request.el"))
+         :syntax-files ("request.el")
+         :elisp-checks
+         ,(ellama-eval--fixture-data "edit-remove-obsolete-binding"
+                                     "checks.eld"))
     (:id "edit-expand-guard-clause"
          :suite edit
          :system ,ellama-eval--coder-system
@@ -127,9 +179,118 @@ then return the clamped value multiplied by WEIGHT."
          "Update `ellama-eval-guarded-join` so it reject both nil ITEMS and \
 non-list ITEMS before calling `string-join`."
          :files
-         (("strings.el" . "(defun ellama-eval-guarded-join (items)\n  (if (null items)\n      \"\"\n    (string-join items \", \")))\n"))
-         :expected-files
-         (("strings.el" . "(defun ellama-eval-guarded-join (items)\n  (if (or (null items) (not (listp items)))\n      \"\"\n    (string-join items \", \")))\n")))
+         ,(ellama-eval--fixture-files
+           "edit-expand-guard-clause" '("strings.el"))
+         :syntax-files ("strings.el")
+         :elisp-checks
+         ,(ellama-eval--fixture-data "edit-expand-guard-clause"
+                                     "checks.eld"))
+    (:id "edit-nested-plist-construction"
+         :suite edit
+         :system ,ellama-eval--coder-system
+         :prompt
+         "Update `ellama-eval-normalize-event` so the returned plist include \
+`:kind` from PAYLOAD between `:id` and `:name`. Keep all guards unchanged."
+         :files
+         ,(ellama-eval--fixture-files
+           "edit-nested-plist-construction" '("event.el"))
+         :syntax-files ("event.el")
+         :elisp-checks
+         ,(ellama-eval--fixture-data "edit-nested-plist-construction"
+                                     "checks.eld"))
+    (:id "edit-nested-branch-plists"
+         :suite edit
+         :system ,ellama-eval--coder-system
+         :prompt
+         "Update `ellama-eval-route-request` so accepted Bearer requests return \
+`:source 'bearer` and accepted public requests return `:source 'public`. Keep \
+the rejected and invalid branches unchanged."
+         :files
+         ,(ellama-eval--fixture-files
+           "edit-nested-branch-plists" '("request-router.el"))
+         :syntax-files ("request-router.el")
+         :elisp-checks
+         ,(ellama-eval--fixture-data "edit-nested-branch-plists"
+                                     "checks.eld"))
+    (:id "edit-nested-backquote-template"
+         :suite edit
+         :system ,ellama-eval--coder-system
+         :prompt
+         "Update `ellama-eval-build-dashboard` so each item plist include \
+`:status` from ROW, defaulting to `unknown`, between `:id` and `:label`."
+         :files
+         ,(ellama-eval--fixture-files
+           "edit-nested-backquote-template" '("dashboard.el"))
+         :syntax-files ("dashboard.el")
+         :elisp-checks
+         ,(ellama-eval--fixture-data "edit-nested-backquote-template"
+                                     "checks.eld"))
+    (:id "edit-nested-filter-lambda"
+         :suite edit
+         :system ,ellama-eval--coder-system
+         :prompt
+         "Update `ellama-eval-active-items` so archived items are excluded in \
+addition to disabled items. Keep the result mapping unchanged."
+         :files
+         ,(ellama-eval--fixture-files
+           "edit-nested-filter-lambda" '("items.el"))
+         :syntax-files ("items.el")
+         :elisp-checks
+         ,(ellama-eval--fixture-data "edit-nested-filter-lambda"
+                                     "checks.eld"))
+    (:id "edit-nested-condition-case"
+         :suite edit
+         :system ,ellama-eval--coder-system
+         :prompt
+         "Update `ellama-eval-load-record` so only the `file-error` branch \
+include `:recoverable t`. Do not change the generic error branch."
+         :files
+         ,(ellama-eval--fixture-files
+           "edit-nested-condition-case" '("loader.el"))
+         :syntax-files ("loader.el")
+         :elisp-checks
+         ,(ellama-eval--fixture-data "edit-nested-condition-case"
+                                     "checks.eld"))
+    (:id "edit-nested-pcase-branch"
+         :suite edit
+         :system ,ellama-eval--coder-system
+         :prompt
+         "Update `ellama-eval-describe-message` so the event branch include \
+`:source` from PAYLOAD with default `internal`. Leave the metric branch \
+unchanged."
+         :files
+         ,(ellama-eval--fixture-files
+           "edit-nested-pcase-branch" '("message.el"))
+         :syntax-files ("message.el")
+         :elisp-checks
+         ,(ellama-eval--fixture-data "edit-nested-pcase-branch"
+                                     "checks.eld"))
+    (:id "edit-nested-accumulator"
+         :suite edit
+         :system ,ellama-eval--coder-system
+         :prompt
+         "Update `ellama-eval-collect-errors` so warning entries are ignored. \
+Keep the order of collected non-warning errors unchanged."
+         :files
+         ,(ellama-eval--fixture-files
+           "edit-nested-accumulator" '("errors.el"))
+         :syntax-files ("errors.el")
+         :elisp-checks
+         ,(ellama-eval--fixture-data "edit-nested-accumulator"
+                                     "checks.eld"))
+    (:id "edit-nested-state-machine"
+         :suite edit
+         :system ,ellama-eval--coder-system
+         :prompt
+         "Update `ellama-eval-next-state` so an expired active state returns \
+`expired` instead of `stale`. Leave all other branches unchanged."
+         :files
+         ,(ellama-eval--fixture-files
+           "edit-nested-state-machine" '("state.el"))
+         :syntax-files ("state.el")
+         :elisp-checks
+         ,(ellama-eval--fixture-data "edit-nested-state-machine"
+                                     "checks.eld"))
     (:id "explore-locate-provider"
          :suite explore
          :system ,ellama-eval--explorer-system
@@ -137,8 +298,11 @@ non-list ITEMS before calling `string-join`."
          "Which function chooses the provider for a named role? Answer with the \
 function name only."
          :files
-         (("tools.el" . "(defun ellama-eval-provider-for-role (role)\n  (alist-get role ellama-eval-role-providers nil nil #'string=))\n\n(defun ellama-eval-tools-for-role (role)\n  (alist-get role ellama-eval-role-tools nil nil #'string=))\n"))
-         :answer-regexps ("\\`ellama-eval-provider-for-role\\'"))
+         ,(ellama-eval--fixture-files "explore-locate-provider"
+                                      '("tools.el"))
+         :answer-regexps
+         ,(ellama-eval--fixture-data "explore-locate-provider"
+                                     "answer-regexps.eld"))
     (:id "explore-identify-read-helper"
          :suite explore
          :system ,ellama-eval--explorer-system
@@ -146,8 +310,11 @@ function name only."
          "What helper reads the file contents before the result is sanitized? \
 Answer with the helper name only."
          :files
-         (("reader.el" . "(defun ellama-eval-read-file-tool (file)\n  (ellama-eval-sanitize\n   (ellama-eval-read-file-as-text file)))\n\n(defun ellama-eval-read-file-as-text (file)\n  (with-temp-buffer\n    (insert-file-contents file)\n    (buffer-string)))\n"))
-         :answer-regexps ("\\`ellama-eval-read-file-as-text\\'"))
+         ,(ellama-eval--fixture-files "explore-identify-read-helper"
+                                      '("reader.el"))
+         :answer-regexps
+         ,(ellama-eval--fixture-data "explore-identify-read-helper"
+                                     "answer-regexps.eld"))
     (:id "explore-summarize-policy"
          :suite explore
          :system ,ellama-eval--explorer-system
@@ -155,8 +322,11 @@ Answer with the helper name only."
          "State whether denied writes return nil or an explanatory string. Answer \
 in one short sentence."
          :files
-         (("policy.el" . "(defun ellama-eval-check-write (path)\n  (if (ellama-eval-path-allowed-p path)\n      nil\n    (format \"Write denied for %s\" path)))\n"))
-         :answer-regexps ("string")))
+         ,(ellama-eval--fixture-files "explore-summarize-policy"
+                                      '("policy.el"))
+         :answer-regexps
+         ,(ellama-eval--fixture-data "explore-summarize-policy"
+                                     "answer-regexps.eld")))
   "Built-in cases for the numbered-read and line-edit hypothesis.")
 
 (defun ellama-eval--tool-spec (name function args description)
@@ -247,6 +417,10 @@ in one short sentence."
   "Return non-nil when PROFILE use line-based editing."
   (memq profile '(line-edit numbered-line-edit)))
 
+(defun ellama-eval--profile-balanced-edit-p (profile)
+  "Return non-nil when PROFILE validate edits before applying them."
+  (eq profile 'balanced-edit))
+
 (defun ellama-eval--profile-tool-names (profile)
   "Return tool names for PROFILE."
   (unless (memq profile ellama-eval-hypothesis-profiles)
@@ -269,6 +443,27 @@ in one short sentence."
                   :function #'ellama-eval-numbered-lines-range-tool))
       (_
        spec))))
+
+(defun ellama-eval--replace-profile-edit-specs (spec profile)
+  "Return SPEC adjusted for edit validation in PROFILE."
+  (pcase (plist-get spec :name)
+    ("edit_file"
+     (plist-put
+      (copy-sequence spec)
+      :function
+      (lambda (file-name oldcontent newcontent)
+        (ellama-eval-monitored-edit-file-tool
+         file-name oldcontent newcontent
+         (ellama-eval--profile-balanced-edit-p profile)))))
+    ("edit_lines"
+     (plist-put
+      (copy-sequence spec)
+      :function
+      (lambda (file-name from to replacement)
+        (ellama-eval-monitored-edit-lines-tool
+         file-name from to replacement nil))))
+    (_
+     spec)))
 
 (defun ellama-eval--trace-tool-call (name args status result)
   "Record a tool call with NAME, ARGS, STATUS and RESULT."
@@ -304,8 +499,10 @@ in one short sentence."
      (let* ((spec (ellama-eval--tool-spec-by-name name))
             (read-spec
              (ellama-eval--replace-profile-read-specs spec profile))
+            (edit-spec
+             (ellama-eval--replace-profile-edit-specs read-spec profile))
             (instrumented
-             (ellama-eval--instrument-tool-spec read-spec)))
+             (ellama-eval--instrument-tool-spec edit-spec)))
        (apply #'llm-make-tool
               (ellama-tools-wrap-with-confirm instrumented))))
    (ellama-eval--profile-tool-names profile)))
@@ -378,8 +575,382 @@ MODE follows the same contract as `ellama-tools-read-file-tool'."
     (goto-char (point-max))
     (line-number-at-pos)))
 
-(defun ellama-eval-edit-lines-tool (file-name from to replacement)
-  "Replace FILE-NAME lines FROM through TO with REPLACEMENT."
+(defun ellama-eval--diagnostic-location (pos)
+  "Return location plist for POS in the current buffer."
+  (save-excursion
+    (goto-char (max (point-min) (min pos (point-max))))
+    (list :pos (point)
+          :line (line-number-at-pos)
+          :column (current-column))))
+
+(defun ellama-eval--syntax-diagnostic (check err)
+  "Return diagnostic for CHECK and ERR at point."
+  (append
+   (list :check check
+         :error (error-message-string err))
+   (ellama-eval--diagnostic-location (point))))
+
+(defun ellama-eval--check-parens-diagnostic ()
+  "Return `check-parens' diagnostic for the current buffer."
+  (condition-case err
+      (let ((inhibit-message t))
+        (check-parens)
+        nil)
+    (error
+     (ellama-eval--syntax-diagnostic "check-parens" err))))
+
+(defun ellama-eval--elisp-reader-diagnostic ()
+  "Return Elisp reader diagnostic for the current buffer."
+  (when (derived-mode-p 'emacs-lisp-mode 'lisp-interaction-mode)
+    (save-excursion
+      (goto-char (point-min))
+      (catch 'done
+        (while t
+          (condition-case err
+              (read (current-buffer))
+            (end-of-file
+             (throw 'done nil))
+            (error
+             (throw
+              'done
+              (ellama-eval--syntax-diagnostic "elisp-reader" err)))))))))
+
+(defun ellama-eval--char-location (char pos)
+  "Return plist for delimiter CHAR at POS."
+  (append (list :char char)
+          (ellama-eval--diagnostic-location pos)))
+
+(defun ellama-eval--delimiter-balance-current-buffer ()
+  "Return delimiter balance for the current buffer syntax table."
+  (let (opens unexpected)
+    (save-excursion
+      (goto-char (point-min))
+      (while (not (eobp))
+        (let* ((pos (point))
+               (char (char-after))
+               (syntax (syntax-after pos))
+               (class (and syntax (syntax-class syntax)))
+               (state (syntax-ppss pos)))
+          (unless (or (nth 3 state)
+                      (nth 4 state))
+            (pcase class
+              (4
+               (push (ellama-eval--char-location char pos) opens))
+              (5
+               (let ((expected (matching-paren char)))
+                 (if (and opens
+                          expected
+                          (= expected (plist-get (car opens) :char)))
+                     (pop opens)
+                   (push (ellama-eval--char-location char pos)
+                         unexpected)))))))
+        (forward-char 1)))
+    (list :opens opens :unexpected (nreverse unexpected))))
+
+(defun ellama-eval--format-delimiter-location (entry)
+  "Return formatted delimiter balance ENTRY."
+  (format "%c at line %d, column %d"
+          (plist-get entry :char)
+          (plist-get entry :line)
+          (plist-get entry :column)))
+
+(defun ellama-eval--format-missing-closer (entry)
+  "Return formatted missing closer description for ENTRY."
+  (let* ((open (plist-get entry :char))
+         (close (matching-paren open)))
+    (format "%s for %s"
+            (if close (format "%c" close) "matching closer")
+            (ellama-eval--format-delimiter-location entry))))
+
+(defun ellama-eval--format-delimiter-balance (balance)
+  "Return human-readable delimiter BALANCE."
+  (let ((opens (plist-get balance :opens))
+        (unexpected (plist-get balance :unexpected)))
+    (concat
+     "Delimiter balance:\n"
+     (if opens
+         (concat
+          "- Missing closers: "
+          (string-join
+           (mapcar #'ellama-eval--format-missing-closer
+                   (seq-take opens 5))
+           "; ")
+          "\n")
+       "- Missing closers: none\n")
+     (if unexpected
+         (concat
+          "- Unexpected closers: "
+          (string-join
+           (mapcar #'ellama-eval--format-delimiter-location
+                   (seq-take unexpected 5))
+           "; ")
+          "\n")
+       "- Unexpected closers: none\n"))))
+
+(defun ellama-eval--validation-missing-closer-count (validation)
+  "Return missing closer count from VALIDATION."
+  (length (plist-get (plist-get validation :balance) :opens)))
+
+(defun ellama-eval--validation-unexpected-closer-count (validation)
+  "Return unexpected closer count from VALIDATION."
+  (length (plist-get (plist-get validation :balance) :unexpected)))
+
+(defun ellama-eval--nearby-text (pos)
+  "Return nearby text around POS in the current buffer."
+  (save-excursion
+    (let* ((safe-pos (max (point-min) (min pos (point-max))))
+           (line (progn
+                   (goto-char safe-pos)
+                   (line-number-at-pos)))
+           (column (current-column))
+           (last-line (progn
+                        (goto-char (point-max))
+                        (line-number-at-pos)))
+           (from (max 1 (- line 2)))
+           (to (min last-line (+ line 2)))
+           (width (length (number-to-string to)))
+           rows)
+      (dotimes (offset (1+ (- to from)))
+        (let ((current (+ from offset)))
+          (goto-char (point-min))
+          (forward-line (1- current))
+          (push
+           (format (format "%%%dd | %%s" width)
+                   current
+                   (buffer-substring-no-properties
+                    (line-beginning-position)
+                    (line-end-position)))
+           rows)
+          (when (= current line)
+            (push
+             (format "%s | %s^"
+                     (make-string width ? )
+                     (make-string column ? ))
+             rows))))
+      (concat "Nearby text:\n"
+              (string-join (nreverse rows) "\n")))))
+
+(defun ellama-eval--syntax-validation-current-buffer ()
+  "Return syntax validation result for the current buffer."
+  (when (fboundp 'syntax-propertize)
+    (syntax-propertize (point-max)))
+  (if-let* ((diagnostic (or (ellama-eval--check-parens-diagnostic)
+                            (ellama-eval--elisp-reader-diagnostic))))
+      (append (list :valid nil
+                    :mode major-mode
+                    :balance
+                    (ellama-eval--delimiter-balance-current-buffer)
+                    :nearby
+                    (ellama-eval--nearby-text
+                     (plist-get diagnostic :pos)))
+              diagnostic)
+    (list :valid t :mode major-mode)))
+
+(defun ellama-eval--validate-text-in-file-buffer (file-name text)
+  "Validate TEXT using the existing Emacs buffer setup for FILE-NAME."
+  (let ((buffer (find-file-noselect file-name)))
+    (with-current-buffer buffer
+      (let ((original (buffer-string))
+            (modified (buffer-modified-p))
+            (point-pos (point))
+            (buffer-undo-list t)
+            (inhibit-modification-hooks t)
+            (inhibit-read-only t))
+        (unwind-protect
+            (progn
+              (erase-buffer)
+              (insert text)
+              (ellama-eval--syntax-validation-current-buffer))
+          (erase-buffer)
+          (insert original)
+          (goto-char (max (point-min) (min point-pos (point-max))))
+          (set-buffer-modified-p modified))))))
+
+(defun ellama-eval--validation-status (validation)
+  "Return short status string for VALIDATION."
+  (if (plist-get validation :valid)
+      "balanced"
+    (format "unbalanced (%s at line %d, column %d: %s)"
+            (plist-get validation :check)
+            (plist-get validation :line)
+            (plist-get validation :column)
+            (plist-get validation :error))))
+
+(defun ellama-eval--record-edit-validation (entry)
+  "Record edit validation ENTRY in the active run."
+  (when-let* ((state ellama-eval--active-run))
+    (push entry
+          (ellama-eval--run-state-edit-validation-trace state))))
+
+(defun ellama-eval--edit-validation-entry
+    (tool file-name candidate-found-p candidate-validation original-validation
+          old-validation new-validation applied-p blocked-p)
+  "Return compact edit validation entry.
+TOOL is the edit tool name.  FILE-NAME identifies the edited file.
+CANDIDATE-FOUND-P is non-nil when a candidate replacement was built.
+CANDIDATE-VALIDATION, ORIGINAL-VALIDATION, OLD-VALIDATION and
+NEW-VALIDATION are syntax validation results.  APPLIED-P and BLOCKED-P
+describe the tool decision."
+  (append
+   (list :tool tool
+         :file file-name
+         :candidate-found candidate-found-p
+         :applied applied-p
+         :blocked blocked-p)
+   (when candidate-validation
+     (list
+      :mode (plist-get candidate-validation :mode)
+      :valid (plist-get candidate-validation :valid)
+      :check (plist-get candidate-validation :check)
+      :error (plist-get candidate-validation :error)
+      :line (plist-get candidate-validation :line)
+      :column (plist-get candidate-validation :column)
+      :missing-closers
+      (ellama-eval--validation-missing-closer-count
+       candidate-validation)
+      :unexpected-closers
+      (ellama-eval--validation-unexpected-closer-count
+       candidate-validation)))
+   (list :original-valid (and original-validation
+                              (plist-get original-validation :valid))
+         :old-fragment-valid (and old-validation
+                                  (plist-get old-validation :valid))
+         :new-fragment-valid (and new-validation
+                                  (plist-get new-validation :valid))
+         :finished-at (float-time))))
+
+(defun ellama-eval--format-edit-rejection
+    (file-name candidate-validation original-validation
+               old-validation new-validation)
+  "Return edit rejection for FILE-NAME and VALIDATION results.
+CANDIDATE-VALIDATION, ORIGINAL-VALIDATION, OLD-VALIDATION and
+NEW-VALIDATION are syntax validation results."
+  (format
+   (concat
+    "Edit rejected: resulting buffer has unbalanced delimiters or "
+    "invalid syntax.\n\n"
+    "File: %s\n"
+    "Mode: %s\n"
+    "Check: %s\n"
+    "Error: %s\n"
+    "Position: line %d, column %d\n\n"
+    "%s\n\n"
+    "Original file status: %s\n"
+    "Old fragment standalone status: %s\n"
+    "Replacement fragment standalone status: %s\n\n"
+    "%s\n"
+    "Instruction: retry the edit. Keep the requested semantic change, "
+    "but return replacement text whose delimiters are balanced in %s.")
+   file-name
+   (plist-get candidate-validation :mode)
+   (plist-get candidate-validation :check)
+   (plist-get candidate-validation :error)
+   (plist-get candidate-validation :line)
+   (plist-get candidate-validation :column)
+   (plist-get candidate-validation :nearby)
+   (ellama-eval--validation-status original-validation)
+   (ellama-eval--validation-status old-validation)
+   (ellama-eval--validation-status new-validation)
+   (ellama-eval--format-delimiter-balance
+    (plist-get candidate-validation :balance))
+   (plist-get candidate-validation :mode)))
+
+(defun ellama-eval-monitored-edit-file-tool
+    (file-name oldcontent newcontent &optional block-invalid)
+  "Replace OLDCONTENT with NEWCONTENT in FILE-NAME with validation.
+When BLOCK-INVALID is non-nil, reject invalid resulting buffers."
+  (or (ellama-tools--tool-check-file-access file-name 'read)
+      (ellama-tools--tool-check-file-access file-name 'write)
+      (let ((content (with-temp-buffer
+                       (insert-file-contents-literally file-name)
+                       (buffer-string))))
+        (if (not (string-match (regexp-quote oldcontent) content))
+            (progn
+              (ellama-eval--record-edit-validation
+               (ellama-eval--edit-validation-entry
+                "edit_file" file-name nil nil nil nil nil nil nil))
+              (if block-invalid
+                  (format "Edit rejected: old content was not found in %s."
+                          file-name)
+                (ellama-tools--edit-file-old-content-not-found-message
+                 file-name)))
+          (let* ((candidate (replace-match newcontent t t content))
+                 (candidate-validation
+                  (ellama-eval--validate-text-in-file-buffer
+                   file-name candidate))
+                 (original-validation
+                  (ellama-eval--validate-text-in-file-buffer
+                   file-name content))
+                 (old-validation
+                  (ellama-eval--validate-text-in-file-buffer
+                   file-name oldcontent))
+                 (new-validation
+                  (ellama-eval--validate-text-in-file-buffer
+                   file-name newcontent))
+                 (valid-p (plist-get candidate-validation :valid))
+                 (blocked-p (and block-invalid (not valid-p))))
+            (ellama-eval--record-edit-validation
+             (ellama-eval--edit-validation-entry
+              "edit_file" file-name t candidate-validation
+              original-validation old-validation new-validation
+              (not blocked-p) blocked-p))
+            (if blocked-p
+                (ellama-eval--format-edit-rejection
+                 file-name
+                 candidate-validation
+                 original-validation
+                 old-validation
+                 new-validation)
+              (ellama-tools--write-file-buffer-content
+               file-name candidate)
+              (if block-invalid
+                  (format "Edited %s after syntax validation." file-name)
+                (format "Edited %s." file-name))))))))
+
+(defun ellama-eval-balanced-edit-file-tool
+    (file-name oldcontent newcontent)
+  "Replace OLDCONTENT with NEWCONTENT in FILE-NAME after validation."
+  (ellama-eval-monitored-edit-file-tool
+   file-name oldcontent newcontent t))
+
+(defun ellama-eval--line-edit-candidate
+    (file-name from to replacement)
+  "Return line edit data after replacing FILE-NAME lines FROM TO.
+REPLACEMENT is inserted for the inclusive line range.  Returned plist
+contains `:candidate' and `:old-fragment'."
+  (with-temp-buffer
+    (insert-file-contents-literally file-name)
+    (let ((line-count (ellama-eval--line-count)))
+      (when (> to line-count)
+        (error "Line range %d-%d exceeds file line count %d"
+               from to line-count)))
+    (goto-char (point-min))
+    (forward-line (1- from))
+    (let ((start (line-beginning-position))
+          end
+          old-fragment
+          suffix-p)
+      (goto-char (point-min))
+      (forward-line to)
+      (setq end (point))
+      (setq old-fragment
+            (buffer-substring-no-properties start end))
+      (setq suffix-p (< end (point-max)))
+      (delete-region start end)
+      (goto-char start)
+      (insert replacement)
+      (when (and suffix-p
+                 (not (string-empty-p replacement))
+                 (not (string-suffix-p "\n" replacement)))
+        (insert "\n"))
+      (list :candidate (buffer-string)
+            :old-fragment old-fragment))))
+
+(defun ellama-eval-monitored-edit-lines-tool
+    (file-name from to replacement &optional block-invalid)
+  "Replace FILE-NAME lines FROM through TO with validation.
+REPLACEMENT is the inserted text.  When BLOCK-INVALID is non-nil, reject
+invalid resulting buffers."
   (or (ellama-tools--tool-check-file-access file-name 'read)
       (ellama-tools--tool-check-file-access file-name 'write)
       (progn
@@ -388,31 +959,49 @@ MODE follows the same contract as `ellama-tools-read-file-tool'."
                      (<= 1 from)
                      (<= from to))
           (error "Line range must use positive integers with FROM <= TO"))
-        (with-temp-buffer
-          (insert-file-contents-literally file-name)
-          (let ((line-count (ellama-eval--line-count)))
-            (when (> to line-count)
-              (error "Line range %d-%d exceeds file line count %d"
-                     from to line-count)))
-          (goto-char (point-min))
-          (forward-line (1- from))
-          (let ((start (line-beginning-position))
-                end
-                suffix-p)
-            (goto-char (point-min))
-            (forward-line to)
-            (setq end (point))
-            (setq suffix-p (< end (point-max)))
-            (delete-region start end)
-            (goto-char start)
-            (insert replacement)
-            (when (and suffix-p
-                       (not (string-empty-p replacement))
-                       (not (string-suffix-p "\n" replacement)))
-              (insert "\n")))
-          (let ((coding-system-for-write 'raw-text))
-            (write-region (point-min) (point-max) file-name nil 'silent))))
-      (format "Replaced lines %d-%d in %s." from to file-name)))
+        (let* ((content (with-temp-buffer
+                          (insert-file-contents-literally file-name)
+                          (buffer-string)))
+               (line-edit-data
+                (ellama-eval--line-edit-candidate
+                 file-name from to replacement))
+               (candidate (plist-get line-edit-data :candidate))
+               (old-fragment (plist-get line-edit-data :old-fragment))
+               (candidate-validation
+                (ellama-eval--validate-text-in-file-buffer
+                 file-name candidate))
+               (original-validation
+                (ellama-eval--validate-text-in-file-buffer
+                 file-name content))
+               (old-validation
+                (ellama-eval--validate-text-in-file-buffer
+                 file-name old-fragment))
+               (new-validation
+                (ellama-eval--validate-text-in-file-buffer
+                 file-name replacement))
+               (valid-p (plist-get candidate-validation :valid))
+               (blocked-p (and block-invalid (not valid-p))))
+          (ellama-eval--record-edit-validation
+           (ellama-eval--edit-validation-entry
+            "edit_lines" file-name t candidate-validation
+            original-validation old-validation new-validation
+            (not blocked-p) blocked-p))
+          (if blocked-p
+              (ellama-eval--format-edit-rejection
+               file-name
+               candidate-validation
+               original-validation
+               old-validation
+               new-validation)
+            (ellama-tools--write-file-buffer-content
+             file-name candidate)
+            (format "Replaced lines %d-%d in %s."
+                    from to file-name))))))
+
+(defun ellama-eval-edit-lines-tool (file-name from to replacement)
+  "Replace FILE-NAME lines FROM through TO with REPLACEMENT."
+  (ellama-eval-monitored-edit-lines-tool
+   file-name from to replacement nil))
 
 (defun ellama-eval--write-case-files (workspace files)
   "Write FILES into WORKSPACE."
@@ -500,6 +1089,36 @@ When IGNORE-DOCSTRINGS is non-nil, ignore defun docstring wording."
          (cdr entry))))
     file-regexps)))
 
+(defun ellama-eval--elisp-checks (workspace elisp-checks)
+  "Return semantic Elisp check entries for WORKSPACE and ELISP-CHECKS."
+  (apply
+   #'append
+   (mapcar
+    (lambda (entry)
+      (let ((relative (car entry)))
+        (mapcar
+         (lambda (check)
+           (let ((description (car check))
+                 (form (cadr check))
+                 (path (expand-file-name relative workspace)))
+             (condition-case err
+                 (let ((default-directory workspace))
+                   (load path nil t)
+                   (let ((result (eval form t)))
+                     (list :path relative
+                           :description description
+                           :form (prin1-to-string form)
+                           :result (prin1-to-string result)
+                           :matched (and result t))))
+               (error
+                (list :path relative
+                      :description description
+                      :form (prin1-to-string form)
+                      :matched nil
+                      :error (error-message-string err))))))
+         (cdr entry))))
+    elisp-checks)))
+
 (defun ellama-eval--answer-checks (answer regexps)
   "Return regexp check entries for ANSWER and REGEXPS."
   (mapcar
@@ -525,18 +1144,78 @@ When IGNORE-DOCSTRINGS is non-nil, ignore defun docstring wording."
           (when provider (list :provider provider))))
 
 (defun ellama-eval--result-status
-    (run-status file-checks file-regexp-checks answer-checks)
+    (run-status file-checks file-regexp-checks elisp-checks answer-checks)
   "Return final evaluation status.
-RUN-STATUS is the execution status.  FILE-CHECKS, FILE-REGEXP-CHECKS
-and ANSWER-CHECKS contain oracle results."
+RUN-STATUS is the execution status.  FILE-CHECKS, FILE-REGEXP-CHECKS,
+ELISP-CHECKS and ANSWER-CHECKS contain oracle results."
   (cond
    ((eq run-status 'timeout) 'timeout)
    ((and (ellama-eval--checks-pass-p file-checks)
          (ellama-eval--checks-pass-p file-regexp-checks)
+         (ellama-eval--checks-pass-p elisp-checks)
          (ellama-eval--checks-pass-p answer-checks))
     'passed)
    (t
     'failed)))
+
+(defun ellama-eval--edit-recovery-count (validation-trace)
+  "Return count of blocked edits recovered later in VALIDATION-TRACE."
+  (let ((count 0)
+        pending)
+    (dolist (entry validation-trace)
+      (cond
+       ((plist-get entry :blocked)
+        (push (plist-get entry :file) pending))
+       ((and (plist-get entry :applied)
+             (plist-get entry :valid))
+        (let ((file (plist-get entry :file)))
+          (when (member file pending)
+            (setq count (1+ count))
+            (setq pending (remove file pending)))))))
+    count))
+
+(defun ellama-eval--final-syntax-check-paths (expected-files syntax-files)
+  "Return relative paths from EXPECTED-FILES and SYNTAX-FILES."
+  (delete-dups
+   (append (mapcar #'car expected-files)
+           (copy-sequence syntax-files))))
+
+(defun ellama-eval--final-syntax-checks
+    (workspace expected-files syntax-files)
+  "Return syntax check entries for WORKSPACE files.
+EXPECTED-FILES and SYNTAX-FILES define the relative file paths to check."
+  (mapcar
+   (lambda (relative)
+     (let* ((relative relative)
+            (path (expand-file-name relative workspace)))
+       (if (not (file-exists-p path))
+           (list :path relative
+                 :valid nil
+                 :error "File does not exist")
+         (let ((validation
+                (ellama-eval--validate-text-in-file-buffer
+                 path
+                 (ellama-eval--read-file-string path))))
+           (list :path relative
+                 :valid (plist-get validation :valid)
+                 :mode (plist-get validation :mode)
+                 :check (plist-get validation :check)
+                 :error (plist-get validation :error)
+                 :line (plist-get validation :line)
+                 :column (plist-get validation :column)
+                 :missing-closers
+                 (ellama-eval--validation-missing-closer-count validation)
+                 :unexpected-closers
+                 (ellama-eval--validation-unexpected-closer-count
+                  validation))))))
+   (ellama-eval--final-syntax-check-paths expected-files syntax-files)))
+
+(defun ellama-eval--syntax-check-count (entries valid-p)
+  "Return count of ENTRIES whose validity is VALID-P."
+  (cl-count-if
+   (lambda (entry)
+     (eq (and (plist-get entry :valid) t) valid-p))
+   entries))
 
 (defun ellama-eval--cancel-timeout-timer (state)
   "Cancel timeout timer stored in STATE."
@@ -557,22 +1236,33 @@ and ANSWER-CHECKS contain oracle results."
   (let* ((case (ellama-eval--run-state-case state))
          (workspace (ellama-eval--run-state-workspace state))
          (expected-files (plist-get case :expected-files))
+         (syntax-files (plist-get case :syntax-files))
          (ignore-docstrings (plist-get case :ignore-docstrings))
          (file-regexps (plist-get case :file-regexps))
+         (elisp-checks (plist-get case :elisp-checks))
          (answer-regexps (plist-get case :answer-regexps))
          (trace (nreverse (ellama-eval--run-state-trace state)))
+         (validation-trace
+          (nreverse
+           (ellama-eval--run-state-edit-validation-trace state)))
          (file-checks
           (ellama-eval--file-checks
            workspace expected-files ignore-docstrings))
          (file-regexp-checks
           (ellama-eval--file-regexp-checks workspace file-regexps))
+         (elisp-check-results
+          (ellama-eval--elisp-checks workspace elisp-checks))
+         (final-syntax-checks
+          (ellama-eval--final-syntax-checks
+           workspace expected-files syntax-files))
          (answer-checks
           (ellama-eval--answer-checks
            (ellama-eval--run-state-result state)
            answer-regexps))
          (status
           (ellama-eval--result-status
-           run-status file-checks file-regexp-checks answer-checks))
+           run-status file-checks file-regexp-checks
+           elisp-check-results answer-checks))
          (worker (ellama-eval--run-state-worker state))
          (extra (and worker (ellama-session-extra worker)))
          (continuation-steps (or (plist-get extra :step-count) 0)))
@@ -595,8 +1285,31 @@ and ANSWER-CHECKS contain oracle results."
      :edit-call-count
      (ellama-eval--tool-count trace '("edit_file" "edit_lines"))
      :tool-trace trace
+     :edit-validation-count (length validation-trace)
+     :edit-rejection-count
+     (cl-count-if (lambda (entry)
+                    (plist-get entry :blocked))
+                  validation-trace)
+     :edit-invalid-candidate-count
+     (cl-count-if (lambda (entry)
+                    (and (plist-get entry :candidate-found)
+                         (not (plist-get entry :valid))))
+                  validation-trace)
+     :edit-missing-candidate-count
+     (cl-count-if (lambda (entry)
+                    (not (plist-get entry :candidate-found)))
+                  validation-trace)
+     :edit-recovery-count
+     (ellama-eval--edit-recovery-count validation-trace)
+     :syntax-valid-final-files
+     (ellama-eval--syntax-check-count final-syntax-checks t)
+     :syntax-invalid-final-files
+     (ellama-eval--syntax-check-count final-syntax-checks nil)
+     :edit-validation-trace validation-trace
+     :final-syntax-checks final-syntax-checks
      :file-checks file-checks
      :file-regexp-checks file-regexp-checks
+     :elisp-checks elisp-check-results
      :answer-checks answer-checks
      :workspace (when ellama-eval-keep-workspaces workspace))))
 
@@ -636,6 +1349,7 @@ PROVIDER overrides the provider used by the eval role."
           (make-ellama-eval--run-state
            :status 'pending
            :trace nil
+           :edit-validation-trace nil
            :started-at (float-time)
            :workspace workspace
            :case case
@@ -811,10 +1525,15 @@ completed count, total count and the latest result."
   "Return VALUE converted to a shape suitable for JSON encoding.
 KEY is the property list key that contains VALUE."
   (cond
-   ((memq key '(:success :matched))
+   ((memq key '(:success :matched :valid :candidate-found :applied
+                         :blocked :original-valid :old-fragment-valid
+                         :new-fragment-valid))
     (if value t json-false))
    ((memq key '(:tool-trace :file-checks
-                            :file-regexp-checks :answer-checks))
+                            :file-regexp-checks :elisp-checks
+                            :answer-checks
+                            :edit-validation-trace
+                            :final-syntax-checks))
     (vconcat (mapcar #'ellama-eval--json-value value)))
    ((ellama-eval--plist-p value)
     (ellama-eval--json-object value))
@@ -850,8 +1569,18 @@ KEY is the property list key that contains VALUE."
   (append
    `(("default model" . ellama-provider)
      ("coding provider" . ellama-coding-provider)
-     ("ollama model" . (ellama-get-ollama-local-model)))
+     ("select model" . (ellama-eval--select-model-provider)))
    ellama-providers))
+
+(defun ellama-eval--select-model-provider ()
+  "Return provider selected with the generic model selector."
+  (require 'ellama-transient)
+  (let* ((base-provider (or ellama-coding-provider ellama-provider))
+         (ellama-transient-model-name ""))
+    (ellama-fill-transient-model base-provider)
+    (setq ellama-transient-model-name
+          (ellama-transient-read-model-name base-provider))
+    (ellama-construct-provider-from-transient base-provider)))
 
 (defun ellama-eval--read-provider ()
   "Read evaluation provider from the minibuffer."

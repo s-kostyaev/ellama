@@ -50,16 +50,134 @@
       (when (file-exists-p file)
         (delete-file file)))))
 
+(ert-deftest test-ellama-eval-balanced-edit-file-tool-rejects-broken-elisp ()
+  (let ((file (make-temp-file "ellama-eval-balanced-edit-" nil ".el")))
+    (unwind-protect
+        (let* ((old "(defun sample ()\n  (message \"ok\"))\n")
+               (new "(defun sample ()\n  (message \"ok\")\n")
+               result)
+          (with-temp-file file
+            (insert old))
+          (setq result
+                (ellama-eval-balanced-edit-file-tool file old new))
+          (should (string-match-p "Edit rejected" result))
+          (should (string-match-p "Mode: emacs-lisp-mode" result))
+          (should (string-match-p "Replacement fragment" result))
+          (should (string-match-p "Missing closers" result))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (equal (buffer-string) old))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-eval-balanced-edit-file-tool-applies-valid-elisp ()
+  (let ((file (make-temp-file "ellama-eval-balanced-edit-" nil ".el")))
+    (unwind-protect
+        (let* ((old "(defun sample ()\n  (message \"old\"))\n")
+               (new "(defun sample ()\n  (message \"new\"))\n")
+               result)
+          (with-temp-file file
+            (insert old))
+          (setq result
+                (ellama-eval-balanced-edit-file-tool file old new))
+          (should (string-match-p "after syntax validation" result))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (equal (buffer-string) new)))
+          (with-current-buffer (find-file-noselect file)
+            (should (equal (buffer-string) new))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-eval-balanced-edit-uses-existing-buffer-mode ()
+  (let ((file (make-temp-file "ellama-eval-balanced-edit-" nil ".txt")))
+    (unwind-protect
+        (let* ((old "(defun sample ()\n  (message \"ok\"))\n")
+               (new "(defun sample ()\n  (message \"ok\")\n")
+               result)
+          (with-temp-file file
+            (insert old))
+          (with-current-buffer (find-file-noselect file)
+            (emacs-lisp-mode))
+          (setq result
+                (ellama-eval-balanced-edit-file-tool file old new))
+          (should (string-match-p "Mode: emacs-lisp-mode" result)))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-eval-monitored-edit-file-logs-invalid-edit ()
+  (let ((file (make-temp-file "ellama-eval-monitored-edit-" nil ".el"))
+        (state (make-ellama-eval--run-state
+                :edit-validation-trace nil)))
+    (unwind-protect
+        (let* ((old "(defun sample ()\n  (message \"ok\"))\n")
+               (new "(defun sample ()\n  (message \"ok\")\n")
+               (ellama-eval--active-run state))
+          (with-temp-file file
+            (insert old))
+          (should
+           (string-match-p
+            "Edited "
+            (ellama-eval-monitored-edit-file-tool file old new nil)))
+          (let ((entry
+                 (car
+                  (ellama-eval--run-state-edit-validation-trace state))))
+            (should (equal (plist-get entry :tool) "edit_file"))
+            (should (plist-get entry :candidate-found))
+            (should (plist-get entry :applied))
+            (should-not (plist-get entry :blocked))
+            (should-not (plist-get entry :valid))
+            (should (= (plist-get entry :missing-closers) 1))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-eval-monitored-edit-file-logs-missing-candidate ()
+  (let ((file (make-temp-file "ellama-eval-monitored-edit-" nil ".el"))
+        (state (make-ellama-eval--run-state
+                :edit-validation-trace nil)))
+    (unwind-protect
+        (let ((ellama-eval--active-run state))
+          (with-temp-file file
+            (insert "(defun sample () nil)\n"))
+          (should
+           (string-match-p
+            "No replacement made"
+            (ellama-eval-monitored-edit-file-tool
+             file "(defun missing () nil)\n" "(defun sample () t)\n" nil)))
+          (let ((entry
+                 (car
+                  (ellama-eval--run-state-edit-validation-trace state))))
+            (should (equal (plist-get entry :tool) "edit_file"))
+            (should-not (plist-get entry :candidate-found))
+            (should-not (plist-get entry :applied))
+            (should-not (plist-get entry :blocked))
+            (should-not (plist-member entry :valid))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
 (ert-deftest test-ellama-eval-profile-tools-switch-read-and-edit-shapes ()
   (let ((ellama-tools-allow-all t)
         (ellama-tools-allowed nil)
         (ellama-tools-confirm-allowed (make-hash-table))
         (baseline (ellama-eval--make-profile-tools 'baseline))
-        (numbered (ellama-eval--make-profile-tools 'numbered-line-edit)))
+        (numbered (ellama-eval--make-profile-tools 'numbered-line-edit))
+        (balanced (ellama-eval--make-profile-tools 'balanced-edit)))
     (should (member "edit_file" (mapcar #'llm-tool-name baseline)))
     (should-not (member "edit_lines" (mapcar #'llm-tool-name baseline)))
     (should (member "edit_lines" (mapcar #'llm-tool-name numbered)))
     (should-not (member "edit_file" (mapcar #'llm-tool-name numbered)))
+    (should (member "edit_file" (mapcar #'llm-tool-name balanced)))
+    (should-not (member "edit_lines" (mapcar #'llm-tool-name balanced)))
     (let* ((tool
             (seq-find
              (lambda (item)
@@ -132,6 +250,91 @@
         (should (plist-get file-check :ignore-docstrings))
         (should (plist-get file-check :matched))
         (should (plist-get regexp-check :matched))))))
+
+(ert-deftest test-ellama-eval-build-result-includes-edit-validation-summary ()
+  (let* ((workspace (make-temp-file "ellama-eval-result-" t))
+         (file (expand-file-name "sample.el" workspace))
+         (state
+          (make-ellama-eval--run-state
+           :status 'pending
+           :trace nil
+           :edit-validation-trace
+           (list
+            (list :tool "edit_file"
+                  :file "sample.el"
+                  :candidate-found t
+                  :applied t
+                  :blocked nil
+                  :valid t)
+            (list :tool "edit_file"
+                  :file "sample.el"
+                  :candidate-found t
+                  :applied nil
+                  :blocked t
+                  :valid nil))
+           :started-at (float-time)
+           :workspace workspace
+           :case '(:id "validation-summary"
+                       :suite edit
+                       :expected-files
+                       (("sample.el" . "(defun sample () nil)\n")))
+           :profile 'balanced-edit))
+         result)
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "(defun sample () nil)\n"))
+          (setq result (ellama-eval--build-result state 'completed))
+          (should (= (plist-get result :edit-validation-count) 2))
+          (should (= (plist-get result :edit-rejection-count) 1))
+          (should (= (plist-get result :edit-invalid-candidate-count) 1))
+          (should (= (plist-get result :edit-missing-candidate-count) 0))
+          (should (= (plist-get result :edit-recovery-count) 1))
+          (should (= (plist-get result :syntax-valid-final-files) 1))
+          (should (= (plist-get result :syntax-invalid-final-files) 0))
+          (should (= (length (plist-get result :edit-validation-trace)) 2))
+          (should (= (length (plist-get result :final-syntax-checks)) 1)))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-directory-p workspace)
+        (delete-directory workspace t)))))
+
+(ert-deftest test-ellama-eval-build-result-runs-elisp-checks ()
+  (let* ((workspace (make-temp-file "ellama-eval-elisp-check-" t))
+         (file (expand-file-name "sample.el" workspace))
+         (state
+          (make-ellama-eval--run-state
+           :status 'pending
+           :trace nil
+           :edit-validation-trace nil
+           :started-at (float-time)
+           :workspace workspace
+           :case '(:id "elisp-check"
+                       :suite edit
+                       :syntax-files ("sample.el")
+                       :elisp-checks
+                       (("sample.el"
+                         ("sample returns expected keyword"
+                          (eq (sample) :ok)))))
+           :profile 'baseline))
+         result)
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "(defun sample () :ok)\n"))
+          (setq result (ellama-eval--build-result state 'completed))
+          (should (eq (plist-get result :status) 'passed))
+          (should (plist-get result :success))
+          (should (= (length (plist-get result :elisp-checks)) 1))
+          (should
+           (plist-get (car (plist-get result :elisp-checks)) :matched))
+          (should (= (plist-get result :syntax-valid-final-files) 1)))
+      (when (fboundp 'sample)
+        (fmakunbound 'sample))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-directory-p workspace)
+        (delete-directory workspace t)))))
 
 (ert-deftest test-ellama-eval-async-suite-calls-progress-and-completion ()
   (let ((completed nil)
@@ -241,9 +444,29 @@
                       ((:path "sample.el"
                               :regexp "VALUE"
                               :matched t))
+                      :elisp-checks
+                      ((:path "sample.el"
+                              :description "sample check"
+                              :form "(sample)"
+                              :result "t"
+                              :matched t))
                       :answer-checks
                       ((:regexp "string"
                                 :matched t))
+                      :edit-validation-trace
+                      ((:tool "edit_file"
+                              :file "sample.el"
+                              :candidate-found t
+                              :applied nil
+                              :blocked t
+                              :valid nil
+                              :original-valid t
+                              :old-fragment-valid t
+                              :new-fragment-valid nil))
+                      :final-syntax-checks
+                      ((:path "sample.el"
+                              :valid nil
+                              :error "Unbalanced"))
                       :workspace nil))))
     (unwind-protect
         (progn
@@ -262,7 +485,12 @@
                  (file-checks (alist-get 'file-checks parsed))
                  (file-regexp-checks
                   (alist-get 'file-regexp-checks parsed))
-                 (answer-checks (alist-get 'answer-checks parsed)))
+                 (elisp-checks (alist-get 'elisp-checks parsed))
+                 (answer-checks (alist-get 'answer-checks parsed))
+                 (validation-trace
+                  (alist-get 'edit-validation-trace parsed))
+                 (final-syntax-checks
+                  (alist-get 'final-syntax-checks parsed)))
             (should (eq (alist-get 'success parsed) json-false))
             (should (assq 'workspace parsed))
             (should (null (alist-get 'workspace parsed)))
@@ -278,8 +506,23 @@
                         json-false))
             (should (eq (alist-get 'matched (car file-regexp-checks))
                         t))
+            (should (eq (alist-get 'matched (car elisp-checks)) t))
             (should (eq (alist-get 'matched (car answer-checks))
-                        t))))
+                        t))
+            (should (= (length validation-trace) 1))
+            (should (eq (alist-get 'candidate-found (car validation-trace))
+                        t))
+            (should (eq (alist-get 'applied (car validation-trace))
+                        json-false))
+            (should (eq (alist-get 'blocked (car validation-trace))
+                        t))
+            (should (eq (alist-get 'valid (car validation-trace))
+                        json-false))
+            (should (eq (alist-get 'new-fragment-valid
+                                   (car validation-trace))
+                        json-false))
+            (should (eq (alist-get 'valid (car final-syntax-checks))
+                        json-false))))
       (when (file-exists-p file-name)
         (delete-file file-name)))))
 
@@ -294,6 +537,24 @@
       edit-cases))
     (should (= (length all-cases)
                (length ellama-eval-hypothesis-cases)))))
+
+(ert-deftest test-ellama-eval-cases-include-nested-edit-cases ()
+  (let* ((ids (mapcar (lambda (case) (plist-get case :id))
+                      ellama-eval-hypothesis-cases))
+         (nested-ids (seq-filter
+                      (lambda (id)
+                        (string-prefix-p "edit-nested-" id))
+                      ids)))
+    (should (>= (length nested-ids) 8))
+    (dolist (id '("edit-nested-plist-construction"
+                  "edit-nested-branch-plists"
+                  "edit-nested-backquote-template"
+                  "edit-nested-filter-lambda"
+                  "edit-nested-condition-case"
+                  "edit-nested-pcase-branch"
+                  "edit-nested-accumulator"
+                  "edit-nested-state-machine"))
+      (should (member id ids)))))
 
 (ert-deftest test-ellama-eval-read-results-file-expands-relative-selection ()
   (let* ((dir (make-temp-file "ellama-eval-results-dir-" t))
@@ -336,6 +597,36 @@
              :type 'user-error)))
       (when (file-directory-p dir)
         (delete-directory dir t)))))
+
+(ert-deftest test-ellama-eval-select-model-uses-generic-selector ()
+  (let ((ellama-coding-provider 'base-provider)
+        (ellama-provider nil)
+        filled-provider
+        read-provider
+        constructed-provider
+        required-feature)
+    (cl-letf (((symbol-function 'require)
+               (lambda (feature &optional _filename _noerror)
+                 (setq required-feature feature)
+                 t))
+              ((symbol-function 'ellama-fill-transient-model)
+               (lambda (provider)
+                 (setq filled-provider provider)))
+              ((symbol-function 'ellama-transient-read-model-name)
+               (lambda (provider)
+                 (setq read-provider provider)
+                 "selected-model"))
+              ((symbol-function 'ellama-construct-provider-from-transient)
+               (lambda (provider)
+                 (setq constructed-provider provider)
+                 (list :provider provider
+                       :model ellama-transient-model-name))))
+      (should (equal (ellama-eval--select-model-provider)
+                     '(:provider base-provider :model "selected-model")))
+      (should (eq required-feature 'ellama-transient))
+      (should (eq filled-provider 'base-provider))
+      (should (eq read-provider 'base-provider))
+      (should (eq constructed-provider 'base-provider)))))
 
 (provide 'test-ellama-eval)
 

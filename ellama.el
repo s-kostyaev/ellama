@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.30.2") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.19.3
+;; Version: 1.20.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -865,6 +865,47 @@ Skip code blocks and math environments."
 
 (defconst ellama--pandoc-think-begin "ELLAMA_THINK_BEGIN")
 (defconst ellama--pandoc-think-end "ELLAMA_THINK_END")
+(defconst ellama--org-verbatim-blocks '("SRC" "EXAMPLE" "EXPORT")
+  "Org block names whose contents should stay untouched.")
+
+(defun ellama--org-keyword-line-start-p ()
+  "Return non-nil when point has only blanks before it on its line."
+  (save-excursion
+    (skip-chars-backward " \t" (line-beginning-position))
+    (bolp)))
+
+(defun ellama--normalize-org-block-markers (text)
+  "Move Org block markers in TEXT to line beginnings and uppercase them."
+  (with-temp-buffer
+    (insert text)
+    (let (verbatim-block)
+      (goto-char (point-min))
+      (while (re-search-forward
+              "#\\+\\(?:begin\\|end\\)_[[:alnum:]_-]+" nil t)
+        (let* ((keyword (upcase (match-string 0)))
+               (beginp (string-prefix-p "#+BEGIN_" keyword))
+               (name (substring keyword
+                                (length (if beginp "#+BEGIN_" "#+END_"))))
+               (matched-verbatim-end
+                (and verbatim-block
+                     (not beginp)
+                     (string= name verbatim-block)))
+               (beg-marker (copy-marker (match-beginning 0)))
+               (end-marker (copy-marker (match-end 0) t)))
+          (when (or (not verbatim-block) matched-verbatim-end)
+            (replace-match keyword t t)
+            (goto-char beg-marker)
+            (unless (ellama--org-keyword-line-start-p)
+              (insert "\n"))
+            (if beginp
+                (when (member name ellama--org-verbatim-blocks)
+                  (setq verbatim-block name))
+              (when matched-verbatim-end
+                (setq verbatim-block nil))))
+          (goto-char end-marker)
+          (set-marker beg-marker nil)
+          (set-marker end-marker nil))))
+    (buffer-substring-no-properties (point-min) (point-max))))
 
 (defun ellama--normalize-inline-markdown-code-fences (text)
   "Normalize Markdown code fences in TEXT for full document converters."
@@ -912,9 +953,7 @@ Skip code blocks and math environments."
      (regexp-quote ellama--pandoc-think-begin) "#+BEGIN_QUOTE")
     (replace-regexp-in-string
      (regexp-quote ellama--pandoc-think-end) "#+END_QUOTE")
-    (replace-regexp-in-string
-     "^#\\+\\(?:begin\\|end\\)_\\(?:src\\|quote\\)"
-     (lambda (match) (upcase match)))))
+    (ellama--normalize-org-block-markers)))
 
 (defun ellama--pandoc-available-p ()
   "Return non-nil if Pandoc is available."
@@ -952,6 +991,7 @@ This filter contains only subset of markdown syntax to be good enough."
     (replace-regexp-in-string "```" "\n#+END_SRC\n")
     (replace-regexp-in-string "<think>[\n]?" "#+BEGIN_QUOTE\n")
     (replace-regexp-in-string "[\n]?</think>[\n]?" "\n#+END_QUOTE\n")
+    (ellama--normalize-org-block-markers)
     (ellama--replace-bad-code-blocks)
     (ellama--replace-outside-of-code-blocks)))
 
@@ -2790,6 +2830,19 @@ EVENT is an argument for mweel scroll."
                             s))))
    "\n"))
 
+(defun ellama--fill-streaming-response-p (delta)
+  "Return non-nil when streaming DELTA should trigger filling."
+  (and ellama-fill-paragraphs
+       (pcase ellama-fill-paragraphs
+         ((cl-type function) (funcall ellama-fill-paragraphs))
+         ((cl-type boolean) ellama-fill-paragraphs)
+         ((cl-type list) (and (apply #'derived-mode-p
+                                     ellama-fill-paragraphs))))
+       (not (and (derived-mode-p 'org-mode)
+                 (string-match-p
+                  "#\\+\\(?:BEGIN\\|END\\)_[[:alnum:]_-]+"
+                  delta)))))
+
 (defun ellama--insert (buffer point filter)
   "Insert text during streaming.
 
@@ -2834,13 +2887,7 @@ FILTER is a function for text transformation."
                     (progn
                       (delete-char (- wrong-chars-cnt))
                       (when delta (insert (propertize delta 'hard t))
-                            (when (and
-                                   ellama-fill-paragraphs
-                                   (pcase ellama-fill-paragraphs
-                                     ((cl-type function) (funcall ellama-fill-paragraphs))
-                                     ((cl-type boolean) ellama-fill-paragraphs)
-                                     ((cl-type list) (and (apply #'derived-mode-p
-                                                                 ellama-fill-paragraphs)))))
+                            (when (ellama--fill-streaming-response-p delta)
                               (if (not (derived-mode-p 'org-mode))
                                   (fill-paragraph)
                                 (when (not (save-excursion
@@ -2862,13 +2909,7 @@ FILTER is a function for text transformation."
                          (delta (string-remove-prefix common-prefix filtered-text)))
                     (delete-char (- wrong-chars-cnt))
                     (when delta (insert (propertize delta 'hard t))
-                          (when (and
-                                 ellama-fill-paragraphs
-                                 (pcase ellama-fill-paragraphs
-                                   ((cl-type function) (funcall ellama-fill-paragraphs))
-                                   ((cl-type boolean) ellama-fill-paragraphs)
-                                   ((cl-type list) (and (apply #'derived-mode-p
-                                                               ellama-fill-paragraphs)))))
+                          (when (ellama--fill-streaming-response-p delta)
                             (if (not (derived-mode-p 'org-mode))
                                 (fill-paragraph)
                               (when (not (save-excursion
@@ -3168,13 +3209,13 @@ inserted into the BUFFER."
                            (and
                             (ellama-session-p session)
                             (ellama--session-registered-buffer session))
-	                           (and (buffer-live-p buffer) buffer))))
-	                      (with-current-buffer target-buffer
-	                        (ellama--deactivate-current-request
-	                         request-context)
-	                        (ellama--run-done-callback donecb text)
-	                        (when ellama-session-hide-org-quotes
-	                          (ellama-collapse-org-quotes)))))))
+                           (and (buffer-live-p buffer) buffer))))
+                      (with-current-buffer target-buffer
+                        (ellama--deactivate-current-request
+                         request-context)
+                        (ellama--run-done-callback donecb text)
+                        (when ellama-session-hide-org-quotes
+                          (ellama-collapse-org-quotes)))))))
             (if (and (not tool-result)
                      (ellama-session-p ellama--current-session))
                 (progn
