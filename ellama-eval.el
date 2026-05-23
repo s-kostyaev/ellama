@@ -84,6 +84,43 @@ change, then report the final result."
 question precisely without changing files."
   "System prompt for read-oriented evaluation cases.")
 
+(defconst ellama-eval--fixtures-directory
+  (expand-file-name
+   "tests/fixtures/ellama-eval"
+   (file-name-directory (or load-file-name buffer-file-name)))
+  "Directory containing eval fixture data.")
+
+(defun ellama-eval--fixture-path (case-id file-name)
+  "Return fixture FILE-NAME path for CASE-ID."
+  (expand-file-name file-name
+                    (expand-file-name case-id
+                                      (expand-file-name
+                                       "cases"
+                                       ellama-eval--fixtures-directory))))
+
+(defun ellama-eval--fixture-file (case-id file-name)
+  "Return fixture FILE-NAME content for CASE-ID."
+  (with-temp-buffer
+    (insert-file-contents (ellama-eval--fixture-path case-id file-name))
+    (buffer-string)))
+
+(defun ellama-eval--fixture-files (case-id file-names)
+  "Return workspace files FILE-NAMES loaded from CASE-ID fixtures."
+  (mapcar
+   (lambda (file-name)
+     (cons file-name
+           (ellama-eval--fixture-file
+            case-id
+            (concat "workspace/" file-name))))
+   file-names))
+
+(defun ellama-eval--fixture-data (case-id file-name)
+  "Return Lisp data from fixture FILE-NAME for CASE-ID."
+  (with-temp-buffer
+    (insert-file-contents (ellama-eval--fixture-path case-id file-name))
+    (goto-char (point-min))
+    (read (current-buffer))))
+
 (defconst ellama-eval-hypothesis-cases
   `((:id "edit-replace-function-body"
          :suite edit
@@ -92,18 +129,15 @@ question precisely without changing files."
          "Update `ellama-eval-score-value` so it clamp VALUE to LIMIT with `min`, \
 then return the clamped value multiplied by WEIGHT."
          :files
-         (("sample.el" . "(defun ellama-eval-score-value (value limit weight)\n  \"Return VALUE scaled by WEIGHT, clamped to LIMIT.\"\n  (* value weight))\n"))
+         ,(ellama-eval--fixture-files
+           "edit-replace-function-body" '("sample.el"))
          :syntax-files ("sample.el")
          :elisp-checks
-         (("sample.el"
-           ("Values below limit are scaled directly"
-            (= (ellama-eval-score-value 3 10 2) 6))
-           ("Values above limit are clamped before scaling"
-            (= (ellama-eval-score-value 7 5 3) 15))))
+         ,(ellama-eval--fixture-data "edit-replace-function-body"
+                                     "checks.eld")
          :file-regexps
-         (("sample.el" . ("\"[^\"]*VALUE[^\"]*\""))
-          ("sample.el" . ("\"[^\"]*LIMIT[^\"]*\""))
-          ("sample.el" . ("\"[^\"]*WEIGHT[^\"]*\""))))
+         ,(ellama-eval--fixture-data "edit-replace-function-body"
+                                     "file-regexps.eld"))
     (:id "edit-update-target-branch"
          :suite edit
          :system ,ellama-eval--coder-system
@@ -111,18 +145,12 @@ then return the clamped value multiplied by WEIGHT."
          "In `ellama-eval-route-status`, only the `stale` branch should return \
 `retry`. Leave the `failed` branch unchanged."
          :files
-         (("router.el" . "(defun ellama-eval-route-status (status)\n  (cond\n   ((eq status 'ready) 'run)\n   ((eq status 'stale) 'skip)\n   ((eq status 'failed) 'skip)\n   (t 'ignore)))\n"))
+         ,(ellama-eval--fixture-files
+           "edit-update-target-branch" '("router.el"))
          :syntax-files ("router.el")
          :elisp-checks
-         (("router.el"
-           ("Ready branch stays run"
-            (eq (ellama-eval-route-status 'ready) 'run))
-           ("Stale branch returns retry"
-            (eq (ellama-eval-route-status 'stale) 'retry))
-           ("Failed branch stays skip"
-            (eq (ellama-eval-route-status 'failed) 'skip))
-           ("Unknown branch stays ignore"
-            (eq (ellama-eval-route-status 'other) 'ignore)))))
+         ,(ellama-eval--fixture-data "edit-update-target-branch"
+                                     "checks.eld"))
     (:id "edit-remove-obsolete-binding"
          :suite edit
          :system ,ellama-eval--coder-system
@@ -130,18 +158,12 @@ then return the clamped value multiplied by WEIGHT."
          "Remove the obsolete local variable `legacy-mode` from \
 `ellama-eval-build-request` and keep the returned plist behavior the same."
          :files
-         (("request.el" . "(defun ellama-eval-build-request (payload kind)\n  (let ((legacy-mode nil)\n        (request-id (format \"%s-%s\" kind payload)))\n    (list :id request-id :payload payload)))\n"))
+         ,(ellama-eval--fixture-files
+           "edit-remove-obsolete-binding" '("request.el"))
          :syntax-files ("request.el")
          :elisp-checks
-         (("request.el"
-           ("Request behavior stays the same"
-            (let ((result (ellama-eval-build-request "payload" "kind")))
-              (and (equal (plist-get result :id) "kind-payload")
-                   (equal (plist-get result :payload) "payload"))))
-           ("Obsolete local binding is removed"
-            (with-temp-buffer
-              (insert-file-contents "request.el")
-              (not (string-match-p "legacy-mode" (buffer-string))))))))
+         ,(ellama-eval--fixture-data "edit-remove-obsolete-binding"
+                                     "checks.eld"))
     (:id "edit-expand-guard-clause"
          :suite edit
          :system ,ellama-eval--coder-system
@@ -149,16 +171,12 @@ then return the clamped value multiplied by WEIGHT."
          "Update `ellama-eval-guarded-join` so it reject both nil ITEMS and \
 non-list ITEMS before calling `string-join`."
          :files
-         (("strings.el" . "(defun ellama-eval-guarded-join (items)\n  (if (null items)\n      \"\"\n    (string-join items \", \")))\n"))
+         ,(ellama-eval--fixture-files
+           "edit-expand-guard-clause" '("strings.el"))
          :syntax-files ("strings.el")
          :elisp-checks
-         (("strings.el"
-           ("Nil items are rejected before string-join"
-            (equal (ellama-eval-guarded-join nil) ""))
-           ("Non-list items are rejected before string-join"
-            (equal (ellama-eval-guarded-join 'not-a-list) ""))
-           ("List items are joined"
-            (equal (ellama-eval-guarded-join '("a" "b")) "a, b")))))
+         ,(ellama-eval--fixture-data "edit-expand-guard-clause"
+                                     "checks.eld"))
     (:id "edit-nested-plist-construction"
          :suite edit
          :system ,ellama-eval--coder-system
@@ -166,27 +184,12 @@ non-list ITEMS before calling `string-join`."
          "Update `ellama-eval-normalize-event` so the returned plist include \
 `:kind` from PAYLOAD between `:id` and `:name`. Keep all guards unchanged."
          :files
-         (("event.el" . "(defun ellama-eval-normalize-event (event)\n  (let ((payload (plist-get event :payload)))\n    (when (and payload\n               (listp payload))\n      (let ((meta (plist-get payload :meta)))\n        (when (and meta\n                   (plist-get meta :enabled))\n          (list :id (plist-get event :id)\n                :name (plist-get payload :name)))))))\n"))
+         ,(ellama-eval--fixture-files
+           "edit-nested-plist-construction" '("event.el"))
          :syntax-files ("event.el")
          :elisp-checks
-         (("event.el"
-           ("Enabled payload includes id kind and name"
-            (let ((result
-                   (ellama-eval-normalize-event
-                    '(:id 7 :payload
-                          (:kind job :name "Build"
-                                 :meta (:enabled t))))))
-              (and (= (plist-get result :id) 7)
-                   (eq (plist-get result :kind) 'job)
-                   (equal (plist-get result :name) "Build"))))
-           ("Missing payload guard stays unchanged"
-            (null (ellama-eval-normalize-event '(:id 7))))
-           ("Disabled payload guard stays unchanged"
-            (null
-             (ellama-eval-normalize-event
-              '(:id 7 :payload
-                    (:kind job :name "Build"
-                           :meta (:enabled nil)))))))))
+         ,(ellama-eval--fixture-data "edit-nested-plist-construction"
+                                     "checks.eld"))
     (:id "edit-nested-branch-plists"
          :suite edit
          :system ,ellama-eval--coder-system
@@ -195,41 +198,12 @@ non-list ITEMS before calling `string-join`."
 `:source 'bearer` and accepted public requests return `:source 'public`. Keep \
 the rejected and invalid branches unchanged."
          :files
-         (("request-router.el" . "(defun ellama-eval-route-request (request)\n  (let* ((headers (plist-get request :headers))\n         (auth (alist-get \"authorization\" headers nil nil #'string=)))\n    (cond\n     ((and auth\n           (string-prefix-p \"Bearer \" auth))\n      (let ((token (substring auth 7)))\n        (if (string-empty-p token)\n            (list :status 'invalid\n                  :reason \"empty token\")\n          (list :status 'accepted\n                :token token))))\n     ((plist-get request :public)\n      (list :status 'accepted\n            :token nil))\n     (t\n      (list :status 'rejected\n            :reason \"missing token\")))))\n"))
+         ,(ellama-eval--fixture-files
+           "edit-nested-branch-plists" '("request-router.el"))
          :syntax-files ("request-router.el")
          :elisp-checks
-         (("request-router.el"
-           ("Bearer requests keep token and include bearer source"
-            (let ((result
-                   (ellama-eval-route-request
-                    (list :headers
-                          '(("authorization" . "Bearer secret"))))))
-              (and (eq (plist-get result :status) 'accepted)
-                   (eq (plist-get result :source) 'bearer)
-                   (equal (plist-get result :token) "secret"))))
-           ("Public requests keep nil token and include public source"
-            (let ((result
-                   (ellama-eval-route-request
-                    (list :headers nil :public t))))
-              (and (eq (plist-get result :status) 'accepted)
-                   (eq (plist-get result :source) 'public)
-                   (plist-member result :token)
-                   (null (plist-get result :token)))))
-           ("Empty bearer token branch stays invalid"
-            (let ((result
-                   (ellama-eval-route-request
-                    (list :headers
-                          '(("authorization" . "Bearer "))))))
-              (and (eq (plist-get result :status) 'invalid)
-                   (equal (plist-get result :reason) "empty token")
-                   (not (plist-member result :source)))))
-           ("Missing token branch stays rejected"
-            (let ((result
-                   (ellama-eval-route-request
-                    (list :headers nil))))
-              (and (eq (plist-get result :status) 'rejected)
-                   (equal (plist-get result :reason) "missing token")
-                   (not (plist-member result :source))))))))
+         ,(ellama-eval--fixture-data "edit-nested-branch-plists"
+                                     "checks.eld"))
     (:id "edit-nested-backquote-template"
          :suite edit
          :system ,ellama-eval--coder-system
@@ -237,27 +211,12 @@ the rejected and invalid branches unchanged."
          "Update `ellama-eval-build-dashboard` so each item plist include \
 `:status` from ROW, defaulting to `unknown`, between `:id` and `:label`."
          :files
-         (("dashboard.el" . "(defun ellama-eval-build-dashboard (rows)\n  (let ((visible (seq-filter\n                  (lambda (row)\n                    (plist-get row :visible))\n                  rows)))\n    `(:count ,(length visible)\n      :items ,(mapcar\n                (lambda (row)\n                  `(:id ,(plist-get row :id)\n                    :label ,(or (plist-get row :label) \"untitled\")))\n                visible))))\n"))
+         ,(ellama-eval--fixture-files
+           "edit-nested-backquote-template" '("dashboard.el"))
          :syntax-files ("dashboard.el")
          :elisp-checks
-         (("dashboard.el"
-           ("Visible items include status and keep labels"
-            (let* ((result
-                    (ellama-eval-build-dashboard
-                     '((:id 1 :visible t :status ready :label "One")
-                       (:id 2 :visible nil :status hidden :label "Two")
-                       (:id 3 :visible t))))
-                   (items (plist-get result :items))
-                   (first (nth 0 items))
-                   (second (nth 1 items)))
-              (and (= (plist-get result :count) 2)
-                   (= (length items) 2)
-                   (= (plist-get first :id) 1)
-                   (eq (plist-get first :status) 'ready)
-                   (equal (plist-get first :label) "One")
-                   (= (plist-get second :id) 3)
-                   (eq (plist-get second :status) 'unknown)
-                   (equal (plist-get second :label) "untitled")))))))
+         ,(ellama-eval--fixture-data "edit-nested-backquote-template"
+                                     "checks.eld"))
     (:id "edit-nested-filter-lambda"
          :suite edit
          :system ,ellama-eval--coder-system
@@ -265,24 +224,12 @@ the rejected and invalid branches unchanged."
          "Update `ellama-eval-active-items` so archived items are excluded in \
 addition to disabled items. Keep the result mapping unchanged."
          :files
-         (("items.el" . "(defun ellama-eval-active-items (items)\n  (mapcar\n   (lambda (item)\n     (let ((meta (plist-get item :meta)))\n       (list :id (plist-get item :id)\n             :label (or (plist-get meta :label)\n                        (plist-get item :fallback)))))\n   (seq-filter\n    (lambda (item)\n      (let ((flags (plist-get item :flags)))\n        (and (not (memq 'disabled flags))\n             (plist-get item :id))))\n    items)))\n"))
+         ,(ellama-eval--fixture-files
+           "edit-nested-filter-lambda" '("items.el"))
          :syntax-files ("items.el")
          :elisp-checks
-         (("items.el"
-           ("Disabled and archived items are excluded"
-            (let* ((result
-                    (ellama-eval-active-items
-                     '((:id 1 :flags nil :meta (:label "One"))
-                       (:id 2 :flags (disabled) :fallback "Two")
-                       (:id 3 :flags (archived) :fallback "Three")
-                       (:id 4 :flags nil :fallback "Four"))))
-                   (first (nth 0 result))
-                   (second (nth 1 result)))
-              (and (= (length result) 2)
-                   (= (plist-get first :id) 1)
-                   (equal (plist-get first :label) "One")
-                   (= (plist-get second :id) 4)
-                   (equal (plist-get second :label) "Four")))))))
+         ,(ellama-eval--fixture-data "edit-nested-filter-lambda"
+                                     "checks.eld"))
     (:id "edit-nested-condition-case"
          :suite edit
          :system ,ellama-eval--coder-system
@@ -290,46 +237,12 @@ addition to disabled items. Keep the result mapping unchanged."
          "Update `ellama-eval-load-record` so only the `file-error` branch \
 include `:recoverable t`. Do not change the generic error branch."
          :files
-         (("loader.el" . "(defun ellama-eval-load-record (reader path)\n  (condition-case err\n      (let ((record (funcall reader path)))\n        (if (and (listp record)\n                 (plist-get record :id))\n            (list :ok t\n                  :record record)\n          (list :ok nil\n                :error 'invalid-record)))\n    (file-error\n     (list :ok nil\n           :error (car err)\n           :path path))\n    (error\n     (list :ok nil\n           :error (car err)\n           :path path))))\n"))
+         ,(ellama-eval--fixture-files
+           "edit-nested-condition-case" '("loader.el"))
          :syntax-files ("loader.el")
          :elisp-checks
-         (("loader.el"
-           ("Valid records still succeed"
-            (let* ((record '(:id 1 :name "ok"))
-                   (result
-                    (ellama-eval-load-record
-                     (lambda (_path) record)
-                     "record.el")))
-              (and (plist-get result :ok)
-                   (equal (plist-get result :record) record))))
-           ("Invalid records still return invalid-record"
-            (let ((result
-                   (ellama-eval-load-record
-                    (lambda (_path) '(:name "missing id"))
-                    "record.el")))
-              (and (null (plist-get result :ok))
-                   (eq (plist-get result :error) 'invalid-record)
-                   (not (plist-member result :recoverable)))))
-           ("File errors are marked recoverable"
-            (let ((result
-                   (ellama-eval-load-record
-                    (lambda (_path)
-                      (signal 'file-error '("missing")))
-                    "missing.el")))
-              (and (null (plist-get result :ok))
-                   (eq (plist-get result :error) 'file-error)
-                   (equal (plist-get result :path) "missing.el")
-                   (plist-get result :recoverable))))
-           ("Generic errors are not marked recoverable"
-            (let ((result
-                   (ellama-eval-load-record
-                    (lambda (_path)
-                      (error "Boom"))
-                    "broken.el")))
-              (and (null (plist-get result :ok))
-                   (eq (plist-get result :error) 'error)
-                   (equal (plist-get result :path) "broken.el")
-                   (not (plist-member result :recoverable))))))))
+         ,(ellama-eval--fixture-data "edit-nested-condition-case"
+                                     "checks.eld"))
     (:id "edit-nested-pcase-branch"
          :suite edit
          :system ,ellama-eval--coder-system
@@ -338,35 +251,12 @@ include `:recoverable t`. Do not change the generic error branch."
 `:source` from PAYLOAD with default `internal`. Leave the metric branch \
 unchanged."
          :files
-         (("message.el" . "(defun ellama-eval-describe-message (message)\n  (pcase message\n    (`(:type event :payload ,payload)\n     (let ((name (plist-get payload :name)))\n       (if name\n           (list :kind 'event\n                 :name name)\n         (list :kind 'event\n               :name \"unknown\"))))\n    (`(:type metric :payload ,payload)\n     (list :kind 'metric\n           :value (plist-get payload :value)))\n    (_\n     (list :kind 'unknown))))\n"))
+         ,(ellama-eval--fixture-files
+           "edit-nested-pcase-branch" '("message.el"))
          :syntax-files ("message.el")
          :elisp-checks
-         (("message.el"
-           ("Named event includes explicit source"
-            (let ((result
-                   (ellama-eval-describe-message
-                    '(:type event :payload
-                            (:name "deploy" :source external)))))
-              (and (eq (plist-get result :kind) 'event)
-                   (eq (plist-get result :source) 'external)
-                   (equal (plist-get result :name) "deploy"))))
-           ("Unnamed event includes default source"
-            (let ((result
-                   (ellama-eval-describe-message
-                    '(:type event :payload nil))))
-              (and (eq (plist-get result :kind) 'event)
-                   (eq (plist-get result :source) 'internal)
-                   (equal (plist-get result :name) "unknown"))))
-           ("Metric branch stays unchanged"
-            (let ((result
-                   (ellama-eval-describe-message
-                    '(:type metric :payload (:value 42)))))
-              (and (eq (plist-get result :kind) 'metric)
-                   (= (plist-get result :value) 42)
-                   (not (plist-member result :source)))))
-           ("Fallback branch stays unchanged"
-            (equal (ellama-eval-describe-message '(:type other))
-                   '(:kind unknown))))))
+         ,(ellama-eval--fixture-data "edit-nested-pcase-branch"
+                                     "checks.eld"))
     (:id "edit-nested-accumulator"
          :suite edit
          :system ,ellama-eval--coder-system
@@ -374,19 +264,12 @@ unchanged."
          "Update `ellama-eval-collect-errors` so warning entries are ignored. \
 Keep the order of collected non-warning errors unchanged."
          :files
-         (("errors.el" . "(defun ellama-eval-collect-errors (entries)\n  (let (errors)\n    (dolist (entry entries)\n      (let ((details (plist-get entry :details)))\n        (when (and details\n                   (plist-get details :error))\n          (push (list :id (plist-get entry :id)\n                      :message (plist-get details :error))\n                errors))))\n    (nreverse errors)))\n"))
+         ,(ellama-eval--fixture-files
+           "edit-nested-accumulator" '("errors.el"))
          :syntax-files ("errors.el")
          :elisp-checks
-         (("errors.el"
-           ("Warnings are ignored and non-warning order is preserved"
-            (equal
-             (ellama-eval-collect-errors
-              '((:id 1 :details (:level error :error "First"))
-                (:id 2 :details (:level warning :error "Skip"))
-                (:id 3 :details (:error "Third"))
-                (:id 4 :details (:level warning))))
-             '((:id 1 :message "First")
-               (:id 3 :message "Third")))))))
+         ,(ellama-eval--fixture-data "edit-nested-accumulator"
+                                     "checks.eld"))
     (:id "edit-nested-state-machine"
          :suite edit
          :system ,ellama-eval--coder-system
@@ -394,23 +277,12 @@ Keep the order of collected non-warning errors unchanged."
          "Update `ellama-eval-next-state` so an expired active state returns \
 `expired` instead of `stale`. Leave all other branches unchanged."
          :files
-         (("state.el" . "(defun ellama-eval-next-state (state event)\n  (let ((kind (plist-get event :kind)))\n    (cond\n     ((eq state 'idle)\n      (if (eq kind 'start)\n          'active\n        'idle))\n     ((eq state 'active)\n      (cond\n       ((plist-get event :cancelled)\n        'cancelled)\n       ((plist-get event :expired)\n        'stale)\n       ((eq kind 'finish)\n        'done)\n       (t\n        'active)))\n     (t\n      state))))\n"))
+         ,(ellama-eval--fixture-files
+           "edit-nested-state-machine" '("state.el"))
          :syntax-files ("state.el")
          :elisp-checks
-         (("state.el"
-           ("Idle start branch stays active"
-            (eq (ellama-eval-next-state 'idle '(:kind start)) 'active))
-           ("Active expired branch returns expired"
-            (eq (ellama-eval-next-state 'active '(:expired t)) 'expired))
-           ("Active cancelled branch stays cancelled"
-            (eq (ellama-eval-next-state 'active '(:cancelled t))
-                'cancelled))
-           ("Active finish branch stays done"
-            (eq (ellama-eval-next-state 'active '(:kind finish)) 'done))
-           ("Active fallback branch stays active"
-            (eq (ellama-eval-next-state 'active '(:kind wait)) 'active))
-           ("Other states stay unchanged"
-            (eq (ellama-eval-next-state 'done '(:kind start)) 'done)))))
+         ,(ellama-eval--fixture-data "edit-nested-state-machine"
+                                     "checks.eld"))
     (:id "explore-locate-provider"
          :suite explore
          :system ,ellama-eval--explorer-system
@@ -418,8 +290,11 @@ Keep the order of collected non-warning errors unchanged."
          "Which function chooses the provider for a named role? Answer with the \
 function name only."
          :files
-         (("tools.el" . "(defun ellama-eval-provider-for-role (role)\n  (alist-get role ellama-eval-role-providers nil nil #'string=))\n\n(defun ellama-eval-tools-for-role (role)\n  (alist-get role ellama-eval-role-tools nil nil #'string=))\n"))
-         :answer-regexps ("\\`ellama-eval-provider-for-role\\'"))
+         ,(ellama-eval--fixture-files "explore-locate-provider"
+                                      '("tools.el"))
+         :answer-regexps
+         ,(ellama-eval--fixture-data "explore-locate-provider"
+                                     "answer-regexps.eld"))
     (:id "explore-identify-read-helper"
          :suite explore
          :system ,ellama-eval--explorer-system
@@ -427,8 +302,11 @@ function name only."
          "What helper reads the file contents before the result is sanitized? \
 Answer with the helper name only."
          :files
-         (("reader.el" . "(defun ellama-eval-read-file-tool (file)\n  (ellama-eval-sanitize\n   (ellama-eval-read-file-as-text file)))\n\n(defun ellama-eval-read-file-as-text (file)\n  (with-temp-buffer\n    (insert-file-contents file)\n    (buffer-string)))\n"))
-         :answer-regexps ("\\`ellama-eval-read-file-as-text\\'"))
+         ,(ellama-eval--fixture-files "explore-identify-read-helper"
+                                      '("reader.el"))
+         :answer-regexps
+         ,(ellama-eval--fixture-data "explore-identify-read-helper"
+                                     "answer-regexps.eld"))
     (:id "explore-summarize-policy"
          :suite explore
          :system ,ellama-eval--explorer-system
@@ -436,8 +314,11 @@ Answer with the helper name only."
          "State whether denied writes return nil or an explanatory string. Answer \
 in one short sentence."
          :files
-         (("policy.el" . "(defun ellama-eval-check-write (path)\n  (if (ellama-eval-path-allowed-p path)\n      nil\n    (format \"Write denied for %s\" path)))\n"))
-         :answer-regexps ("string")))
+         ,(ellama-eval--fixture-files "explore-summarize-policy"
+                                      '("policy.el"))
+         :answer-regexps
+         ,(ellama-eval--fixture-data "explore-summarize-policy"
+                                     "answer-regexps.eld")))
   "Built-in cases for the numbered-read and line-edit hypothesis.")
 
 (defun ellama-eval--tool-spec (name function args description)
