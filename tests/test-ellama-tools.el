@@ -747,6 +747,16 @@ Return list with result and prompt."
       (when (file-exists-p file)
         (delete-file file)))))
 
+(ert-deftest test-ellama-tools-grep-in-file-tool-explains-missing-file ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (expand-file-name "ellama-missing-file"
+                                temporary-file-directory)))
+    (when (file-exists-p file)
+      (delete-file file))
+    (should (equal (ellama-tools-grep-in-file-tool "needle" file)
+                   (json-encode
+                    (format "File %s doesn't exists." file))))))
+
 (ert-deftest test-ellama-read-file-tool-rejects-binary-content ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((file (make-temp-file "ellama-read-file-bin-")))

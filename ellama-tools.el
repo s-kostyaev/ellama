@@ -2062,13 +2062,16 @@ CALLBACK – function called once with the result string."
 
 (defun ellama-tools-grep-in-file-tool (search-string file)
   "Grep SEARCH-STRING in FILE."
-  (json-encode
-   (let ((truename (file-truename file)))
-     (ellama-tools--grep-output
-      (ellama-tools--call-command
-       "grep" "--color=never" "-nh" search-string truename)
-      (format "No matches for %S in %s."
-              search-string truename)))))
+  (or (ellama-tools--tool-check-file-access file 'read)
+      (json-encode
+       (if (not (file-exists-p file))
+           (format "File %s doesn't exists." file)
+         (let ((truename (file-truename file)))
+           (ellama-tools--grep-output
+            (ellama-tools--call-command
+             "grep" "--color=never" "-nh" search-string truename)
+            (format "No matches for %S in %s."
+                    search-string truename)))))))
 
 (ellama-tools-define-tool
  '(:function
