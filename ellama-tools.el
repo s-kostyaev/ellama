@@ -192,6 +192,11 @@ Use `image' to force image handling."
                  (const image))
   :group 'ellama)
 
+(defcustom ellama-tools-shell-command-default-timeout 5
+  "Default timeout in seconds for the `shell_command' tool."
+  :type 'number
+  :group 'ellama)
+
 (defcustom ellama-tools-read-before-write-enabled t
   "Require a session-local read before overwriting existing files.
 When non-nil, full-file mutating tools refuse their first attempt to change an
@@ -1894,6 +1899,12 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
       (format "%s failed with exit status %s:\n%s"
               program status trimmed))))
 
+(defun ellama-tools--shell-command-timeout (timeout)
+  "Return shell command TIMEOUT or the configured default."
+  (if (and (numberp timeout) (> timeout 0))
+      timeout
+    ellama-tools-shell-command-default-timeout))
+
 (defun ellama-tools--grep-output (result no-matches-message)
   "Return grep RESULT output or NO-MATCHES-MESSAGE."
   (let ((status (car result))
@@ -2842,46 +2853,80 @@ Replace OLDCONTENT with NEWCONTENT."
    :description
    "Edit file FILE_NAME. Replace OLDCONTENT with NEWCONTENT."))
 
-(defun ellama-tools-shell-command-tool (callback cmd)
+(defun ellama-tools-shell-command-tool (callback cmd &optional timeout)
   "Execute shell command CMD.
-CALLBACK – function called once with the result string."
+CALLBACK – function called once with the result string.
+TIMEOUT is the optional command timeout in seconds."
   (let ((argv (ellama-tools--command-argv
                shell-file-name shell-command-switch cmd))
+        (timeout (ellama-tools--shell-command-timeout timeout))
         (process-environment
          (ellama-tools--process-environment-with-cat-pager)))
     (condition-case err
         (let ((buf (get-buffer-create
-                    (concat (make-temp-name " *ellama shell command") "*"))))
-          (set-process-sentinel
-           (apply #'start-process
-                  "*ellama-shell-command*" buf
-                  (car argv) (cdr argv))
-           (lambda (process _)
-             (when (not (process-live-p process))
-               (let* ((raw-output
-                       ;; trim trailing newline to reduce noisy tool output
-                       (string-trim-right
-                        (with-current-buffer buf (buffer-string))
-                        "\n"))
-                      (output
-                       (ellama-tools--sanitize-tool-text-output
-                        raw-output
-                        "Command output"))
-                      (exit-code (process-exit-status process))
-                      (result
-                       (cond
-                        ((and (string= output "") (zerop exit-code))
-                         "Command completed successfully with no output.")
-                        ((string= output "")
-                         (format "Command failed with exit code %d and no output."
-                                 exit-code))
-                        ((zerop exit-code)
-                         output)
-                        (t
-                         (format "Command failed with exit code %d.\n%s"
-                                 exit-code output)))))
-                 (funcall callback result)
-                 (kill-buffer buf))))))
+                    (concat (make-temp-name " *ellama shell command") "*")))
+              process timer done timed-out)
+          (cl-labels
+              ((command-output ()
+                 ;; trim trailing newline to reduce noisy tool output
+                 (ellama-tools--sanitize-tool-text-output
+                  (string-trim-right
+                   (with-current-buffer buf (buffer-string))
+                   "\n")
+                  "Command output"))
+               (timeout-result ()
+                 (let ((output (command-output)))
+                   (if (string-empty-p output)
+                       (format "Command timed out after %s seconds."
+                               timeout)
+                     (format "Command timed out after %s seconds.\n%s"
+                             timeout output))))
+               (finish (result)
+                 (unless done
+                   (setq done t)
+                   (when timer
+                     (cancel-timer timer))
+                   (unwind-protect
+                       (funcall callback result)
+                     (when (buffer-live-p buf)
+                       (kill-buffer buf)))))
+               (finish-process (proc)
+                 (if timed-out
+                     (finish (timeout-result))
+                   (let* ((output (command-output))
+                          (exit-code (process-exit-status proc))
+                          (result
+                           (cond
+                            ((and (string= output "") (zerop exit-code))
+                             "Command completed successfully with no output.")
+                            ((string= output "")
+                             (format
+                              "Command failed with exit code %d and no output."
+                              exit-code))
+                            ((zerop exit-code)
+                             output)
+                            (t
+                             (format "Command failed with exit code %d.\n%s"
+                                     exit-code output)))))
+                     (finish result)))))
+            (setq process
+                  (apply #'start-process
+                         "*ellama-shell-command*" buf
+                         (car argv) (cdr argv)))
+            (set-process-sentinel
+             process
+             (lambda (proc _)
+               (when (not (process-live-p proc))
+                 (finish-process proc))))
+            (setq timer
+                  (run-at-time
+                   timeout nil
+                   (lambda ()
+                     (when (and process (process-live-p process))
+                       (setq timed-out t)
+                       (let ((result (timeout-result)))
+                         (delete-process process)
+                         (finish result))))))))
       (error
        (funcall callback
                 (format "Failed to start shell command: %s"
@@ -2902,7 +2947,15 @@ CALLBACK – function called once with the result string."
      :type
      string
      :description
-     "Shell command to execute."))
+     "Shell command to execute.")
+    (:name
+     "timeout"
+     :type
+     number
+     :optional
+     t
+     :description
+     "Command timeout in seconds. Defaults to 5."))
    :description
    "Execute shell command CMD."))
 

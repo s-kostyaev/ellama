@@ -138,15 +138,17 @@
        (when (file-exists-p settings-file)
          (delete-file settings-file)))))
 
-(defun ellama-test--wait-shell-command-result (cmd)
+(defun ellama-test--wait-shell-command-result (cmd &optional timeout)
   "Run shell tool CMD and wait for a result string."
   (ellama-test--ensure-local-ellama-tools)
   (let ((result :pending)
-        (deadline (+ (float-time) 3.0)))
+        (deadline (+ (float-time)
+                     (max 3.0 (+ (or timeout 0) 1.0)))))
     (ellama-tools-shell-command-tool
      (lambda (res)
        (setq result res))
-     cmd)
+     cmd
+     timeout)
     (while (and (eq result :pending)
                 (< (float-time) deadline))
       (accept-process-output nil 0.01))
@@ -262,6 +264,17 @@ Return list with result and prompt."
    (string=
     (ellama-test--wait-shell-command-result "printf 'ok\\n'")
     "ok")))
+
+(ert-deftest test-ellama-shell-command-tool-default-timeout ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-shell-command-default-timeout 5))
+    (should (= (ellama-tools--shell-command-timeout nil) 5))))
+
+(ert-deftest test-ellama-shell-command-tool-times-out ()
+  (should
+   (string-match-p
+    "Command timed out after 0\\.1 seconds\\."
+    (ellama-test--wait-shell-command-result "sleep 1" 0.1))))
 
 (ert-deftest test-ellama-shell-command-tool-uses-cat-pager ()
   (let ((process-environment (copy-sequence process-environment)))
