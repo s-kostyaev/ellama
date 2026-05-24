@@ -85,6 +85,86 @@ PAIRS is a flat plist of keys and values."
       (setq extra (plist-put extra (pop pairs) (pop pairs))))
     extra))
 
+(defun ellama-tools--active-session ()
+  "Return the active Ellama session for tool bookkeeping."
+  (cond
+   ((and (boundp 'ellama--current-session)
+         (ellama-session-p ellama--current-session))
+    ellama--current-session)
+   ((ellama-session-p ellama-tools--current-session)
+    ellama-tools--current-session)))
+
+(defun ellama-tools--existing-file-key (file-name)
+  "Return canonical key for existing FILE-NAME."
+  (when (and (file-exists-p file-name)
+             (not (file-directory-p file-name)))
+    (file-truename file-name)))
+
+(defun ellama-tools--session-list-extra (session key)
+  "Return list value for SESSION extra KEY."
+  (let ((value (and (ellama-session-p session)
+                    (plist-get (ellama-session-extra session) key))))
+    (and (listp value) value)))
+
+(defun ellama-tools--session-note-list-extra (session key value)
+  "Add VALUE to SESSION extra list KEY."
+  (when (and (ellama-session-p session)
+             value
+             (not (member value (ellama-tools--session-list-extra
+                                 session key))))
+    (ellama-tools--set-session-extra
+     session
+     (ellama-tools--session-extra-with
+      session key
+      (cons value (ellama-tools--session-list-extra session key))))))
+
+(defun ellama-tools--mark-file-read (file-name)
+  "Mark existing FILE-NAME as read in the active tool session."
+  (when-let* ((session (ellama-tools--active-session))
+              (file-key (ellama-tools--existing-file-key file-name)))
+    (ellama-tools--session-note-list-extra
+     session :read-before-write-read-files file-key)))
+
+(defun ellama-tools--file-read-p (file-name)
+  "Return non-nil when FILE-NAME was read in the active tool session."
+  (when-let* ((session (ellama-tools--active-session))
+              (file-key (ellama-tools--existing-file-key file-name)))
+    (member file-key
+            (ellama-tools--session-list-extra
+             session :read-before-write-read-files))))
+
+(defun ellama-tools--read-before-write-warning-recorded-p (file-name)
+  "Return non-nil when FILE-NAME already triggered read-before-write guard."
+  (when-let* ((session (ellama-tools--active-session))
+              (file-key (ellama-tools--existing-file-key file-name)))
+    (member file-key
+            (ellama-tools--session-list-extra
+             session :read-before-write-warned-files))))
+
+(defun ellama-tools--record-read-before-write-warning (file-name)
+  "Record that FILE-NAME triggered read-before-write guard."
+  (when-let* ((session (ellama-tools--active-session))
+              (file-key (ellama-tools--existing-file-key file-name)))
+    (ellama-tools--session-note-list-extra
+     session :read-before-write-warned-files file-key)))
+
+(defun ellama-tools--read-before-write-check (operation file-name)
+  "Return a read-before-write refusal for OPERATION on FILE-NAME, or nil."
+  (when (and ellama-tools-read-before-write-enabled
+             (ellama-tools--active-session)
+             (ellama-tools--existing-file-key file-name)
+             (not (ellama-tools--file-read-p file-name))
+             (not (ellama-tools--read-before-write-warning-recorded-p
+                   file-name)))
+    (ellama-tools--record-read-before-write-warning file-name)
+    (format
+     (concat
+      "%s refused: existing file %s has not been read in this Ellama "
+      "tool session. Use `read_file` or `lines_range` to inspect it, "
+      "then retry. A second attempt is allowed if this overwrite is "
+      "intentional.")
+     operation file-name)))
+
 (defcustom ellama-tools-allow-all nil
   "Allow `ellama' using all the tools without user confirmation.
 Dangerous.  Use at your own risk."
@@ -110,6 +190,14 @@ Use `image' to force image handling."
   :type '(choice (const auto)
                  (const text)
                  (const image))
+  :group 'ellama)
+
+(defcustom ellama-tools-read-before-write-enabled t
+  "Require a session-local read before overwriting existing files.
+When non-nil, full-file mutating tools refuse their first attempt to change an
+existing file that has not been read in the current Ellama tool session.  The
+next attempt is allowed so deliberate overwrites remain possible."
+  :type 'boolean
   :group 'ellama)
 
 (defcustom ellama-tools-balanced-edit-enabled t
@@ -578,6 +666,25 @@ MAX-LINE-LENGTH limits one line width in characters."
           path)
       (error nil))))
 
+(defun ellama-tools--output-truncation-next-range (truncation)
+  "Return next line range plist for TRUNCATION."
+  (let* ((total-lines (plist-get truncation :total-lines))
+         (max-lines (max 0 ellama-tools-output-line-budget-max-lines))
+         (window (max 1 max-lines))
+         (from (if (> max-lines 0) (1+ max-lines) 1))
+         (to (min total-lines (+ from window -1))))
+    (when (<= from total-lines)
+      (list :from from :to to))))
+
+(defun ellama-tools--output-truncation-range-hint (path truncation)
+  "Return concrete `lines_range' hint for PATH and TRUNCATION."
+  (when-let* ((range (ellama-tools--output-truncation-next-range truncation)))
+    (format
+     "Next suggested tool call: `lines_range` with file_name=%S, from=%d, to=%d.\n"
+     path
+     (plist-get range :from)
+     (plist-get range :to))))
+
 (defun ellama-tools--output-truncation-notice
     (tool-name truncation source-info saved-path)
   "Return tool output truncation notice string.
@@ -608,26 +715,40 @@ SAVED-PATH is optional path to full saved output."
      (cond
       ((and source-path (eq source-kind 'file))
        (format
-        (concat "Source file: %s\n"
-                "Use `lines_range` for more lines, or "
-                "`grep_in_file`/`grep` to search.\n")
+        (concat
+         "Source file: %s\n"
+         "%s"
+         "Use `grep_in_file` with file=%S and a specific search_string "
+         "to locate relevant lines.\n")
+        source-path
+        (or (ellama-tools--output-truncation-range-hint
+             source-path truncation)
+            "")
         source-path))
       ((and source-path (eq source-kind 'directory))
        (format
-        (concat "Source directory: %s\n"
-                "Use `grep` in this directory, or read a target file with "
-                "`read_file`/`lines_range`.\n")
-        source-path))
+        (concat
+         "Source directory: %s\n"
+         "Next suggested tool call: `grep` with dir=%S and a specific "
+         "search_string, then `read_file` or `lines_range` on the target file.\n")
+        source-path source-path))
       (saved-path
        (format
-        (concat "Full output saved to: %s\n"
-                "Use `lines_range` on this file for more lines, or "
-                "`grep_in_file`/`grep` to search.\n")
+        (concat
+         "Full output saved to: %s\n"
+         "%s"
+         "Use `grep_in_file` with file=%S and a specific search_string "
+         "to search the saved output.\n")
+        saved-path
+        (or (ellama-tools--output-truncation-range-hint
+             saved-path truncation)
+            "")
         saved-path))
       (t
        (concat
         "Full output file was not saved.\n"
-        "You can rerun the tool with narrower scope and use `grep`.\n")))
+        "Next suggested action: rerun the tool with narrower arguments "
+        "or use `grep` with a specific search_string.\n")))
      "\n--- BEGIN TRUNCATED OUTPUT ---\n"
      snippet
      "\n--- END TRUNCATED OUTPUT ---")))
@@ -1835,23 +1956,33 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
   "Read the file FILE-NAME.
 MODE can be `auto', `text' or `image'."
   (or (ellama-tools--tool-check-file-access file-name 'read)
-      (json-encode
-       (if (not (file-exists-p file-name))
-           (format "File %s does not exist." file-name)
-         (if (file-directory-p file-name)
-             (format "%s is a directory, not a file." file-name)
-           (pcase (ellama-tools--read-file-mode mode)
-             ('auto
-              (if (ellama-image-file-p file-name)
-                  (ellama-tools--read-image-file-tool file-name)
-                (ellama-tools--read-file-as-text file-name)))
-             ('text
-              (ellama-tools--read-file-as-text file-name))
-             ('image
-              (ellama-tools--read-image-file-tool file-name))
-             (_
-              (format "Unsupported read_file mode %S. Use auto, text or image."
-                      mode))))))))
+      (let ((result
+             (cond
+              ((not (file-exists-p file-name))
+               (format "File %s does not exist." file-name))
+              ((file-directory-p file-name)
+               (format "%s is a directory, not a file." file-name))
+              (t
+               (pcase (ellama-tools--read-file-mode mode)
+                 ('auto
+                  (prog1
+                      (if (ellama-image-file-p file-name)
+                          (ellama-tools--read-image-file-tool file-name)
+                        (ellama-tools--read-file-as-text file-name))
+                    (ellama-tools--mark-file-read file-name)))
+                 ('text
+                  (prog1
+                      (ellama-tools--read-file-as-text file-name)
+                    (ellama-tools--mark-file-read file-name)))
+                 ('image
+                  (prog1
+                      (ellama-tools--read-image-file-tool file-name)
+                    (ellama-tools--mark-file-read file-name)))
+                 (_
+                  (format
+                   "Unsupported read_file mode %S. Use auto, text or image."
+                   mode)))))))
+        (json-encode result))))
 
 (ellama-tools-define-tool
  '(:function
@@ -2385,6 +2516,7 @@ buffer contents, matching their historical behavior."
       (ellama-tools--file-parent-directory-error-message "write" file-name)
       (when (file-directory-p file-name)
         (format "Cannot write %s: path is a directory." file-name))
+      (ellama-tools--read-before-write-check "Write" file-name)
       (condition-case err
           (let* ((original (when (file-exists-p file-name)
                              (ellama-tools--current-file-content file-name)))
@@ -2435,6 +2567,7 @@ buffer contents, matching their historical behavior."
       (ellama-tools--file-parent-directory-error-message "append to" file-name)
       (when (file-directory-p file-name)
         (format "Cannot append to %s: path is a directory." file-name))
+      (ellama-tools--read-before-write-check "Append" file-name)
       (condition-case err
           (let* ((original (ellama-tools--current-file-content file-name))
                  (candidate (concat original content))
@@ -2485,6 +2618,7 @@ buffer contents, matching their historical behavior."
       (ellama-tools--file-parent-directory-error-message "prepend to" file-name)
       (when (file-directory-p file-name)
         (format "Cannot prepend to %s: path is a directory." file-name))
+      (ellama-tools--read-before-write-check "Prepend" file-name)
       (condition-case err
           (let* ((original (ellama-tools--current-file-content file-name))
                  (candidate (concat content original))
@@ -2581,6 +2715,7 @@ DEPTH is the current recursion depth, used internally."
   (or (ellama-tools--tool-check-file-access file-name 'read)
       (ellama-tools--tool-check-file-access file-name 'write)
       (ellama-tools--tool-check-file-access new-file-name 'write)
+      (ellama-tools--read-before-write-check "Move" file-name)
       (cond
        ((not (file-exists-p file-name))
         (format "Cannot move file: source file does not exist: %s."
@@ -2648,6 +2783,7 @@ Replace OLDCONTENT with NEWCONTENT."
       (let ((content (with-temp-buffer
                        (insert-file-contents-literally file-name)
                        (buffer-string))))
+        (ellama-tools--mark-file-read file-name)
         (if (not (string-match (regexp-quote oldcontent) content))
             (ellama-tools--edit-file-old-content-not-found-message file-name)
           (let* ((candidate (replace-match newcontent t t content))
@@ -2971,9 +3107,11 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
                               (forward-line (1- to))
                               (end-of-line)
                               (point))))
-                   (ellama-tools--sanitize-tool-text-output
-                    (buffer-substring-no-properties start end)
-                    (format "File %s" file-name))))))))))))
+                   (prog1
+                       (ellama-tools--sanitize-tool-text-output
+                        (buffer-substring-no-properties start end)
+                        (format "File %s" file-name))
+                     (ellama-tools--mark-file-read file-name))))))))))))
 
 (ellama-tools-define-tool
  '(:function

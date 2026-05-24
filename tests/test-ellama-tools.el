@@ -1875,7 +1875,14 @@ Return list with result and prompt."
             (with-temp-buffer
               (insert-file-contents saved-path)
               (should (equal (buffer-string)
-                             "line-1\nline-2\nline-3\nline-4"))))
+                             "line-1\nline-2\nline-3\nline-4")))
+            (should
+             (string-match-p
+              (regexp-quote
+               (format
+                "Next suggested tool call: `lines_range` with file_name=%S, from=3, to=4."
+                saved-path))
+              result)))
         (when (and saved-path (file-exists-p saved-path))
           (delete-file saved-path))))))
 
@@ -1906,6 +1913,13 @@ Return list with result and prompt."
               result))
             (should-not (string-match-p "Full output saved to:" result))
             (should (string-match-p "Use `lines_range`" result))
+            (should
+             (string-match-p
+              (regexp-quote
+               (format
+                "Next suggested tool call: `lines_range` with file_name=%S, from=3, to=3."
+                source-path))
+              result))
             (should (string-match-p "grep_in_file" result)))
         (when (file-exists-p source-path)
           (delete-file source-path))))))
@@ -2263,6 +2277,75 @@ Return list with result and prompt."
         (delete-file file))
       (when (file-directory-p dir)
         (delete-directory dir)))))
+
+(ert-deftest test-ellama-tools-read-before-write-refuses-first-overwrite ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((file (make-temp-file "ellama-read-before-write-"))
+         (session (make-ellama-session :id "read-before-write"))
+         (ellama--current-session session)
+         (ellama-tools--current-session nil)
+         (ellama-tools-read-before-write-enabled t))
+    (unwind-protect
+        (progn
+          (write-region "old" nil file nil 'silent)
+          (let ((result (ellama-tools-write-file-tool file "new")))
+            (should (string-match-p "Write refused" result))
+            (should (string-match-p "read_file" result))
+            (with-temp-buffer
+              (insert-file-contents file)
+              (should (equal (buffer-string) "old"))))
+          (let ((result (ellama-tools-write-file-tool file "new")))
+            (should (string-match-p "Wrote 3 characters" result))
+            (with-temp-buffer
+              (insert-file-contents file)
+              (should (equal (buffer-string) "new")))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-tools-read-before-write-allows-after-read-file ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((file (make-temp-file "ellama-read-before-write-"))
+         (session (make-ellama-session :id "read-before-write"))
+         (ellama--current-session session)
+         (ellama-tools--current-session nil)
+         (ellama-tools-read-before-write-enabled t))
+    (unwind-protect
+        (progn
+          (write-region "old" nil file nil 'silent)
+          (ellama-tools-read-file-tool file "text")
+          (let ((result (ellama-tools-write-file-tool file "new")))
+            (should (string-match-p "Wrote 3 characters" result))
+            (with-temp-buffer
+              (insert-file-contents file)
+              (should (equal (buffer-string) "new")))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-tools-read-before-write-edit-file-counts-as-read ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((file (make-temp-file "ellama-read-before-write-"))
+         (session (make-ellama-session :id "read-before-write"))
+         (ellama--current-session session)
+         (ellama-tools--current-session nil)
+         (ellama-tools-read-before-write-enabled t))
+    (unwind-protect
+        (progn
+          (write-region "old" nil file nil 'silent)
+          (let ((result (ellama-tools-edit-file-tool file "old" "mid")))
+            (should (string-match-p "Edited" result)))
+          (let ((result (ellama-tools-write-file-tool file "new")))
+            (should (string-match-p "Wrote 3 characters" result))
+            (with-temp-buffer
+              (insert-file-contents file)
+              (should (equal (buffer-string) "new")))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
 
 (ert-deftest test-ellama-tools-edit-hook-output-has-separate-budget ()
   (ellama-test--ensure-local-ellama-tools)
