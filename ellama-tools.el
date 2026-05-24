@@ -3068,6 +3068,12 @@ TIMEOUT is the optional command timeout in seconds."
   (unless case-sensitive
     '("-i")))
 
+(defun ellama-tools--grep-search-args (case-sensitive)
+  "Return grep arguments for literal CASE-SENSITIVE matching."
+  (append
+   (ellama-tools--grep-case-args case-sensitive)
+   '("-F")))
+
 (defun ellama-tools-grep-tool (dir search-string &optional case-sensitive timeout)
   "Grep SEARCH-STRING in DIR files.
 Match case-insensitively unless CASE-SENSITIVE is non-nil.
@@ -3088,7 +3094,7 @@ TIMEOUT is the optional command timeout in seconds."
            (append
             (list timeout
                   "find" "." "-type" "f" "-exec" "grep" "--color=never")
-            (ellama-tools--grep-case-args case-sensitive)
+            (ellama-tools--grep-search-args case-sensitive)
             (list "-nH" "-e" search-string "{}" "+")))
           (format "No matches for %S in %s."
                   search-string
@@ -3150,8 +3156,8 @@ Match case-insensitively unless CASE-SENSITIVE is non-nil."
              #'ellama-tools--call-command
              (append
               (list "grep" "--color=never")
-              (ellama-tools--grep-case-args case-sensitive)
-              (list "-nh" search-string truename)))
+              (ellama-tools--grep-search-args case-sensitive)
+              (list "-nh" "-e" search-string truename)))
             (format "No matches for %S in %s."
                     search-string truename))))))))
 
