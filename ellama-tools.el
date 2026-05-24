@@ -72,8 +72,8 @@
 
 (defun ellama-tools--set-session-extra (session extra)
   "Set SESSION EXTRA."
-  (with-no-warnings
-    (setf (ellama-session-extra session) extra)))
+  (let ((offset (cl-struct-slot-offset 'ellama-session 'extra)))
+    (aset session offset extra)))
 
 (defun ellama-tools--session-extra-with (session &rest pairs)
   "Return SESSION extra plist with PAIRS applied.

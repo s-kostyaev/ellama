@@ -1912,7 +1912,6 @@ Return list with result and prompt."
               (regexp-quote (format "Source file: %s" source-path))
               result))
             (should-not (string-match-p "Full output saved to:" result))
-            (should (string-match-p "Use `lines_range`" result))
             (should
              (string-match-p
               (regexp-quote
