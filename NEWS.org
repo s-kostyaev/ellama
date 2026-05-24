@@ -1,3 +1,9 @@
+* Version 1.21.0
+- Added project-local before and after shell hook support around mutating edit tools, including per-hook output visibility, failure reporting, hook environment context, and independent sectioned output budgets.
+- Added root .codex hook scripts and ~.dir-locals.el~ configuration so edit tools block writes on main and run file-specific checks after edits. Added aggregate Makefile targets for Elisp, README, and NEWS validation.
+- Updated ~grep~ and ~grep_in_file~ to pass ~-i~ unless ~case_sensitive~ is explicitly set.
+- Removed hook details, skill paths, and automatically checked style guidance from AGENTS.md. Moved release-specific changelog workflow details into the project-local changelog skill.
+- Changed the MELPA CI glob from all top-level .el files to ~ellama*.el~ so ~.dir-locals.el~ is not loaded as a package source file.
 * Version 1.20.0
 - Add ~balanced-edit~ evaluation profile to validate edits in real Emacs
   buffers.
