@@ -34,8 +34,6 @@ Example:
 - Some fix in ~ellama-example-command~ description.
 ```
 
-After all of that call shell_command tool with "make refill-news" argument.
-
 After generating the changelog, update the version in ellama.el, commit the
 generated release changes with the exact commit message "Bump version", and
 push.
