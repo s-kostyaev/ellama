@@ -407,13 +407,7 @@ in one short sentence."
 
 (defun ellama-eval--profile-tool-names (profile)
   "Return tool names for PROFILE."
-  (pcase profile
-    ('baseline
-     (copy-sequence ellama-eval--base-tool-names))
-    ('balanced-edit
-     (append ellama-eval--base-tool-names '("edit_file")))
-    (_
-     (error "Unknown evaluation profile %S" profile))))
+  (append ellama-eval--base-tool-names '("edit_file")))
 
 
 

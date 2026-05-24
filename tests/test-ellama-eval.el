@@ -144,13 +144,13 @@
         (delete-file file)))))
 
 (ert-deftest test-ellama-eval-profile-tools-switch-read-and-edit-shapes ()
-  "Verify baseline uses read_file and balanced-edit uses edit_file."
+  "Verify both baseline and balanced-edit use edit_file."
   (let ((ellama-tools-allow-all t)
         (ellama-tools-allowed nil)
         (ellama-tools-confirm-allowed (make-hash-table))
         (baseline (ellama-eval--make-profile-tools 'baseline))
         (balanced (ellama-eval--make-profile-tools 'balanced-edit)))
-    (should-not (member "edit_file" (mapcar #'llm-tool-name baseline)))
+    (should (member "edit_file" (mapcar #'llm-tool-name baseline)))
     (should (member "edit_file" (mapcar #'llm-tool-name balanced)))
     (should (member "read_file" (mapcar #'llm-tool-name baseline)))
     (should (member "read_file" (mapcar #'llm-tool-name balanced)))))
