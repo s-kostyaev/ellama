@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || printf '')
+
+if [ "$branch" = "main" ]; then
+	cat >&2 <<'EOF'
+Commit blocked: current branch is main.
+
+Create and switch to a feature branch first:
+  git switch -c <branch-name>
+EOF
+	exit 1
+fi
+
+exit 0

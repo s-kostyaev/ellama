@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || printf '')
+
+if [ "$branch" = "main" ]; then
+	cat >&2 <<'EOF'
+Push blocked: current branch is main.
+
+Switch to a feature branch first:
+  git switch <branch-name>
+EOF
+	exit 1
+fi
+
+while read local_ref _local_sha _remote_ref _remote_sha
+do
+	if [ "$local_ref" = "refs/heads/main" ]; then
+		cat >&2 <<'EOF'
+Push blocked: refusing to push refs/heads/main.
+
+Push a feature branch instead.
+EOF
+		exit 1
+	fi
+done
+
+exit 0
