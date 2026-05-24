@@ -14,7 +14,14 @@ EOF
 fi
 
 zero_sha=0000000000000000000000000000000000000000
-check_elisp=false
+changed_files=$(mktemp)
+changed_files_sorted=$(mktemp)
+
+cleanup() {
+	rm -f "$changed_files" "$changed_files_sorted"
+}
+
+trap cleanup EXIT
 
 while read local_ref local_sha _remote_ref remote_sha
 do
@@ -42,24 +49,19 @@ EOF
 		range="$remote_sha..$local_sha"
 	fi
 
-	if git diff --name-only --diff-filter=ACMR "$range" -- '*.el' | grep -q .
-	then
-		check_elisp=true
-	fi
+	git diff --name-only --diff-filter=ACMR "$range" -- \
+		'*.el' README.org NEWS.org >>"$changed_files"
 done
 
-if [ "$check_elisp" = true ]; then
-	printf '%s\n' "Running make check-elisp for pushed Elisp changes..."
-	make check-elisp
+if [ -s "$changed_files" ]; then
+	sort -u "$changed_files" >"$changed_files_sorted"
+	set --
+	while IFS= read -r file
+	do
+		set -- "$@" "$file"
+	done <"$changed_files_sorted"
 
-	if ! git diff --quiet -- '*.el'; then
-		cat >&2 <<'EOF'
-Push blocked: make check-elisp changed Elisp files.
-
-Review, stage, and commit those changes before pushing.
-EOF
-		exit 1
-	fi
+	ELLAMA_BLOCK_ON_CHECK_CHANGES=1 sh .codex/hooks/check-files.sh "$@"
 fi
 
 exit 0

@@ -79,6 +79,7 @@ Configuration
 * Session Compaction::
 * Image Input::
 * Task Tool Subagents::
+* Plan-and-Act Agent Loop::
 * Edit Tool Shell Hooks::
 * DLP for Tool Input/Output::
 * SRT Filesystem Policy for Tools::
@@ -244,6 +245,11 @@ File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Top
      an interactive buffer and continue conversation.  If called with
      universal argument (‘C-u’) will start new session with llm model
      interactive selection.
+   • ‘ellama-plan-and-act’: Start an agent loop that first creates a
+     checklist plan and then acts on it with automatic continuations.
+     It reuses the current chat session when possible and can be
+     launched from the main transient menu with ‘A’ in the ‘Problem
+     solving’ section.
    • ‘ellama-ask-image’: Ask Ellama about one image file by adding it as
      ephemeral context for the request.  If called with universal
      argument (‘C-u’) will start new session with llm model interactive
@@ -645,6 +651,7 @@ argument generated text string.
 * Session Compaction::
 * Image Input::
 * Task Tool Subagents::
+* Plan-and-Act Agent Loop::
 * Edit Tool Shell Hooks::
 * DLP for Tool Input/Output::
 * SRT Filesystem Policy for Tools::
@@ -793,7 +800,7 @@ Tool calls can request image handling explicitly:
      }
 
 
-File: ellama.info,  Node: Task Tool Subagents,  Next: Edit Tool Shell Hooks,  Prev: Image Input,  Up: Configuration
+File: ellama.info,  Node: Task Tool Subagents,  Next: Plan-and-Act Agent Loop,  Prev: Image Input,  Up: Configuration
 
 4.4 Task Tool Subagents
 =======================
@@ -844,9 +851,53 @@ letting skills bundle reusable task prompts next to their ‘SKILL.md’
 files.
 
 
-File: ellama.info,  Node: Edit Tool Shell Hooks,  Next: DLP for Tool Input/Output,  Prev: Task Tool Subagents,  Up: Configuration
+File: ellama.info,  Node: Plan-and-Act Agent Loop,  Next: Edit Tool Shell Hooks,  Prev: Task Tool Subagents,  Up: Configuration
 
-4.5 Edit Tool Shell Hooks
+4.5 Plan-and-Act Agent Loop
+===========================
+
+‘ellama-plan-and-act’ runs a local agent in the current Ellama chat
+session.  It starts with a planning turn, asks the model to submit a
+checklist, and then continues automatically through the checklist until
+the agent reports a result, marks the plan complete, becomes blocked, or
+reaches ‘ellama-tools-agent-default-max-steps’.
+
+The loop adds temporary controller tools to the session:
+
+   • ‘agent_submit_plan’ records the initial checklist before acting
+     starts
+   • ‘agent_update_plan’ records progress as checklist items move
+     between states
+   • ‘agent_report_result’ finishes the loop and restores the original
+     tool set
+
+Models or providers that cannot call tools can still participate by
+emitting the fallback ‘BEGIN_ELLAMA_AGENT_STATE’ block described in the
+controller prompt.  Ellama parses that block, updates the stored state,
+and prints visible plan or status snapshots into the chat buffer.
+
+Start the loop with ‘M-x ellama-plan-and-act’, or open the main
+transient with ‘M-x ellama’ and press ‘A’ in the ‘Problem solving’
+section.  The transient entry respects the regular session options: use
+‘-n’ before ‘A’ to create a new session, and use ‘-e’ when ephemeral
+sessions are enabled.
+
+Without a new-session request, the command reuses the current chat
+buffer and session.  If that session already has an active plan-and-act
+loop, a new user message resumes the same loop instead of replacing the
+plan.  This makes it possible to interrupt a running request with ‘C-g’,
+add corrective instructions under the next ‘User:’ prompt, and continue
+the existing loop with ‘C-c C-c’ or another ‘ellama-plan-and-act’ call.
+
+Plan-and-act state is stored in the session extra data, so the loop
+survives session compaction and regular session persistence.  The
+visible plan/status notes in the chat buffer are for transparency; the
+canonical state is the session state used by the continuation handler.
+
+
+File: ellama.info,  Node: Edit Tool Shell Hooks,  Next: DLP for Tool Input/Output,  Prev: Plan-and-Act Agent Loop,  Up: Configuration
+
+4.6 Edit Tool Shell Hooks
 =========================
 
 Projects can define shell commands that run around mutating edit tools:
@@ -889,7 +940,7 @@ and is not scanned by tool output DLP.
 
 File: ellama.info,  Node: DLP for Tool Input/Output,  Next: SRT Filesystem Policy for Tools,  Prev: Edit Tool Shell Hooks,  Up: Configuration
 
-4.6 DLP for Tool Input/Output
+4.7 DLP for Tool Input/Output
 =============================
 
 Ellama includes an optional DLP (Data Loss Prevention) layer for tool
@@ -1215,7 +1266,7 @@ Troubleshooting:
 
 File: ellama.info,  Node: SRT Filesystem Policy for Tools,  Prev: DLP for Tool Input/Output,  Up: Configuration
 
-4.7 SRT Filesystem Policy for Tools
+4.8 SRT Filesystem Policy for Tools
 ===================================
 
 When ‘ellama-tools-use-srt’ is non-nil, the ‘srt’ settings file is the
@@ -2455,48 +2506,49 @@ their use in free software.
 
 Tag Table:
 Node: Top1379
-Node: Installation3945
-Node: Commands8959
-Node: Keymap17588
-Node: Configuration20475
-Node: Session Provider Keys32787
-Node: Session Compaction34648
-Node: Image Input36942
-Node: Task Tool Subagents39087
-Node: Edit Tool Shell Hooks41186
-Node: DLP for Tool Input/Output43170
-Node: SRT Filesystem Policy for Tools58074
-Node: Context Management63743
-Node: Transient Menus for Context Management64811
-Node: Managing the Context66490
-Node: Considerations67265
-Node: Minor modes67858
-Node: ellama-context-header-line-mode69846
-Node: ellama-context-header-line-global-mode70671
-Node: ellama-context-mode-line-mode71391
-Node: ellama-context-mode-line-global-mode72239
-Node: Ellama Session Header Line Mode72943
-Node: Enabling and Disabling73512
-Node: Customization73959
-Node: Ellama Session Mode Line Mode74247
-Node: Enabling and Disabling (1)74832
-Node: Customization (1)75279
-Node: Using Blueprints75573
-Node: Key Components of Ellama Blueprints76213
-Node: Creating and Managing Blueprints76820
-Node: Blueprints files77798
-Node: Variable Management78219
-Node: Keymap and Mode78672
-Node: Transient Menus79608
-Node: Running Blueprints programmatically80154
-Node: MCP Integration80741
-Node: Agent Skills81976
-Node: Directory Structure82339
-Node: Creating a Skill83366
-Node: How it works83741
-Node: Acknowledgments84132
-Node: Contributions84843
-Node: GNU Free Documentation License85229
+Node: Installation3973
+Node: Commands8987
+Node: Keymap17925
+Node: Configuration20812
+Node: Session Provider Keys33152
+Node: Session Compaction35013
+Node: Image Input37307
+Node: Task Tool Subagents39452
+Node: Plan-and-Act Agent Loop41553
+Node: Edit Tool Shell Hooks43737
+Node: DLP for Tool Input/Output45725
+Node: SRT Filesystem Policy for Tools60629
+Node: Context Management66298
+Node: Transient Menus for Context Management67366
+Node: Managing the Context69045
+Node: Considerations69820
+Node: Minor modes70413
+Node: ellama-context-header-line-mode72401
+Node: ellama-context-header-line-global-mode73226
+Node: ellama-context-mode-line-mode73946
+Node: ellama-context-mode-line-global-mode74794
+Node: Ellama Session Header Line Mode75498
+Node: Enabling and Disabling76067
+Node: Customization76514
+Node: Ellama Session Mode Line Mode76802
+Node: Enabling and Disabling (1)77387
+Node: Customization (1)77834
+Node: Using Blueprints78128
+Node: Key Components of Ellama Blueprints78768
+Node: Creating and Managing Blueprints79375
+Node: Blueprints files80353
+Node: Variable Management80774
+Node: Keymap and Mode81227
+Node: Transient Menus82163
+Node: Running Blueprints programmatically82709
+Node: MCP Integration83296
+Node: Agent Skills84531
+Node: Directory Structure84894
+Node: Creating a Skill85921
+Node: How it works86296
+Node: Acknowledgments86687
+Node: Contributions87398
+Node: GNU Free Documentation License87784
 
 End Tag Table
 

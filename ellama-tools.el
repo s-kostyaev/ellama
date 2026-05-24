@@ -272,6 +272,11 @@ Plist with keys `:path', `:mtime' and `:policy'.")
   :type 'integer
   :group 'ellama)
 
+(defcustom ellama-tools-agent-default-max-steps 40
+  "Default maximum number of auto-continue steps for plan-and-act agents."
+  :type 'integer
+  :group 'ellama)
+
 (defcustom ellama-tools-task-template-dirs
   (list (locate-user-emacs-file "ellama/task-templates"))
   "Directories used to resolve relative task template names.
@@ -316,6 +321,31 @@ The guard applies before output is sent back to the LLM."
 
 (defcustom ellama-tools-subagent-continue-prompt "Task not marked complete. Continue working. If you are done, YOU MUST use the `report_result` tool."
   "Prompt sent to sub-agent to keep the loop going."
+  :type 'string
+  :group 'ellama)
+
+(defcustom ellama-tools-agent-planning-prompt
+  "Create a concise checklist plan for the user's task before acting.
+Inspect context with tools if needed. When the plan is ready, either call the
+`agent_submit_plan` tool with the full checklist, or include this block exactly
+if tool calls are not available:
+
+BEGIN_ELLAMA_AGENT_STATE
+phase: acting
+plan:
+- [ ] First concrete step
+- [ ] Second concrete step
+END_ELLAMA_AGENT_STATE"
+  "Prompt sent while the plan-and-act loop is planning."
+  :type 'string
+  :group 'ellama)
+
+(defcustom ellama-tools-agent-continue-prompt
+  "Continue the plan-and-act loop. Work on the first pending checklist item.
+After each meaningful change, call `agent_update_plan` or include an updated
+BEGIN_ELLAMA_AGENT_STATE block. When all items are complete, call
+`agent_report_result` or set phase: done with a result."
+  "Prompt sent to continue a plan-and-act loop."
   :type 'string
   :group 'ellama)
 
@@ -3507,6 +3537,509 @@ TEMPLATE-BASE, ROLE and ARGUMENTS are used for template rendering and hints."
     (or description
         (error "%s" (ellama-tools--task-template-error
                      "Either description or template is required")))))
+
+(defconst ellama-tools--agent-state-begin "BEGIN_ELLAMA_AGENT_STATE"
+  "Marker starting a fallback plan-and-act state block.")
+
+(defconst ellama-tools--agent-state-end "END_ELLAMA_AGENT_STATE"
+  "Marker ending a fallback plan-and-act state block.")
+
+(defun ellama-tools--agent-state (session)
+  "Return plan-and-act state from SESSION."
+  (when-let* (((ellama-session-p session))
+              (extra (ellama-session-extra session)))
+    (plist-get extra :agent-loop)))
+
+(defun ellama-tools--agent-put-state (session state)
+  "Store plan-and-act STATE in SESSION."
+  (ellama-tools--set-session-extra
+   session
+   (ellama-tools--session-extra-with session :agent-loop state)))
+
+(defun ellama-tools--agent-state-put (state key value)
+  "Return STATE with KEY set to VALUE."
+  (plist-put (copy-sequence state) key value))
+
+(defun ellama-tools--agent-session-buffer (session &optional buffer)
+  "Return live chat BUFFER for SESSION."
+  (or (and (buffer-live-p buffer) buffer)
+      (when-let* (((ellama-session-p session))
+                  (extra (ellama-session-extra session))
+                  (uid (plist-get extra :uid))
+                  (session-buffer (ellama-get-session-buffer uid)))
+        (and (buffer-live-p session-buffer) session-buffer))
+      (when-let* (((ellama-session-p session))
+                  (session-buffer
+                   (ellama-get-session-buffer (ellama-session-id session))))
+        (and (buffer-live-p session-buffer) session-buffer))))
+
+(defun ellama-tools--agent-step-status (step)
+  "Return STEP status."
+  (or (plist-get step :status) 'pending))
+
+(defun ellama-tools--agent-step-done-p (step)
+  "Return non-nil when STEP is done."
+  (eq (ellama-tools--agent-step-status step) 'done))
+
+(defun ellama-tools--agent-next-step (state)
+  "Return first pending step in STATE."
+  (seq-find (lambda (step)
+              (not (ellama-tools--agent-step-done-p step)))
+            (plist-get state :plan)))
+
+(defun ellama-tools--agent-plan-complete-p (state)
+  "Return non-nil when STATE plan is fully done."
+  (let ((plan (plist-get state :plan)))
+    (and plan (seq-every-p #'ellama-tools--agent-step-done-p plan))))
+
+(defun ellama-tools--agent-clean-step-title (line)
+  "Return checklist step title parsed from LINE."
+  (let ((title (string-trim line)))
+    (setq title
+          (replace-regexp-in-string
+           "\\`[-+*][[:space:]]+\\(?:\\[[ Xx-]\\][[:space:]]+\\)?"
+           "" title))
+    (setq title
+          (replace-regexp-in-string
+           "\\`[0-9]+[.)][[:space:]]+\\(?:\\[[ Xx-]\\][[:space:]]+\\)?"
+           "" title))
+    (string-trim title)))
+
+(defun ellama-tools--agent-status-from-line (line)
+  "Return checklist status parsed from LINE."
+  (cond
+   ((string-match-p "\\[[Xx]\\]" line) 'done)
+   ((string-match-p "\\[-\\]" line) 'in-progress)
+   (t 'pending)))
+
+(defun ellama-tools--agent-parse-plan (text)
+  "Return checklist entries parsed from TEXT."
+  (let ((id 0)
+        steps)
+    (dolist (line (split-string (or text "") "\n"))
+      (let ((trimmed (string-trim line)))
+        (when (string-match-p
+               "\\`\\(?:[-+*][[:space:]]+\\|[0-9]+[.)][[:space:]]+\\)"
+               trimmed)
+          (let ((title (ellama-tools--agent-clean-step-title trimmed)))
+            (unless (string-empty-p title)
+              (push (list :id (cl-incf id)
+                          :title title
+                          :status (ellama-tools--agent-status-from-line
+                                   trimmed))
+                    steps))))))
+    (nreverse steps)))
+
+(defun ellama-tools--agent-state-block (text)
+  "Return fallback state block from TEXT, or nil."
+  (when (and (stringp text)
+             (string-match
+              (concat (regexp-quote ellama-tools--agent-state-begin)
+                      "\\(?:.\\|\n\\)*?"
+                      (regexp-quote ellama-tools--agent-state-end))
+              text))
+    (match-string 0 text)))
+
+(defun ellama-tools--agent-parse-phase (text)
+  "Return plan-and-act phase parsed from TEXT."
+  (when (and (stringp text)
+             (string-match
+              "^phase:[[:space:]]*\\([[:alpha:]-]+\\)[[:space:]]*$"
+              text))
+    (intern (match-string 1 text))))
+
+(defun ellama-tools--agent-parse-field (field text)
+  "Return FIELD value parsed from TEXT."
+  (when (and (stringp text)
+             (string-match
+              (format "^%s:[[:space:]]*\\(.+\\)[[:space:]]*$"
+                      (regexp-quote field))
+              text))
+    (string-trim (match-string 1 text))))
+
+(defun ellama-tools--agent-state-from-text (text)
+  "Return plan-and-act state update parsed from TEXT."
+  (when-let* ((block (ellama-tools--agent-state-block text)))
+    (let ((plan (ellama-tools--agent-parse-plan block))
+          (phase (ellama-tools--agent-parse-phase block))
+          (result (ellama-tools--agent-parse-field "result" block))
+          (blocked (ellama-tools--agent-parse-field "blocked" block)))
+      (when (or plan phase result blocked)
+        (list :phase phase
+              :plan plan
+              :result result
+              :blocked blocked)))))
+
+(defun ellama-tools--agent-merge-state-update (state update)
+  "Return STATE merged with parsed UPDATE."
+  (let ((state (copy-sequence state)))
+    (when-let ((phase (plist-get update :phase)))
+      (setq state (plist-put state :phase phase)))
+    (when-let ((plan (plist-get update :plan)))
+      (setq state (plist-put state :plan plan)))
+    (when-let ((result (plist-get update :result)))
+      (setq state (plist-put state :result result)))
+    (when-let ((blocked (plist-get update :blocked)))
+      (setq state (plist-put state :blocked blocked)
+            state (plist-put state :phase 'blocked)))
+    (when (eq (plist-get state :phase) 'done)
+      (setq state (plist-put state :completed t)))
+    state))
+
+(defun ellama-tools--agent-checkbox (status)
+  "Return Org checkbox string for STATUS."
+  (pcase status
+    ('done "[X]")
+    ((or 'in-progress 'blocked) "[-]")
+    (_ "[ ]")))
+
+(defun ellama-tools--agent-render-plan (state)
+  "Return Org text rendering plan in STATE."
+  (mapconcat
+   (lambda (step)
+     (format "- %s %s"
+             (ellama-tools--agent-checkbox
+              (ellama-tools--agent-step-status step))
+             (plist-get step :title)))
+   (plist-get state :plan)
+   "\n"))
+
+(defun ellama-tools--agent-insert-note (buffer title body)
+  "Insert visible plan-and-act note with TITLE and BODY into BUFFER."
+  (when (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (save-excursion
+        (goto-char (point-max))
+        (unless (bobp)
+          (unless (bolp)
+            (insert "\n"))
+          (unless (save-excursion
+                    (forward-line -1)
+                    (looking-at-p "[[:space:]]*$"))
+            (insert "\n")))
+        (insert (ellama-get-nick-prefix-for-mode)
+                " Ellama Agent " title ":\n"
+                (or body "")
+                "\n\n")))))
+
+(defun ellama-tools--agent-insert-state (session buffer title)
+  "Insert SESSION plan-and-act state into BUFFER with TITLE."
+  (when-let* ((state (ellama-tools--agent-state session)))
+    (let ((plan (ellama-tools--agent-render-plan state))
+          (phase (plist-get state :phase))
+          (result (plist-get state :result))
+          (blocked (plist-get state :blocked)))
+      (ellama-tools--agent-insert-note
+       (ellama-tools--agent-session-buffer session buffer)
+       title
+       (string-join
+        (delq nil
+              (list (format "Phase: %s" phase)
+                    (unless (string-empty-p plan) plan)
+                    (when blocked (format "Blocked: %s" blocked))
+                    (when result (format "Result: %s" result))))
+        "\n")))))
+
+(defun ellama-tools--agent-controller-tools ()
+  "Return plan-and-act controller tools."
+  (list
+   (llm-make-tool
+    :function #'ellama-tools-agent-submit-plan-tool
+    :name "agent_submit_plan"
+    :description "Submit the checklist plan before acting."
+    :args '((:name "plan" :type string
+                   :description "Org-style checklist or numbered plan.")))
+   (llm-make-tool
+    :function #'ellama-tools-agent-update-plan-tool
+    :name "agent_update_plan"
+    :description "Update checklist status after making progress."
+    :args '((:name "plan" :type string
+                   :description "Full updated Org-style checklist.")
+            (:name "status" :type string
+                   :description "Short status summary.")))
+   (llm-make-tool
+    :function #'ellama-tools-agent-report-result-tool
+    :name "agent_report_result"
+    :description "Report final result and terminate the plan-and-act loop."
+    :args '((:name "result" :type string)))))
+
+(defun ellama-tools--agent-tool-name-p (name)
+  "Return non-nil when NAME is a plan-and-act controller tool."
+  (member name '("agent_submit_plan"
+                 "agent_update_plan"
+                 "agent_report_result")))
+
+(defun ellama-tools--agent-combine-tools (tools)
+  "Return TOOLS plus plan-and-act controller tools."
+  (let ((base (seq-remove
+               (lambda (tool)
+                 (ellama-tools--agent-tool-name-p (llm-tool-name tool)))
+               tools)))
+    (append (ellama-tools--agent-controller-tools) base)))
+
+(defun ellama-tools--agent-restore-tools (session)
+  "Restore SESSION tools saved before plan-and-act started."
+  (let* ((state (ellama-tools--agent-state session))
+         (had-tools (plist-get state :had-original-tools))
+         (tools (plist-get state :original-tools)))
+    (ellama-tools--set-session-extra
+     session
+     (ellama-tools--session-extra-with
+      session :tools (and had-tools tools)))))
+
+(defun ellama-tools-agent-active-p (session)
+  "Return non-nil when SESSION has a running plan-and-act loop."
+  (when-let* ((state (ellama-tools--agent-state session)))
+    (and (not (plist-get state :completed))
+         (not (memq (plist-get state :phase) '(done blocked))))))
+
+(defun ellama-tools--agent-active-session ()
+  "Return active session for plan-and-act controller tools."
+  (or (ellama-tools--active-session)
+      ellama--current-session))
+
+(defun ellama-tools-agent-submit-plan-tool (plan)
+  "Submit plan-and-act PLAN."
+  (let* ((session (ellama-tools--agent-active-session))
+         (state (ellama-tools--agent-state session))
+         (steps (ellama-tools--agent-parse-plan plan)))
+    (unless (and (ellama-session-p session) state)
+      (error "No active plan-and-act session"))
+    (unless steps
+      (error "Plan must contain at least one checklist or numbered item"))
+    (setq state (ellama-tools--agent-state-put state :plan steps))
+    (setq state (ellama-tools--agent-state-put state :phase 'acting))
+    (ellama-tools--agent-put-state session state)
+    (ellama-tools--agent-insert-state session nil "Plan")
+    "Plan accepted. Continue with the first pending item."))
+
+(defun ellama-tools-agent-update-plan-tool (plan &optional status)
+  "Update current plan-and-act PLAN with optional STATUS."
+  (let* ((session (ellama-tools--agent-active-session))
+         (state (ellama-tools--agent-state session))
+         (steps (ellama-tools--agent-parse-plan plan)))
+    (unless (and (ellama-session-p session) state)
+      (error "No active plan-and-act session"))
+    (unless steps
+      (error "Plan update must contain at least one checklist or numbered item"))
+    (setq state (ellama-tools--agent-state-put state :plan steps))
+    (setq state (ellama-tools--agent-state-put state :phase 'acting))
+    (when status
+      (setq state (ellama-tools--agent-state-put state :status status)))
+    (ellama-tools--agent-put-state session state)
+    (ellama-tools--agent-insert-state session nil "Status")
+    "Plan updated."))
+
+(defun ellama-tools-agent-report-result-tool (result)
+  "Report final plan-and-act RESULT."
+  (let* ((session (ellama-tools--agent-active-session))
+         (state (ellama-tools--agent-state session)))
+    (unless (and (ellama-session-p session) state)
+      (error "No active plan-and-act session"))
+    (setq state (ellama-tools--agent-state-put state :phase 'done))
+    (setq state (ellama-tools--agent-state-put state :completed t))
+    (setq state (ellama-tools--agent-state-put state :result result))
+    (ellama-tools--agent-put-state session state)
+    (ellama-tools--agent-insert-state session nil "Done")
+    (ellama-tools--agent-restore-tools session)
+    "Result received. Plan-and-act loop completed."))
+
+(defun ellama-tools--agent-system-message (system)
+  "Return plan-and-act system message appended to SYSTEM."
+  (format
+   "%s\n\nPLAN AND ACT INSTRUCTIONS:\n\
+You are running inside Ellama's plan-and-act controller. The controller gives \
+you three extra tools for this session:
+
+- `agent_submit_plan`: call this once after you have a concrete checklist. Do \
+not start making changes before submitting a plan unless you need read-only \
+inspection to craft it.
+- `agent_update_plan`: call this after meaningful progress, especially when a \
+checklist item moves to in-progress or done.
+- `agent_report_result`: call this exactly once when the task is complete.
+
+Do not ask the user unless you are truly blocked. Execute the checklist step by \
+step and keep it current. If the provider or model cannot use tools, emit \
+exactly one BEGIN_ELLAMA_AGENT_STATE block with phase, plan, and optional \
+result/blocked fields instead."
+   (or system "")))
+
+(defun ellama-tools--agent-prompt (state)
+  "Return controller prompt for plan-and-act STATE."
+  (let ((plan (ellama-tools--agent-render-plan state))
+        (next (ellama-tools--agent-next-step state)))
+    (string-join
+     (delq nil
+           (list
+            (if (plist-get state :plan)
+                ellama-tools-agent-continue-prompt
+              ellama-tools-agent-planning-prompt)
+            (unless (string-empty-p plan)
+              (concat "Current plan state:\n" plan))
+            (when next
+              (format "Next pending item: %s" (plist-get next :title)))))
+     "\n\n")))
+
+(defun ellama-tools--insert-agent-prompt (buffer prompt)
+  "Insert controller PROMPT into BUFFER and return insertion point."
+  (with-current-buffer buffer
+    (save-excursion
+      (goto-char (point-max))
+      (unless (bobp)
+        (unless (bolp)
+          (insert "\n"))
+        (unless (save-excursion
+                  (forward-line -1)
+                  (looking-at-p "[[:space:]]*$"))
+          (insert "\n")))
+      (insert (ellama-get-nick-prefix-for-mode)
+              " Agent controller:\n"
+              (ellama--fill-long-lines prompt)
+              "\n\n"
+              (ellama-get-nick-prefix-for-mode)
+              " " ellama-assistant-nick ":\n")
+      (point))))
+
+(defun ellama-tools--agent-apply-text-update (session text)
+  "Apply fallback state update parsed from TEXT to SESSION."
+  (when-let* ((state (ellama-tools--agent-state session))
+              (update (ellama-tools--agent-state-from-text text)))
+    (let ((merged (ellama-tools--agent-merge-state-update state update)))
+      (ellama-tools--agent-put-state session merged)
+      merged)))
+
+(defun ellama-tools--agent-loop-handler (text &optional session buffer system)
+  "Continue plan-and-act SESSION loop after TEXT in BUFFER with SYSTEM message."
+  (let* ((session (or session ellama--current-session))
+         (parsed (and (ellama-session-p session)
+                      (ellama-tools--agent-apply-text-update session text)))
+         (state (and (ellama-session-p session)
+                     (ellama-tools--agent-state session)))
+         (buffer (ellama-tools--agent-session-buffer session buffer))
+         (done (plist-get state :completed))
+         (phase (plist-get state :phase))
+         (steps (or (plist-get state :step-count) 0))
+         (max (or (plist-get state :max-steps)
+                  ellama-tools-agent-default-max-steps))
+         (tools (and (ellama-session-p session)
+                     (plist-get (ellama-session-extra session) :tools)))
+         (system (or system (plist-get state :system))))
+    (when parsed
+      (ellama-tools--agent-insert-state
+       session buffer (if (plist-get parsed :plan) "Plan" "Status")))
+    (cond
+     ((not (ellama-session-p session))
+      (message "Plan-and-act session is not available."))
+     (done
+      (message "Plan-and-act loop finished."))
+     ((eq phase 'done)
+      (setq state (ellama-tools--agent-state-put state :completed t))
+      (ellama-tools--agent-put-state session state)
+      (ellama-tools--agent-insert-state session buffer "Done")
+      (ellama-tools--agent-restore-tools session))
+     ((eq phase 'blocked)
+      (ellama-tools--agent-insert-state session buffer "Blocked")
+      (ellama-tools--agent-restore-tools session))
+     ((>= steps max)
+      (setq state (ellama-tools--agent-state-put state :phase 'blocked))
+      (setq state (ellama-tools--agent-state-put
+                   state :blocked (format "Max steps (%d) reached." max)))
+      (ellama-tools--agent-put-state session state)
+      (ellama-tools--agent-insert-state session buffer "Blocked")
+      (ellama-tools--agent-restore-tools session))
+     ((ellama-tools--agent-plan-complete-p state)
+      (setq state (ellama-tools--agent-state-put state :phase 'done))
+      (setq state (ellama-tools--agent-state-put state :completed t))
+      (ellama-tools--agent-put-state session state)
+      (ellama-tools--agent-insert-state session buffer "Done")
+      (ellama-tools--agent-restore-tools session))
+     (t
+      (setq state (ellama-tools--agent-state-put state :step-count (1+ steps)))
+      (ellama-tools--agent-put-state session state)
+      (let* ((prompt (ellama-tools--agent-prompt state))
+             (point (when (buffer-live-p buffer)
+                      (ellama-tools--insert-agent-prompt buffer prompt))))
+        (apply
+         #'ellama-stream
+         prompt
+         (append
+          (list :buffer buffer
+                :session session
+                :tools tools
+                :system system
+                :on-done
+                (ellama-tools--make-agent-loop-handler
+                 session buffer system))
+          (when point
+            (list :point point)))))))))
+
+(defun ellama-tools--make-agent-loop-handler (session &optional buffer system)
+  "Return plan-and-act loop handler for SESSION, BUFFER and SYSTEM."
+  (lambda (text)
+    (ellama-tools--agent-loop-handler text session buffer system)))
+
+(defun ellama-tools-start-plan-and-act
+    (session buffer prompt &optional system tools max-steps)
+  "Initialize plan-and-act state for SESSION in BUFFER.
+PROMPT is the original user task.  SYSTEM is the base system message.
+TOOLS is the tool list to extend with controller tools.  MAX-STEPS limits
+automatic continuations."
+  (unless (ellama-session-p session)
+    (error "No session for plan-and-act loop"))
+  (let* ((extra (ellama-session-extra session))
+         (had-tools (and (plistp extra) (plist-member extra :tools)))
+         (original-tools (and (plistp extra) (plist-get extra :tools)))
+         (combined-tools
+          (ellama-tools--agent-combine-tools
+           (or tools original-tools ellama-tools-enabled)))
+         (agent-system (ellama-tools--agent-system-message system))
+         (state (list :phase 'planning
+                      :plan nil
+                      :task prompt
+                      :step-count 0
+                      :max-steps (or max-steps
+                                     ellama-tools-agent-default-max-steps)
+                      :completed nil
+                      :system agent-system
+                      :had-original-tools had-tools
+                      :original-tools original-tools)))
+    (ellama-tools--set-session-extra
+     session
+     (ellama-tools--session-extra-with
+      session
+      :agent-loop state
+      :tools combined-tools))
+    (ellama-tools--agent-insert-note
+     buffer "Status" "Planning started.")
+    (list :system agent-system
+          :tools combined-tools
+          :on-done (ellama-tools--make-agent-loop-handler
+                    session buffer agent-system))))
+
+(defun ellama-tools-resume-plan-and-act
+    (session buffer &optional system tools)
+  "Return stream args needed to resume SESSION plan-and-act loop in BUFFER.
+SYSTEM and TOOLS can override the stored runtime values."
+  (unless (ellama-tools-agent-active-p session)
+    (error "No active plan-and-act loop"))
+  (let* ((state (ellama-tools--agent-state session))
+         (agent-system (or system
+                           (plist-get state :system)
+                           (ellama-tools--agent-system-message nil)))
+         (combined-tools
+          (ellama-tools--agent-combine-tools
+           (or tools
+               (plist-get (ellama-session-extra session) :tools)
+               ellama-tools-enabled))))
+    (setq state (ellama-tools--agent-state-put state :system agent-system))
+    (ellama-tools--agent-put-state session state)
+    (ellama-tools--set-session-extra
+     session
+     (ellama-tools--session-extra-with session :tools combined-tools))
+    (list :system agent-system
+          :tools combined-tools
+          :on-done (ellama-tools--make-agent-loop-handler
+                    session buffer agent-system))))
 
 (defun ellama-tools--insert-subagent-prompt (buffer description)
   "Insert sub-agent DESCRIPTION into BUFFER as a main-agent turn.

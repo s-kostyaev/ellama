@@ -814,6 +814,14 @@ ARGS used for transient arguments."
    (transient-arg-value "--new-session" args)
    :ephemeral (transient-arg-value "--ephemeral" args)))
 
+(transient-define-suffix ellama-transient-plan-and-act (&optional args)
+  "Start a plan-and-act agent loop.  ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-plan-and-act
+   (read-string "Ask ellama agent: ")
+   (transient-arg-value "--new-session" args)
+   :ephemeral (transient-arg-value "--ephemeral" args)))
+
 (transient-define-suffix ellama-transient-chat-with-image (&optional args)
   "Chat with Ellama about an image.  ARGS used for transient arguments."
   (interactive (list (transient-args transient-current-command)))
@@ -861,7 +869,8 @@ ARGS used for transient arguments."
     ("x" "Context Commands" ellama-transient-context-menu)]]
   [["Problem solving"
     ("R" "Solve reasoning problem" ellama-solve-reasoning-problem)
-    ("D" "Solve domain specific problem" ellama-solve-domain-specific-problem)]]
+    ("D" "Solve domain specific problem" ellama-solve-domain-specific-problem)
+    ("A" "Agent" ellama-transient-plan-and-act)]]
   [["Quit" ("q" "Quit" transient-quit-one)]]
   (interactive)
   (transient-setup 'ellama-transient-main-menu)
