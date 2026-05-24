@@ -2723,37 +2723,66 @@ buffer contents, matching their historical behavior."
    :description
    "Prepend CONTENT to the file FILE_NAME."))
 
-(defun ellama-tools-directory-tree-tool (dir &optional depth)
+(defun ellama-tools--directory-tree-timeout-output (timeout output)
+  "Return diagnostic text for `directory_tree' timeout after TIMEOUT.
+OUTPUT is the partial directory tree collected before the timeout."
+  (if (string-empty-p output)
+      (format "directory_tree timed out after %s seconds." timeout)
+    (format "directory_tree timed out after %s seconds.\n%s"
+            timeout output)))
+
+(defun ellama-tools--directory-tree (dir depth deadline)
+  "Return directory tree under DIR at DEPTH until DEADLINE."
+  (let* ((indent (make-string (* (or depth 0) 2) ? ))
+         (entries
+          (sort (cl-remove-if
+                 (lambda (f)
+                   (string-prefix-p "." f))
+                 (directory-files dir))
+                #'string-lessp))
+         (single-entry-p (= (length entries) 1))
+         (tree "")
+         timed-out)
+    (catch 'done
+      (dolist (f entries)
+        (when (>= (float-time) deadline)
+          (setq timed-out t)
+          (throw 'done nil))
+        (let* ((full   (expand-file-name f dir))
+               (name   (file-name-nondirectory f))
+               (type   (if (file-directory-p full) "|-" "`-"))
+               (line   (concat indent
+                               (unless single-entry-p type)
+                               name "\n")))
+          (setq tree (concat tree line))
+          (when (file-directory-p full)
+            (let ((child (ellama-tools--directory-tree
+                          full
+                          (+ (or depth 0) 1)
+                          deadline)))
+              (setq tree (concat tree (car child)))
+              (when (cdr child)
+                (setq timed-out t)
+                (throw 'done nil)))))))
+    (cons tree timed-out)))
+
+(defun ellama-tools-directory-tree-tool (dir &optional timeout)
   "Return a string representing the directory tree under DIR.
-DEPTH is the current recursion depth, used internally."
+TIMEOUT is the optional command timeout in seconds."
   (or (ellama-tools--tool-check-file-access dir 'list)
       (if (not (file-exists-p dir))
           (format "Directory %s does not exist." dir)
         (if (not (file-directory-p dir))
             (format "%s is not a directory." dir)
-          (let* ((indent (make-string (* (or depth 0) 2) ? ))
-                 (entries
-                  (sort (cl-remove-if
-                         (lambda (f)
-                           (string-prefix-p "." f))
-                         (directory-files dir))
-                        #'string-lessp))
-                 (single-entry-p (= (length entries) 1))
-                 (tree ""))
-            (dolist (f entries)
-              (let* ((full   (expand-file-name f dir))
-                     (name   (file-name-nondirectory f))
-                     (type   (if (file-directory-p full) "|-" "`-"))
-                     (line   (concat indent
-                                     (unless single-entry-p type)
-                                     name "\n")))
-                (setq tree (concat tree line))
-                (when (file-directory-p full)
-                  (setq tree (concat tree
-                                     (ellama-tools-directory-tree-tool
-                                      full
-                                      (+ (or depth 0) 1)))))))
-            tree)))))
+          (let* ((timeout (ellama-tools--shell-command-timeout timeout))
+                 (result (ellama-tools--directory-tree
+                          dir
+                          0
+                          (+ (float-time) timeout)))
+                 (tree (car result)))
+            (if (cdr result)
+                (ellama-tools--directory-tree-timeout-output timeout tree)
+              tree))))))
 
 (ellama-tools-define-tool
  '(:function
@@ -2766,7 +2795,15 @@ DEPTH is the current recursion depth, used internally."
      :type
      string
      :description
-     "Directory path to generate tree for."))
+     "Directory path to generate tree for.")
+    (:name
+     "timeout"
+     :type
+     number
+     :optional
+     t
+     :description
+     "Command timeout in seconds. Defaults to 5."))
    :description
    "Return a string representing the directory tree under DIR."))
 

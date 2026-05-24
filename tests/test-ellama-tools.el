@@ -2621,6 +2621,52 @@ Return list with result and prompt."
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
+(ert-deftest test-ellama-tools-directory-tree-tool-uses-default-timeout ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((dir (make-temp-file "ellama-tree-timeout-default-" t))
+        (ellama-tools-shell-command-default-timeout 5)
+        captured-timeout)
+    (unwind-protect
+        (cl-letf (((symbol-function 'float-time)
+                   (lambda () 100.0))
+                  ((symbol-function 'ellama-tools--directory-tree)
+                   (lambda (_dir _depth deadline)
+                     (setq captured-timeout (- deadline 100.0))
+                     '("ok\n" . nil))))
+          (should (equal (ellama-tools-directory-tree-tool dir) "ok\n"))
+          (should (= captured-timeout 5)))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest test-ellama-tools-directory-tree-tool-passes-timeout ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((dir (make-temp-file "ellama-tree-timeout-" t))
+        captured-timeout)
+    (unwind-protect
+        (cl-letf (((symbol-function 'float-time)
+                   (lambda () 100.0))
+                  ((symbol-function 'ellama-tools--directory-tree)
+                   (lambda (_dir _depth deadline)
+                     (setq captured-timeout (- deadline 100.0))
+                     '("ok\n" . nil))))
+          (should (equal (ellama-tools-directory-tree-tool dir 0.25) "ok\n"))
+          (should (= captured-timeout 0.25)))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest test-ellama-tools-directory-tree-tool-explains-timeout ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((dir (make-temp-file "ellama-tree-timeout-output-" t)))
+    (unwind-protect
+        (cl-letf (((symbol-function 'ellama-tools--directory-tree)
+                   (lambda (&rest _args)
+                     '("|-a\n" . t))))
+          (should
+           (equal (ellama-tools-directory-tree-tool dir 0.1)
+                  "directory_tree timed out after 0.1 seconds.\n|-a\n")))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
 (ert-deftest test-ellama-tools-grep-explains-missing-directory ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((dir (make-temp-name

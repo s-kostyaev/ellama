@@ -6,6 +6,9 @@
 - Add optional ~timeout~ support to ~grep~ with the same five-second default.
   Directory searches now use timeout-aware command execution and return a clear
   diagnostic when grep exceeds the configured limit.
+- Add optional ~timeout~ support to ~directory_tree~ with the same five-second
+  default. Recursive directory traversal now stops when the timeout expires and
+  returns a clear diagnostic with the partial tree collected so far.
 - Strengthen project git hook templates for local Elisp validation. Staged Elisp
   changes now run ~make checkdocs~ before commit, while pushed Elisp changes run
   ~make check-elisp~ and block the push if formatting changes files.
