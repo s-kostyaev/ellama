@@ -263,6 +263,16 @@ Return list with result and prompt."
     (ellama-test--wait-shell-command-result "printf 'ok\\n'")
     "ok")))
 
+(ert-deftest test-ellama-shell-command-tool-uses-cat-pager ()
+  (let ((process-environment (copy-sequence process-environment)))
+    (setenv "PAGER" "less")
+    (setenv "GIT_PAGER" "less")
+    (should
+     (string=
+      (ellama-test--wait-shell-command-result
+       "printf '%s|%s' \"$PAGER\" \"$GIT_PAGER\"")
+      "cat|cat"))))
+
 (ert-deftest test-ellama-enabled-shell-command-tool-async-contract ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((ellama-tools-dlp-enabled t)
@@ -310,6 +320,17 @@ Return list with result and prompt."
        (equal
         (ellama-tools--command-argv "sh" "-c" "printf ok")
         '("/tmp/fake-srt" "--debug" "sh" "-c" "printf ok"))))))
+
+(ert-deftest test-ellama-tools-call-command-uses-cat-pager ()
+  (let ((process-environment (copy-sequence process-environment)))
+    (setenv "PAGER" "less")
+    (setenv "GIT_PAGER" "less")
+    (should
+     (equal
+      (ellama-tools--call-command-to-string
+       shell-file-name shell-command-switch
+       "printf '%s|%s' \"$PAGER\" \"$GIT_PAGER\"")
+      "cat|cat"))))
 
 (ert-deftest test-ellama-shell-command-tool-errors-when-srt-missing ()
   (ellama-test--ensure-local-ellama-tools)
@@ -2276,6 +2297,25 @@ Return list with result and prompt."
         (delete-file file))
       (when (file-directory-p dir)
         (delete-directory dir)))))
+
+(ert-deftest test-ellama-tools-edit-hook-uses-cat-pager ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-hook-pager-"))
+        (process-environment (copy-sequence process-environment))
+        (ellama-tools-edit-before-shell-commands nil)
+        (ellama-tools-edit-after-shell-commands
+         '((:command "printf '%s|%s' \"$PAGER\" \"$GIT_PAGER\""
+                     :show-output t))))
+    (setenv "PAGER" "less")
+    (setenv "GIT_PAGER" "less")
+    (unwind-protect
+        (let ((msg (ellama-tools-write-file-tool file "x")))
+          (should (string-match-p "After edit hook completed" msg))
+          (should (string-match-p "cat|cat" msg)))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
 
 (ert-deftest test-ellama-tools-read-before-write-refuses-first-overwrite ()
   (ellama-test--ensure-local-ellama-tools)
