@@ -407,6 +407,8 @@ in one short sentence."
 
 (defun ellama-eval--profile-tool-names (profile)
   "Return tool names for PROFILE."
+  (unless (memq profile ellama-eval-hypothesis-profiles)
+    (error "Unknown evaluation profile %S" profile))
   (append ellama-eval--base-tool-names '("edit_file")))
 
 
