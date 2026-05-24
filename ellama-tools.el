@@ -3748,15 +3748,15 @@ TEMPLATE-BASE, ROLE and ARGUMENTS are used for template rendering and hints."
     :name "agent_submit_plan"
     :description "Submit the checklist plan before acting."
     :args '((:name "plan" :type string
-             :description "Org-style checklist or numbered plan.")))
+                   :description "Org-style checklist or numbered plan.")))
    (llm-make-tool
     :function #'ellama-tools-agent-update-plan-tool
     :name "agent_update_plan"
     :description "Update checklist status after making progress."
     :args '((:name "plan" :type string
-             :description "Full updated Org-style checklist.")
+                   :description "Full updated Org-style checklist.")
             (:name "status" :type string
-             :description "Short status summary.")))
+                   :description "Short status summary.")))
    (llm-make-tool
     :function #'ellama-tools-agent-report-result-tool
     :name "agent_report_result"
