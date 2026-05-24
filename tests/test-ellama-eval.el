@@ -28,28 +28,6 @@
 (require 'ellama-eval)
 (require 'ert)
 
-(ert-deftest test-ellama-eval-number-text-lines ()
-  (should
-   (equal
-    (ellama-eval--number-text-lines "alpha\nbeta\n" 7)
-    "7 | alpha\n8 | beta")))
-
-(ert-deftest test-ellama-eval-edit-lines-tool-replaces-range ()
-  (let ((file (make-temp-file "ellama-eval-edit-lines-")))
-    (unwind-protect
-        (progn
-          (with-temp-file file
-            (insert "alpha\nbeta\ngamma\n"))
-          (should
-           (string-match-p
-            "Replaced lines 2-2"
-            (ellama-eval-edit-lines-tool file 2 2 "delta")))
-          (with-temp-buffer
-            (insert-file-contents file)
-            (should (equal (buffer-string) "alpha\ndelta\ngamma\n"))))
-      (when (file-exists-p file)
-        (delete-file file)))))
-
 (ert-deftest test-ellama-eval-balanced-edit-file-tool-rejects-broken-elisp ()
   (let ((file (make-temp-file "ellama-eval-balanced-edit-" nil ".el")))
     (unwind-protect
@@ -166,35 +144,16 @@
         (delete-file file)))))
 
 (ert-deftest test-ellama-eval-profile-tools-switch-read-and-edit-shapes ()
+  "Verify baseline uses read_file and balanced-edit uses edit_file."
   (let ((ellama-tools-allow-all t)
         (ellama-tools-allowed nil)
         (ellama-tools-confirm-allowed (make-hash-table))
         (baseline (ellama-eval--make-profile-tools 'baseline))
-        (numbered (ellama-eval--make-profile-tools 'numbered-line-edit))
         (balanced (ellama-eval--make-profile-tools 'balanced-edit)))
-    (should (member "edit_file" (mapcar #'llm-tool-name baseline)))
-    (should-not (member "edit_lines" (mapcar #'llm-tool-name baseline)))
-    (should (member "edit_lines" (mapcar #'llm-tool-name numbered)))
-    (should-not (member "edit_file" (mapcar #'llm-tool-name numbered)))
+    (should-not (member "edit_file" (mapcar #'llm-tool-name baseline)))
     (should (member "edit_file" (mapcar #'llm-tool-name balanced)))
-    (should-not (member "edit_lines" (mapcar #'llm-tool-name balanced)))
-    (let* ((tool
-            (seq-find
-             (lambda (item)
-               (string= (llm-tool-name item) "read_file"))
-             numbered))
-           (function (llm-tool-function tool))
-           (file (make-temp-file "ellama-eval-numbered-read-")))
-      (unwind-protect
-          (progn
-            (with-temp-file file
-              (insert "one\ntwo\n"))
-            (should
-             (equal
-              (json-parse-string (funcall function file "text"))
-              "1 | one\n2 | two")))
-        (when (file-exists-p file)
-          (delete-file file))))))
+    (should (member "read_file" (mapcar #'llm-tool-name baseline)))
+    (should (member "read_file" (mapcar #'llm-tool-name balanced)))))
 
 (ert-deftest test-ellama-eval-run-case-scores-files-and-answer ()
   (let ((case
