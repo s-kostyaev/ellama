@@ -1,3 +1,14 @@
+* Version 1.24.1
+- Added literal string matching support to ~ellama-tools-grep-tool~ and
+  ~ellama-tools-grep-in-file-tool~ using ~-F~ (fixed-strings) and ~-e~ flags,
+  treating the search string literally rather than as a regular expression.
+  Added helper function ~ellama-tools--grep-search-args~ and corresponding unit
+  tests.
+- Fixed ~srt~ command quoting for shell execution. Added
+  ~ellama-tools--shell-quote-command~ helper and updated
+  ~ellama-tools--command-argv~ to properly construct shell command strings when
+  using ~srt~ sandbox. Commands are now wrapped with ~srt -c~ using
+  ~shell-quote-argument~ to safely handle special characters in arguments.
 * Version 1.24.0
 - Added plan-and-act agent loop for multi-agent code generation workflows.
 - Added plan-and-act agent to transient menu for easy access.
