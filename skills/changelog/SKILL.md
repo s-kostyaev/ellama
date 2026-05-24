@@ -5,17 +5,17 @@ description: Use this skill to generate changelog.
 
 # Generating changelog
 
-Call shell_command tool with "git --no-pager log --reverse main..HEAD" argument. Based on
-the output write changelog in org-mode list format. Use org quoting
+Call shell_command tool with "git --no-pager log --reverse main..HEAD" argument.
+Based on the output write changelog in org-mode list format. Use org quoting
 (~quoted-text~) instead of markdown quoting (`quoted-text`). Every changelog
 element should be ended with full stop. Changelog shouldn't be too short or too
 long, use detailed description for major changes and concise description for
 minor changes.
 
-Call shell_command tools with "git --no-pager tag -l --points-at=main" argument to see
-previously released version. Based on this information and minority/majority of
-the changes you can fill version variable. If you are not sure, ask the user
-using ask_user tool with your variants of the version.
+Call shell_command tools with "git --no-pager tag -l --points-at=main" argument
+to see previously released version. Based on this information and
+minority/majority of the changes you can fill version variable. If you are not
+sure, ask the user using ask_user tool with your variants of the version.
 
 Write it to ./NEWS.org using prepend_file tool
 with header:
@@ -35,3 +35,7 @@ Example:
 ```
 
 After all of that call shell_command tool with "make refill-news" argument.
+
+After generating the changelog, update the version in ellama.el, commit the
+generated release changes with the exact commit message "Bump version", and
+push.
