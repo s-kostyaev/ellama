@@ -2173,6 +2173,34 @@ REQUEST-CONTEXT is a request context."
       (with-current-buffer buffer
         (ellama-request-mode -1)))))
 
+(defun ellama--chat-last-role ()
+  "Return last chat role marker in current buffer."
+  (save-excursion
+    (save-match-data
+      (goto-char (point-max))
+      (when (re-search-backward
+             (format "^%s \\(%s\\|%s\\):[[:space:]]*$"
+                     (regexp-quote (ellama-get-nick-prefix-for-mode))
+                     (regexp-quote ellama-user-nick)
+                     (regexp-quote ellama-assistant-nick))
+             nil t)
+        (match-string 1)))))
+
+(defun ellama--chat-append-user-header-after-cancel (buffer)
+  "Append a user header to BUFFER after interactive request cancellation."
+  (when (and (buffer-live-p buffer)
+             (ellama-chat-buffer-p buffer))
+    (with-current-buffer buffer
+      (unless (equal (ellama--chat-last-role) ellama-user-nick)
+        (save-excursion
+          (goto-char (point-max))
+          (insert "\n\n"
+                  (ellama-get-nick-prefix-for-mode)
+                  " " ellama-user-nick ":\n")
+          (when (and ellama-session-auto-save
+                     buffer-file-name)
+            (save-buffer)))))))
+
 (defun ellama--kill-buffer-without-request-cancel (buffer)
   "Kill BUFFER without request cancellation hook."
   (when (buffer-live-p buffer)
@@ -2180,24 +2208,30 @@ REQUEST-CONTEXT is a request context."
       (setq ellama--ignore-kill-buffer-request-cancel t)
       (kill-buffer buffer))))
 
-(defun ellama--cancel-current-request ()
-  "Cancel current running request."
+(defun ellama--cancel-current-request (&optional append-user-header)
+  "Cancel current running request.
+When APPEND-USER-HEADER is non-nil, append a user header in chat buffers."
   (declare-function spinner-stop "ext:spinner")
   (let* ((request-context ellama--request-context)
          (request (or ellama--current-request
                       (when request-context
-                        (ellama--request-context-request request-context)))))
+                        (ellama--request-context-request request-context))))
+         (buffers (and request-context
+                       (ellama--request-context-buffers request-context))))
     (when request
       (llm-cancel-request request)
       (when ellama-spinner-enabled
         (require 'spinner)
         (spinner-stop))
-      (ellama--deactivate-current-request request-context))))
+      (ellama--deactivate-current-request request-context)
+      (when append-user-header
+        (dolist (buffer (or buffers (list (current-buffer))))
+          (ellama--chat-append-user-header-after-cancel buffer))))))
 
 (defun ellama--cancel-current-request-and-quit ()
   "Cancel the current request and quit."
   (interactive)
-  (ellama--cancel-current-request)
+  (ellama--cancel-current-request t)
   (keyboard-quit))
 
 (defun ellama--session-deactivate ()
@@ -3980,9 +4014,13 @@ after compaction."
            (ellama-get-nick-prefix-for-mode)
            " " ellama-assistant-nick ":\n"))
         (let* ((agent
-                (ellama-tools-start-plan-and-act
-                 session buffer prompt system (plist-get args :tools)
-                 max-steps))
+                (if (and (not create-session)
+                         (ellama-tools-agent-active-p session))
+                    (ellama-tools-resume-plan-and-act
+                     session buffer system (plist-get args :tools))
+                  (ellama-tools-start-plan-and-act
+                   session buffer prompt system (plist-get args :tools)
+                   max-steps)))
                (agent-system (plist-get agent :system))
                (agent-tools (plist-get agent :tools))
                (donecb (plist-get agent :on-done)))
@@ -4029,11 +4067,20 @@ after compaction."
     (when (or ellama-context-global ellama-context-ephemeral)
       (insert (ellama-context-format session)))
     (insert (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
-    (ellama-stream text
-                   :session session
-                   :on-done #'ellama-chat-done
-                   :filter (when (derived-mode-p 'org-mode)
-                             #'ellama--translate-markdown-to-org-filter))))
+    (let* ((agent (when (ellama-tools-agent-active-p session)
+                    (ellama-tools-resume-plan-and-act
+                     session (current-buffer))))
+           (system (plist-get agent :system))
+           (tools (plist-get agent :tools))
+           (donecb (or (plist-get agent :on-done)
+                       #'ellama-chat-done)))
+      (ellama-stream text
+                     :session session
+                     :system system
+                     :tools tools
+                     :on-done donecb
+                     :filter (when (derived-mode-p 'org-mode)
+                               #'ellama--translate-markdown-to-org-filter)))))
 
 ;;;###autoload
 (defun ellama-ask-about (&optional create-session &rest args)

@@ -123,6 +123,29 @@ STYLE controls partial message shape.  Default value is `word-leading'."
       (should (null ellama--current-request))
       (should-not ellama-request-mode))))
 
+(ert-deftest test-ellama-request-mode-c-g-appends-user-header-in-chat ()
+  (let ((cancelled-request nil)
+        (ellama-spinner-enabled nil)
+        (ellama-session-auto-save nil)
+        (ellama-user-nick "User")
+        (ellama-assistant-nick "Ellama"))
+    (with-temp-buffer
+      (org-mode)
+      (setq-local ellama--current-session
+                  (make-ellama-session :id "cancel-chat"))
+      (insert "** User:\nStart\n\n** Ellama:\nPartial output")
+      (ellama--set-current-request 'request (list (current-buffer)))
+      (cl-letf (((symbol-function 'llm-cancel-request)
+                 (lambda (request)
+                   (setq cancelled-request request))))
+        (condition-case nil
+            (call-interactively #'ellama--cancel-current-request-and-quit)
+          (quit nil)))
+      (should (eq cancelled-request 'request))
+      (should (null ellama--current-request))
+      (should-not ellama-request-mode)
+      (should (string-suffix-p "\n\n** User:\n" (buffer-string))))))
+
 (ert-deftest test-ellama-request-mode-c-g-cancels-from-reasoning-buffer ()
   (let ((cancelled-request nil)
         (ellama-spinner-enabled nil)
@@ -1072,6 +1095,64 @@ detailed comparison to help you decide:
       (when (buffer-live-p session-buffer)
         (kill-buffer session-buffer)))))
 
+(ert-deftest test-ellama-plan-and-act-resumes-active-loop ()
+  (load-file
+   (expand-file-name "ellama-tools.el" ellama-test--root))
+  (let* ((provider (make-llm-fake))
+         (base-tool (llm-make-tool :name "read_file" :function #'ignore))
+         (ellama-provider provider)
+         (ellama-providers nil)
+         (ellama-tools-enabled (list base-tool))
+         (ellama-session-auto-save nil)
+         (ellama-chat-display-action-function nil)
+         (ellama--active-sessions (make-hash-table :test #'equal))
+         (ellama--active-session-states (make-hash-table :test #'equal))
+         (state (list :phase 'acting
+                      :plan (list (list :id 1
+                                        :title "Existing step"
+                                        :status 'pending))
+                      :completed nil
+                      :system "Existing system"))
+         (session (make-ellama-session
+                   :id "agent-resume"
+                   :provider provider
+                   :prompt nil
+                   :extra (list :uid "agent-resume-uid"
+                                :tools (list base-tool)
+                                :agent-loop state)))
+         (session-buffer (generate-new-buffer " *ellama-agent-resume-test*"))
+         (stream-call nil))
+    (unwind-protect
+        (progn
+          (with-current-buffer session-buffer
+            (org-mode)
+            (insert "** User:\nOriginal\n\n** Ellama:\nPartial\n\n** User:\n"))
+          (ellama--register-session session session-buffer t)
+          (cl-letf (((symbol-function 'display-buffer)
+                     (lambda (&rest _args) nil))
+                    ((symbol-function 'ellama-stream)
+                     (lambda (prompt &rest args)
+                       (setq stream-call (list prompt args)))))
+            (ellama-plan-and-act "Correct the approach"))
+          (should (equal (car stream-call) "Correct the approach"))
+          (should (eq (plist-get (cadr stream-call) :session)
+                      session))
+          (should (equal (plist-get (cadr stream-call) :system)
+                         "Existing system"))
+          (should (functionp (plist-get (cadr stream-call) :on-done)))
+          (should (equal (plist-get
+                          (car (plist-get
+                                (ellama-tools--agent-state session)
+                                :plan))
+                          :title)
+                         "Existing step"))
+          (with-current-buffer session-buffer
+            (let ((text (buffer-string)))
+              (should (string-match-p "Correct the approach" text))
+              (should-not (string-match-p "Planning started" text)))))
+      (when (buffer-live-p session-buffer)
+        (kill-buffer session-buffer)))))
+
 (defun ellama-test--with-temp-image-file (body)
   "Call BODY with a tiny temporary PNG file."
   (let ((file-name (make-temp-file "ellama-image-" nil ".png")))
@@ -1234,6 +1315,49 @@ detailed comparison to help you decide:
            (ellama-chat-send-last-message)
            :type 'user-error))
         (should (equal before (buffer-string)))))))
+
+(ert-deftest test-ellama-chat-send-last-message-resumes-plan-and-act-loop ()
+  (load-file
+   (expand-file-name "ellama-tools.el" ellama-test--root))
+  (let* ((base-tool (llm-make-tool :name "read_file" :function #'ignore))
+         (session (make-ellama-session
+                   :id "agent-chat"
+                   :provider (make-llm-fake)
+                   :extra (list :uid "agent-chat-uid"
+                                :tools (list base-tool)
+                                :agent-loop
+                                (list :phase 'acting
+                                      :plan (list (list :id 1
+                                                        :title "Fix issue"
+                                                        :status 'pending))
+                                      :completed nil
+                                      :system "Agent system"))))
+         (ellama-context-global nil)
+         (ellama-context-ephemeral nil)
+         (stream-call nil))
+    (with-temp-buffer
+      (org-mode)
+      (setq-local ellama--current-session session)
+      (insert "** User:\nGive the agent a correction")
+      (cl-letf (((symbol-function 'ellama-stream)
+                 (lambda (prompt &rest args)
+                   (setq stream-call (list prompt args)))))
+        (ellama-chat-send-last-message))
+      (should (equal (car stream-call) "Give the agent a correction"))
+      (should (eq (plist-get (cadr stream-call) :session) session))
+      (should (equal (plist-get (cadr stream-call) :system)
+                     "Agent system"))
+      (should (functionp (plist-get (cadr stream-call) :on-done)))
+      (should (not (eq (plist-get (cadr stream-call) :on-done)
+                       #'ellama-chat-done)))
+      (should (equal
+               (mapcar #'llm-tool-name
+                       (plist-get (cadr stream-call) :tools))
+               '("agent_submit_plan"
+                 "agent_update_plan"
+                 "agent_report_result"
+                 "read_file")))
+      (should (string-match-p "\\*\\* Ellama:" (buffer-string))))))
 
 (ert-deftest test-ellama-stream-displays-session-buffer-on-generation ()
   (let* ((provider (make-llm-fake

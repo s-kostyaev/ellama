@@ -3787,6 +3787,12 @@ TEMPLATE-BASE, ROLE and ARGUMENTS are used for template rendering and hints."
      (ellama-tools--session-extra-with
       session :tools (and had-tools tools)))))
 
+(defun ellama-tools-agent-active-p (session)
+  "Return non-nil when SESSION has a running plan-and-act loop."
+  (when-let* ((state (ellama-tools--agent-state session)))
+    (and (not (plist-get state :completed))
+         (not (memq (plist-get state :phase) '(done blocked))))))
+
 (defun ellama-tools--agent-active-session ()
   "Return active session for plan-and-act controller tools."
   (or (ellama-tools--active-session)
@@ -4005,6 +4011,31 @@ automatic continuations."
       :tools combined-tools))
     (ellama-tools--agent-insert-note
      buffer "Status" "Planning started.")
+    (list :system agent-system
+          :tools combined-tools
+          :on-done (ellama-tools--make-agent-loop-handler
+                    session buffer agent-system))))
+
+(defun ellama-tools-resume-plan-and-act
+    (session buffer &optional system tools)
+  "Return stream args needed to resume SESSION plan-and-act loop in BUFFER.
+SYSTEM and TOOLS can override the stored runtime values."
+  (unless (ellama-tools-agent-active-p session)
+    (error "No active plan-and-act loop"))
+  (let* ((state (ellama-tools--agent-state session))
+         (agent-system (or system
+                           (plist-get state :system)
+                           (ellama-tools--agent-system-message nil)))
+         (combined-tools
+          (ellama-tools--agent-combine-tools
+           (or tools
+               (plist-get (ellama-session-extra session) :tools)
+               ellama-tools-enabled))))
+    (setq state (ellama-tools--agent-state-put state :system agent-system))
+    (ellama-tools--agent-put-state session state)
+    (ellama-tools--set-session-extra
+     session
+     (ellama-tools--session-extra-with session :tools combined-tools))
     (list :system agent-system
           :tools combined-tools
           :on-done (ellama-tools--make-agent-loop-handler
