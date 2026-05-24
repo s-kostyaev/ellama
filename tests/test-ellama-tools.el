@@ -345,6 +345,12 @@ Return list with result and prompt."
        "printf '%s|%s' \"$PAGER\" \"$GIT_PAGER\"")
       "cat|cat"))))
 
+(ert-deftest test-ellama-tools-call-command-with-timeout-times-out ()
+  (should
+   (eq (car (ellama-tools--call-command-with-timeout
+             0.1 shell-file-name shell-command-switch "sleep 1"))
+       'timeout)))
+
 (ert-deftest test-ellama-shell-command-tool-errors-when-srt-missing ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((ellama-tools-use-srt t)
@@ -700,29 +706,50 @@ Return list with result and prompt."
 
 (ert-deftest test-ellama-tools-grep-tool-uses-shared-command-helper ()
   (ellama-test--ensure-local-ellama-tools)
-  (let (captured)
-    (cl-letf (((symbol-function 'ellama-tools--call-command)
+  (let ((ellama-tools-shell-command-default-timeout 5)
+        captured)
+    (cl-letf (((symbol-function 'ellama-tools--call-command-with-timeout)
                (lambda (&rest args)
                  (setq captured args)
                  '(0 . "a:1:match\n"))))
       (should (equal (ellama-tools-grep-tool default-directory "match")
                      "\"a:1:match\"")))
     (should (equal captured
-                   '("find" "." "-type" "f" "-exec"
+                   '(5 "find" "." "-type" "f" "-exec"
                      "grep" "--color=never" "-i" "-nH" "-e"
                      "match" "{}" "+")))))
 
-(ert-deftest test-ellama-tools-grep-tool-can-match-case-sensitively ()
+(ert-deftest test-ellama-tools-grep-tool-passes-timeout ()
   (ellama-test--ensure-local-ellama-tools)
   (let (captured)
-    (cl-letf (((symbol-function 'ellama-tools--call-command)
+    (cl-letf (((symbol-function 'ellama-tools--call-command-with-timeout)
+               (lambda (&rest args)
+                 (setq captured args)
+                 '(0 . "a:1:match\n"))))
+      (should (equal (ellama-tools-grep-tool default-directory "match" nil 0.25)
+                     "\"a:1:match\"")))
+    (should (equal (car captured) 0.25))))
+
+(ert-deftest test-ellama-tools-grep-tool-explains-timeout ()
+  (ellama-test--ensure-local-ellama-tools)
+  (cl-letf (((symbol-function 'ellama-tools--call-command-with-timeout)
+             (lambda (&rest _args)
+               '(timeout . ""))))
+    (should (equal (ellama-tools-grep-tool default-directory "match" nil 0.1)
+                   "\"grep timed out after 0.1 seconds.\""))))
+
+(ert-deftest test-ellama-tools-grep-tool-can-match-case-sensitively ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-shell-command-default-timeout 5)
+        captured)
+    (cl-letf (((symbol-function 'ellama-tools--call-command-with-timeout)
                (lambda (&rest args)
                  (setq captured args)
                  '(0 . "a:1:Match\n"))))
       (should (equal (ellama-tools-grep-tool default-directory "Match" t)
                      "\"a:1:Match\"")))
     (should (equal captured
-                   '("find" "." "-type" "f" "-exec"
+                   '(5 "find" "." "-type" "f" "-exec"
                      "grep" "--color=never" "-nH" "-e"
                      "Match" "{}" "+")))))
 

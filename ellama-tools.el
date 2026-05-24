@@ -1891,6 +1891,32 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
       (let ((status (apply #'call-process (car argv) nil t nil (cdr argv))))
         (cons status (buffer-string))))))
 
+(defun ellama-tools--call-command-with-timeout (timeout program &rest args)
+  "Run PROGRAM with ARGS and return cons of exit status and stdout.
+Terminate the process and return `timeout' as status after TIMEOUT seconds."
+  (let ((argv (apply #'ellama-tools--command-argv program args))
+        (process-environment
+         (ellama-tools--process-environment-with-cat-pager)))
+    (with-temp-buffer
+      (let* ((process (apply #'start-process
+                             "*ellama-command*" (current-buffer)
+                             (car argv) (cdr argv)))
+             (deadline (+ (float-time) timeout))
+             timed-out)
+        (set-process-sentinel process (lambda (_process _event) nil))
+        (while (and (process-live-p process)
+                    (< (float-time) deadline))
+          (accept-process-output
+           process
+           (max 0.0 (min 0.05 (- deadline (float-time))))))
+        (when (process-live-p process)
+          (setq timed-out t)
+          (delete-process process))
+        (cons (if timed-out
+                  'timeout
+                (process-exit-status process))
+              (buffer-string))))))
+
 (defun ellama-tools--command-failure-output (program status output)
   "Return diagnostic text for PROGRAM failure with STATUS and OUTPUT."
   (let ((trimmed (string-trim-right output "\n")))
@@ -1899,18 +1925,28 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
       (format "%s failed with exit status %s:\n%s"
               program status trimmed))))
 
+(defun ellama-tools--command-timeout-output (program timeout output)
+  "Return diagnostic text for PROGRAM timeout after TIMEOUT with OUTPUT."
+  (let ((trimmed (string-trim-right output "\n")))
+    (if (string-empty-p trimmed)
+        (format "%s timed out after %s seconds." program timeout)
+      (format "%s timed out after %s seconds:\n%s"
+              program timeout trimmed))))
+
 (defun ellama-tools--shell-command-timeout (timeout)
   "Return shell command TIMEOUT or the configured default."
   (if (and (numberp timeout) (> timeout 0))
       timeout
     ellama-tools-shell-command-default-timeout))
 
-(defun ellama-tools--grep-output (result no-matches-message)
+(defun ellama-tools--grep-output (result no-matches-message &optional timeout)
   "Return grep RESULT output or NO-MATCHES-MESSAGE."
   (let ((status (car result))
         (output (string-trim-right (cdr result) "\n")))
     (cond
      ((and (integerp status) (zerop status)) output)
+     ((eq status 'timeout)
+      (ellama-tools--command-timeout-output "grep" timeout output))
      ((and (integerp status)
            (= status 1)
            (string-empty-p output))
@@ -2964,10 +3000,12 @@ TIMEOUT is the optional command timeout in seconds."
   (unless case-sensitive
     '("-i")))
 
-(defun ellama-tools-grep-tool (dir search-string &optional case-sensitive)
+(defun ellama-tools-grep-tool (dir search-string &optional case-sensitive timeout)
   "Grep SEARCH-STRING in DIR files.
-Match case-insensitively unless CASE-SENSITIVE is non-nil."
-  (let ((search-dir (expand-file-name dir)))
+Match case-insensitively unless CASE-SENSITIVE is non-nil.
+TIMEOUT is the optional command timeout in seconds."
+  (let ((search-dir (expand-file-name dir))
+        (timeout (ellama-tools--shell-command-timeout timeout)))
     (json-encode
      (cond
       ((not (file-exists-p search-dir))
@@ -2978,14 +3016,16 @@ Match case-insensitively unless CASE-SENSITIVE is non-nil."
        (let ((default-directory (file-name-as-directory search-dir)))
          (ellama-tools--grep-output
           (apply
-           #'ellama-tools--call-command
+           #'ellama-tools--call-command-with-timeout
            (append
-            (list "find" "." "-type" "f" "-exec" "grep" "--color=never")
+            (list timeout
+                  "find" "." "-type" "f" "-exec" "grep" "--color=never")
             (ellama-tools--grep-case-args case-sensitive)
             (list "-nH" "-e" search-string "{}" "+")))
           (format "No matches for %S in %s."
                   search-string
-                  search-dir))))))))
+                  search-dir)
+          timeout)))))))
 
 (ellama-tools-define-tool
  '(:function
@@ -3012,7 +3052,15 @@ Match case-insensitively unless CASE-SENSITIVE is non-nil."
      :optional
      t
      :description
-     "When non-nil, match case sensitively. Defaults to false."))
+     "When non-nil, match case sensitively. Defaults to false.")
+    (:name
+     "timeout"
+     :type
+     number
+     :optional
+     t
+     :description
+     "Command timeout in seconds. Defaults to 5."))
    :description
    "Grep SEARCH-STRING in directory files. Case-insensitive by default."))
 
