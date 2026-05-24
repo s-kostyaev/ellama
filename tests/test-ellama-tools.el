@@ -139,7 +139,7 @@
          (delete-file settings-file)))))
 
 (defun ellama-test--wait-shell-command-result (cmd &optional timeout)
-  "Run shell tool CMD and wait for a result string."
+  "Run shell tool CMD with TIMEOUT and wait for a result string."
   (ellama-test--ensure-local-ellama-tools)
   (let ((result :pending)
         (deadline (+ (float-time)

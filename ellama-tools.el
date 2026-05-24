@@ -1940,7 +1940,8 @@ Terminate the process and return `timeout' as status after TIMEOUT seconds."
     ellama-tools-shell-command-default-timeout))
 
 (defun ellama-tools--grep-output (result no-matches-message &optional timeout)
-  "Return grep RESULT output or NO-MATCHES-MESSAGE."
+  "Return grep RESULT output or NO-MATCHES-MESSAGE.
+TIMEOUT is the timeout in seconds used when RESULT reports a timeout."
   (let ((status (car result))
         (output (string-trim-right (cdr result) "\n")))
     (cond
