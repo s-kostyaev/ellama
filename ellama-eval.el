@@ -363,16 +363,22 @@ in one short sentence."
       #'ellama-tools-grep-tool
       '((:name "dir" :type string :description "Directory to search in.")
         (:name "search_string" :type string
-               :description "String to search for."))
-      "Grep SEARCH-STRING in directory files."))
+               :description "String to search for.")
+        (:name "case_sensitive" :type boolean :optional t
+               :description
+               "When non-nil, match case sensitively. Defaults to false."))
+      "Grep SEARCH-STRING in directory files. Case-insensitive by default."))
     ("grep_in_file"
      (ellama-eval--tool-spec
       "grep_in_file"
       #'ellama-tools-grep-in-file-tool
       '((:name "search_string" :type string
                :description "String to search for.")
-        (:name "file" :type string :description "File to search in."))
-      "Grep SEARCH-STRING in FILE."))
+        (:name "file" :type string :description "File to search in.")
+        (:name "case_sensitive" :type boolean :optional t
+               :description
+               "When non-nil, match case sensitively. Defaults to false."))
+      "Grep SEARCH-STRING in FILE. Case-insensitive by default."))
     ("directory_tree"
      (ellama-eval--tool-spec
       "directory_tree"

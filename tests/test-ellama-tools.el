@@ -675,7 +675,22 @@ Return list with result and prompt."
                      "\"a:1:match\"")))
     (should (equal captured
                    '("find" "." "-type" "f" "-exec"
-                     "grep" "--color=never" "-nH" "-e" "match" "{}" "+")))))
+                     "grep" "--color=never" "-i" "-nH" "-e"
+                     "match" "{}" "+")))))
+
+(ert-deftest test-ellama-tools-grep-tool-can-match-case-sensitively ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let (captured)
+    (cl-letf (((symbol-function 'ellama-tools--call-command)
+               (lambda (&rest args)
+                 (setq captured args)
+                 '(0 . "a:1:Match\n"))))
+      (should (equal (ellama-tools-grep-tool default-directory "Match" t)
+                     "\"a:1:Match\"")))
+    (should (equal captured
+                   '("find" "." "-type" "f" "-exec"
+                     "grep" "--color=never" "-nH" "-e"
+                     "Match" "{}" "+")))))
 
 (ert-deftest test-ellama-tools-grep-tool-explains-no-matches ()
   (ellama-test--ensure-local-ellama-tools)
@@ -708,6 +723,19 @@ Return list with result and prompt."
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
+(ert-deftest test-ellama-tools-grep-tool-matches-case-insensitively ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-grep-ignore-case-" t))
+         (file (expand-file-name "sample.txt" dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "Needle\n"))
+          (should (equal (ellama-tools-grep-tool dir "needle")
+                         "\"./sample.txt:1:Needle\"")))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
 (ert-deftest test-ellama-tools-grep-in-file-tool-uses-shared-command-helper ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((file (make-temp-file "ellama-grep-in-file-"))
@@ -727,6 +755,28 @@ Return list with result and prompt."
       (when (file-exists-p file)
         (delete-file file)))
     (should (equal captured
+                   (list "grep" "--color=never" "-i" "-nh"
+                         "hello" truename)))))
+
+(ert-deftest test-ellama-tools-grep-in-file-tool-can-match-case-sensitively ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-grep-in-file-"))
+        truename
+        captured)
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "hello\n"))
+          (setq truename (file-truename file))
+          (cl-letf (((symbol-function 'ellama-tools--call-command)
+                     (lambda (&rest args)
+                       (setq captured args)
+                       '(0 . "1:hello\n"))))
+            (should (equal (ellama-tools-grep-in-file-tool "hello" file t)
+                           "\"1:hello\""))))
+      (when (file-exists-p file)
+        (delete-file file)))
+    (should (equal captured
                    (list "grep" "--color=never" "-nh"
                          "hello" truename)))))
 
@@ -741,6 +791,18 @@ Return list with result and prompt."
             (insert "haystack\n"))
           (should (equal (ellama-tools-grep-in-file-tool "needle" file)
                          (json-encode expected))))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-tools-grep-in-file-tool-matches-case-insensitively ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-grep-in-file-")))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "Needle\n"))
+          (should (equal (ellama-tools-grep-in-file-tool "needle" file)
+                         "\"1:Needle\"")))
       (when (file-exists-p file)
         (delete-file file)))))
 

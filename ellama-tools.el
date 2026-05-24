@@ -2756,8 +2756,14 @@ CALLBACK – function called once with the result string."
    :description
    "Execute shell command CMD."))
 
-(defun ellama-tools-grep-tool (dir search-string)
-  "Grep SEARCH-STRING in DIR files."
+(defun ellama-tools--grep-case-args (case-sensitive)
+  "Return grep arguments for CASE-SENSITIVE matching."
+  (unless case-sensitive
+    '("-i")))
+
+(defun ellama-tools-grep-tool (dir search-string &optional case-sensitive)
+  "Grep SEARCH-STRING in DIR files.
+Match case-insensitively unless CASE-SENSITIVE is non-nil."
   (let ((search-dir (expand-file-name dir)))
     (json-encode
      (cond
@@ -2768,9 +2774,12 @@ CALLBACK – function called once with the result string."
       (t
        (let ((default-directory (file-name-as-directory search-dir)))
          (ellama-tools--grep-output
-          (ellama-tools--call-command
-           "find" "." "-type" "f" "-exec"
-           "grep" "--color=never" "-nH" "-e" search-string "{}" "+")
+          (apply
+           #'ellama-tools--call-command
+           (append
+            (list "find" "." "-type" "f" "-exec" "grep" "--color=never")
+            (ellama-tools--grep-case-args case-sensitive)
+            (list "-nH" "-e" search-string "{}" "+")))
           (format "No matches for %S in %s."
                   search-string
                   search-dir))))))))
@@ -2792,12 +2801,22 @@ CALLBACK – function called once with the result string."
      :type
      string
      :description
-     "String to search for."))
+     "String to search for.")
+    (:name
+     "case_sensitive"
+     :type
+     boolean
+     :optional
+     t
+     :description
+     "When non-nil, match case sensitively. Defaults to false."))
    :description
-   "Grep SEARCH-STRING in directory files."))
+   "Grep SEARCH-STRING in directory files. Case-insensitive by default."))
 
-(defun ellama-tools-grep-in-file-tool (search-string file)
-  "Grep SEARCH-STRING in FILE."
+(defun ellama-tools-grep-in-file-tool (search-string file
+                                                     &optional case-sensitive)
+  "Grep SEARCH-STRING in FILE.
+Match case-insensitively unless CASE-SENSITIVE is non-nil."
   (or (ellama-tools--tool-check-file-access file 'read)
       (json-encode
        (cond
@@ -2808,8 +2827,12 @@ CALLBACK – function called once with the result string."
         (t
          (let ((truename (file-truename file)))
            (ellama-tools--grep-output
-            (ellama-tools--call-command
-             "grep" "--color=never" "-nh" search-string truename)
+            (apply
+             #'ellama-tools--call-command
+             (append
+              (list "grep" "--color=never")
+              (ellama-tools--grep-case-args case-sensitive)
+              (list "-nh" search-string truename)))
             (format "No matches for %S in %s."
                     search-string truename))))))))
 
@@ -2817,9 +2840,13 @@ CALLBACK – function called once with the result string."
  '(:function
    ellama-tools-grep-in-file-tool
    :name "grep_in_file"
-   :args ((:name "search_string" :type string :description "String to search for.")
-          (:name "file" :type string :description "File to search in."))
-   :description "Grep SEARCH-STRING in FILE."))
+   :args ((:name "search_string" :type string
+                 :description "String to search for.")
+          (:name "file" :type string :description "File to search in.")
+          (:name "case_sensitive" :type boolean :optional t
+                 :description
+                 "When non-nil, match case sensitively. Defaults to false."))
+   :description "Grep SEARCH-STRING in FILE. Case-insensitive by default."))
 
 (defun ellama-tools-now-tool ()
   "Return current date, time and timezone."
