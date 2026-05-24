@@ -113,10 +113,11 @@ manual:
 format-elisp:
 	emacs -batch --eval "(setq load-prefer-newer t)" --eval "(let ((files (append (file-expand-wildcards \"ellama*.el\") (file-expand-wildcards \"tests/*.el\")))) (package-initialize) (require 'transient) (dolist (file files) (with-current-buffer (find-file-noselect file) (emacs-lisp-mode) (indent-region (point-min) (point-max)) (untabify (point-min) (point-max)) (delete-trailing-whitespace) (save-buffer))))"
 
-refill-org := "(setq load-prefer-newer t) (with-current-buffer (find-file-noselect \"FILE\") (package-initialize) (require (quote org)) (require (quote org-element)) (setq fill-column 80) (save-excursion (org-with-wide-buffer (cl-loop for el in (reverse (org-element-map (org-element-parse-buffer) (quote (paragraph quote-block item)) (quote identity))) do (goto-char (org-element-property :contents-begin el)) (org-fill-paragraph)))) (save-buffer))"
+refill-org := "(progn (setq load-prefer-newer t) (with-current-buffer (find-file-noselect \"FILE\") (package-initialize) (require (quote org)) (require (quote org-element)) (setq fill-column 80) (save-excursion (org-with-wide-buffer (cl-loop for el in (reverse (org-element-map (org-element-parse-buffer) (quote (paragraph quote-block item)) (quote identity))) do (goto-char (org-element-property :contents-begin el)) (org-fill-paragraph)))) (save-buffer)))"
+refill-news-org := "(progn (setq load-prefer-newer t) (package-initialize) (require (quote org)) (require (quote org-element)) (with-current-buffer (find-file-noselect \"./NEWS.org\") (setq fill-column 80) (save-excursion (save-restriction (goto-char (point-min)) (org-narrow-to-subtree) (cl-loop for el in (reverse (org-element-map (org-element-parse-buffer) (quote (paragraph quote-block item)) (quote identity))) do (goto-char (or (org-element-property :contents-begin el) (org-element-property :begin el))) (org-fill-paragraph)))) (save-buffer)))"
 
 refill-news:
-	emacs -batch --eval $(subst FILE,./NEWS.org,$(refill-org))
+	emacs -batch --eval $(refill-news-org)
 
 refill-readme:
 	emacs -batch --eval $(subst FILE,./README.org,$(refill-org))
