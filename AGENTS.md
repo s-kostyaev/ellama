@@ -4,6 +4,9 @@
 
 Before committing, use the project-local `commit-message` skill.
 
+Never merge, rebase, cherry-pick, or otherwise integrate code into `main`.
+Never push directly to `main`; always use a feature branch and a pull request.
+
 For release work, use the project-local `changelog` skill.
 
 ## Code Style Guidelines
