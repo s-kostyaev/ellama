@@ -332,7 +332,37 @@ Return list with result and prompt."
       (should
        (equal
         (ellama-tools--command-argv "sh" "-c" "printf ok")
-        '("/tmp/fake-srt" "--debug" "sh" "-c" "printf ok"))))))
+        (list "/tmp/fake-srt"
+              "--debug"
+              "-c"
+              (ellama-tools--shell-quote-command
+               "sh" '("-c" "printf ok"))))))))
+
+(ert-deftest test-ellama-tools-command-argv-quotes-srt-command ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-use-srt t)
+        (ellama-tools-srt-program "srt")
+        (ellama-tools-srt-args nil)
+        argv)
+    (cl-letf (((symbol-function 'executable-find)
+               (lambda (_program) "/tmp/fake-srt")))
+      (setq argv
+            (ellama-tools--command-argv
+             "grep" "--color=never" "-F" "-nh" "-e"
+             "(defconst ellama--code-prefix" "/tmp/ellama.el"))
+      (should
+       (equal
+        argv
+        (list "/tmp/fake-srt"
+              "-c"
+              (ellama-tools--shell-quote-command
+               "grep"
+               '("--color=never" "-F" "-nh" "-e"
+                 "(defconst ellama--code-prefix" "/tmp/ellama.el")))))
+      (should
+       (string-match-p
+        (regexp-quote "\\(defconst\\ ellama--code-prefix")
+        (nth 2 argv))))))
 
 (ert-deftest test-ellama-tools-call-command-uses-cat-pager ()
   (let ((process-environment (copy-sequence process-environment)))
@@ -716,7 +746,7 @@ Return list with result and prompt."
                      "\"a:1:match\"")))
     (should (equal captured
                    '(5 "find" "." "-type" "f" "-exec"
-                       "grep" "--color=never" "-i" "-nH" "-e"
+                       "grep" "--color=never" "-i" "-F" "-nH" "-e"
                        "match" "{}" "+")))))
 
 (ert-deftest test-ellama-tools-grep-tool-passes-timeout ()
@@ -750,7 +780,7 @@ Return list with result and prompt."
                      "\"a:1:Match\"")))
     (should (equal captured
                    '(5 "find" "." "-type" "f" "-exec"
-                       "grep" "--color=never" "-nH" "-e"
+                       "grep" "--color=never" "-F" "-nH" "-e"
                        "Match" "{}" "+")))))
 
 (ert-deftest test-ellama-tools-grep-tool-explains-no-matches ()
@@ -797,6 +827,19 @@ Return list with result and prompt."
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
+(ert-deftest test-ellama-tools-grep-tool-matches-literal-metacharacters ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-grep-literal-" t))
+         (file (expand-file-name "sample.txt" dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "value[0]\n"))
+          (should (equal (ellama-tools-grep-tool dir "value[0]")
+                         "\"./sample.txt:1:value[0]\"")))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
 (ert-deftest test-ellama-tools-grep-in-file-tool-uses-shared-command-helper ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((file (make-temp-file "ellama-grep-in-file-"))
@@ -816,7 +859,7 @@ Return list with result and prompt."
       (when (file-exists-p file)
         (delete-file file)))
     (should (equal captured
-                   (list "grep" "--color=never" "-i" "-nh"
+                   (list "grep" "--color=never" "-i" "-F" "-nh" "-e"
                          "hello" truename)))))
 
 (ert-deftest test-ellama-tools-grep-in-file-tool-can-match-case-sensitively ()
@@ -838,7 +881,7 @@ Return list with result and prompt."
       (when (file-exists-p file)
         (delete-file file)))
     (should (equal captured
-                   (list "grep" "--color=never" "-nh"
+                   (list "grep" "--color=never" "-F" "-nh" "-e"
                          "hello" truename)))))
 
 (ert-deftest test-ellama-tools-grep-in-file-tool-explains-no-matches ()
@@ -864,6 +907,18 @@ Return list with result and prompt."
             (insert "Needle\n"))
           (should (equal (ellama-tools-grep-in-file-tool "needle" file)
                          "\"1:Needle\"")))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-tools-grep-in-file-tool-matches-literal-metacharacters ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-grep-in-file-")))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "value[0]\n"))
+          (should (equal (ellama-tools-grep-in-file-tool "value[0]" file)
+                         "\"1:value[0]\"")))
       (when (file-exists-p file)
         (delete-file file)))))
 

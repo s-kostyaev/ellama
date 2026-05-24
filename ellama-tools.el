@@ -1884,6 +1884,10 @@ Return error message on denial when `ellama-tools-use-srt' is non-nil."
           (format "srt policy denied %s access to %s (target %s) using %s: %s"
                   op path target config-path reason))))))
 
+(defun ellama-tools--shell-quote-command (program args)
+  "Return shell command string for PROGRAM with ARGS."
+  (mapconcat #'shell-quote-argument (cons program args) " "))
+
 (defun ellama-tools--command-argv (program &rest args)
   "Return argv for PROGRAM and ARGS.
 Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
@@ -1896,7 +1900,10 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
           "Cannot find `srt' executable `%s'.  Install sandbox-runtime "
           "or disable `ellama-tools-use-srt'")
          ellama-tools-srt-program))
-      (append (list srt-path) ellama-tools-srt-args (cons program args)))))
+      (append
+       (list srt-path)
+       ellama-tools-srt-args
+       (list "-c" (ellama-tools--shell-quote-command program args))))))
 
 (defun ellama-tools--process-environment-with-cat-pager (&optional env)
   "Return ENV with shell command pagers forced to cat."
@@ -3068,6 +3075,12 @@ TIMEOUT is the optional command timeout in seconds."
   (unless case-sensitive
     '("-i")))
 
+(defun ellama-tools--grep-search-args (case-sensitive)
+  "Return grep arguments for literal CASE-SENSITIVE matching."
+  (append
+   (ellama-tools--grep-case-args case-sensitive)
+   '("-F")))
+
 (defun ellama-tools-grep-tool (dir search-string &optional case-sensitive timeout)
   "Grep SEARCH-STRING in DIR files.
 Match case-insensitively unless CASE-SENSITIVE is non-nil.
@@ -3088,7 +3101,7 @@ TIMEOUT is the optional command timeout in seconds."
            (append
             (list timeout
                   "find" "." "-type" "f" "-exec" "grep" "--color=never")
-            (ellama-tools--grep-case-args case-sensitive)
+            (ellama-tools--grep-search-args case-sensitive)
             (list "-nH" "-e" search-string "{}" "+")))
           (format "No matches for %S in %s."
                   search-string
@@ -3150,8 +3163,8 @@ Match case-insensitively unless CASE-SENSITIVE is non-nil."
              #'ellama-tools--call-command
              (append
               (list "grep" "--color=never")
-              (ellama-tools--grep-case-args case-sensitive)
-              (list "-nh" search-string truename)))
+              (ellama-tools--grep-search-args case-sensitive)
+              (list "-nh" "-e" search-string truename)))
             (format "No matches for %S in %s."
                     search-string truename))))))))
 
