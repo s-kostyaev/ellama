@@ -1863,13 +1863,25 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
          ellama-tools-srt-program))
       (append (list srt-path) ellama-tools-srt-args (cons program args)))))
 
+(defun ellama-tools--process-environment-with-cat-pager (&optional env)
+  "Return ENV with shell command pagers forced to cat."
+  (append
+   '("PAGER=cat" "GIT_PAGER=cat")
+   (seq-remove
+    (lambda (entry)
+      (or (string-prefix-p "PAGER=" entry)
+          (string-prefix-p "GIT_PAGER=" entry)))
+    (copy-sequence (or env process-environment)))))
+
 (defun ellama-tools--call-command-to-string (program &rest args)
   "Run PROGRAM with ARGS and return stdout as a string."
   (cdr (apply #'ellama-tools--call-command program args)))
 
 (defun ellama-tools--call-command (program &rest args)
   "Run PROGRAM with ARGS and return cons of exit status and stdout."
-  (let ((argv (apply #'ellama-tools--command-argv program args)))
+  (let ((argv (apply #'ellama-tools--command-argv program args))
+        (process-environment
+         (ellama-tools--process-environment-with-cat-pager)))
     (with-temp-buffer
       (let ((status (apply #'call-process (car argv) nil t nil (cdr argv))))
         (cons status (buffer-string))))))
@@ -2347,7 +2359,7 @@ describe the edit."
     (format "ELLAMA_FILE_NAME=%s" (expand-file-name file-name))
     (format "ELLAMA_PROJECT_ROOT=%s" root)
     (format "ELLAMA_HOOK_NAME=%s" (or (plist-get spec :name) "")))
-   process-environment))
+   (ellama-tools--process-environment-with-cat-pager)))
 
 (defun ellama-tools--run-edit-shell-hook
     (phase file-name operation tool-name spec)
@@ -2834,7 +2846,9 @@ Replace OLDCONTENT with NEWCONTENT."
   "Execute shell command CMD.
 CALLBACK – function called once with the result string."
   (let ((argv (ellama-tools--command-argv
-               shell-file-name shell-command-switch cmd)))
+               shell-file-name shell-command-switch cmd))
+        (process-environment
+         (ellama-tools--process-environment-with-cat-pager)))
     (condition-case err
         (let ((buf (get-buffer-create
                     (concat (make-temp-name " *ellama shell command") "*"))))
