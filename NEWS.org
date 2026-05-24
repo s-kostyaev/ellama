@@ -1,3 +1,25 @@
+* Version 1.22.1
+
+- Remove experimental hypothesis profiles (numbered-read, line-edit,
+  numbered-line-edit) and their associated tools including ~edit_lines~,
+  ~ellama-eval-edit-lines-tool~, ~ellama-eval-monitored-edit-lines-tool~,
+  ~ellama-eval-numbered-read-file-tool~, and
+  ~ellama-eval-numbered-lines-range-tool~. Delete corresponding helper
+  functions: ~ellama-eval--line-edit-candidate~,
+  ~ellama-eval--number-text-lines~, ~ellama-eval--replace-profile-read-specs~,
+  and profile classifiers ~ellama-eval--profile-numbered-read-p~,
+  ~ellama-eval--profile-line-edit-p~,
+  ~ellama-eval--profile-balanced-edit-p~. Net change: -208 lines.
+- Unify ~ellama-eval--profile-tool-names~ to unconditionally append ~edit_file~
+  to the base tool list for all profiles (baseline and balanced-edit), removing
+  profile-specific matching logic.
+- Restore profile validation in ~ellama-eval--profile-tool-names~ to properly
+  reject unknown or misspelled profile names with an error, fixing the unused
+  lexical argument warning reported by CI.
+- Add policy forbidding direct integration into ~main~ branch; require feature
+  branches and pull requests instead of direct pushes.
+- Force ~cat~ pager for shell commands and shared command helpers, adding tests
+  to verify pager environment across all shell execution paths.
 * Version 1.22.0
 
 - Added read-before-write safety for mutating tools. Session-local read tracking
