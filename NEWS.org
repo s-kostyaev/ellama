@@ -1,3 +1,10 @@
+* Version 1.24.0
+- Added plan-and-act agent loop for multi-agent code generation workflows.
+- Added plan-and-act agent to transient menu for easy access.
+- Added support for resuming plan-and-act after interruption.
+- Formatted plan-and-act tool arguments for better reliability.
+- Fixed plan-and-act test root path for correct test execution.
+- Documented plan-and-act agent loop functionality.
 * Version 1.23.0
 
 - Add optional ~timeout~ support to ~shell_command~ with a default of five
