@@ -1,3 +1,23 @@
+* Version 1.22.0
+
+- Added read-before-write safety for mutating tools. Session-local read tracking
+  now requires that existing files be read before being overwritten; the first
+  overwrite attempt of an existing file is refused with instructions to read the
+  file first, and the second attempt is allowed for deliberate overwrites. This
+  applies to ~write-file~, ~append-to-file~, ~prepend-to-file~, ~move-file~, and
+  ~edit-file~ tools. Also enhances output truncation messages with concrete next
+  tool call suggestions including specific line ranges via ~lines_range~.
+
+- Added git hooks to prevent commits and pushes to the ~main~ branch. Created
+  pre-commit and pre-push hooks that block operations when on ~main~, providing
+  clear error messages and instructions to use feature branches instead. Added
+  ~install-git-hooks~ Makefile target to automate hook installation.
+
+- Fixed read-before-write CI failures by using direct ~ellama-session~ struct
+  slot assignment for tool session extra updates, ensuring read-before-write
+  bookkeeping works on older Emacs versions. Updated the output line budget test
+  to assert the new concrete ~lines_range~ hint instead of the removed generic
+  wording.
 * Version 1.21.0
 - Added project-local before and after shell hook support around mutating edit
   tools, including per-hook output visibility, failure reporting, hook
