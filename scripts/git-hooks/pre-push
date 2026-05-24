@@ -13,7 +13,10 @@ EOF
 	exit 1
 fi
 
-while read local_ref _local_sha _remote_ref _remote_sha
+zero_sha=0000000000000000000000000000000000000000
+check_elisp=false
+
+while read local_ref local_sha _remote_ref remote_sha
 do
 	if [ "$local_ref" = "refs/heads/main" ]; then
 		cat >&2 <<'EOF'
@@ -23,6 +26,40 @@ Push a feature branch instead.
 EOF
 		exit 1
 	fi
+
+	if [ "$local_sha" = "$zero_sha" ]; then
+		continue
+	fi
+
+	if [ "$remote_sha" = "$zero_sha" ]; then
+		base=$(git merge-base "$local_sha" main 2>/dev/null || printf '')
+		if [ -n "$base" ]; then
+			range="$base..$local_sha"
+		else
+			range="$local_sha"
+		fi
+	else
+		range="$remote_sha..$local_sha"
+	fi
+
+	if git diff --name-only --diff-filter=ACMR "$range" -- '*.el' | grep -q .
+	then
+		check_elisp=true
+	fi
 done
+
+if [ "$check_elisp" = true ]; then
+	printf '%s\n' "Running make check-elisp for pushed Elisp changes..."
+	make check-elisp
+
+	if ! git diff --quiet -- '*.el'; then
+		cat >&2 <<'EOF'
+Push blocked: make check-elisp changed Elisp files.
+
+Review, stage, and commit those changes before pushing.
+EOF
+		exit 1
+	fi
+fi
 
 exit 0

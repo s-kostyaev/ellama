@@ -192,6 +192,11 @@ Use `image' to force image handling."
                  (const image))
   :group 'ellama)
 
+(defcustom ellama-tools-shell-command-default-timeout 5
+  "Default timeout in seconds for the `shell_command' tool."
+  :type 'number
+  :group 'ellama)
+
 (defcustom ellama-tools-read-before-write-enabled t
   "Require a session-local read before overwriting existing files.
 When non-nil, full-file mutating tools refuse their first attempt to change an
@@ -1886,6 +1891,32 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
       (let ((status (apply #'call-process (car argv) nil t nil (cdr argv))))
         (cons status (buffer-string))))))
 
+(defun ellama-tools--call-command-with-timeout (timeout program &rest args)
+  "Run PROGRAM with ARGS and return cons of exit status and stdout.
+Terminate the process and return `timeout' as status after TIMEOUT seconds."
+  (let ((argv (apply #'ellama-tools--command-argv program args))
+        (process-environment
+         (ellama-tools--process-environment-with-cat-pager)))
+    (with-temp-buffer
+      (let* ((process (apply #'start-process
+                             "*ellama-command*" (current-buffer)
+                             (car argv) (cdr argv)))
+             (deadline (+ (float-time) timeout))
+             timed-out)
+        (set-process-sentinel process (lambda (_process _event) nil))
+        (while (and (process-live-p process)
+                    (< (float-time) deadline))
+          (accept-process-output
+           process
+           (max 0.0 (min 0.05 (- deadline (float-time))))))
+        (when (process-live-p process)
+          (setq timed-out t)
+          (delete-process process))
+        (cons (if timed-out
+                  'timeout
+                (process-exit-status process))
+              (buffer-string))))))
+
 (defun ellama-tools--command-failure-output (program status output)
   "Return diagnostic text for PROGRAM failure with STATUS and OUTPUT."
   (let ((trimmed (string-trim-right output "\n")))
@@ -1894,12 +1925,29 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
       (format "%s failed with exit status %s:\n%s"
               program status trimmed))))
 
-(defun ellama-tools--grep-output (result no-matches-message)
-  "Return grep RESULT output or NO-MATCHES-MESSAGE."
+(defun ellama-tools--command-timeout-output (program timeout output)
+  "Return diagnostic text for PROGRAM timeout after TIMEOUT with OUTPUT."
+  (let ((trimmed (string-trim-right output "\n")))
+    (if (string-empty-p trimmed)
+        (format "%s timed out after %s seconds." program timeout)
+      (format "%s timed out after %s seconds:\n%s"
+              program timeout trimmed))))
+
+(defun ellama-tools--shell-command-timeout (timeout)
+  "Return shell command TIMEOUT or the configured default."
+  (if (and (numberp timeout) (> timeout 0))
+      timeout
+    ellama-tools-shell-command-default-timeout))
+
+(defun ellama-tools--grep-output (result no-matches-message &optional timeout)
+  "Return grep RESULT output or NO-MATCHES-MESSAGE.
+TIMEOUT is the timeout in seconds used when RESULT reports a timeout."
   (let ((status (car result))
         (output (string-trim-right (cdr result) "\n")))
     (cond
      ((and (integerp status) (zerop status)) output)
+     ((eq status 'timeout)
+      (ellama-tools--command-timeout-output "grep" timeout output))
      ((and (integerp status)
            (= status 1)
            (string-empty-p output))
@@ -2675,37 +2723,66 @@ buffer contents, matching their historical behavior."
    :description
    "Prepend CONTENT to the file FILE_NAME."))
 
-(defun ellama-tools-directory-tree-tool (dir &optional depth)
+(defun ellama-tools--directory-tree-timeout-output (timeout output)
+  "Return diagnostic text for `directory_tree' timeout after TIMEOUT.
+OUTPUT is the partial directory tree collected before the timeout."
+  (if (string-empty-p output)
+      (format "directory_tree timed out after %s seconds." timeout)
+    (format "directory_tree timed out after %s seconds.\n%s"
+            timeout output)))
+
+(defun ellama-tools--directory-tree (dir depth deadline)
+  "Return directory tree under DIR at DEPTH until DEADLINE."
+  (let* ((indent (make-string (* (or depth 0) 2) ? ))
+         (entries
+          (sort (cl-remove-if
+                 (lambda (f)
+                   (string-prefix-p "." f))
+                 (directory-files dir))
+                #'string-lessp))
+         (single-entry-p (= (length entries) 1))
+         (tree "")
+         timed-out)
+    (catch 'done
+      (dolist (f entries)
+        (when (>= (float-time) deadline)
+          (setq timed-out t)
+          (throw 'done nil))
+        (let* ((full   (expand-file-name f dir))
+               (name   (file-name-nondirectory f))
+               (type   (if (file-directory-p full) "|-" "`-"))
+               (line   (concat indent
+                               (unless single-entry-p type)
+                               name "\n")))
+          (setq tree (concat tree line))
+          (when (file-directory-p full)
+            (let ((child (ellama-tools--directory-tree
+                          full
+                          (+ (or depth 0) 1)
+                          deadline)))
+              (setq tree (concat tree (car child)))
+              (when (cdr child)
+                (setq timed-out t)
+                (throw 'done nil)))))))
+    (cons tree timed-out)))
+
+(defun ellama-tools-directory-tree-tool (dir &optional timeout)
   "Return a string representing the directory tree under DIR.
-DEPTH is the current recursion depth, used internally."
+TIMEOUT is the optional command timeout in seconds."
   (or (ellama-tools--tool-check-file-access dir 'list)
       (if (not (file-exists-p dir))
           (format "Directory %s does not exist." dir)
         (if (not (file-directory-p dir))
             (format "%s is not a directory." dir)
-          (let* ((indent (make-string (* (or depth 0) 2) ? ))
-                 (entries
-                  (sort (cl-remove-if
-                         (lambda (f)
-                           (string-prefix-p "." f))
-                         (directory-files dir))
-                        #'string-lessp))
-                 (single-entry-p (= (length entries) 1))
-                 (tree ""))
-            (dolist (f entries)
-              (let* ((full   (expand-file-name f dir))
-                     (name   (file-name-nondirectory f))
-                     (type   (if (file-directory-p full) "|-" "`-"))
-                     (line   (concat indent
-                                     (unless single-entry-p type)
-                                     name "\n")))
-                (setq tree (concat tree line))
-                (when (file-directory-p full)
-                  (setq tree (concat tree
-                                     (ellama-tools-directory-tree-tool
-                                      full
-                                      (+ (or depth 0) 1)))))))
-            tree)))))
+          (let* ((timeout (ellama-tools--shell-command-timeout timeout))
+                 (result (ellama-tools--directory-tree
+                          dir
+                          0
+                          (+ (float-time) timeout)))
+                 (tree (car result)))
+            (if (cdr result)
+                (ellama-tools--directory-tree-timeout-output timeout tree)
+              tree))))))
 
 (ellama-tools-define-tool
  '(:function
@@ -2718,7 +2795,15 @@ DEPTH is the current recursion depth, used internally."
      :type
      string
      :description
-     "Directory path to generate tree for."))
+     "Directory path to generate tree for.")
+    (:name
+     "timeout"
+     :type
+     number
+     :optional
+     t
+     :description
+     "Command timeout in seconds. Defaults to 5."))
    :description
    "Return a string representing the directory tree under DIR."))
 
@@ -2842,46 +2927,80 @@ Replace OLDCONTENT with NEWCONTENT."
    :description
    "Edit file FILE_NAME. Replace OLDCONTENT with NEWCONTENT."))
 
-(defun ellama-tools-shell-command-tool (callback cmd)
+(defun ellama-tools-shell-command-tool (callback cmd &optional timeout)
   "Execute shell command CMD.
-CALLBACK – function called once with the result string."
+CALLBACK – function called once with the result string.
+TIMEOUT is the optional command timeout in seconds."
   (let ((argv (ellama-tools--command-argv
                shell-file-name shell-command-switch cmd))
+        (timeout (ellama-tools--shell-command-timeout timeout))
         (process-environment
          (ellama-tools--process-environment-with-cat-pager)))
     (condition-case err
         (let ((buf (get-buffer-create
-                    (concat (make-temp-name " *ellama shell command") "*"))))
-          (set-process-sentinel
-           (apply #'start-process
-                  "*ellama-shell-command*" buf
-                  (car argv) (cdr argv))
-           (lambda (process _)
-             (when (not (process-live-p process))
-               (let* ((raw-output
-                       ;; trim trailing newline to reduce noisy tool output
-                       (string-trim-right
-                        (with-current-buffer buf (buffer-string))
-                        "\n"))
-                      (output
-                       (ellama-tools--sanitize-tool-text-output
-                        raw-output
-                        "Command output"))
-                      (exit-code (process-exit-status process))
-                      (result
-                       (cond
-                        ((and (string= output "") (zerop exit-code))
-                         "Command completed successfully with no output.")
-                        ((string= output "")
-                         (format "Command failed with exit code %d and no output."
-                                 exit-code))
-                        ((zerop exit-code)
-                         output)
-                        (t
-                         (format "Command failed with exit code %d.\n%s"
-                                 exit-code output)))))
-                 (funcall callback result)
-                 (kill-buffer buf))))))
+                    (concat (make-temp-name " *ellama shell command") "*")))
+              process timer done timed-out)
+          (cl-labels
+              ((command-output ()
+                 ;; trim trailing newline to reduce noisy tool output
+                 (ellama-tools--sanitize-tool-text-output
+                  (string-trim-right
+                   (with-current-buffer buf (buffer-string))
+                   "\n")
+                  "Command output"))
+               (timeout-result ()
+                 (let ((output (command-output)))
+                   (if (string-empty-p output)
+                       (format "Command timed out after %s seconds."
+                               timeout)
+                     (format "Command timed out after %s seconds.\n%s"
+                             timeout output))))
+               (finish (result)
+                 (unless done
+                   (setq done t)
+                   (when timer
+                     (cancel-timer timer))
+                   (unwind-protect
+                       (funcall callback result)
+                     (when (buffer-live-p buf)
+                       (kill-buffer buf)))))
+               (finish-process (proc)
+                 (if timed-out
+                     (finish (timeout-result))
+                   (let* ((output (command-output))
+                          (exit-code (process-exit-status proc))
+                          (result
+                           (cond
+                            ((and (string= output "") (zerop exit-code))
+                             "Command completed successfully with no output.")
+                            ((string= output "")
+                             (format
+                              "Command failed with exit code %d and no output."
+                              exit-code))
+                            ((zerop exit-code)
+                             output)
+                            (t
+                             (format "Command failed with exit code %d.\n%s"
+                                     exit-code output)))))
+                     (finish result)))))
+            (setq process
+                  (apply #'start-process
+                         "*ellama-shell-command*" buf
+                         (car argv) (cdr argv)))
+            (set-process-sentinel
+             process
+             (lambda (proc _)
+               (when (not (process-live-p proc))
+                 (finish-process proc))))
+            (setq timer
+                  (run-at-time
+                   timeout nil
+                   (lambda ()
+                     (when (and process (process-live-p process))
+                       (setq timed-out t)
+                       (let ((result (timeout-result)))
+                         (delete-process process)
+                         (finish result))))))))
       (error
        (funcall callback
                 (format "Failed to start shell command: %s"
@@ -2902,7 +3021,15 @@ CALLBACK – function called once with the result string."
      :type
      string
      :description
-     "Shell command to execute."))
+     "Shell command to execute.")
+    (:name
+     "timeout"
+     :type
+     number
+     :optional
+     t
+     :description
+     "Command timeout in seconds. Defaults to 5."))
    :description
    "Execute shell command CMD."))
 
@@ -2911,10 +3038,12 @@ CALLBACK – function called once with the result string."
   (unless case-sensitive
     '("-i")))
 
-(defun ellama-tools-grep-tool (dir search-string &optional case-sensitive)
+(defun ellama-tools-grep-tool (dir search-string &optional case-sensitive timeout)
   "Grep SEARCH-STRING in DIR files.
-Match case-insensitively unless CASE-SENSITIVE is non-nil."
-  (let ((search-dir (expand-file-name dir)))
+Match case-insensitively unless CASE-SENSITIVE is non-nil.
+TIMEOUT is the optional command timeout in seconds."
+  (let ((search-dir (expand-file-name dir))
+        (timeout (ellama-tools--shell-command-timeout timeout)))
     (json-encode
      (cond
       ((not (file-exists-p search-dir))
@@ -2925,14 +3054,16 @@ Match case-insensitively unless CASE-SENSITIVE is non-nil."
        (let ((default-directory (file-name-as-directory search-dir)))
          (ellama-tools--grep-output
           (apply
-           #'ellama-tools--call-command
+           #'ellama-tools--call-command-with-timeout
            (append
-            (list "find" "." "-type" "f" "-exec" "grep" "--color=never")
+            (list timeout
+                  "find" "." "-type" "f" "-exec" "grep" "--color=never")
             (ellama-tools--grep-case-args case-sensitive)
             (list "-nH" "-e" search-string "{}" "+")))
           (format "No matches for %S in %s."
                   search-string
-                  search-dir))))))))
+                  search-dir)
+          timeout)))))))
 
 (ellama-tools-define-tool
  '(:function
@@ -2959,7 +3090,15 @@ Match case-insensitively unless CASE-SENSITIVE is non-nil."
      :optional
      t
      :description
-     "When non-nil, match case sensitively. Defaults to false."))
+     "When non-nil, match case sensitively. Defaults to false.")
+    (:name
+     "timeout"
+     :type
+     number
+     :optional
+     t
+     :description
+     "Command timeout in seconds. Defaults to 5."))
    :description
    "Grep SEARCH-STRING in directory files. Case-insensitive by default."))
 

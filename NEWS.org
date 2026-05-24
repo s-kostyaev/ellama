@@ -1,3 +1,18 @@
+* Version 1.23.0
+
+- Add optional ~timeout~ support to ~shell_command~ with a default of five
+  seconds. Long-running async shell commands are terminated when the timeout
+  expires and return a timeout message with any collected output.
+- Add optional ~timeout~ support to ~grep~ with the same five-second default.
+  Directory searches now use timeout-aware command execution and return a clear
+  diagnostic when grep exceeds the configured limit.
+- Add optional ~timeout~ support to ~directory_tree~ with the same five-second
+  default. Recursive directory traversal now stops when the timeout expires and
+  returns a clear diagnostic with the partial tree collected so far.
+- Strengthen project git hook templates for local Elisp validation. Staged Elisp
+  changes now run ~make checkdocs~ before commit, while pushed Elisp changes run
+  ~make check-elisp~ and block the push if formatting changes files.
+
 * Version 1.22.1
 
 - Remove experimental hypothesis profiles (numbered-read, line-edit,

@@ -138,15 +138,17 @@
        (when (file-exists-p settings-file)
          (delete-file settings-file)))))
 
-(defun ellama-test--wait-shell-command-result (cmd)
-  "Run shell tool CMD and wait for a result string."
+(defun ellama-test--wait-shell-command-result (cmd &optional timeout)
+  "Run shell tool CMD with TIMEOUT and wait for a result string."
   (ellama-test--ensure-local-ellama-tools)
   (let ((result :pending)
-        (deadline (+ (float-time) 3.0)))
+        (deadline (+ (float-time)
+                     (max 3.0 (+ (or timeout 0) 1.0)))))
     (ellama-tools-shell-command-tool
      (lambda (res)
        (setq result res))
-     cmd)
+     cmd
+     timeout)
     (while (and (eq result :pending)
                 (< (float-time) deadline))
       (accept-process-output nil 0.01))
@@ -263,6 +265,17 @@ Return list with result and prompt."
     (ellama-test--wait-shell-command-result "printf 'ok\\n'")
     "ok")))
 
+(ert-deftest test-ellama-shell-command-tool-default-timeout ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-shell-command-default-timeout 5))
+    (should (= (ellama-tools--shell-command-timeout nil) 5))))
+
+(ert-deftest test-ellama-shell-command-tool-times-out ()
+  (should
+   (string-match-p
+    "Command timed out after 0\\.1 seconds\\."
+    (ellama-test--wait-shell-command-result "sleep 1" 0.1))))
+
 (ert-deftest test-ellama-shell-command-tool-uses-cat-pager ()
   (let ((process-environment (copy-sequence process-environment)))
     (setenv "PAGER" "less")
@@ -331,6 +344,12 @@ Return list with result and prompt."
        shell-file-name shell-command-switch
        "printf '%s|%s' \"$PAGER\" \"$GIT_PAGER\"")
       "cat|cat"))))
+
+(ert-deftest test-ellama-tools-call-command-with-timeout-times-out ()
+  (should
+   (eq (car (ellama-tools--call-command-with-timeout
+             0.1 shell-file-name shell-command-switch "sleep 1"))
+       'timeout)))
 
 (ert-deftest test-ellama-shell-command-tool-errors-when-srt-missing ()
   (ellama-test--ensure-local-ellama-tools)
@@ -687,31 +706,52 @@ Return list with result and prompt."
 
 (ert-deftest test-ellama-tools-grep-tool-uses-shared-command-helper ()
   (ellama-test--ensure-local-ellama-tools)
-  (let (captured)
-    (cl-letf (((symbol-function 'ellama-tools--call-command)
+  (let ((ellama-tools-shell-command-default-timeout 5)
+        captured)
+    (cl-letf (((symbol-function 'ellama-tools--call-command-with-timeout)
                (lambda (&rest args)
                  (setq captured args)
                  '(0 . "a:1:match\n"))))
       (should (equal (ellama-tools-grep-tool default-directory "match")
                      "\"a:1:match\"")))
     (should (equal captured
-                   '("find" "." "-type" "f" "-exec"
-                     "grep" "--color=never" "-i" "-nH" "-e"
-                     "match" "{}" "+")))))
+                   '(5 "find" "." "-type" "f" "-exec"
+                       "grep" "--color=never" "-i" "-nH" "-e"
+                       "match" "{}" "+")))))
+
+(ert-deftest test-ellama-tools-grep-tool-passes-timeout ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let (captured)
+    (cl-letf (((symbol-function 'ellama-tools--call-command-with-timeout)
+               (lambda (&rest args)
+                 (setq captured args)
+                 '(0 . "a:1:match\n"))))
+      (should (equal (ellama-tools-grep-tool default-directory "match" nil 0.25)
+                     "\"a:1:match\"")))
+    (should (equal (car captured) 0.25))))
+
+(ert-deftest test-ellama-tools-grep-tool-explains-timeout ()
+  (ellama-test--ensure-local-ellama-tools)
+  (cl-letf (((symbol-function 'ellama-tools--call-command-with-timeout)
+             (lambda (&rest _args)
+               '(timeout . ""))))
+    (should (equal (ellama-tools-grep-tool default-directory "match" nil 0.1)
+                   "\"grep timed out after 0.1 seconds.\""))))
 
 (ert-deftest test-ellama-tools-grep-tool-can-match-case-sensitively ()
   (ellama-test--ensure-local-ellama-tools)
-  (let (captured)
-    (cl-letf (((symbol-function 'ellama-tools--call-command)
+  (let ((ellama-tools-shell-command-default-timeout 5)
+        captured)
+    (cl-letf (((symbol-function 'ellama-tools--call-command-with-timeout)
                (lambda (&rest args)
                  (setq captured args)
                  '(0 . "a:1:Match\n"))))
       (should (equal (ellama-tools-grep-tool default-directory "Match" t)
                      "\"a:1:Match\"")))
     (should (equal captured
-                   '("find" "." "-type" "f" "-exec"
-                     "grep" "--color=never" "-nH" "-e"
-                     "Match" "{}" "+")))))
+                   '(5 "find" "." "-type" "f" "-exec"
+                       "grep" "--color=never" "-nH" "-e"
+                       "Match" "{}" "+")))))
 
 (ert-deftest test-ellama-tools-grep-tool-explains-no-matches ()
   (ellama-test--ensure-local-ellama-tools)
@@ -2578,6 +2618,52 @@ Return list with result and prompt."
           (should
            (equal (ellama-tools-directory-tree-tool dir)
                   "only.txt\n")))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest test-ellama-tools-directory-tree-tool-uses-default-timeout ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((dir (make-temp-file "ellama-tree-timeout-default-" t))
+        (ellama-tools-shell-command-default-timeout 5)
+        captured-timeout)
+    (unwind-protect
+        (cl-letf (((symbol-function 'float-time)
+                   (lambda () 100.0))
+                  ((symbol-function 'ellama-tools--directory-tree)
+                   (lambda (_dir _depth deadline)
+                     (setq captured-timeout (- deadline 100.0))
+                     '("ok\n" . nil))))
+          (should (equal (ellama-tools-directory-tree-tool dir) "ok\n"))
+          (should (= captured-timeout 5)))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest test-ellama-tools-directory-tree-tool-passes-timeout ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((dir (make-temp-file "ellama-tree-timeout-" t))
+        captured-timeout)
+    (unwind-protect
+        (cl-letf (((symbol-function 'float-time)
+                   (lambda () 100.0))
+                  ((symbol-function 'ellama-tools--directory-tree)
+                   (lambda (_dir _depth deadline)
+                     (setq captured-timeout (- deadline 100.0))
+                     '("ok\n" . nil))))
+          (should (equal (ellama-tools-directory-tree-tool dir 0.25) "ok\n"))
+          (should (= captured-timeout 0.25)))
+      (when (file-exists-p dir)
+        (delete-directory dir t)))))
+
+(ert-deftest test-ellama-tools-directory-tree-tool-explains-timeout ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((dir (make-temp-file "ellama-tree-timeout-output-" t)))
+    (unwind-protect
+        (cl-letf (((symbol-function 'ellama-tools--directory-tree)
+                   (lambda (&rest _args)
+                     '("|-a\n" . t))))
+          (should
+           (equal (ellama-tools-directory-tree-tool dir 0.1)
+                  "directory_tree timed out after 0.1 seconds.\n|-a\n")))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
 
