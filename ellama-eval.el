@@ -79,7 +79,7 @@ Only one evaluation run is supported at a time.")
   "Tool names included in every hypothesis profile.")
 
 (defconst ellama-eval-hypothesis-profiles
-  '(baseline numbered-read line-edit numbered-line-edit balanced-edit)
+  '(baseline balanced-edit)
   "Profiles used by hypothesis suites.")
 
 (defconst ellama-eval--coder-system
@@ -327,7 +327,7 @@ in one short sentence."
          :answer-regexps
          ,(ellama-eval--fixture-data "explore-summarize-policy"
                                      "answer-regexps.eld")))
-  "Built-in cases for the numbered-read and line-edit hypothesis.")
+  "Built-in cases for the baseline and balanced-edit hypotheses.")
 
 (defun ellama-eval--tool-spec (name function args description)
   "Return a tool plist for NAME, FUNCTION, ARGS and DESCRIPTION."
@@ -402,53 +402,20 @@ in one short sentence."
         (:name "newcontent" :type string
                :description "New content to replace with."))
       "Edit file FILE_NAME. Replace OLDCONTENT with NEWCONTENT."))
-    ("edit_lines"
-     (ellama-eval--tool-spec
-      "edit_lines"
-      #'ellama-eval-edit-lines-tool
-      '((:name "file_name" :type string :description "Name of the file.")
-        (:name "from" :type number :description "Starting line number.")
-        (:name "to" :type number :description "Ending line number.")
-        (:name "replacement" :type string
-               :description "Replacement block for the line range."))
-      "Replace file FILE_NAME lines FROM through TO with REPLACEMENT."))
     (_
      (error "Unknown evaluation tool %s" name))))
 
-(defun ellama-eval--profile-numbered-read-p (profile)
-  "Return non-nil when PROFILE use numbered read output."
-  (memq profile '(numbered-read numbered-line-edit)))
-
-(defun ellama-eval--profile-line-edit-p (profile)
-  "Return non-nil when PROFILE use line-based editing."
-  (memq profile '(line-edit numbered-line-edit)))
-
-(defun ellama-eval--profile-balanced-edit-p (profile)
-  "Return non-nil when PROFILE validate edits before applying them."
-  (eq profile 'balanced-edit))
-
 (defun ellama-eval--profile-tool-names (profile)
   "Return tool names for PROFILE."
-  (unless (memq profile ellama-eval-hypothesis-profiles)
-    (error "Unknown evaluation profile %S" profile))
-  (append ellama-eval--base-tool-names
-          (list (if (ellama-eval--profile-line-edit-p profile)
-                    "edit_lines"
-                  "edit_file"))))
+  (pcase profile
+    ('baseline
+     (copy-sequence ellama-eval--base-tool-names))
+    ('balanced-edit
+     (append ellama-eval--base-tool-names '("edit_file")))
+    (_
+     (error "Unknown evaluation profile %S" profile))))
 
-(defun ellama-eval--replace-profile-read-specs (spec profile)
-  "Return SPEC adjusted for numbered read PROFILE."
-  (if (not (ellama-eval--profile-numbered-read-p profile))
-      spec
-    (pcase (plist-get spec :name)
-      ("read_file"
-       (plist-put (copy-sequence spec)
-                  :function #'ellama-eval-numbered-read-file-tool))
-      ("lines_range"
-       (plist-put (copy-sequence spec)
-                  :function #'ellama-eval-numbered-lines-range-tool))
-      (_
-       spec))))
+
 
 (defun ellama-eval--replace-profile-edit-specs (spec profile)
   "Return SPEC adjusted for edit validation in PROFILE."
@@ -460,14 +427,7 @@ in one short sentence."
       (lambda (file-name oldcontent newcontent)
         (ellama-eval-monitored-edit-file-tool
          file-name oldcontent newcontent
-         (ellama-eval--profile-balanced-edit-p profile)))))
-    ("edit_lines"
-     (plist-put
-      (copy-sequence spec)
-      :function
-      (lambda (file-name from to replacement)
-        (ellama-eval-monitored-edit-lines-tool
-         file-name from to replacement nil))))
+         (eq profile 'balanced-edit)))))
     (_
      spec)))
 
@@ -503,77 +463,13 @@ in one short sentence."
   (mapcar
    (lambda (name)
      (let* ((spec (ellama-eval--tool-spec-by-name name))
-            (read-spec
-             (ellama-eval--replace-profile-read-specs spec profile))
             (edit-spec
-             (ellama-eval--replace-profile-edit-specs read-spec profile))
+             (ellama-eval--replace-profile-edit-specs spec profile))
             (instrumented
              (ellama-eval--instrument-tool-spec edit-spec)))
        (apply #'llm-make-tool
               (ellama-tools-wrap-with-confirm instrumented))))
    (ellama-eval--profile-tool-names profile)))
-
-(defun ellama-eval--number-text-lines (text &optional first-line)
-  "Return TEXT with line numbers starting at FIRST-LINE."
-  (let ((line-number (or first-line 1))
-        lines)
-    (with-temp-buffer
-      (insert text)
-      (goto-char (point-min))
-      (while (not (eobp))
-        (push (format "%d | %s"
-                      line-number
-                      (buffer-substring-no-properties
-                       (line-beginning-position)
-                       (line-end-position)))
-              lines)
-        (setq line-number (1+ line-number))
-        (forward-line 1)))
-    (string-join (nreverse lines) "\n")))
-
-(defun ellama-eval-numbered-read-file-tool (file-name &optional mode)
-  "Read FILE-NAME and number text output lines.
-MODE follows the same contract as `ellama-tools-read-file-tool'."
-  (or (ellama-tools--tool-check-file-access file-name 'read)
-      (json-encode
-       (if (not (file-exists-p file-name))
-           (format "File %s doesn't exists." file-name)
-         (pcase (ellama-tools--read-file-mode mode)
-           ('auto
-            (if (ellama-image-file-p file-name)
-                (ellama-tools--read-image-file-tool file-name)
-              (ellama-eval--number-text-lines
-               (ellama-tools--read-file-as-text file-name))))
-           ('text
-            (ellama-eval--number-text-lines
-             (ellama-tools--read-file-as-text file-name)))
-           ('image
-            (ellama-tools--read-image-file-tool file-name))
-           (_
-            (format "Unsupported read_file mode %S. Use auto, text or image."
-                    mode)))))))
-
-(defun ellama-eval-numbered-lines-range-tool (file-name from to)
-  "Return numbered FILE-NAME content from line FROM through TO."
-  (or (ellama-tools--tool-check-file-access file-name 'read)
-      (json-encode
-       (with-current-buffer (find-file-noselect file-name)
-         (save-excursion
-           (let ((start (progn
-                          (goto-char (point-min))
-                          (forward-line (1- from))
-                          (beginning-of-line)
-                          (point)))
-                 (end (progn
-                        (goto-char (point-min))
-                        (forward-line (1- to))
-                        (end-of-line)
-                        (point))))
-             (ellama-eval--number-text-lines
-              (ellama-tools--sanitize-tool-text-output
-               (buffer-substring-no-properties start end)
-               (format "File %s" file-name))
-              from)))))))
 
 (defun ellama-eval--line-count ()
   "Return line count for the current buffer."
@@ -919,96 +815,6 @@ When BLOCK-INVALID is non-nil, reject invalid resulting buffers."
   (ellama-eval-monitored-edit-file-tool
    file-name oldcontent newcontent t))
 
-(defun ellama-eval--line-edit-candidate
-    (file-name from to replacement)
-  "Return line edit data after replacing FILE-NAME lines FROM TO.
-REPLACEMENT is inserted for the inclusive line range.  Returned plist
-contains `:candidate' and `:old-fragment'."
-  (with-temp-buffer
-    (insert-file-contents-literally file-name)
-    (let ((line-count (ellama-eval--line-count)))
-      (when (> to line-count)
-        (error "Line range %d-%d exceeds file line count %d"
-               from to line-count)))
-    (goto-char (point-min))
-    (forward-line (1- from))
-    (let ((start (line-beginning-position))
-          end
-          old-fragment
-          suffix-p)
-      (goto-char (point-min))
-      (forward-line to)
-      (setq end (point))
-      (setq old-fragment
-            (buffer-substring-no-properties start end))
-      (setq suffix-p (< end (point-max)))
-      (delete-region start end)
-      (goto-char start)
-      (insert replacement)
-      (when (and suffix-p
-                 (not (string-empty-p replacement))
-                 (not (string-suffix-p "\n" replacement)))
-        (insert "\n"))
-      (list :candidate (buffer-string)
-            :old-fragment old-fragment))))
-
-(defun ellama-eval-monitored-edit-lines-tool
-    (file-name from to replacement &optional block-invalid)
-  "Replace FILE-NAME lines FROM through TO with validation.
-REPLACEMENT is the inserted text.  When BLOCK-INVALID is non-nil, reject
-invalid resulting buffers."
-  (or (ellama-tools--tool-check-file-access file-name 'read)
-      (ellama-tools--tool-check-file-access file-name 'write)
-      (progn
-        (unless (and (integerp from)
-                     (integerp to)
-                     (<= 1 from)
-                     (<= from to))
-          (error "Line range must use positive integers with FROM <= TO"))
-        (let* ((content (with-temp-buffer
-                          (insert-file-contents-literally file-name)
-                          (buffer-string)))
-               (line-edit-data
-                (ellama-eval--line-edit-candidate
-                 file-name from to replacement))
-               (candidate (plist-get line-edit-data :candidate))
-               (old-fragment (plist-get line-edit-data :old-fragment))
-               (candidate-validation
-                (ellama-eval--validate-text-in-file-buffer
-                 file-name candidate))
-               (original-validation
-                (ellama-eval--validate-text-in-file-buffer
-                 file-name content))
-               (old-validation
-                (ellama-eval--validate-text-in-file-buffer
-                 file-name old-fragment))
-               (new-validation
-                (ellama-eval--validate-text-in-file-buffer
-                 file-name replacement))
-               (valid-p (plist-get candidate-validation :valid))
-               (blocked-p (and block-invalid (not valid-p))))
-          (ellama-eval--record-edit-validation
-           (ellama-eval--edit-validation-entry
-            "edit_lines" file-name t candidate-validation
-            original-validation old-validation new-validation
-            (not blocked-p) blocked-p))
-          (if blocked-p
-              (ellama-eval--format-edit-rejection
-               file-name
-               candidate-validation
-               original-validation
-               old-validation
-               new-validation)
-            (ellama-tools--write-file-buffer-content
-             file-name candidate)
-            (format "Replaced lines %d-%d in %s."
-                    from to file-name))))))
-
-(defun ellama-eval-edit-lines-tool (file-name from to replacement)
-  "Replace FILE-NAME lines FROM through TO with REPLACEMENT."
-  (ellama-eval-monitored-edit-lines-tool
-   file-name from to replacement nil))
-
 (defun ellama-eval--write-case-files (workspace files)
   "Write FILES into WORKSPACE."
   (dolist (entry files)
@@ -1289,7 +1095,7 @@ EXPECTED-FILES and SYNTAX-FILES define the relative file paths to check."
      :read-call-count
      (ellama-eval--tool-count trace '("read_file" "lines_range"))
      :edit-call-count
-     (ellama-eval--tool-count trace '("edit_file" "edit_lines"))
+     (ellama-eval--tool-count trace '("edit_file"))
      :tool-trace trace
      :edit-validation-count (length validation-trace)
      :edit-rejection-count
