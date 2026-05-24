@@ -716,8 +716,8 @@ Return list with result and prompt."
                      "\"a:1:match\"")))
     (should (equal captured
                    '(5 "find" "." "-type" "f" "-exec"
-                     "grep" "--color=never" "-i" "-nH" "-e"
-                     "match" "{}" "+")))))
+                       "grep" "--color=never" "-i" "-nH" "-e"
+                       "match" "{}" "+")))))
 
 (ert-deftest test-ellama-tools-grep-tool-passes-timeout ()
   (ellama-test--ensure-local-ellama-tools)
@@ -750,8 +750,8 @@ Return list with result and prompt."
                      "\"a:1:Match\"")))
     (should (equal captured
                    '(5 "find" "." "-type" "f" "-exec"
-                     "grep" "--color=never" "-nH" "-e"
-                     "Match" "{}" "+")))))
+                       "grep" "--color=never" "-nH" "-e"
+                       "Match" "{}" "+")))))
 
 (ert-deftest test-ellama-tools-grep-tool-explains-no-matches ()
   (ellama-test--ensure-local-ellama-tools)

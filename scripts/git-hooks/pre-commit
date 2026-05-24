@@ -13,4 +13,10 @@ EOF
 	exit 1
 fi
 
+if git diff --cached --name-only --diff-filter=ACMR -- '*.el' | grep -q .
+then
+	printf '%s\n' "Running make checkdocs for staged Elisp changes..."
+	make checkdocs
+fi
+
 exit 0
