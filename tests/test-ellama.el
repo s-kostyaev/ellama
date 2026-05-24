@@ -33,6 +33,11 @@
 (require 'llm-fake)
 (require 'llm-openai)
 
+(defconst ellama-test--root
+  (expand-file-name
+   ".."
+   (file-name-directory (or load-file-name buffer-file-name default-directory)))
+  "Project root directory for `test-ellama.el'.")
 
 (defun ellama-test--fake-stream-partials (response style)
   "Return streaming partial strings for RESPONSE using STYLE."
@@ -1016,7 +1021,8 @@ detailed comparison to help you decide:
         (kill-buffer session-buffer)))))
 
 (ert-deftest test-ellama-plan-and-act-reuses-current-session-buffer ()
-  (load-file (expand-file-name "ellama-tools.el" default-directory))
+  (load-file
+   (expand-file-name "ellama-tools.el" ellama-test--root))
   (let* ((provider (make-llm-fake))
          (base-tool (llm-make-tool :name "read_file" :function #'ignore))
          (ellama-provider provider)
