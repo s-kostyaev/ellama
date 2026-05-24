@@ -332,7 +332,37 @@ Return list with result and prompt."
       (should
        (equal
         (ellama-tools--command-argv "sh" "-c" "printf ok")
-        '("/tmp/fake-srt" "--debug" "sh" "-c" "printf ok"))))))
+        (list "/tmp/fake-srt"
+              "--debug"
+              "-c"
+              (ellama-tools--shell-quote-command
+               "sh" '("-c" "printf ok"))))))))
+
+(ert-deftest test-ellama-tools-command-argv-quotes-srt-command ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-use-srt t)
+        (ellama-tools-srt-program "srt")
+        (ellama-tools-srt-args nil)
+        argv)
+    (cl-letf (((symbol-function 'executable-find)
+               (lambda (_program) "/tmp/fake-srt")))
+      (setq argv
+            (ellama-tools--command-argv
+             "grep" "--color=never" "-F" "-nh" "-e"
+             "(defconst ellama--code-prefix" "/tmp/ellama.el"))
+      (should
+       (equal
+        argv
+        (list "/tmp/fake-srt"
+              "-c"
+              (ellama-tools--shell-quote-command
+               "grep"
+               '("--color=never" "-F" "-nh" "-e"
+                 "(defconst ellama--code-prefix" "/tmp/ellama.el")))))
+      (should
+       (string-match-p
+        (regexp-quote "\\(defconst\\ ellama--code-prefix")
+        (nth 2 argv))))))
 
 (ert-deftest test-ellama-tools-call-command-uses-cat-pager ()
   (let ((process-environment (copy-sequence process-environment)))

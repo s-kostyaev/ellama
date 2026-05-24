@@ -1884,6 +1884,10 @@ Return error message on denial when `ellama-tools-use-srt' is non-nil."
           (format "srt policy denied %s access to %s (target %s) using %s: %s"
                   op path target config-path reason))))))
 
+(defun ellama-tools--shell-quote-command (program args)
+  "Return shell command string for PROGRAM with ARGS."
+  (mapconcat #'shell-quote-argument (cons program args) " "))
+
 (defun ellama-tools--command-argv (program &rest args)
   "Return argv for PROGRAM and ARGS.
 Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
@@ -1896,7 +1900,10 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
           "Cannot find `srt' executable `%s'.  Install sandbox-runtime "
           "or disable `ellama-tools-use-srt'")
          ellama-tools-srt-program))
-      (append (list srt-path) ellama-tools-srt-args (cons program args)))))
+      (append
+       (list srt-path)
+       ellama-tools-srt-args
+       (list "-c" (ellama-tools--shell-quote-command program args))))))
 
 (defun ellama-tools--process-environment-with-cat-pager (&optional env)
   "Return ENV with shell command pagers forced to cat."
