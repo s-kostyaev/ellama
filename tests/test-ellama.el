@@ -1015,6 +1015,57 @@ detailed comparison to help you decide:
       (when (buffer-live-p session-buffer)
         (kill-buffer session-buffer)))))
 
+(ert-deftest test-ellama-plan-and-act-reuses-current-session-buffer ()
+  (load-file (expand-file-name "ellama-tools.el" default-directory))
+  (let* ((provider (make-llm-fake))
+         (base-tool (llm-make-tool :name "read_file" :function #'ignore))
+         (ellama-provider provider)
+         (ellama-providers nil)
+         (ellama-tools-enabled (list base-tool))
+         (ellama-session-auto-save nil)
+         (ellama-chat-display-action-function nil)
+         (ellama--active-sessions (make-hash-table :test #'equal))
+         (ellama--active-session-states (make-hash-table :test #'equal))
+         (session (make-ellama-session :id "agent-session"
+                                       :provider provider
+                                       :prompt nil
+                                       :extra '(:uid "agent-session-uid")))
+         (session-buffer (generate-new-buffer " *ellama-agent-chat-test*"))
+         (stream-call nil))
+    (unwind-protect
+        (progn
+          (with-current-buffer session-buffer
+            (org-mode))
+          (ellama--register-session session session-buffer t)
+          (cl-letf (((symbol-function 'display-buffer)
+                     (lambda (&rest _args) nil))
+                    ((symbol-function 'ellama-stream)
+                     (lambda (prompt &rest args)
+                       (setq stream-call (list prompt args)))))
+            (ellama-plan-and-act "Do work"))
+          (should (equal (car stream-call) "Do work"))
+          (should (eq (plist-get (cadr stream-call) :session)
+                      session))
+          (should (functionp (plist-get (cadr stream-call) :on-done)))
+          (should (string-match-p
+                   "PLAN AND ACT INSTRUCTIONS"
+                   (plist-get (cadr stream-call) :system)))
+          (should (equal
+                   (mapcar #'llm-tool-name
+                           (plist-get (ellama-session-extra session) :tools))
+                   '("agent_submit_plan"
+                     "agent_update_plan"
+                     "agent_report_result"
+                     "read_file")))
+          (with-current-buffer session-buffer
+            (let ((text (buffer-string)))
+              (should (string-match-p "User:" text))
+              (should (string-match-p "Do work" text))
+              (should (string-match-p "Ellama Agent Status:" text))
+              (should (string-match-p "Planning started" text)))))
+      (when (buffer-live-p session-buffer)
+        (kill-buffer session-buffer)))))
+
 (defun ellama-test--with-temp-image-file (body)
   "Call BODY with a tiny temporary PNG file."
   (let ((file-name (make-temp-file "ellama-image-" nil ".png")))

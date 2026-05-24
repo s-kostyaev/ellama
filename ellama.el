@@ -3887,6 +3887,116 @@ the full response text when the request completes (with BUFFER current)."
                      #'ellama--translate-markdown-to-org-filter)))))))
 
 ;;;###autoload
+(defun ellama-plan-and-act (prompt &optional create-session &rest args)
+  "Start a plan-and-act agent loop for PROMPT in an Ellama chat session.
+
+If CREATE-SESSION is non-nil, create a new session.  Otherwise reuse the
+current session when possible.  ARGS accepts the same provider/session/system
+keys as `ellama-chat'.  The loop stores canonical state in session extra data,
+prints plan/status snapshots into the chat buffer, and continues automatically
+after compaction."
+  (interactive "sAsk ellama agent: ")
+  (let* ((providers (append
+                     `(("default model" . ellama-provider)
+                       ("ollama model" . (ellama-get-ollama-local-model)))
+                     ellama-providers))
+         (variants (mapcar #'car providers))
+         (system (plist-get args :system))
+         (max-tokens (plist-get args :max-tokens))
+         (max-steps (plist-get args :max-steps))
+         (provider (if current-prefix-arg
+                       (eval (alist-get
+                              (completing-read "Select model: " variants)
+                              providers nil nil #'string=))
+                     (or (plist-get args :provider)
+                         ellama-provider
+                         (ellama-get-first-ollama-chat-model))))
+         (explicit-session-arg (plist-get args :session))
+         (explicit-session-id (plist-get args :session-id))
+         (explicit-session (when (or explicit-session-arg
+                                     explicit-session-id)
+                             (ellama--resolve-session
+                              explicit-session-arg
+                              explicit-session-id)))
+         (current-session (or explicit-session
+                              (ellama--resolve-session
+                               nil ellama--current-session-id)))
+         (need-new-session (and (not explicit-session)
+                                (or create-session
+                                    current-prefix-arg
+                                    (and provider
+                                         current-session
+                                         (or (plist-get args :provider)
+                                             (not (equal provider ellama-provider)))
+                                         (not (equal
+                                               provider
+                                               (ellama-session-provider
+                                                current-session))))
+                                    (not current-session))))
+         (session (or explicit-session
+                      (if need-new-session
+                          (ellama-new-session
+                           provider prompt (plist-get args :ephemeral))
+                        current-session)))
+         (_ (unless (ellama-session-p session)
+              (error "Unable to resolve ellama session")))
+         (buffer (or (ellama-get-session-buffer
+                      (ellama--session-uid session))
+                     (if-let ((session-file (ellama-session-file session)))
+                         (find-file-noselect session-file)
+                       (get-buffer-create (ellama-session-id session)))))
+         (_ (ellama--ensure-session-request-idle session buffer))
+         (_ (with-current-buffer buffer
+              (setq ellama--current-session session)
+              (unless ellama-session-mode
+                (ellama-session-mode +1))))
+         (_ (ellama--register-session session buffer t)))
+    (with-current-buffer buffer
+      (when (and
+             (derived-mode-p 'org-mode)
+             (not (and (boundp 'org-ctrl-c-ctrl-c-hook)
+                       (member #'ellama-chat-send-last-message
+                               org-ctrl-c-ctrl-c-hook))))
+        (add-hook 'org-ctrl-c-ctrl-c-hook #'ellama-chat-send-last-message
+                  10 t)))
+    (display-buffer
+     buffer
+     (when ellama-chat-display-action-function
+       `((ignore . (,ellama-chat-display-action-function)))))
+    (with-current-buffer buffer
+      (save-excursion
+        (goto-char (point-max))
+        (if (equal (point-min) (point-max))
+            (insert
+             (ellama-get-nick-prefix-for-mode)
+             " " ellama-user-nick ":\n"
+             (ellama-context-format session)
+             (ellama--fill-long-lines prompt) "\n\n"
+             (ellama-get-nick-prefix-for-mode)
+             " " ellama-assistant-nick ":\n")
+          (insert
+           (ellama-context-format session)
+           (ellama--fill-long-lines prompt) "\n\n"
+           (ellama-get-nick-prefix-for-mode)
+           " " ellama-assistant-nick ":\n"))
+        (let* ((agent
+                (ellama-tools-start-plan-and-act
+                 session buffer prompt system (plist-get args :tools)
+                 max-steps))
+               (agent-system (plist-get agent :system))
+               (agent-tools (plist-get agent :tools))
+               (donecb (plist-get agent :on-done)))
+          (ellama-stream
+           prompt
+           :session session
+           :system agent-system
+           :tools agent-tools
+           :max-tokens max-tokens
+           :on-done donecb
+           :filter (when (derived-mode-p 'org-mode)
+                     #'ellama--translate-markdown-to-org-filter)))))))
+
+;;;###autoload
 (defun ellama-chat-with-system-from-buffer ()
   "Start a new chat session with a system message created from the current buffer."
   (interactive)

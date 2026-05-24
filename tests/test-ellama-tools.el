@@ -2803,6 +2803,154 @@ Return list with result and prompt."
     (should (eq (ellama-tools--provider-for-role "all")
                 'default-provider))))
 
+(ert-deftest test-ellama-agent-start-plan-and-act-combines-tools-and-renders ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((buffer (generate-new-buffer " *ellama-agent-start-test*"))
+         (base-tool (llm-make-tool :name "read_file" :function #'ignore))
+         (session (make-ellama-session
+                   :id "agent-start"
+                   :extra '(:uid "agent-start-uid"))))
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer
+            (org-mode))
+          (let ((result (ellama-tools-start-plan-and-act
+                         session buffer "Do work" "System"
+                         (list base-tool) 5)))
+            (should (equal (plist-get result :system)
+                           (plist-get
+                            (ellama-tools--agent-state session)
+                            :system)))
+            (should (functionp (plist-get result :on-done)))
+            (should (equal (plist-get
+                            (ellama-tools--agent-state session)
+                            :phase)
+                           'planning))
+            (should (= (plist-get
+                        (ellama-tools--agent-state session)
+                        :max-steps)
+                       5))
+            (should (equal
+                     (mapcar #'llm-tool-name
+                             (plist-get (ellama-session-extra session)
+                                        :tools))
+                     '("agent_submit_plan"
+                       "agent_update_plan"
+                       "agent_report_result"
+                       "read_file")))
+            (with-current-buffer buffer
+              (should (string-match-p "Ellama Agent Status:"
+                                      (buffer-string)))
+              (should (string-match-p "Planning started"
+                                      (buffer-string))))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest test-ellama-agent-loop-handler-parses-fallback-state-and-continues ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((buffer (generate-new-buffer " *ellama-agent-loop-test*"))
+         (base-tool (llm-make-tool :name "read_file" :function #'ignore))
+         (session (make-ellama-session
+                   :id "agent-loop"
+                   :extra (list :uid "agent-loop-uid"
+                                :tools (list base-tool)
+                                :agent-loop
+                                (list :phase 'planning
+                                      :plan nil
+                                      :step-count 0
+                                      :max-steps 3
+                                      :completed nil
+                                      :system "System"))))
+         (stream-call nil)
+         (state-text
+          "BEGIN_ELLAMA_AGENT_STATE
+phase: acting
+plan:
+- [ ] Inspect code
+- [ ] Implement change
+END_ELLAMA_AGENT_STATE"))
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer
+            (org-mode)
+            (insert "** Ellama:\nInitial response\n"))
+          (cl-letf (((symbol-function 'ellama-get-session-buffer)
+                     (lambda (id)
+                       (and (member id '("agent-loop" "agent-loop-uid"))
+                            buffer)))
+                    ((symbol-function 'ellama-stream)
+                     (lambda (prompt &rest args)
+                       (setq stream-call (list prompt args)))))
+            (let ((ellama--current-session nil))
+              (funcall
+               (ellama-tools--make-agent-loop-handler
+                session buffer "System")
+               state-text))
+            (let ((state (ellama-tools--agent-state session)))
+              (should (equal (plist-get state :phase) 'acting))
+              (should (= (plist-get state :step-count) 1))
+              (should (equal (plist-get (car (plist-get state :plan))
+                                        :title)
+                             "Inspect code")))
+            (should (equal (plist-get (cadr stream-call) :session)
+                           session))
+            (should (equal (plist-get (cadr stream-call) :tools)
+                           (list base-tool)))
+            (should (functionp (plist-get (cadr stream-call) :on-done)))
+            (should (string-match-p "Current plan state"
+                                    (car stream-call)))
+            (should (string-match-p "Next pending item: Inspect code"
+                                    (car stream-call)))
+            (with-current-buffer buffer
+              (should (string-match-p "Ellama Agent Plan:"
+                                      (buffer-string)))
+              (should (string-match-p "Inspect code" (buffer-string)))
+              (should (string-match-p "Agent controller:"
+                                      (buffer-string))))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest test-ellama-agent-report-result-restores-original-tools ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((buffer (generate-new-buffer " *ellama-agent-done-test*"))
+         (base-tool (llm-make-tool :name "read_file" :function #'ignore))
+         (agent-tools (ellama-tools--agent-controller-tools))
+         (session (make-ellama-session
+                   :id "agent-done"
+                   :extra (list :uid "agent-done-uid"
+                                :tools (append agent-tools (list base-tool))
+                                :agent-loop
+                                (list :phase 'acting
+                                      :plan (list (list :id 1
+                                                        :title "Done"
+                                                        :status 'done))
+                                      :completed nil
+                                      :had-original-tools t
+                                      :original-tools (list base-tool))))))
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer
+            (org-mode))
+          (cl-letf (((symbol-function 'ellama-get-session-buffer)
+                     (lambda (id)
+                       (and (member id '("agent-done" "agent-done-uid"))
+                            buffer))))
+            (let ((ellama-tools--current-session session))
+              (should (equal (ellama-tools-agent-report-result-tool "Finished")
+                             "Result received. Plan-and-act loop completed.")))
+            (should (plist-get (ellama-tools--agent-state session)
+                               :completed))
+            (should (equal (plist-get (ellama-tools--agent-state session)
+                                      :result)
+                           "Finished"))
+            (should (equal (plist-get (ellama-session-extra session) :tools)
+                           (list base-tool)))
+            (with-current-buffer buffer
+              (should (string-match-p "Ellama Agent Done:"
+                                      (buffer-string))))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
 (ert-deftest test-ellama-subagent-loop-handler-max-steps-and-continue ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((updated-extra nil)
