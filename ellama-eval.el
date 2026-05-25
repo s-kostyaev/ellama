@@ -1635,9 +1635,10 @@ KEY is the property list key that contains VALUE."
              (plist-get result :elapsed-ms)))))
 
 (defun ellama-eval--render-summary-buffer
-    (results completed total &optional results-file)
+    (results completed total &optional results-file window)
   "Render RESULTS summary with COMPLETED and TOTAL progress.
-RESULTS-FILE is shown when JSONL export is configured."
+RESULTS-FILE is shown when JSONL export is configured.
+When WINDOW is live, show the summary in WINDOW."
   (let ((buffer (get-buffer-create ellama-eval--summary-buffer-name)))
     (with-current-buffer buffer
       (let ((inhibit-read-only t))
@@ -1657,7 +1658,9 @@ RESULTS-FILE is shown when JSONL export is configured."
           (insert "No completed cases yet.\n"))
         (goto-char (point-min))
         (special-mode)))
-    (display-buffer buffer)
+    (if (window-live-p window)
+        (set-window-buffer window buffer)
+      (display-buffer buffer))
     buffer))
 
 ;;;###autoload
@@ -1671,7 +1674,8 @@ select experiment profiles.  RESULTS-FILE receives JSONL output when non-nil."
          (ellama-eval--read-suite-selection)
          (ellama-eval--read-profile-selection)
          (ellama-eval--read-results-file)))
-  (let ((cases (ellama-eval--cases-for-suite-selection suite)))
+  (let ((cases (ellama-eval--cases-for-suite-selection suite))
+        (summary-window (selected-window)))
     (ellama-eval-run-hypothesis-suite-async
      provider profiles cases
      (lambda (results)
@@ -1679,11 +1683,11 @@ select experiment profiles.  RESULTS-FILE receives JSONL output when non-nil."
        (when results-file
          (ellama-eval-write-results-jsonl results results-file))
        (ellama-eval--render-summary-buffer
-        results (length results) (length results) results-file)
+        results (length results) (length results) results-file summary-window)
        (message "Ellama evaluation finished: %d runs." (length results)))
      (lambda (results completed total _latest)
        (ellama-eval--render-summary-buffer
-        results completed total results-file)))
+        results completed total results-file summary-window)))
     (message "Ellama evaluation started.")))
 
 (provide 'ellama-eval)

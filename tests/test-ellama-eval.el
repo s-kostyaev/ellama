@@ -456,6 +456,21 @@
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
 
+(ert-deftest test-ellama-eval-render-summary-buffer-uses-target-window ()
+  (let ((placeholder (get-buffer-create " *ellama-eval-placeholder*"))
+        buffer)
+    (unwind-protect
+        (save-window-excursion
+          (set-window-buffer (selected-window) placeholder)
+          (setq buffer
+                (ellama-eval--render-summary-buffer
+                 nil 0 1 nil (selected-window)))
+          (should (eq (window-buffer (selected-window)) buffer)))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (when (buffer-live-p placeholder)
+        (kill-buffer placeholder)))))
+
 (ert-deftest test-ellama-eval-write-results-jsonl-uses-arrays-and-booleans ()
   (let* ((file-name (make-temp-file "ellama-eval-results-" nil ".jsonl"))
          (results
