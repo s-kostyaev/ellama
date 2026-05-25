@@ -272,6 +272,24 @@ Plist with keys `:path', `:mtime' and `:policy'.")
   :type 'integer
   :group 'ellama)
 
+(defcustom ellama-tools-subagent-loop-detection-enabled t
+  "Detect repeated identical tool calls in sub-agent sessions.
+When non-nil, sub-agent tools return recovery guidance on repeated identical
+calls and terminate the subtask if the same consecutive call chain continues."
+  :type 'boolean
+  :group 'ellama)
+
+(defcustom ellama-tools-subagent-loop-detection-repeated-threshold 2
+  "Number of consecutive identical sub-agent tool calls that triggers recovery.
+Values below 2 are treated as 2 so the first call is never considered a loop."
+  :type 'integer
+  :group 'ellama)
+
+(defcustom ellama-tools-subagent-loop-detection-max-traces 50
+  "Maximum recent sub-agent tool calls retained for loop detection."
+  :type 'integer
+  :group 'ellama)
+
 (defcustom ellama-tools-agent-default-max-steps 40
   "Default maximum number of auto-continue steps for plan-and-act agents."
   :type 'integer
@@ -4090,6 +4108,141 @@ CALLBACK will be used to report result asyncronously."
     :description "Report final result and terminate the task."
     :args ((:name "result" :type string))))
 
+(defun ellama-tools--subagent-loop-state ()
+  "Return a fresh sub-agent tool loop state plist."
+  (list :tool-history nil
+        :loop-detected nil
+        :loop-reason ""
+        :loop-recovery-attempted nil
+        :loop-recovery-count 0
+        :loop-recovery-reason ""))
+
+(defun ellama-tools--subagent-complete (session result)
+  "Complete sub-agent SESSION with RESULT when it is still active."
+  (when-let* (((ellama-session-p session))
+              (extra (ellama-session-extra session))
+              ((not (plist-get extra :task-completed))))
+    (ellama-tools--set-session-extra
+     session
+     (plist-put (copy-sequence extra) :task-completed t))
+    (when-let* ((callback (plist-get extra :result-callback))
+                ((functionp callback)))
+      (funcall callback result))))
+
+(defun ellama-tools--subagent-loop-recovery-message
+    (name args result repeat-count)
+  "Return recovery guidance for repeated tool NAME with ARGS.
+RESULT is the latest tool result.  REPEAT-COUNT is the repeated call count."
+  (concat
+   (format
+    "LOOP RECOVERY: `%s` was called %d times with identical arguments.\n"
+    name repeat-count)
+   (format "Do not call `%s` again with these exact arguments: %S\n"
+           name args)
+   (format "Latest tool result:\n%s\n\n" result)
+   (if (equal name "edit_file")
+       "Next action: read the exact current file text with `read_file` \
+or `lines_range`, copy the exact oldcontent from that output, then call \
+`edit_file` with different oldcontent.  If you cannot identify an exact \
+replacement, call `report_result` with the blocker."
+     "Next action: choose a different tool call or different arguments \
+based on the latest result.  If no different useful action exists, call \
+`report_result` with the blocker.")))
+
+(defun ellama-tools--subagent-trace-tool-call
+    (session name args result)
+  "Record sub-agent tool call NAME with ARGS and RESULT for SESSION.
+Return recovery guidance or loop termination text when it should replace
+RESULT for the agent."
+  (when (and ellama-tools-subagent-loop-detection-enabled
+             (ellama-session-p session))
+    (let* ((extra (ellama-session-extra session))
+           (loop-state (or (plist-get extra :tool-loop-state)
+                           (ellama-tools--subagent-loop-state)))
+           (tool-history (or (plist-get loop-state :tool-history) (list)))
+           (threshold
+            (max 2 ellama-tools-subagent-loop-detection-repeated-threshold))
+           replacement)
+      (unless (plist-get extra :task-completed)
+        (let* ((repeated
+                (seq-take-while
+                 (lambda (history-entry)
+                   (and (equal (plist-get history-entry :name) name)
+                        (equal (plist-get history-entry :args) args)))
+                 tool-history))
+               (repeat-count (1+ (length repeated))))
+          (when (>= repeat-count threshold)
+            (let* ((recovery-count
+                    (or (plist-get loop-state :loop-recovery-count) 0))
+                   (loop-reason
+                    (format
+                     "Loop detected: tool %s called %d times with identical args"
+                     name repeat-count)))
+              (if (= repeat-count threshold)
+                  (progn
+                    (setq replacement
+                          (ellama-tools--subagent-loop-recovery-message
+                           name args result repeat-count))
+                    (setq loop-state
+                          (plist-put loop-state
+                                     :loop-recovery-attempted t))
+                    (setq loop-state
+                          (plist-put loop-state
+                                     :loop-recovery-count
+                                     (1+ recovery-count)))
+                    (setq loop-state
+                          (plist-put loop-state
+                                     :loop-recovery-reason loop-reason)))
+                (setq loop-state
+                      (plist-put loop-state :loop-detected t))
+                (setq loop-state
+                      (plist-put loop-state :loop-reason loop-reason))
+                (setq replacement loop-reason)
+                (ellama-tools--subagent-complete session loop-reason)))))
+        (push (list :name name :args args) tool-history)
+        (let ((max-traces ellama-tools-subagent-loop-detection-max-traces))
+          (when (> (length tool-history) max-traces)
+            (setf (nthcdr max-traces tool-history) nil)))
+        (setq loop-state (plist-put loop-state :tool-history tool-history))
+        (ellama-tools--set-session-extra
+         session
+         (ellama-tools--session-extra-with
+          session :tool-loop-state loop-state)))
+      replacement)))
+
+(defun ellama-tools--wrap-subagent-tool (tool session)
+  "Return TOOL wrapped with sub-agent loop detection for SESSION."
+  (let* ((wrapped-tool (copy-sequence tool))
+         (name (llm-tool-name tool))
+         (function (llm-tool-function tool))
+         (async (llm-tool-async tool)))
+    (setf
+     (llm-tool-function wrapped-tool)
+     (lambda (&rest args)
+       (if (and async args (functionp (car args)))
+           (let ((callback (car args))
+                 (call-args (cdr args)))
+             (apply
+              function
+              (lambda (result)
+                (funcall
+                 callback
+                 (or (ellama-tools--subagent-trace-tool-call
+                      session name call-args result)
+                     result)))
+              call-args))
+         (let ((result (apply function args)))
+           (or (ellama-tools--subagent-trace-tool-call
+                session name args result)
+               result)))))
+    wrapped-tool))
+
+(defun ellama-tools--wrap-subagent-tools (tools session)
+  "Return TOOLS wrapped with sub-agent loop detection for SESSION."
+  (mapcar (lambda (tool)
+            (ellama-tools--wrap-subagent-tool tool session))
+          tools))
+
 (defun ellama-tools--subagent-system-message (system-msg)
   "Return subagent system message from SYSTEM-MSG."
   (format
@@ -4197,6 +4350,8 @@ ARGUMENTS  – object with template substitution values."
 
                ;; ---- resolve tools for role ----
                (role-tools (ellama-tools--for-role role-key))
+               (subagent-tools
+                (ellama-tools--wrap-subagent-tools role-tools worker))
 
                ;; ---- dynamic report_result tool ----
                (report-tool
@@ -4205,7 +4360,7 @@ ARGUMENTS  – object with template substitution values."
                         callback worker)))
 
                ;; IMPORTANT: report tool must be first (termination tool priority)
-               (all-tools (cons report-tool role-tools)))
+               (all-tools (cons report-tool subagent-tools)))
 
           ;; ============================================================
           ;; Initialize session state (single source of truth)
@@ -4222,6 +4377,7 @@ ARGUMENTS  – object with template substitution values."
             :task-completed nil
             :step-count 0
             :max-steps steps-limit
+            :tool-loop-state (ellama-tools--subagent-loop-state)
             :system subagent-system))
 
           ;; ============================================================
