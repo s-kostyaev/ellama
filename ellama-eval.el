@@ -453,8 +453,16 @@ in one short sentence."
   "Record a tool call with NAME, ARGS, STATUS and RESULT.
 Also performs loop detection if enabled."
   (when-let* ((state ellama-eval--active-run))
+    ;; Record the trace before loop finalization so the triggering call is
+    ;; visible in the final result.
+    (push (list :name name
+                :args args
+                :status status
+                :result result
+                :finished-at (float-time))
+          (ellama-eval--run-state-trace state))
     (when (and ellama-eval-loop-detection-enabled
-               (not (eq (ellama-eval--run-state-status state) 'loop-detected)))
+               (eq (ellama-eval--run-state-status state) 'pending))
       (let* ((loop-state (ellama-eval--run-state-loop-state state))
              (tool-history (or (and loop-state (plist-get loop-state :tool-history))
                                (list)))
@@ -462,17 +470,15 @@ Also performs loop detection if enabled."
         ;; Check if this tool has been called with identical args recently
         (let ((repeated (seq-take-while
                          (lambda (entry)
-                           (and (eq (plist-get entry :name) name)
+                           (and (equal (plist-get entry :name) name)
                                 (equal (plist-get entry :args) args)))
                          tool-history)))
           (when (>= (1+ (length repeated)) threshold)
             ;; Loop detected - the current call makes it the threshold-th repetition
-            (let* ((loop-reason (format
-                                 "Loop detected: tool %s called %d times with identical args"
-                                 name threshold))
-                   (loop-result (list :status 'loop-detected :loop-reason loop-reason)))
-              (setf (ellama-eval--run-state-status state) 'loop-detected)
-              (setf (ellama-eval--run-state-result state) loop-result)
+            (let ((loop-reason (format
+                                "Loop detected: tool %s called %d times with identical args"
+                                name threshold)))
+              (setq loop-state (plist-put loop-state :loop-detected t))
               (setf loop-state (plist-put loop-state :loop-reason loop-reason))
               (setf (ellama-eval--run-state-loop-state state) loop-state))))
         ;; Record the tool call in history
@@ -483,14 +489,10 @@ Also performs loop detection if enabled."
             (setf (nthcdr max-traces tool-history) nil)))
         ;; Update the loop-state in the struct
         (setf (ellama-eval--run-state-loop-state state)
-              (plist-put loop-state :tool-history tool-history))))
-    ;; Record the trace (inside when-let* so state is bound)
-    (push (list :name name
-                :args args
-                :status status
-                :result result
-                :finished-at (float-time))
-          (ellama-eval--run-state-trace state))))
+              (plist-put loop-state :tool-history tool-history))
+        (when (plist-get loop-state :loop-detected)
+          (ellama-eval--finish-run
+           state 'loop-detected (plist-get loop-state :loop-reason)))))))
 
 (defun ellama-eval--instrument-tool-spec (spec)
   "Return SPEC with tool function wrapped for eval tracing."
@@ -1013,6 +1015,7 @@ RUN-STATUS is the execution status.  FILE-CHECKS, FILE-REGEXP-CHECKS,
 ELISP-CHECKS and ANSWER-CHECKS contain oracle results."
   (cond
    ((eq run-status 'timeout) 'timeout)
+   ((eq run-status 'loop-detected) 'loop-detected)
    ((and (ellama-eval--checks-pass-p file-checks)
          (ellama-eval--checks-pass-p file-regexp-checks)
          (ellama-eval--checks-pass-p elisp-checks)

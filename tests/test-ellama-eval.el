@@ -587,16 +587,13 @@
       (should (eq read-provider 'base-provider))
       (should (eq constructed-provider 'base-provider)))))
 
-(provide 'test-ellama-eval)
-
-;;; test-ellama-eval.el ends here
-
 (ert-deftest test-ellama-eval-loop-detection-identical-calls ()
   "Test that identical tool calls trigger loop detection."
   (let ((ellama-eval--active-run nil)
         (ellama-eval-loop-detection-enabled t)
         (ellama-eval-loop-detection-repeated-threshold 3)
         (ellama-eval-loop-detection-max-traces 50)
+        (workspace (make-temp-file "ellama-eval-loop-" t))
         state)
     ;; Create a run state with loop detection enabled
     (setq state
@@ -605,7 +602,7 @@
            :trace nil
            :edit-validation-trace nil
            :started-at (float-time)
-           :workspace "/tmp"
+           :workspace workspace
            :case '(:id "test")
            :profile 'baseline
            :callback nil
@@ -614,9 +611,11 @@
     (setq ellama-eval--active-run state)
     ;; Simulate 3 identical tool calls
     (let ((identical-args '(:path "/test.el")))
-      (dotimes (i 3)
+      (dotimes (_ 3)
         (ellama-eval--trace-tool-call "read_file" identical-args 'ok "content"))
       (should (eq (ellama-eval--run-state-status state) 'loop-detected))
+      (should (plist-get (ellama-eval--run-state-loop-state state)
+                         :loop-detected))
       (should (string-match-p "Loop detected: tool read_file called"
                               (plist-get (ellama-eval--run-state-loop-state state) :loop-reason))))))
 
@@ -626,6 +625,7 @@
         (ellama-eval-loop-detection-enabled t)
         (ellama-eval-loop-detection-repeated-threshold 3)
         (ellama-eval-loop-detection-max-traces 50)
+        (workspace (make-temp-file "ellama-eval-loop-" t))
         state)
     (setq state
           (make-ellama-eval--run-state
@@ -633,7 +633,7 @@
            :trace nil
            :edit-validation-trace nil
            :started-at (float-time)
-           :workspace "/tmp"
+           :workspace workspace
            :case '(:id "test")
            :profile 'baseline
            :callback nil
@@ -671,7 +671,7 @@
     (setq ellama-eval--active-run state)
     ;; Simulate 5 identical calls (should NOT trigger since disabled)
     (let ((identical-args '(:path "/test.el")))
-      (dotimes (i 5)
+      (dotimes (_ 5)
         (ellama-eval--trace-tool-call "read_file" identical-args 'ok "content"))
       (should-not (eq (ellama-eval--run-state-status state) 'loop-detected)))))
 
@@ -724,6 +724,8 @@
         (ellama-eval-loop-detection-enabled t)
         (ellama-eval-loop-detection-repeated-threshold 3)
         (ellama-eval-loop-detection-max-traces 50)
+        (workspace (make-temp-file "ellama-eval-loop-" t))
+        callback-result
         state)
     (setq state
           (make-ellama-eval--run-state
@@ -731,22 +733,63 @@
            :trace nil
            :edit-validation-trace nil
            :started-at (float-time)
-           :workspace "/tmp"
+           :workspace workspace
            :case '(:id "test")
            :profile 'baseline
-           :callback nil
+           :callback (lambda (result)
+                       (setq callback-result result))
            :loop-state
            (list :tool-history nil :loop-detected nil :loop-reason "")))
     (setq ellama-eval--active-run state)
     ;; Make 3 identical calls (triggers loop detection)
     (let ((identical-args '(:path "/test.el")))
-      (dotimes (i 3)
+      (dotimes (_ 3)
         (ellama-eval--trace-tool-call "read_file" identical-args 'ok "content")))
-    ;; Verify trace still has all calls
-    (let ((trace (ellama-eval--run-state-trace state)))
+    ;; Verify the final public result still has all calls.
+    (let ((trace (plist-get callback-result :tool-trace)))
       (should (= (length trace) 3))
       (should (seq-every-p (lambda (entry)
                              (eq (plist-get entry :status) 'ok))
                            trace)))))
 
+(ert-deftest test-ellama-eval-loop-detection-finalizes-run ()
+  "Test that loop detection finalizes the eval run and calls the callback."
+  (let* ((ellama-eval--active-run nil)
+         (ellama-eval-loop-detection-enabled t)
+         (ellama-eval-loop-detection-repeated-threshold 3)
+         (ellama-eval-loop-detection-max-traces 50)
+         (workspace (make-temp-file "ellama-eval-loop-" t))
+         callback-result
+         (state
+          (make-ellama-eval--run-state
+           :status 'pending
+           :trace nil
+           :edit-validation-trace nil
+           :started-at (float-time)
+           :workspace workspace
+           :case '(:id "test" :suite edit)
+           :profile 'baseline
+           :callback (lambda (result)
+                       (setq callback-result result))
+           :loop-state
+           (list :tool-history nil :loop-detected nil :loop-reason ""))))
+    (setq ellama-eval--active-run state)
+    (let ((identical-args '(:path "/test.el")))
+      (dotimes (_ 3)
+        (ellama-eval--trace-tool-call
+         "read_file" identical-args 'ok "content")))
+    (should (null ellama-eval--active-run))
+    (should-not (file-directory-p workspace))
+    (should (eq (plist-get callback-result :status) 'loop-detected))
+    (should-not (plist-get callback-result :success))
+    (should (equal (plist-get callback-result :report-result)
+                   "Loop detected: tool read_file called 3 times with identical args"))
+    (should (equal (plist-get callback-result :loop-detection)
+                   '(:loop-detected t
+                                    :loop-reason
+                                    "Loop detected: tool read_file called 3 times with identical args")))
+    (should (= (plist-get callback-result :tool-call-count) 3))))
+
 (provide 'test-ellama-eval)
+
+;;; test-ellama-eval.el ends here
