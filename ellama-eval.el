@@ -58,10 +58,33 @@
   :type 'integer
   :group 'ellama-eval)
 
+(defcustom ellama-eval-loop-detection-enabled t
+  "Enable automatic loop detection during evaluation runs.
+When non-nil, the eval harness tracks tool call patterns and detects
+repetitive behavior that indicates the agent is stuck in a loop."
+  :type 'boolean
+  :group 'ellama-eval)
+
+(defcustom ellama-eval-loop-detection-repeated-threshold 2
+  "Number of repeated identical tool calls that triggers loop recovery.
+When the same tool is called with identical arguments this many times
+in a row, the harness returns recovery guidance to the agent.  If
+another loop is detected after recovery, the run is stopped."
+  :type 'integer
+  :group 'ellama-eval)
+
+(defcustom ellama-eval-loop-detection-max-traces 50
+  "Maximum number of tool call traces to keep for loop analysis.
+Older traces are discarded when this limit is exceeded."
+  :type 'integer
+  :group 'ellama-eval)
+
 (cl-defstruct ellama-eval--run-state
   "Mutable state for one active evaluation run."
   status result trace worker started-at workspace case profile callback
-  timeout-timer edit-validation-trace)
+  timeout-timer edit-validation-trace
+  loop-detection loop-state)
+
 
 (defvar ellama-eval--active-run nil
   "Current evaluation run state.
@@ -72,6 +95,9 @@ Only one evaluation run is supported at a time.")
 
 (defconst ellama-eval--summary-buffer-name "*Ellama Eval Summary*"
   "Name of the interactive evaluation summary buffer.")
+
+(defconst ellama-eval--timer-buffer-name " *Ellama Eval Timer*"
+  "Name of the internal buffer used to schedule eval timers.")
 
 (defconst ellama-eval--base-tool-names
   '("read_file" "lines_range" "grep" "grep_in_file"
@@ -427,15 +453,105 @@ in one short sentence."
     (_
      spec)))
 
+(defun ellama-eval--loop-recovery-message
+    (name args result repeat-count)
+  "Return recovery guidance for repeated tool NAME with ARGS.
+RESULT is the latest tool result.  REPEAT-COUNT is the repeated
+call count."
+  (concat
+   (format
+    "LOOP RECOVERY: `%s` was called %d times with identical arguments.\n"
+    name repeat-count)
+   (format "Do not call `%s` again with these exact arguments: %S\n"
+           name args)
+   (format "Latest tool result:\n%s\n\n" result)
+   (if (equal name "edit_file")
+       "Next action: read the exact current file text with `read_file` \
+or `lines_range`, copy the exact oldcontent from that output, then call \
+`edit_file` with different oldcontent.  If you cannot identify an exact \
+replacement, call `report_result` with the blocker."
+     "Next action: choose a different tool call or different arguments \
+based on the latest result.  If no different useful action exists, call \
+`report_result` with the blocker.")))
+
 (defun ellama-eval--trace-tool-call (name args status result)
-  "Record a tool call with NAME, ARGS, STATUS and RESULT."
+  "Record a tool call with NAME, ARGS, STATUS and RESULT.
+Also performs loop detection if enabled.
+Return recovery guidance when the tool result should be replaced
+for the agent."
   (when-let* ((state ellama-eval--active-run))
-    (push (list :name name
-                :args args
-                :status status
-                :result result
-                :finished-at (float-time))
-          (ellama-eval--run-state-trace state))))
+    ;; Record the trace before loop finalization so the triggering call is
+    ;; visible in the final result.
+    (let ((entry (list :name name
+                       :args args
+                       :status status
+                       :result result
+                       :finished-at (float-time)))
+          recovery-message)
+      (push entry (ellama-eval--run-state-trace state))
+      (when (and ellama-eval-loop-detection-enabled
+                 (eq (ellama-eval--run-state-status state) 'pending))
+        (let* ((loop-state (ellama-eval--run-state-loop-state state))
+               (tool-history
+                (or (and loop-state (plist-get loop-state :tool-history))
+                    (list)))
+               (threshold ellama-eval-loop-detection-repeated-threshold))
+          ;; Check if this tool has been called with identical args recently.
+          (let* ((repeated (seq-take-while
+                            (lambda (history-entry)
+                              (and (equal (plist-get history-entry :name) name)
+                                   (equal (plist-get history-entry :args) args)))
+                            tool-history))
+                 (repeat-count (1+ (length repeated))))
+            (when (>= repeat-count threshold)
+              (let* ((recovery-count
+                      (or (plist-get loop-state :loop-recovery-count) 0))
+                     (loop-reason
+                      (format
+                       "Loop detected: tool %s called %d times with identical args"
+                       name repeat-count)))
+                (if (= repeat-count threshold)
+                    (progn
+                      (setq recovery-message
+                            (ellama-eval--loop-recovery-message
+                             name args result repeat-count))
+                      (setq loop-state
+                            (plist-put loop-state
+                                       :loop-recovery-attempted t))
+                      (setq loop-state
+                            (plist-put loop-state
+                                       :loop-recovery-count
+                                       (1+ recovery-count)))
+                      (setq loop-state
+                            (plist-put loop-state
+                                       :loop-recovery-reason loop-reason)))
+                  (setq loop-state
+                        (plist-put loop-state :loop-detected t))
+                  (setf loop-state
+                        (plist-put loop-state :loop-reason loop-reason)))
+                (setf (ellama-eval--run-state-loop-state state)
+                      loop-state))))
+          ;; Record the tool call in history.
+          (push (list :name name :args args) tool-history)
+          ;; Limit history size.
+          (let ((max-traces ellama-eval-loop-detection-max-traces))
+            (when (> (length tool-history) max-traces)
+              (setf (nthcdr max-traces tool-history) nil)))
+          ;; Update the loop-state in the struct.
+          (setf (ellama-eval--run-state-loop-state state)
+                (plist-put loop-state :tool-history tool-history))
+          (when recovery-message
+            (setf (car (ellama-eval--run-state-trace state))
+                  (let ((recovery-entry (copy-sequence entry)))
+                    (setq recovery-entry
+                          (plist-put recovery-entry :raw-result result))
+                    (setq recovery-entry
+                          (plist-put recovery-entry :result recovery-message))
+                    (plist-put recovery-entry :loop-recovery t))))
+          (when (plist-get loop-state :loop-detected)
+            (ellama-eval--finish-run
+             state 'loop-detected (plist-get loop-state :loop-reason)))))
+      recovery-message)))
 
 (defun ellama-eval--instrument-tool-spec (spec)
   "Return SPEC with tool function wrapped for eval tracing."
@@ -447,8 +563,8 @@ in one short sentence."
      (lambda (&rest args)
        (condition-case err
            (let ((result (apply function args)))
-             (ellama-eval--trace-tool-call name args 'ok result)
-             result)
+             (or (ellama-eval--trace-tool-call name args 'ok result)
+                 result))
          (error
           (ellama-eval--trace-tool-call
            name args 'error (error-message-string err))
@@ -958,6 +1074,7 @@ RUN-STATUS is the execution status.  FILE-CHECKS, FILE-REGEXP-CHECKS,
 ELISP-CHECKS and ANSWER-CHECKS contain oracle results."
   (cond
    ((eq run-status 'timeout) 'timeout)
+   ((eq run-status 'loop-detected) 'loop-detected)
    ((and (ellama-eval--checks-pass-p file-checks)
          (ellama-eval--checks-pass-p file-regexp-checks)
          (ellama-eval--checks-pass-p elisp-checks)
@@ -1031,6 +1148,27 @@ EXPECTED-FILES and SYNTAX-FILES define the relative file paths to check."
     (cancel-timer timer)
     (setf (ellama-eval--run-state-timeout-timer state) nil)))
 
+(defun ellama-eval--run-at-time (time function &rest args)
+  "Run FUNCTION with ARGS after TIME from a stable eval timer buffer."
+  (with-current-buffer (get-buffer-create ellama-eval--timer-buffer-name)
+    (apply #'run-at-time time nil function args)))
+
+(defun ellama-eval--cancel-worker-request (state)
+  "Cancel active worker request for STATE, if any."
+  (when-let* ((worker (ellama-eval--run-state-worker state))
+              ((ellama-session-p worker)))
+    (let ((extra (ellama-session-extra worker)))
+      (when (plistp extra)
+        (ellama-tools--set-session-extra
+         worker
+         (plist-put (copy-sequence extra) :task-completed t))
+        (when-let* ((request-context
+                     (plist-get extra :current-request-context)))
+          (ellama--cancel-request-context request-context))))
+    (when-let* ((buffer (ellama-tools--subagent-buffer worker)))
+      (with-current-buffer buffer
+        (ellama--cancel-current-request)))))
+
 (defun ellama-eval--cleanup-workspace (state)
   "Delete STATE workspace unless retention is enabled."
   (let ((workspace (ellama-eval--run-state-workspace state)))
@@ -1071,6 +1209,13 @@ EXPECTED-FILES and SYNTAX-FILES define the relative file paths to check."
           (ellama-eval--result-status
            run-status file-checks file-regexp-checks
            elisp-check-results answer-checks))
+         (loop-state (ellama-eval--run-state-loop-state state))
+         (loop-detected (and loop-state
+                             (plist-get loop-state :loop-detected)))
+         (loop-recovery-count
+          (or (and loop-state
+                   (plist-get loop-state :loop-recovery-count))
+              0))
          (worker (ellama-eval--run-state-worker state))
          (extra (and worker (ellama-session-extra worker)))
          (continuation-steps (or (plist-get extra :step-count) 0)))
@@ -1119,6 +1264,21 @@ EXPECTED-FILES and SYNTAX-FILES define the relative file paths to check."
      :file-regexp-checks file-regexp-checks
      :elisp-checks elisp-check-results
      :answer-checks answer-checks
+     :loop-detection
+     (when (and loop-state
+                (or loop-detected
+                    (> loop-recovery-count 0)))
+       (list :loop-detected (and loop-detected t)
+             :loop-reason (plist-get loop-state :loop-reason)
+             :loop-recovery-attempted
+             (and (plist-get loop-state :loop-recovery-attempted) t)
+             :loop-recovery-count loop-recovery-count
+             :loop-recovery-reason
+             (plist-get loop-state :loop-recovery-reason)
+             :loop-recovered
+             (and (> loop-recovery-count 0)
+                  (not loop-detected)
+                  (eq status 'passed))))
      :workspace (when ellama-eval-keep-workspaces workspace))))
 
 (defun ellama-eval--finish-run (state run-status &optional task-result)
@@ -1127,6 +1287,8 @@ EXPECTED-FILES and SYNTAX-FILES define the relative file paths to check."
     (when task-result
       (setf (ellama-eval--run-state-result state) task-result))
     (setf (ellama-eval--run-state-status state) run-status)
+    (unless (eq run-status 'completed)
+      (ellama-eval--cancel-worker-request state))
     (ellama-eval--cancel-timeout-timer state)
     (let ((result (ellama-eval--build-result state run-status))
           (callback (ellama-eval--run-state-callback state)))
@@ -1162,12 +1324,15 @@ PROVIDER overrides the provider used by the eval role."
            :workspace workspace
            :case case
            :profile profile
-           :callback callback))
+           :callback callback
+           :loop-state
+           (when ellama-eval-loop-detection-enabled
+             (list :tool-history nil :loop-detected nil :loop-reason ""))))
          (original-new-session (symbol-function 'ellama-new-session)))
     (setq ellama-eval--active-run state)
     (setf (ellama-eval--run-state-timeout-timer state)
-          (run-at-time ellama-eval-timeout-seconds nil
-                       #'ellama-eval--timeout-run state))
+          (ellama-eval--run-at-time
+           ellama-eval-timeout-seconds #'ellama-eval--timeout-run state))
     (condition-case err
         (let ((default-directory workspace)
               (ellama-tools-allow-all t)
@@ -1262,11 +1427,11 @@ completed count, total count and the latest result."
                   (when progress-callback
                     (funcall progress-callback
                              (reverse results) completed total result))
-                  (run-at-time 0 nil #'start-next))
+                  (ellama-eval--run-at-time 0 #'start-next))
                 provider)))))
       (when progress-callback
         (funcall progress-callback nil 0 total nil))
-      (run-at-time 0 nil #'start-next)
+      (ellama-eval--run-at-time 0 #'start-next)
       total)))
 
 (defun ellama-eval-summarize-results (results)
@@ -1479,9 +1644,10 @@ KEY is the property list key that contains VALUE."
              (plist-get result :elapsed-ms)))))
 
 (defun ellama-eval--render-summary-buffer
-    (results completed total &optional results-file)
+    (results completed total &optional results-file window)
   "Render RESULTS summary with COMPLETED and TOTAL progress.
-RESULTS-FILE is shown when JSONL export is configured."
+RESULTS-FILE is shown when JSONL export is configured.
+When WINDOW is live, show the summary in WINDOW."
   (let ((buffer (get-buffer-create ellama-eval--summary-buffer-name)))
     (with-current-buffer buffer
       (let ((inhibit-read-only t))
@@ -1501,7 +1667,14 @@ RESULTS-FILE is shown when JSONL export is configured."
           (insert "No completed cases yet.\n"))
         (goto-char (point-min))
         (special-mode)))
-    (display-buffer buffer)
+    (condition-case err
+        (if (window-live-p window)
+            (set-window-buffer window buffer)
+          (display-buffer buffer))
+      (error
+       (message "Ellama eval summary display failed: %s"
+                (error-message-string err))
+       (display-buffer buffer)))
     buffer))
 
 ;;;###autoload
@@ -1515,7 +1688,8 @@ select experiment profiles.  RESULTS-FILE receives JSONL output when non-nil."
          (ellama-eval--read-suite-selection)
          (ellama-eval--read-profile-selection)
          (ellama-eval--read-results-file)))
-  (let ((cases (ellama-eval--cases-for-suite-selection suite)))
+  (let ((cases (ellama-eval--cases-for-suite-selection suite))
+        (summary-window (selected-window)))
     (ellama-eval-run-hypothesis-suite-async
      provider profiles cases
      (lambda (results)
@@ -1523,11 +1697,11 @@ select experiment profiles.  RESULTS-FILE receives JSONL output when non-nil."
        (when results-file
          (ellama-eval-write-results-jsonl results results-file))
        (ellama-eval--render-summary-buffer
-        results (length results) (length results) results-file)
+        results (length results) (length results) results-file summary-window)
        (message "Ellama evaluation finished: %d runs." (length results)))
      (lambda (results completed total _latest)
        (ellama-eval--render-summary-buffer
-        results completed total results-file)))
+        results completed total results-file summary-window)))
     (message "Ellama evaluation started.")))
 
 (provide 'ellama-eval)

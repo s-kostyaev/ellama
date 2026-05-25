@@ -639,6 +639,14 @@ argument generated text string.
      Skills.  Default value is ‘"skills"’.
    • ‘ellama-tools-subagent-default-max-steps’: Default maximum number
      of auto-continue steps for a sub-agent.  Default value is 30.
+   • ‘ellama-tools-subagent-loop-detection-enabled’: Detect repeated
+     identical tool calls in sub-agent sessions.  Enabled by default.
+   • ‘ellama-tools-subagent-loop-detection-repeated-threshold’: Number
+     of consecutive identical sub-agent tool calls that triggers
+     recovery.  Default value is 2.
+   • ‘ellama-tools-subagent-loop-detection-max-traces’: Maximum recent
+     sub-agent tool calls retained for loop detection.  Default value is
+     50.
    • ‘ellama-tools-subagent-continue-prompt’: Prompt sent to a sub-agent
      when it finishes a turn without calling ‘report_result’.
    • ‘ellama-tools-subagent-roles’: Subagent roles with provider, system
@@ -817,6 +825,17 @@ Each sub-agent runs in its own Ellama session.  When
 displays both the main session and sub-agent session buffers as
 generation starts.  Sub-agent buffers include the delegated prompt under
 the ‘Main agent:’ label, followed by the sub-agent response.
+
+Sub-agents also keep session-local tool loop state.  When
+‘ellama-tools-subagent-loop-detection-enabled’ is non-nil, the second
+consecutive identical tool call returns a recovery message instead of
+the normal tool result.  The message includes the repeated tool name,
+exact arguments, the latest tool result and a next action.  If the same
+consecutive call chain continues beyond
+‘ellama-tools-subagent-loop-detection-repeated-threshold’, Ellama
+finishes the subtask with a loop-detected result.  A later repeated call
+after a different tool call is treated as a new recovery opportunity,
+not as an immediate hard loop.
 
 The tool accepts either a free-form ‘description’ or a prompt template:
 
@@ -2510,45 +2529,45 @@ Node: Installation3973
 Node: Commands8987
 Node: Keymap17925
 Node: Configuration20812
-Node: Session Provider Keys33152
-Node: Session Compaction35013
-Node: Image Input37307
-Node: Task Tool Subagents39452
-Node: Plan-and-Act Agent Loop41553
-Node: Edit Tool Shell Hooks43737
-Node: DLP for Tool Input/Output45725
-Node: SRT Filesystem Policy for Tools60629
-Node: Context Management66298
-Node: Transient Menus for Context Management67366
-Node: Managing the Context69045
-Node: Considerations69820
-Node: Minor modes70413
-Node: ellama-context-header-line-mode72401
-Node: ellama-context-header-line-global-mode73226
-Node: ellama-context-mode-line-mode73946
-Node: ellama-context-mode-line-global-mode74794
-Node: Ellama Session Header Line Mode75498
-Node: Enabling and Disabling76067
-Node: Customization76514
-Node: Ellama Session Mode Line Mode76802
-Node: Enabling and Disabling (1)77387
-Node: Customization (1)77834
-Node: Using Blueprints78128
-Node: Key Components of Ellama Blueprints78768
-Node: Creating and Managing Blueprints79375
-Node: Blueprints files80353
-Node: Variable Management80774
-Node: Keymap and Mode81227
-Node: Transient Menus82163
-Node: Running Blueprints programmatically82709
-Node: MCP Integration83296
-Node: Agent Skills84531
-Node: Directory Structure84894
-Node: Creating a Skill85921
-Node: How it works86296
-Node: Acknowledgments86687
-Node: Contributions87398
-Node: GNU Free Documentation License87784
+Node: Session Provider Keys33634
+Node: Session Compaction35495
+Node: Image Input37789
+Node: Task Tool Subagents39934
+Node: Plan-and-Act Agent Loop42664
+Node: Edit Tool Shell Hooks44848
+Node: DLP for Tool Input/Output46836
+Node: SRT Filesystem Policy for Tools61740
+Node: Context Management67409
+Node: Transient Menus for Context Management68477
+Node: Managing the Context70156
+Node: Considerations70931
+Node: Minor modes71524
+Node: ellama-context-header-line-mode73512
+Node: ellama-context-header-line-global-mode74337
+Node: ellama-context-mode-line-mode75057
+Node: ellama-context-mode-line-global-mode75905
+Node: Ellama Session Header Line Mode76609
+Node: Enabling and Disabling77178
+Node: Customization77625
+Node: Ellama Session Mode Line Mode77913
+Node: Enabling and Disabling (1)78498
+Node: Customization (1)78945
+Node: Using Blueprints79239
+Node: Key Components of Ellama Blueprints79879
+Node: Creating and Managing Blueprints80486
+Node: Blueprints files81464
+Node: Variable Management81885
+Node: Keymap and Mode82338
+Node: Transient Menus83274
+Node: Running Blueprints programmatically83820
+Node: MCP Integration84407
+Node: Agent Skills85642
+Node: Directory Structure86005
+Node: Creating a Skill87032
+Node: How it works87407
+Node: Acknowledgments87798
+Node: Contributions88509
+Node: GNU Free Documentation License88895
 
 End Tag Table
 

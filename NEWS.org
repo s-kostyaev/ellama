@@ -1,3 +1,43 @@
+* Version 1.25.0
+
+- Add loop detection to ~ellama-eval~ harness that identifies repetitive tool
+  call patterns indicating agents are stuck in evaluation loops. The harness
+  returns recovery guidance on the first repeated identical tool call sequence,
+  and falls back to hard loop detection for repeated loops after recovery.
+  Configurable defcustoms control the behavior:
+  ~ellama-eval-loop-detection-enabled~ (default: t),
+  ~ellama-eval-loop-detection-repeated-threshold~ (default: 2), and
+  ~ellama-eval-loop-detection-max-traces~ (default: 50).
+
+- Move loop recovery into task subagents by wrapping role tools with
+  session-local repeated-call detection. Repeated identical tool calls return
+  recovery guidance at the configured threshold and complete the subtask if the
+  same consecutive chain continues. Document the new subagent loop-detection
+  settings in README.org.
+
+- Extend evaluation cancellation with request context tracking. Store the active
+  request context on the session for streaming, continuation, and compaction
+  requests so that eval timeout cancellation can target the correct context
+  directly. Cancel active eval worker requests when a run finishes with a
+  non-completed status, and register asynchronous session compaction requests in
+  the active request context so user cancellation and eval timeout stop the
+  compact request itself.
+
+- Harden evaluation async buffer handling by scheduling timers from a stable
+  internal buffer so callbacks do not inherit transient subagent buffers. Guard
+  interactive summary rendering against stale target-window errors and fall back
+  to display-buffer.
+
+- Render evaluation progress and final summaries into the selected window for
+  interactive runs, keeping the existing display-buffer behavior as a fallback
+  for noninteractive or stale-window calls.
+
+- Preserve triggering tool calls in public traces and final loop-detection
+  results when loop detection triggers, and record recovery metadata in tool
+  traces so recovered passing runs remain visible. Avoid false loop detection on
+  later repeated reads by treating the repeated-call threshold as the recovery
+  point for the current consecutive chain.
+
 * Version 1.24.1
 - Added literal string matching support to ~ellama-tools-grep-tool~ and
   ~ellama-tools-grep-in-file-tool~ using ~-F~ (fixed-strings) and ~-e~ flags,
