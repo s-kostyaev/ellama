@@ -456,30 +456,35 @@ Also performs loop detection if enabled."
     (when (and ellama-eval-loop-detection-enabled
                (not (eq (ellama-eval--run-state-status state) 'loop-detected)))
       (let* ((loop-state (ellama-eval--run-state-loop-state state))
-             (tool-history (and loop-state (plist-get loop-state :tool-history)))
+             (tool-history (or (and loop-state (plist-get loop-state :tool-history))
+                               (list)))
              (threshold ellama-eval-loop-detection-repeated-threshold))
-        (when tool-history
-          ;; Check if this tool has been called with identical args recently
-          (let ((repeated (seq-take-while
-                           (lambda (entry)
-                             (and (eq (plist-get entry :name) name)
-                                  (equal (plist-get entry :args) args)))
-                           tool-history)))
-            (when (>= (length repeated) threshold)
-              ;; Loop detected - stop the run
+        ;; Check if this tool has been called with identical args recently
+        (let ((repeated (seq-take-while
+                         (lambda (entry)
+                           (and (eq (plist-get entry :name) name)
+                                (equal (plist-get entry :args) args)))
+                         tool-history)))
+          (when (>= (1+ (length repeated)) threshold)
+            ;; Loop detected - the current call makes it the threshold-th repetition
+            (let* ((loop-reason (format
+                                 "Loop detected: tool %s called %d times with identical args"
+                                 name threshold))
+                   (loop-result (list :status 'loop-detected :loop-reason loop-reason)))
               (setf (ellama-eval--run-state-status state) 'loop-detected)
-              (ellama-eval--run-state-set-result
-               state
-               (list :status 'loop-detected
-                     :loop-reason (format
-                                   "Loop detected: tool %s called %d times with identical args"
-                                   name threshold)))))
-          ;; Record the tool call in history
-          (push (list :name name :args args) tool-history)
-          ;; Limit history size
-          (let ((max-traces ellama-eval-loop-detection-max-traces))
-            (when (> (length tool-history) max-traces)
-              (setf (nthcdr max-traces tool-history) nil))))))
+              (setf (ellama-eval--run-state-result state) loop-result)
+              (setf loop-state (plist-put loop-state :loop-reason loop-reason))
+              (setf (ellama-eval--run-state-loop-state state) loop-state))))
+        ;; Record the tool call in history
+        (push (list :name name :args args) tool-history)
+        ;; Limit history size
+        (let ((max-traces ellama-eval-loop-detection-max-traces))
+          (when (> (length tool-history) max-traces)
+            (setf (nthcdr max-traces tool-history) nil)))
+        ;; Update the loop-state in the struct
+        (setf (ellama-eval--run-state-loop-state state)
+              (plist-put loop-state :tool-history tool-history))))
+    ;; Record the trace (inside when-let* so state is bound)
     (push (list :name name
                 :args args
                 :status status

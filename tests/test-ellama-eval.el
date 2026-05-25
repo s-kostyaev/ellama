@@ -703,7 +703,7 @@
        'ok "result"))
     (let ((history (plist-get (ellama-eval--run-state-loop-state state) :tool-history)))
       (should (= (length history) 5))
-      (should (eq (plist-get (car history) :name) "grep")))))
+      (should (equal (plist-get (car history) :name) "grep")))))
 
 (ert-deftest test-ellama-eval-loop-detection-no-active-run ()
   "Test that loop detection gracefully handles missing active run."
