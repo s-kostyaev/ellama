@@ -1888,6 +1888,106 @@ detailed comparison to help you decide:
         (funcall response-callback '(:text "Summary"))
         (should-not ellama-compaction-mode)))))
 
+(ert-deftest test-ellama-session-compact-request-is-cancellable ()
+  (let* ((provider (make-llm-fake))
+         (session (ellama-test--compact-session provider))
+         (prompt (ellama-session-prompt session))
+         (initial-interactions
+          (mapcar #'llm-chat-prompt-interaction-content
+                  (llm-chat-prompt-interactions prompt)))
+         (response-callback nil)
+         cancelled-request
+         (ellama-spinner-enabled nil)
+         (ellama-session-auto-compact-provider (make-llm-fake))
+         (ellama-session-auto-compact-keep-last-turns 2)
+         (ellama-session-auto-compact-show-message nil))
+    (cl-letf (((symbol-function 'llm-chat-async)
+               (lambda (_provider _summary-prompt callback
+                                  _error-callback &optional _multi-output)
+                 (setq response-callback callback)
+                 'compact-request))
+              ((symbol-function 'llm-cancel-request)
+               (lambda (request)
+                 (setq cancelled-request request))))
+      (with-temp-buffer
+        (should
+         (ellama--session-compact
+          session
+          :provider provider
+          :buffer (current-buffer)))
+        (should response-callback)
+        (should (eq ellama--current-request 'compact-request))
+        (should ellama-request-mode)
+        (should (ellama--session-extra-get
+                 session :auto-compact-in-progress))
+        (should (eq (ellama--session-extra-get
+                     session :auto-compact-request)
+                    'compact-request))
+        (ellama--cancel-current-request)
+        (should (eq cancelled-request 'compact-request))
+        (should-not ellama--current-request)
+        (should-not ellama-request-mode)
+        (should-not (ellama--session-extra-get
+                     session :auto-compact-in-progress))
+        (should-not (ellama--session-extra-get
+                     session :auto-compact-request))
+        (funcall response-callback '(:text "Late summary"))
+        (should
+         (equal
+          initial-interactions
+          (mapcar #'llm-chat-prompt-interaction-content
+                  (llm-chat-prompt-interactions prompt))))))))
+
+(ert-deftest test-ellama-response-handler-cancels-auto-compact-request ()
+  (let* ((provider (make-llm-fake))
+         (session (ellama-test--compact-session provider))
+         (compact-response-callback nil)
+         cancelled-request
+         done-text
+         request-context
+         (ellama-session-auto-compact-enabled t)
+         (ellama-session-auto-compact-token-threshold 100)
+         (ellama-session-auto-compact-provider (make-llm-fake))
+         (ellama-session-auto-compact-keep-last-turns 2)
+         (ellama-session-auto-compact-show-message nil)
+         (ellama-session-hide-org-quotes nil)
+         (ellama-spinner-enabled nil))
+    (cl-letf (((symbol-function 'llm-chat-async)
+               (lambda (_provider _summary-prompt response-callback
+                                  _error-callback &optional _multi-output)
+                 (setq compact-response-callback response-callback)
+                 'compact-request))
+              ((symbol-function 'llm-cancel-request)
+               (lambda (request)
+                 (setq cancelled-request request))))
+      (with-temp-buffer
+        (setq-local ellama--current-session session)
+        (setq-local ellama--change-group (prepare-change-group))
+        (activate-change-group ellama--change-group)
+        (setq request-context
+              (ellama--set-current-request
+               'main-request
+               (list (current-buffer))))
+        (funcall
+         (ellama--response-handler
+          #'ignore nil (current-buffer)
+          (lambda (text) (setq done-text text))
+          #'ignore provider (ellama-session-prompt session) t #'identity
+          request-context)
+         '(:text "answer" :input-tokens 90 :output-tokens 20))
+        (should compact-response-callback)
+        (should-not done-text)
+        (should (eq ellama--current-request 'compact-request))
+        (ellama--cancel-current-request)
+        (should (eq cancelled-request 'compact-request))
+        (should-not done-text)
+        (should-not ellama--current-request)
+        (should-not ellama-request-mode)
+        (should-not (ellama--session-extra-get
+                     session :auto-compact-in-progress))
+        (should-not (ellama--session-extra-get
+                     session :auto-compact-request))))))
+
 (ert-deftest test-ellama-chat-writes-to-session-buffer ()
   (let* ((provider (make-llm-fake
                     :chat-action-func (lambda () "Chat answer")))

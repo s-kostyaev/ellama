@@ -1720,17 +1720,34 @@ REQUESTED-KEPT-TURNS is the configured recent turn count."
 
 (defun ellama--session-compact-handle-async-error (session err)
   "Reset SESSION compaction state and report asynchronous ERR."
-  (ellama--session-extra-put session :auto-compact-in-progress nil)
-  (ellama--session-set-compaction-mode session nil nil)
+  (ellama--session-compact-reset session nil)
   (message "Ellama context compaction failed: %s" err))
 
+(defun ellama--session-compact-reset (session buffer)
+  "Reset SESSION compaction state and BUFFER status."
+  (ellama--session-extra-put session :auto-compact-in-progress nil)
+  (ellama--session-extra-put session :auto-compact-request nil)
+  (ellama--session-set-compaction-mode session buffer nil))
+
+(defun ellama--session-compact-request-buffers
+    (buffer request-context)
+  "Return buffers that should own a compaction request.
+BUFFER is the compaction buffer.  REQUEST-CONTEXT is the active
+request context when compaction runs after a response."
+  (or (and request-context
+           (ellama--request-context-buffers request-context))
+      (and (buffer-live-p buffer)
+           (list buffer))))
+
 (cl-defun ellama--session-compact
-    (session &key provider buffer token-count automatic on-done)
+    (session &key provider buffer token-count automatic on-done
+             request-context)
   "Compact SESSION conversation context.
 PROVIDER is the current session provider.
 BUFFER is the chat buffer that should receive a notice.
 TOKEN-COUNT is the estimated context size before compaction.
 ON-DONE is called after asynchronous compaction succeeds or fails.
+REQUEST-CONTEXT is the active request context.
 If AUTOMATIC is non-nil, fail quietly and return nil."
   (condition-case err
       (let* ((provider (or provider (ellama-session-provider session)))
@@ -1779,43 +1796,63 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
                   (ellama--session-compact-build-summary-prompt
                    previous-summary old-interactions target)))
             (condition-case err
-                (progn
-                  (llm-chat-async
-                   summary-provider
-                   (llm-make-chat-prompt summary-prompt)
-                   (lambda (response)
-                     (condition-case compact-err
-                         (ellama--session-compact-apply
-                          session prompt provider buffer original-context
-                          interactions old-interactions recent-interactions
-                          before-token-count
-                          (if (stringp response)
-                              response
-                            (plist-get response :text))
-                          requested-keep-turns)
-                       (error
-                        (ellama--session-compact-handle-async-error
-                         session (error-message-string compact-err))))
-                     (ellama--session-set-compaction-mode
-                      session buffer nil)
-                     (ellama--session-extra-put
-                      session :auto-compact-in-progress nil)
-                     (when on-done
-                       (funcall on-done)))
-                   (lambda (&rest err)
-                     (ellama--session-compact-handle-async-error
-                      session
-                      (mapconcat
-                       (lambda (item) (format "%s" item))
-                       err " "))
-                     (when on-done
-                       (funcall on-done)))
-                   t)
+                (let (completed request)
+                  (cl-labels
+                      ((finish ()
+                         (setq completed t)
+                         (ellama--session-compact-reset session buffer)
+                         (when request-context
+                           (ellama--deactivate-current-request
+                            request-context))
+                         (when on-done
+                           (funcall on-done)))
+                       (cancel ()
+                         (setq completed t)
+                         (ellama--session-compact-reset session buffer)))
+                    (setq
+                     request
+                     (llm-chat-async
+                      summary-provider
+                      (llm-make-chat-prompt summary-prompt)
+                      (lambda (response)
+                        (unless completed
+                          (condition-case compact-err
+                              (ellama--session-compact-apply
+                               session prompt provider buffer original-context
+                               interactions old-interactions recent-interactions
+                               before-token-count
+                               (if (stringp response)
+                                   response
+                                 (plist-get response :text))
+                               requested-keep-turns)
+                            (error
+                             (ellama--session-compact-handle-async-error
+                              session (error-message-string compact-err))))
+                          (finish)))
+                      (lambda (&rest err)
+                        (unless completed
+                          (ellama--session-compact-handle-async-error
+                           session
+                           (mapconcat
+                            (lambda (item) (format "%s" item))
+                            err " "))
+                          (finish)))
+                      t))
+                    (unless completed
+                      (ellama--session-extra-put
+                       session :auto-compact-request request)
+                      (let ((buffers
+                             (ellama--session-compact-request-buffers
+                              buffer request-context)))
+                        (when buffers
+                          (setq request-context
+                                (ellama--set-current-request
+                                 request buffers request-context))
+                          (ellama--request-context-add-cancel-function
+                           request-context #'cancel)))))
                   t)
               (error
-               (ellama--session-set-compaction-mode session buffer nil)
-               (ellama--session-extra-put
-                session :auto-compact-in-progress nil)
+               (ellama--session-compact-reset session buffer)
                (signal (car err) (cdr err)))))))
     (error
      (if automatic
@@ -1826,10 +1863,11 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
        (signal (car err) (cdr err))))))
 
 (cl-defun ellama--session-auto-compact-maybe
-    (session provider response text buffer &key on-done)
+    (session provider response text buffer &key on-done request-context)
   "Compact SESSION when RESPONSE token use for TEXT crosses threshold.
 PROVIDER is the session provider.  BUFFER is the chat buffer.
-ON-DONE is called after asynchronous compaction succeeds or fails."
+ON-DONE is called after asynchronous compaction succeeds or fails.
+REQUEST-CONTEXT is the active request context."
   (when-let ((token-count
               (ellama--session-auto-compact-needed-p
                session provider response text)))
@@ -1839,7 +1877,8 @@ ON-DONE is called after asynchronous compaction succeeds or fails."
      :buffer buffer
      :token-count token-count
      :automatic t
-     :on-done on-done)))
+     :on-done on-done
+     :request-context request-context)))
 
 (defun ellama--active-session-by-id (id)
   "Return active session matching display ID."
@@ -2126,7 +2165,8 @@ If EPHEMERAL non nil new session will not be associated with any file."
 (defun ellama--make-request-context (buffers)
   "Create request context for BUFFERS."
   (list :buffers (cl-remove-if-not #'buffer-live-p buffers)
-        :request nil))
+        :request nil
+        :cancel-functions nil))
 
 (defun ellama--request-context-buffers (request-context)
   "Return live buffers from REQUEST-CONTEXT."
@@ -2136,6 +2176,24 @@ If EPHEMERAL non nil new session will not be associated with any file."
 (defun ellama--request-context-request (request-context)
   "Return request object from REQUEST-CONTEXT."
   (plist-get request-context :request))
+
+(defun ellama--request-context-add-cancel-function
+    (request-context function)
+  "Add FUNCTION to REQUEST-CONTEXT cancellation hooks."
+  (when request-context
+    (setf (plist-get request-context :cancel-functions)
+          (cons function
+                (plist-get request-context :cancel-functions)))))
+
+(defun ellama--run-request-context-cancel-functions (request-context)
+  "Run cancellation hooks from REQUEST-CONTEXT."
+  (dolist (function (plist-get request-context :cancel-functions))
+    (condition-case err
+        (funcall function)
+      (error
+       (message "Ellama request cancellation cleanup failed: %s"
+                (error-message-string err)))))
+  (setf (plist-get request-context :cancel-functions) nil))
 
 (defun ellama--set-current-request (request buffers &optional request-context)
   "Set REQUEST for BUFFERS and enable `ellama-request-mode'.
@@ -2220,6 +2278,8 @@ When APPEND-USER-HEADER is non-nil, append a user header in chat buffers."
                        (ellama--request-context-buffers request-context))))
     (when request
       (llm-cancel-request request)
+      (when request-context
+        (ellama--run-request-context-cancel-functions request-context))
       (when ellama-spinner-enabled
         (require 'spinner)
         (spinner-stop))
@@ -3258,7 +3318,8 @@ inserted into the BUFFER."
                   (unless
                       (ellama--session-auto-compact-maybe
                        ellama--current-session provider response text buffer
-                       :on-done finish-response)
+                       :on-done finish-response
+                       :request-context request-context)
                     (funcall finish-response)))
               (funcall finish-response))))))))
 
