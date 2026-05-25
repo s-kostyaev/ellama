@@ -344,6 +344,42 @@
     (should-not (plist-get callback-result :success))
     (should-not (file-directory-p workspace))))
 
+(ert-deftest test-ellama-eval-timeout-run-cancels-worker-request ()
+  (let* ((workspace (make-temp-file "ellama-eval-timeout-" t))
+         (worker-buffer (generate-new-buffer " *ellama-eval-worker*"))
+         (worker (make-ellama-session
+                  :id "eval-worker"
+                  :extra '(:task-completed nil :step-count 0)))
+         cancel-buffer
+         canceled
+         (state
+          (make-ellama-eval--run-state
+           :status 'pending
+           :trace nil
+           :started-at (float-time)
+           :workspace workspace
+           :worker worker
+           :case '(:id "timeout" :suite edit)
+           :profile 'baseline
+           :callback nil)))
+    (unwind-protect
+        (cl-letf (((symbol-function 'ellama-tools--subagent-buffer)
+                   (lambda (session &optional _buffer)
+                     (and (eq session worker) worker-buffer)))
+                  ((symbol-function 'ellama--cancel-current-request)
+                   (lambda (&optional _append-user-header)
+                     (setq canceled t
+                           cancel-buffer (current-buffer)))))
+          (ellama-eval--timeout-run state)
+          (should canceled)
+          (should (eq cancel-buffer worker-buffer))
+          (should (plist-get (ellama-session-extra worker)
+                             :task-completed)))
+      (when (buffer-live-p worker-buffer)
+        (kill-buffer worker-buffer))
+      (when (file-directory-p workspace)
+        (delete-directory workspace t)))))
+
 (ert-deftest test-ellama-eval-summarize-results ()
   (let* ((results
           '((:suite edit :profile baseline :success t
@@ -789,6 +825,54 @@
                                     :loop-reason
                                     "Loop detected: tool read_file called 3 times with identical args")))
     (should (= (plist-get callback-result :tool-call-count) 3))))
+
+(ert-deftest test-ellama-eval-loop-detection-cancels-worker-request ()
+  "Test that loop detection cancels the active worker request."
+  (let* ((ellama-eval--active-run nil)
+         (ellama-eval-loop-detection-enabled t)
+         (ellama-eval-loop-detection-repeated-threshold 3)
+         (ellama-eval-loop-detection-max-traces 50)
+         (workspace (make-temp-file "ellama-eval-loop-" t))
+         (worker-buffer (generate-new-buffer " *ellama-eval-worker*"))
+         (worker (make-ellama-session
+                  :id "eval-worker"
+                  :extra '(:task-completed nil :step-count 0)))
+         cancel-buffer
+         canceled
+         (state
+          (make-ellama-eval--run-state
+           :status 'pending
+           :trace nil
+           :edit-validation-trace nil
+           :started-at (float-time)
+           :workspace workspace
+           :worker worker
+           :case '(:id "test" :suite edit)
+           :profile 'baseline
+           :callback nil
+           :loop-state
+           (list :tool-history nil :loop-detected nil :loop-reason ""))))
+    (unwind-protect
+        (cl-letf (((symbol-function 'ellama-tools--subagent-buffer)
+                   (lambda (session &optional _buffer)
+                     (and (eq session worker) worker-buffer)))
+                  ((symbol-function 'ellama--cancel-current-request)
+                   (lambda (&optional _append-user-header)
+                     (setq canceled t
+                           cancel-buffer (current-buffer)))))
+          (setq ellama-eval--active-run state)
+          (let ((identical-args '(:path "/test.el")))
+            (dotimes (_ 3)
+              (ellama-eval--trace-tool-call
+               "read_file" identical-args 'ok "content")))
+          (should canceled)
+          (should (eq cancel-buffer worker-buffer))
+          (should (plist-get (ellama-session-extra worker)
+                             :task-completed)))
+      (when (buffer-live-p worker-buffer)
+        (kill-buffer worker-buffer))
+      (when (file-directory-p workspace)
+        (delete-directory workspace t)))))
 
 (provide 'test-ellama-eval)
 

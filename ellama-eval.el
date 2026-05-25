@@ -1089,6 +1089,19 @@ EXPECTED-FILES and SYNTAX-FILES define the relative file paths to check."
     (cancel-timer timer)
     (setf (ellama-eval--run-state-timeout-timer state) nil)))
 
+(defun ellama-eval--cancel-worker-request (state)
+  "Cancel active worker request for STATE, if any."
+  (when-let* ((worker (ellama-eval--run-state-worker state))
+              ((ellama-session-p worker)))
+    (let ((extra (ellama-session-extra worker)))
+      (when (plistp extra)
+        (ellama-tools--set-session-extra
+         worker
+         (plist-put (copy-sequence extra) :task-completed t))))
+    (when-let* ((buffer (ellama-tools--subagent-buffer worker)))
+      (with-current-buffer buffer
+        (ellama--cancel-current-request)))))
+
 (defun ellama-eval--cleanup-workspace (state)
   "Delete STATE workspace unless retention is enabled."
   (let ((workspace (ellama-eval--run-state-workspace state)))
@@ -1190,6 +1203,8 @@ EXPECTED-FILES and SYNTAX-FILES define the relative file paths to check."
     (when task-result
       (setf (ellama-eval--run-state-result state) task-result))
     (setf (ellama-eval--run-state-status state) run-status)
+    (unless (eq run-status 'completed)
+      (ellama-eval--cancel-worker-request state))
     (ellama-eval--cancel-timeout-timer state)
     (let ((result (ellama-eval--build-result state run-status))
           (callback (ellama-eval--run-state-callback state)))
