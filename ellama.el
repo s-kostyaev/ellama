@@ -1848,6 +1848,8 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
                           (setq request-context
                                 (ellama--set-current-request
                                  request buffers request-context))
+                          (ellama--set-session-request-context
+                           session request-context)
                           (ellama--request-context-add-cancel-function
                            request-context #'cancel)))))
                   t)
@@ -2166,6 +2168,7 @@ If EPHEMERAL non nil new session will not be associated with any file."
   "Create request context for BUFFERS."
   (list :buffers (cl-remove-if-not #'buffer-live-p buffers)
         :request nil
+        :session nil
         :cancel-functions nil))
 
 (defun ellama--request-context-buffers (request-context)
@@ -2176,6 +2179,26 @@ If EPHEMERAL non nil new session will not be associated with any file."
 (defun ellama--request-context-request (request-context)
   "Return request object from REQUEST-CONTEXT."
   (plist-get request-context :request))
+
+(defun ellama--request-context-session (request-context)
+  "Return session from REQUEST-CONTEXT."
+  (plist-get request-context :session))
+
+(defun ellama--set-session-request-context (session request-context)
+  "Store REQUEST-CONTEXT as active request context for SESSION."
+  (when (ellama-session-p session)
+    (setf (plist-get request-context :session) session)
+    (ellama--session-extra-put
+     session :current-request-context request-context)))
+
+(defun ellama--clear-session-request-context (request-context)
+  "Clear session request context matching REQUEST-CONTEXT."
+  (when-let* ((session (ellama--request-context-session request-context))
+              ((ellama-session-p session))
+              ((eq (ellama--session-extra-get
+                    session :current-request-context)
+                   request-context)))
+    (ellama--session-extra-put session :current-request-context nil)))
 
 (defun ellama--request-context-add-cancel-function
     (request-context function)
@@ -2229,7 +2252,9 @@ REQUEST-CONTEXT is a request context."
           (push buffer target-buffers))))
     (dolist (buffer target-buffers)
       (with-current-buffer buffer
-        (ellama-request-mode -1)))))
+        (ellama-request-mode -1)))
+    (when ctx
+      (ellama--clear-session-request-context ctx))))
 
 (defun ellama--chat-last-role ()
   "Return last chat role marker in current buffer."
@@ -2287,6 +2312,25 @@ When APPEND-USER-HEADER is non-nil, append a user header in chat buffers."
       (when append-user-header
         (dolist (buffer (or buffers (list (current-buffer))))
           (ellama--chat-append-user-header-after-cancel buffer))))))
+
+(defun ellama--cancel-request-context
+    (request-context &optional append-user-header)
+  "Cancel request stored in REQUEST-CONTEXT.
+When APPEND-USER-HEADER is non-nil, append a user header in chat buffers."
+  (declare-function spinner-stop "ext:spinner")
+  (when-let* ((request-context)
+              (request (ellama--request-context-request request-context)))
+    (let ((buffers (ellama--request-context-buffers request-context)))
+      (llm-cancel-request request)
+      (ellama--run-request-context-cancel-functions request-context)
+      (when ellama-spinner-enabled
+        (require 'spinner)
+        (spinner-stop))
+      (ellama--deactivate-current-request request-context)
+      (when append-user-header
+        (dolist (buffer buffers)
+          (ellama--chat-append-user-header-after-cancel buffer)))
+      t)))
 
 (defun ellama--cancel-current-request-and-quit ()
   "Cancel the current request and quit."
@@ -3288,7 +3332,11 @@ inserted into the BUFFER."
                              (ellama--set-current-request
                               request
                               (list buffer reasoning-buffer)
-                              request-context))))))
+                              request-context))
+                       (ellama--set-session-request-context
+                        (with-current-buffer buffer
+                          ellama--current-session)
+                        request-context)))))
               (start-request)))
         (with-current-buffer buffer
           (accept-change-group ellama--change-group)
@@ -3545,7 +3593,9 @@ failure (with BUFFER current).
                          (ellama--set-current-request
                           request
                           (list buffer reasoning-buffer)
-                          request-context))))))
+                          request-context))
+                   (ellama--set-session-request-context
+                    session request-context)))))
           (start-request))))))
 
 (defun ellama-chain (initial-prompt forms &optional acc)

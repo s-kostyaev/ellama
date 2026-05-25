@@ -380,6 +380,51 @@
       (when (file-directory-p workspace)
         (delete-directory workspace t)))))
 
+(ert-deftest test-ellama-eval-timeout-run-cancels-worker-request-context ()
+  (let* ((workspace (make-temp-file "ellama-eval-timeout-" t))
+         (worker-buffer (generate-new-buffer " *ellama-eval-worker*"))
+         (worker (make-ellama-session
+                  :id "eval-worker"
+                  :extra '(:task-completed nil :step-count 0)))
+         cancelled-request
+         request-context
+         (state
+          (make-ellama-eval--run-state
+           :status 'pending
+           :trace nil
+           :started-at (float-time)
+           :workspace workspace
+           :worker worker
+           :case '(:id "timeout" :suite edit)
+           :profile 'baseline
+           :callback nil)))
+    (unwind-protect
+        (progn
+          (with-current-buffer worker-buffer
+            (setq request-context
+                  (ellama--set-current-request
+                   'worker-request
+                   (list worker-buffer))))
+          (ellama--set-session-request-context worker request-context)
+          (cl-letf (((symbol-function 'ellama-tools--subagent-buffer)
+                     (lambda (&rest _args) nil))
+                    ((symbol-function 'llm-cancel-request)
+                     (lambda (request)
+                       (setq cancelled-request request))))
+            (ellama-eval--timeout-run state)
+            (should (eq cancelled-request 'worker-request))
+            (should (plist-get (ellama-session-extra worker)
+                               :task-completed))
+            (should-not (plist-get (ellama-session-extra worker)
+                                   :current-request-context))
+            (with-current-buffer worker-buffer
+              (should-not ellama--current-request)
+              (should-not ellama-request-mode))))
+      (when (buffer-live-p worker-buffer)
+        (kill-buffer worker-buffer))
+      (when (file-directory-p workspace)
+        (delete-directory workspace t)))))
+
 (ert-deftest test-ellama-eval-summarize-results ()
   (let* ((results
           '((:suite edit :profile baseline :success t

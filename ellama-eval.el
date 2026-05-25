@@ -1097,7 +1097,10 @@ EXPECTED-FILES and SYNTAX-FILES define the relative file paths to check."
       (when (plistp extra)
         (ellama-tools--set-session-extra
          worker
-         (plist-put (copy-sequence extra) :task-completed t))))
+         (plist-put (copy-sequence extra) :task-completed t))
+        (when-let* ((request-context
+                     (plist-get extra :current-request-context)))
+          (ellama--cancel-request-context request-context))))
     (when-let* ((buffer (ellama-tools--subagent-buffer worker)))
       (with-current-buffer buffer
         (ellama--cancel-current-request)))))
