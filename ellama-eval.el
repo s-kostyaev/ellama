@@ -96,6 +96,9 @@ Only one evaluation run is supported at a time.")
 (defconst ellama-eval--summary-buffer-name "*Ellama Eval Summary*"
   "Name of the interactive evaluation summary buffer.")
 
+(defconst ellama-eval--timer-buffer-name " *Ellama Eval Timer*"
+  "Name of the internal buffer used to schedule eval timers.")
+
 (defconst ellama-eval--base-tool-names
   '("read_file" "lines_range" "grep" "grep_in_file"
     "directory_tree" "project_root")
@@ -1144,6 +1147,11 @@ EXPECTED-FILES and SYNTAX-FILES define the relative file paths to check."
     (cancel-timer timer)
     (setf (ellama-eval--run-state-timeout-timer state) nil)))
 
+(defun ellama-eval--run-at-time (time function &rest args)
+  "Run FUNCTION with ARGS after TIME from a stable eval timer buffer."
+  (with-current-buffer (get-buffer-create ellama-eval--timer-buffer-name)
+    (apply #'run-at-time time nil function args)))
+
 (defun ellama-eval--cancel-worker-request (state)
   "Cancel active worker request for STATE, if any."
   (when-let* ((worker (ellama-eval--run-state-worker state))
@@ -1322,8 +1330,8 @@ PROVIDER overrides the provider used by the eval role."
          (original-new-session (symbol-function 'ellama-new-session)))
     (setq ellama-eval--active-run state)
     (setf (ellama-eval--run-state-timeout-timer state)
-          (run-at-time ellama-eval-timeout-seconds nil
-                       #'ellama-eval--timeout-run state))
+          (ellama-eval--run-at-time
+           ellama-eval-timeout-seconds #'ellama-eval--timeout-run state))
     (condition-case err
         (let ((default-directory workspace)
               (ellama-tools-allow-all t)
@@ -1418,11 +1426,11 @@ completed count, total count and the latest result."
                   (when progress-callback
                     (funcall progress-callback
                              (reverse results) completed total result))
-                  (run-at-time 0 nil #'start-next))
+                  (ellama-eval--run-at-time 0 #'start-next))
                 provider)))))
       (when progress-callback
         (funcall progress-callback nil 0 total nil))
-      (run-at-time 0 nil #'start-next)
+      (ellama-eval--run-at-time 0 #'start-next)
       total)))
 
 (defun ellama-eval-summarize-results (results)
@@ -1658,9 +1666,14 @@ When WINDOW is live, show the summary in WINDOW."
           (insert "No completed cases yet.\n"))
         (goto-char (point-min))
         (special-mode)))
-    (if (window-live-p window)
-        (set-window-buffer window buffer)
-      (display-buffer buffer))
+    (condition-case err
+        (if (window-live-p window)
+            (set-window-buffer window buffer)
+          (display-buffer buffer))
+      (error
+       (message "Ellama eval summary display failed: %s"
+                (error-message-string err))
+       (display-buffer buffer)))
     buffer))
 
 ;;;###autoload

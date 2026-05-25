@@ -425,6 +425,23 @@
       (when (file-directory-p workspace)
         (delete-directory workspace t)))))
 
+(ert-deftest test-ellama-eval-run-at-time-uses-stable-buffer ()
+  (let (scheduled-buffer scheduled-time scheduled-function scheduled-args)
+    (cl-letf (((symbol-function 'run-at-time)
+               (lambda (time repeat function &rest args)
+                 (setq scheduled-buffer (current-buffer))
+                 (setq scheduled-time time)
+                 (setq scheduled-function function)
+                 (setq scheduled-args args)
+                 repeat)))
+      (ellama-eval--run-at-time 5 #'ignore 'arg)
+      (should (buffer-live-p scheduled-buffer))
+      (should (equal (buffer-name scheduled-buffer)
+                     ellama-eval--timer-buffer-name))
+      (should (= scheduled-time 5))
+      (should (eq scheduled-function #'ignore))
+      (should (equal scheduled-args '(arg))))))
+
 (ert-deftest test-ellama-eval-summarize-results ()
   (let* ((results
           '((:suite edit :profile baseline :success t
@@ -470,6 +487,26 @@
         (kill-buffer buffer))
       (when (buffer-live-p placeholder)
         (kill-buffer placeholder)))))
+
+(ert-deftest test-ellama-eval-render-summary-buffer-falls-back-on-window-error ()
+  (let ((displayed nil)
+        buffer)
+    (unwind-protect
+        (cl-letf (((symbol-function 'set-window-buffer)
+                   (lambda (&rest _)
+                     (error "Selecting deleted buffer")))
+                  ((symbol-function 'display-buffer)
+                   (lambda (buf &rest _)
+                     (setq displayed buf)
+                     buf))
+                  ((symbol-function 'message)
+                   #'ignore))
+          (setq buffer
+                (ellama-eval--render-summary-buffer
+                 nil 0 1 nil (selected-window)))
+          (should (eq displayed buffer)))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
 
 (ert-deftest test-ellama-eval-write-results-jsonl-uses-arrays-and-booleans ()
   (let* ((file-name (make-temp-file "ellama-eval-results-" nil ".jsonl"))
