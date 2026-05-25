@@ -58,10 +58,32 @@
   :type 'integer
   :group 'ellama-eval)
 
+(defcustom ellama-eval-loop-detection-enabled t
+  "Enable automatic loop detection during evaluation runs.
+When non-nil, the eval harness tracks tool call patterns and detects
+repetitive behavior that indicates the agent is stuck in a loop."
+  :type 'boolean
+  :group 'ellama-eval)
+
+(defcustom ellama-eval-loop-detection-repeated-threshold 3
+  "Number of repeated identical tool calls that triggers loop detection.
+When the same tool is called with identical arguments this many times
+in a row, the harness flags it as a potential loop."
+  :type 'integer
+  :group 'ellama-eval)
+
+(defcustom ellama-eval-loop-detection-max-traces 50
+  "Maximum number of tool call traces to keep for loop analysis.
+Older traces are discarded when this limit is exceeded."
+  :type 'integer
+  :group 'ellama-eval)
+
 (cl-defstruct ellama-eval--run-state
   "Mutable state for one active evaluation run."
   status result trace worker started-at workspace case profile callback
-  timeout-timer edit-validation-trace)
+  timeout-timer edit-validation-trace
+  loop-detection loop-state)
+
 
 (defvar ellama-eval--active-run nil
   "Current evaluation run state.
@@ -428,8 +450,36 @@ in one short sentence."
      spec)))
 
 (defun ellama-eval--trace-tool-call (name args status result)
-  "Record a tool call with NAME, ARGS, STATUS and RESULT."
+  "Record a tool call with NAME, ARGS, STATUS and RESULT.
+Also performs loop detection if enabled."
   (when-let* ((state ellama-eval--active-run))
+    (when (and ellama-eval-loop-detection-enabled
+               (not (eq (ellama-eval--run-state-status state) 'loop-detected)))
+      (let* ((loop-state (ellama-eval--run-state-loop-state state))
+             (tool-history (and loop-state (plist-get loop-state :tool-history)))
+             (threshold ellama-eval-loop-detection-repeated-threshold))
+        (when tool-history
+          ;; Check if this tool has been called with identical args recently
+          (let ((repeated (seq-take-while
+                           (lambda (entry)
+                             (and (eq (plist-get entry :name) name)
+                                  (equal (plist-get entry :args) args)))
+                           tool-history)))
+            (when (>= (length repeated) threshold)
+              ;; Loop detected - stop the run
+              (setf (ellama-eval--run-state-status state) 'loop-detected)
+              (ellama-eval--run-state-set-result
+               state
+               (list :status 'loop-detected
+                     :loop-reason (format
+                                   "Loop detected: tool %s called %d times with identical args"
+                                   name threshold)))))
+          ;; Record the tool call in history
+          (push (list :name name :args args) tool-history)
+          ;; Limit history size
+          (let ((max-traces ellama-eval-loop-detection-max-traces))
+            (when (> (length tool-history) max-traces)
+              (setf (nthcdr max-traces tool-history) nil))))))
     (push (list :name name
                 :args args
                 :status status
@@ -1119,6 +1169,11 @@ EXPECTED-FILES and SYNTAX-FILES define the relative file paths to check."
      :file-regexp-checks file-regexp-checks
      :elisp-checks elisp-check-results
      :answer-checks answer-checks
+     :loop-detection
+     (when-let* ((loop-state (ellama-eval--run-state-loop-state state))
+                 (loop-detected (plist-get loop-state :loop-detected)))
+       (list :loop-detected loop-detected
+             :loop-reason (plist-get loop-state :loop-reason)))
      :workspace (when ellama-eval-keep-workspaces workspace))))
 
 (defun ellama-eval--finish-run (state run-status &optional task-result)
@@ -1162,7 +1217,10 @@ PROVIDER overrides the provider used by the eval role."
            :workspace workspace
            :case case
            :profile profile
-           :callback callback))
+           :callback callback
+           :loop-state
+           (when ellama-eval-loop-detection-enabled
+             (list :tool-history nil :loop-detected nil :loop-reason ""))))
          (original-new-session (symbol-function 'ellama-new-session)))
     (setq ellama-eval--active-run state)
     (setf (ellama-eval--run-state-timeout-timer state)
