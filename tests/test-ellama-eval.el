@@ -796,6 +796,50 @@
     (should-not (eq (ellama-eval--run-state-status state) 'loop-detected))
     (should (string= "" (plist-get (ellama-eval--run-state-loop-state state) :loop-reason)))))
 
+(ert-deftest test-ellama-eval-loop-detection-allows-later-repeat-after-progress ()
+  "Test that a later repeated read after progress gets recovery, not hard stop."
+  (let ((ellama-eval--active-run nil)
+        (ellama-eval-loop-detection-enabled t)
+        (ellama-eval-loop-detection-repeated-threshold 2)
+        (ellama-eval-loop-detection-max-traces 50)
+        (workspace (make-temp-file "ellama-eval-loop-" t))
+        state)
+    (setq state
+          (make-ellama-eval--run-state
+           :status 'pending
+           :trace nil
+           :edit-validation-trace nil
+           :started-at (float-time)
+           :workspace workspace
+           :case '(:id "test")
+           :profile 'baseline
+           :callback nil
+           :loop-state
+           (list :tool-history nil :loop-detected nil :loop-reason "")))
+    (setq ellama-eval--active-run state)
+    (let ((read-args '("sample.el" nil)))
+      (should-not
+       (ellama-eval--trace-tool-call "read_file" read-args 'ok "before"))
+      (should
+       (string-match-p
+        "LOOP RECOVERY"
+        (ellama-eval--trace-tool-call "read_file" read-args 'ok "before")))
+      (should-not
+       (ellama-eval--trace-tool-call
+        "edit_file" '("sample.el" "old" "new") 'ok "Edited sample.el."))
+      (should-not
+       (ellama-eval--trace-tool-call "read_file" read-args 'ok "after"))
+      (should
+       (string-match-p
+        "LOOP RECOVERY"
+        (ellama-eval--trace-tool-call "read_file" read-args 'ok "after")))
+      (should (eq (ellama-eval--run-state-status state) 'pending))
+      (should-not (plist-get (ellama-eval--run-state-loop-state state)
+                             :loop-detected))
+      (should (= (plist-get (ellama-eval--run-state-loop-state state)
+                            :loop-recovery-count)
+                 2)))))
+
 (ert-deftest test-ellama-eval-loop-detection-disabled ()
   "Test that loop detection can be disabled."
   (let ((ellama-eval--active-run nil)

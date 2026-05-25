@@ -510,7 +510,7 @@ for the agent."
                       (format
                        "Loop detected: tool %s called %d times with identical args"
                        name repeat-count)))
-                (if (zerop recovery-count)
+                (if (= repeat-count threshold)
                     (progn
                       (setq recovery-message
                             (ellama-eval--loop-recovery-message
@@ -520,7 +520,8 @@ for the agent."
                                        :loop-recovery-attempted t))
                       (setq loop-state
                             (plist-put loop-state
-                                       :loop-recovery-count 1))
+                                       :loop-recovery-count
+                                       (1+ recovery-count)))
                       (setq loop-state
                             (plist-put loop-state
                                        :loop-recovery-reason loop-reason)))
