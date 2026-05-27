@@ -27,25 +27,6 @@ build:
 		--eval "(setq load-path (cl-remove-if (lambda (dir) (string-match-p \"/elpa/org-[^/]+/?$$\" dir)) (cons (expand-file-name \".\") load-path)))" \
 		-f batch-byte-compile ellama*.el
 
-test:
-	emacs -Q -batch \
-		--eval "(package-initialize)" \
-		--eval "(require 'cl-lib)" \
-		--eval "(setq load-prefer-newer t)" \
-		--eval "(setq load-path (cl-remove-if (lambda (dir) (string-match-p \"/elpa/org-[^/]+/?$$\" dir)) load-path))" \
-		-l ellama.el \
-		-l tests/test-ellama.el \
-		-l tests/test-ellama-eval.el \
-		-l tests/test-ellama-context.el \
-		-l tests/test-ellama-tools.el \
-		-l tests/test-ellama-tools-dlp.el \
-		-l tests/test-ellama-skills.el \
-		-l tests/test-ellama-transient.el \
-		-l tests/test-ellama-blueprint.el \
-		-l tests/test-ellama-manual.el \
-		-l tests/test-ellama-community-prompts.el \
-		--eval "(ert t)"
-
 test-detailed:
 	emacs -Q -batch \
 		--eval "(package-initialize)" \
@@ -65,6 +46,8 @@ test-detailed:
 		-l tests/test-ellama-community-prompts.el \
 		--eval "(setq ert-batch-backtrace-right-margin 200)" \
 		--eval "(ert-run-tests-batch-and-exit t)"
+
+test: test-detailed
 
 test-integration:
 	emacs -Q -batch \
