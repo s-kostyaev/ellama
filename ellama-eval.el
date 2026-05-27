@@ -604,6 +604,71 @@ for the agent."
          :error (error-message-string err))
    (ellama-eval--diagnostic-location (point))))
 
+(defun ellama-eval--remove-unexpected-closers-in-buffer ()
+  "Remove unexpected closing delimiters from the current buffer.
+Returns the number of characters removed, or nil if none found."
+  (when (fboundp 'syntax-propertize)
+    (syntax-propertize (point-max)))
+  (let ((unexpected-pos))
+    (save-excursion
+      (goto-char (point-min))
+      (while (not (eobp))
+        (let* ((pos (point))
+               (syntax (syntax-after pos))
+               (class (and syntax (syntax-class syntax)))
+               (state (syntax-ppss pos)))
+          (when (and (eq class 5)
+                     (not (nth 3 state))
+                     (not (nth 4 state)))
+            (unless (nth 1 state)
+              (push pos unexpected-pos))))
+        (forward-char 1)))
+    (let ((count (length unexpected-pos)))
+      (when (and count (plusp count))
+        (dolist (pos (sort unexpected-pos #'<))
+          (goto-char pos)
+          (delete-char 1))
+        count))))
+
+(defun ellama-eval--try-fix-unexpected-closers (text file-name)
+  "Try to fix TEXT by removing unexpected closers in FILE-NAME context.
+Returns a plist with :text (fixed or original), :auto-fixed (t if fixed),
+and :validation (re-validation result of returned text)."
+  (let ((buffer (find-file-noselect file-name)))
+    (with-current-buffer buffer
+      (let ((original (buffer-string))
+            (modified (buffer-modified-p))
+            (point-pos (point))
+            (buffer-undo-list t)
+            (inhibit-modification-hooks t)
+            (inhibit-read-only t))
+        (unwind-protect
+            (progn
+              (erase-buffer)
+              (insert text)
+              (let ((removed (ellama-eval--remove-unexpected-closers-in-buffer)))
+                (if (and removed (plusp removed))
+                    (let* ((fixed-text (buffer-string))
+                           (re-validation (ellama-eval--syntax-validation-current-buffer)))
+                      (if (plist-get re-validation :valid)
+                          (list :text fixed-text
+                                :auto-fixed t
+                                :validation re-validation)
+                        (let ((original-validation (ellama-eval--syntax-validation-current-buffer)))
+                          (erase-buffer)
+                          (insert text)
+                          (list :text text
+                                :auto-fixed nil
+                                :validation original-validation))))
+                  (let ((validation (ellama-eval--syntax-validation-current-buffer)))
+                    (list :text text
+                          :auto-fixed nil
+                          :validation validation)))))
+          (erase-buffer)
+          (insert original)
+          (goto-char (max (point-min) (min point-pos (point-max))))
+          (set-buffer-modified-p modified))))))
+
 (defun ellama-eval--check-parens-diagnostic ()
   "Return `check-parens' diagnostic for the current buffer."
   (condition-case err
@@ -839,35 +904,47 @@ describe the tool decision."
   "Return edit rejection for FILE-NAME and VALIDATION results.
 CANDIDATE-VALIDATION, ORIGINAL-VALIDATION, OLD-VALIDATION and
 NEW-VALIDATION are syntax validation results."
-  (format
-   (concat
-    "Edit rejected: resulting buffer has unbalanced delimiters or "
-    "invalid syntax.\n\n"
-    "File: %s\n"
-    "Mode: %s\n"
-    "Check: %s\n"
-    "Error: %s\n"
-    "Position: line %d, column %d\n\n"
-    "%s\n\n"
-    "Original file status: %s\n"
-    "Old fragment standalone status: %s\n"
-    "Replacement fragment standalone status: %s\n\n"
-    "%s\n"
-    "Instruction: retry the edit. Keep the requested semantic change, "
-    "but return replacement text whose delimiters are balanced in %s.")
-   file-name
-   (plist-get candidate-validation :mode)
-   (plist-get candidate-validation :check)
-   (plist-get candidate-validation :error)
-   (plist-get candidate-validation :line)
-   (plist-get candidate-validation :column)
-   (plist-get candidate-validation :nearby)
-   (ellama-eval--validation-status original-validation)
-   (ellama-eval--validation-status old-validation)
-   (ellama-eval--validation-status new-validation)
-   (ellama-eval--format-delimiter-balance
-    (plist-get candidate-validation :balance))
-   (plist-get candidate-validation :mode)))
+  (let ((hint
+         (cond
+          ((not (plist-get candidate-validation :missing))
+           "")
+          ((< (length (plist-get candidate-validation :missing)) 3)
+           (format "Hint: try adding: %s"
+                   (mapconcat #'symbol-name
+                              (plist-get candidate-validation :missing)
+                              " and ")))
+          (t
+           "Hint: there are multiple missing closers."))))
+    (format
+     (concat
+      "Edit rejected: resulting buffer has unbalanced delimiters or invalid syntax.\n\n"
+      "File: %s\n"
+      "Mode: %s\n"
+      "Check: %s\n"
+      "Error: %s\n"
+      "Position: line %d, column %d\n\n"
+      "%s\n"
+      "%s\n"
+      "Original file status: %s\n"
+      "Old fragment standalone status: %s\n"
+      "Replacement fragment standalone status: %s\n\n"
+      "%s\n"
+      "Instruction: retry the edit. Keep the requested semantic change, but return replacement text whose delimiters are balanced in %s.\n"
+      hint)
+     file-name
+     (plist-get candidate-validation :mode)
+     (plist-get candidate-validation :check)
+     (plist-get candidate-validation :error)
+     (plist-get candidate-validation :line)
+     (plist-get candidate-validation :column)
+     (plist-get candidate-validation :nearby)
+     hint
+     (ellama-eval--validation-status original-validation)
+     (ellama-eval--validation-status old-validation)
+     (ellama-eval--validation-status new-validation)
+     (ellama-eval--format-delimiter-balance
+      (plist-get candidate-validation :balance))
+     (plist-get candidate-validation :mode))))
 
 (defun ellama-eval-monitored-edit-file-tool
     (file-name oldcontent newcontent &optional block-invalid)
@@ -902,7 +979,19 @@ When BLOCK-INVALID is non-nil, reject invalid resulting buffers."
                   (ellama-eval--validate-text-in-file-buffer
                    file-name newcontent))
                  (valid-p (plist-get candidate-validation :valid))
-                 (blocked-p (and block-invalid (not valid-p))))
+                 (blocked-p (and block-invalid (not valid-p)))
+                 (fix-result nil)
+                 (auto-fixed nil)
+                 (fixed-text nil))
+            (when blocked-p
+              (setq fix-result
+                    (ellama-eval--try-fix-unexpected-closers candidate file-name))
+              (setq auto-fixed (plist-get fix-result :auto-fixed))
+              (setq fixed-text (plist-get fix-result :text))
+              (setq valid-p (plist-get (plist-get fix-result :validation) :valid))
+              (when auto-fixed
+                (setq candidate-validation (plist-get fix-result :validation))
+                (setq blocked-p nil)))
             (ellama-eval--record-edit-validation
              (ellama-eval--edit-validation-entry
               "edit_file" file-name t candidate-validation
@@ -916,10 +1005,12 @@ When BLOCK-INVALID is non-nil, reject invalid resulting buffers."
                  old-validation
                  new-validation)
               (ellama-tools--write-file-buffer-content
-               file-name candidate)
-              (if block-invalid
-                  (format "Edited %s after syntax validation." file-name)
-                (format "Edited %s." file-name))))))))
+               file-name (or fixed-text candidate))
+              (if auto-fixed
+                  (format "Edited %s after syntax validation (auto-fixed unexpected closers)." file-name)
+                (if block-invalid
+                    (format "Edited %s after syntax validation." file-name)
+                  (format "Edited %s." file-name)))))))))
 
 (defun ellama-eval-balanced-edit-file-tool
     (file-name oldcontent newcontent)
