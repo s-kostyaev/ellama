@@ -598,6 +598,12 @@ sub-agent sessions started by tools."
   "Enable debug."
   :type 'boolean)
 
+(defcustom ellama-undo-on-error nil
+  "Undo buffer changes when a request fails.
+When non-nil, `ellama-stream' rolls back any partial text insertion
+into the buffer if the LLM call raises an error."
+  :type 'boolean)
+
 (defcustom ellama-sessions-directory (file-truename
                                       (file-name-concat
                                        user-emacs-directory
@@ -3224,7 +3230,9 @@ REQUEST-CONTEXT is request context."
           (progn
             (ellama--append-tool-error-to-prompt prompt msg)
             (funcall retry-fn))
-        (cancel-change-group ellama--change-group)
+        (if ellama-undo-on-error
+            (cancel-change-group ellama--change-group)
+          (accept-change-group ellama--change-group))
         (when ellama-spinner-enabled
           (spinner-stop))
         (funcall errcb msg)
