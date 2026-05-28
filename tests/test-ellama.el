@@ -2955,3 +2955,31 @@ region, season, or type)! 🍎🍊"))))
 (provide 'test-ellama)
 
 ;;; test-ellama.el ends here
+
+(ert-deftest test-ellama-extract-diff-no-diff ()
+  "Return nil when no diff is available."
+  (cl-letf (((symbol-function 'ellama--diff-cached) (lambda () nil))
+            ((symbol-function 'ellama--diff) (lambda () nil))
+            ((symbol-function 'ellama--in-commit-buffer) (lambda () nil)))
+    (should (null (ellama--extract-diff)))))
+
+(ert-deftest test-ellama-extract-diff-fallback-to-unstaged ()
+  "Return unstaged diff when staged is empty."
+  (cl-letf (((symbol-function 'ellama--diff-cached) (lambda () nil))
+            ((symbol-function 'ellama--diff) (lambda () "unstaged-diff"))
+            ((symbol-function 'ellama--in-commit-buffer) (lambda () t)))
+    (should (equal (ellama--extract-diff) "unstaged-diff"))))
+
+(ert-deftest test-ellama-extract-diff-fallback-to-commit-patch ()
+  "Return commit patch when no diff and in commit buffer."
+  (cl-letf (((symbol-function 'ellama--diff-cached) (lambda () nil))
+            ((symbol-function 'ellama--diff) (lambda () nil))
+            ((symbol-function 'ellama--in-commit-buffer) (lambda () t))
+            ((symbol-function 'ellama--commit-patch) (lambda () "patch-content")))
+    (should (equal (ellama--extract-diff) "patch-content"))))
+
+(ert-deftest test-ellama-extract-diff-prefers-staged ()
+  "Return staged diff and ignore other sources."
+  (cl-letf (((symbol-function 'ellama--diff-cached) (lambda () "staged-diff"))
+            ((symbol-function 'ellama--diff) (lambda () "unstaged-diff")))
+    (should (equal (ellama--extract-diff) "staged-diff"))))

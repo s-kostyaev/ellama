@@ -2573,16 +2573,21 @@ Return list with result and prompt."
             (insert original))
           (with-temp-file prepend-file
             (insert original))
+          ;; Unexpected closers are now auto-fixed, so append succeeds
           (let ((msg (ellama-tools-append-file-tool append-file ")")))
-            (should (string-match-p "Append rejected" msg))
-            (should (string-match-p "Unexpected closers" msg)))
+            (should (string-match-p "auto-fixed unexpected closers" msg)))
+          ;; Missing closers still block the edit
           (let ((msg (ellama-tools-prepend-file-tool prepend-file "(")))
             (should (string-match-p "Prepend rejected" msg))
             (should (string-match-p "Missing closers" msg)))
-          (dolist (file (list append-file prepend-file))
-            (with-temp-buffer
-              (insert-file-contents file)
-              (should (equal (buffer-string) original)))))
+          ;; Append file was auto-fixed to original content
+          (with-temp-buffer
+            (insert-file-contents append-file)
+            (should (equal (buffer-string) original)))
+          ;; Prepend file remains unchanged
+          (with-temp-buffer
+            (insert-file-contents prepend-file)
+            (should (equal (buffer-string) original))))
       (dolist (file (list append-file prepend-file))
         (when-let* ((buffer (get-file-buffer file)))
           (kill-buffer buffer))

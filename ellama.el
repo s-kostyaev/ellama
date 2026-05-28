@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.30.2") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.25.0
+;; Version: 1.26.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -4261,6 +4261,34 @@ ARGS contains keys for fine control.
 (declare-function vc-diff-internal "vc")
 (declare-function vc-deduce-fileset "vc")
 
+(defun ellama--in-commit-buffer ()
+  "Return non-nil if current buffer is a git commit message buffer.
+
+This is used to detect `git-commit-mode' reword or amend buffers."
+  (and (bound-and-true-p buffer-file-name)
+       (string= (file-name-nondirectory buffer-file-name) "COMMIT_EDITMSG")))
+
+(defun ellama--commit-patch (&optional revision)
+  "Return the patch for REVISION (default: HEAD).
+
+This is used as a fallback when no staged or unstaged diff is
+available, for example in a `git-commit-mode' reword buffer."
+  (let ((revision (or revision "HEAD")))
+    (with-temp-buffer
+      (let ((default-directory
+             (if (string= ".git"
+                          (car (reverse
+                                (cl-remove
+                                 ""
+                                 (file-name-split default-directory)
+                                 :test #'string=))))
+                 (file-name-parent-directory default-directory)
+               default-directory)))
+        (call-process "git" nil t nil "show" "--format="
+                      "--no-ext-diff" "--no-color" "--patch"
+                      revision)
+        (buffer-substring-no-properties (point-min) (point-max))))))
+
 (defun ellama--diff-cached ()
   "Diff staged."
   (require 'vc)
@@ -4303,22 +4331,25 @@ ARGS contains keys for fine control.
         nil
       diff)))
 
+(defun ellama--extract-diff ()
+  "Return a git diff string: staged, unstaged, or commit patch.
+
+Tries staged diff first, then unstaged diff, and finally falls back
+to the current commit patch if in a `git-commit-mode' buffer."
+  (or (ellama--diff-cached)
+      (ellama--diff)
+      (and (ellama--in-commit-buffer)
+           (ellama--commit-patch))))
+
 ;;;###autoload
 (defun ellama-generate-commit-message ()
-  "Generate commit message based on diff."
+  "Generate commit message based on diff.
+
+If there is no staged or unstaged diff (e.g. in a `git-commit-mode'
+reword buffer), falls back to using the current commit patch."
   (interactive)
   (save-window-excursion
-    (when-let* ((default-directory
-                 (if (string= ".git"
-                              (car (reverse
-                                    (cl-remove
-                                     ""
-                                     (file-name-split default-directory)
-                                     :test #'string=))))
-                     (file-name-parent-directory default-directory)
-                   default-directory))
-                (diff (or (ellama--diff-cached)
-                          (ellama--diff))))
+    (when-let ((diff (ellama--extract-diff)))
       (ellama-stream
        (format ellama-generate-commit-message-template diff)
        :provider ellama-coding-provider))))
