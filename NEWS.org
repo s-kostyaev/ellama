@@ -1,3 +1,25 @@
+* Version 1.26.0
+
+- Auto-fix unexpected closing delimiters in file edits. When syntax validation
+  fails due to unexpected closing delimiters (like extra `)` or `]`), the system
+  automatically removes them and accepts the edit if the result is valid. This
+  reduces friction for LLM-generated edits that occasionally include spurious
+  closers. Changes include new functions
+  `ellama-eval--remove-unexpected-closers-in-buffer` and
+  `ellama-tools--remove-unexpected-closers-in-buffer` to scan buffers and remove
+  closers without matching openers, `ellama-eval--try-fix-unexpected-closers`
+  and `ellama-tools--try-fix-unexpected-closers` to attempt auto-fixing in file
+  context with safe buffer restoration, and integration of auto-fixing into
+  monitored-edit-file-tool and all balanced edit tools.
+- Add commit patch fallback for generate-commit-message. New functions
+  `ellama--in-commit-buffer` and `ellama--commit-patch` detect git commit
+  buffers and retrieve commit patches. Modified `ellama-generate-commit-message`
+  to use commit patch as a fallback when no staged or unstaged diff is
+  available, enabling proper commit message generation in git-commit-mode reword
+  or amend scenarios.
+- Simplify test target in Makefile. Remove the inline test command definition
+  and make `test` an alias for `test-detailed`, consolidating the test execution
+  into a single target.
 * Version 1.25.0
 
 - Add loop detection to ~ellama-eval~ harness that identifies repetitive tool
