@@ -2881,6 +2881,7 @@ Return list with result and prompt."
                            (plist-get
                             (ellama-tools--agent-state session)
                             :system)))
+            (should (functionp (plist-get result :on-error)))
             (should (functionp (plist-get result :on-done)))
             (should (equal (plist-get
                             (ellama-tools--agent-state session)
@@ -2903,6 +2904,68 @@ Return list with result and prompt."
                                       (buffer-string)))
               (should (string-match-p "Planning started"
                                       (buffer-string))))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest test-ellama-agent-error-callback-continues-and-compacts-on-repeat ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((buffer (generate-new-buffer " *ellama-agent-error-test*"))
+         (base-tool (llm-make-tool :name "read_file" :function #'ignore))
+         (session
+          (make-ellama-session
+           :id "agent-error"
+           :extra (list :uid "agent-error-uid"
+                        :tools (list base-tool)
+                        :agent-loop
+                        (list :phase 'acting
+                              :plan (list (list :id 1
+                                                :title "Keep working"
+                                                :status 'pending))
+                              :step-count 0
+                              :consecutive-error-count 0
+                              :max-steps 5
+                              :completed nil
+                              :system "System"))))
+         (stream-calls nil)
+         (compact-count 0)
+         (compact-done nil))
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer
+            (org-mode))
+          (cl-letf (((symbol-function 'ellama-get-session-buffer)
+                     (lambda (id)
+                       (and (member id '("agent-error"
+                                         "agent-error-uid"))
+                            buffer)))
+                    ((symbol-function 'ellama-stream)
+                     (lambda (prompt &rest args)
+                       (push (list prompt args) stream-calls)))
+                    ((symbol-function 'ellama--session-compact)
+                     (lambda (_session &rest args)
+                       (setq compact-count (1+ compact-count))
+                       (setq compact-done (plist-get args :on-done))
+                       t))
+                    ((symbol-function 'message)
+                     (lambda (&rest _args) nil)))
+            (let ((callback (ellama-tools--make-agent-error-callback session)))
+              (funcall callback "temporary failure")
+              (should (= (plist-get (ellama-tools--agent-state session)
+                                    :consecutive-error-count)
+                         1))
+              (should (= (length stream-calls) 1))
+              (should (= compact-count 0))
+              (funcall callback "temporary failure again")
+              (should (= (plist-get (ellama-tools--agent-state session)
+                                    :consecutive-error-count)
+                         0))
+              (should (= compact-count 1))
+              (should (= (length stream-calls) 1))
+              (should (functionp compact-done))
+              (funcall compact-done)
+              (should (= (length stream-calls) 2))
+              (should (string-match-p "Current plan state"
+                                      (caar stream-calls))))))
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
 
@@ -2956,6 +3019,7 @@ END_ELLAMA_AGENT_STATE"))
                            session))
             (should (equal (plist-get (cadr stream-call) :tools)
                            (list base-tool)))
+            (should (functionp (plist-get (cadr stream-call) :on-error)))
             (should (functionp (plist-get (cadr stream-call) :on-done)))
             (should (string-match-p "Current plan state"
                                     (car stream-call)))
@@ -3116,6 +3180,65 @@ END_ELLAMA_AGENT_STATE"))
                                       (buffer-string)))
               (should (= (plist-get (cadr stream-call) :point)
                          (point-max))))))
+      (when (buffer-live-p worker-buffer)
+        (kill-buffer worker-buffer)))))
+
+(ert-deftest test-ellama-subagent-error-callback-continues-and-compacts-on-repeat ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((worker-buffer (generate-new-buffer " *ellama-worker-error-test*"))
+         (role-tool (llm-make-tool :name "read_file" :function #'ignore))
+         (session
+          (make-ellama-session
+           :id "worker-error"
+           :extra (list :uid "worker-error-uid"
+                        :task-completed nil
+                        :step-count 0
+                        :consecutive-error-count 0
+                        :max-steps 5
+                        :tools (list role-tool)
+                        :system "System"
+                        :result-callback #'ignore)))
+         (stream-calls nil)
+         (compact-count 0)
+         (compact-done nil))
+    (unwind-protect
+        (progn
+          (with-current-buffer worker-buffer
+            (org-mode))
+          (cl-letf (((symbol-function 'ellama-get-session-buffer)
+                     (lambda (id)
+                       (and (member id '("worker-error"
+                                         "worker-error-uid"))
+                            worker-buffer)))
+                    ((symbol-function 'ellama-stream)
+                     (lambda (prompt &rest args)
+                       (push (list prompt args) stream-calls)))
+                    ((symbol-function 'ellama--session-compact)
+                     (lambda (_session &rest args)
+                       (setq compact-count (1+ compact-count))
+                       (setq compact-done (plist-get args :on-done))
+                       t))
+                    ((symbol-function 'message)
+                     (lambda (&rest _args) nil)))
+            (let ((callback
+                   (ellama-tools--make-subagent-error-callback session)))
+              (funcall callback "temporary failure")
+              (should (= (plist-get (ellama-session-extra session)
+                                    :consecutive-error-count)
+                         1))
+              (should (= (length stream-calls) 1))
+              (should (= compact-count 0))
+              (funcall callback "temporary failure again")
+              (should (= (plist-get (ellama-session-extra session)
+                                    :consecutive-error-count)
+                         0))
+              (should (= compact-count 1))
+              (should (= (length stream-calls) 1))
+              (should (functionp compact-done))
+              (funcall compact-done)
+              (should (= (length stream-calls) 2))
+              (should (equal (caar stream-calls)
+                             ellama-tools-subagent-continue-prompt)))))
       (when (buffer-live-p worker-buffer)
         (kill-buffer worker-buffer)))))
 

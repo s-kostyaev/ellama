@@ -3235,8 +3235,8 @@ REQUEST-CONTEXT is request context."
           (accept-change-group ellama--change-group))
         (when ellama-spinner-enabled
           (spinner-stop))
-        (funcall errcb msg)
-        (ellama--deactivate-current-request request-context)))))
+        (ellama--deactivate-current-request request-context)
+        (funcall errcb msg)))))
 
 (defun ellama--run-done-callback (donecb text)
   "Call DONECB with TEXT."
@@ -4142,6 +4142,7 @@ after compaction."
                    max-steps)))
                (agent-system (plist-get agent :system))
                (agent-tools (plist-get agent :tools))
+               (errcb (plist-get agent :on-error))
                (donecb (plist-get agent :on-done)))
           (ellama-stream
            prompt
@@ -4149,6 +4150,7 @@ after compaction."
            :system agent-system
            :tools agent-tools
            :max-tokens max-tokens
+           :on-error errcb
            :on-done donecb
            :filter (when (derived-mode-p 'org-mode)
                      #'ellama--translate-markdown-to-org-filter)))))))
@@ -4191,12 +4193,14 @@ after compaction."
                      session (current-buffer))))
            (system (plist-get agent :system))
            (tools (plist-get agent :tools))
+           (errcb (plist-get agent :on-error))
            (donecb (or (plist-get agent :on-done)
                        #'ellama-chat-done)))
       (ellama-stream text
                      :session session
                      :system system
                      :tools tools
+                     :on-error errcb
                      :on-done donecb
                      :filter (when (derived-mode-p 'org-mode)
                                #'ellama--translate-markdown-to-org-filter)))))

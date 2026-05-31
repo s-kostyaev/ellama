@@ -1075,6 +1075,7 @@ detailed comparison to help you decide:
           (should (equal (car stream-call) "Do work"))
           (should (eq (plist-get (cadr stream-call) :session)
                       session))
+          (should (functionp (plist-get (cadr stream-call) :on-error)))
           (should (functionp (plist-get (cadr stream-call) :on-done)))
           (should (string-match-p
                    "PLAN AND ACT INSTRUCTIONS"
@@ -1139,6 +1140,7 @@ detailed comparison to help you decide:
                       session))
           (should (equal (plist-get (cadr stream-call) :system)
                          "Existing system"))
+          (should (functionp (plist-get (cadr stream-call) :on-error)))
           (should (functionp (plist-get (cadr stream-call) :on-done)))
           (should (equal (plist-get
                           (car (plist-get
@@ -1347,6 +1349,7 @@ detailed comparison to help you decide:
       (should (eq (plist-get (cadr stream-call) :session) session))
       (should (equal (plist-get (cadr stream-call) :system)
                      "Agent system"))
+      (should (functionp (plist-get (cadr stream-call) :on-error)))
       (should (functionp (plist-get (cadr stream-call) :on-done)))
       (should (not (eq (plist-get (cadr stream-call) :on-done)
                        #'ellama-chat-done)))
@@ -2051,6 +2054,27 @@ detailed comparison to help you decide:
         (should (null error-captured))
         (should (equal done-text "Recovered answer"))
         (should (equal (buffer-string) "Recovered answer"))))))
+
+(ert-deftest test-ellama-error-handler-deactivates-before-on-error ()
+  (let ((ellama-spinner-enabled nil)
+        (ellama-undo-on-error nil)
+        (active-request-during-callback :unset))
+    (with-temp-buffer
+      (let* ((request-context (ellama--make-request-context
+                               (list (current-buffer))))
+             (handler (ellama--error-handler
+                       (current-buffer)
+                       (lambda (_msg)
+                         (setq active-request-during-callback
+                               ellama--current-request))
+                       nil nil request-context)))
+        (setq ellama--change-group (prepare-change-group))
+        (activate-change-group ellama--change-group)
+        (ellama--set-current-request
+         'request (list (current-buffer)) request-context)
+        (funcall handler 'error "temporary failure")
+        (should (null active-request-during-callback))
+        (should (null ellama--current-request))))))
 
 (ert-deftest test-ellama-normalize-tool-use-args-decodes-unibyte-json ()
   (let* ((raw-json

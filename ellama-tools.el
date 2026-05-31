@@ -4083,6 +4083,12 @@ ERROR-CB is called on non-tool LLM errors to track consecutive failures."
     (when parsed
       (ellama-tools--agent-insert-state
        session buffer (if (plist-get parsed :plan) "Plan" "Status")))
+    (when (and (stringp text)
+               (plist-get state :consecutive-error-count))
+      (setq state
+            (ellama-tools--agent-state-put
+             state :consecutive-error-count 0))
+      (ellama-tools--agent-put-state session state))
     (cond
      ((not (ellama-session-p session))
       (message "Plan-and-act session is not available."))
@@ -4138,7 +4144,34 @@ ERROR-CB is called on non-tool LLM errors to track consecutive failures."
        text session buffer system
        (ellama-tools--make-agent-error-callback session)))))
 
-(declare-function ellama--session-compact "ellama" (session &key automatic))
+(declare-function ellama--session-compact "ellama"
+                  (session &key automatic on-done))
+
+(defun ellama-tools--agent-error-message (err)
+  "Return human-readable message for agent loop ERR."
+  (cond
+   ((stringp err) err)
+   ((and (consp err) (symbolp (car err)))
+    (error-message-string err))
+   (t (format "%s" err))))
+
+(defun ellama-tools--continue-agent-after-error (session)
+  "Continue plan-and-act SESSION after an LLM error."
+  (ellama-tools--agent-loop-handler
+   nil session nil nil
+   (ellama-tools--make-agent-error-callback session)))
+
+(defun ellama-tools--compact-and-continue-agent (session)
+  "Compact plan-and-act SESSION and continue the loop."
+  (let (continued)
+    (cl-labels
+        ((continue ()
+           (unless continued
+             (setq continued t)
+             (ellama-tools--continue-agent-after-error session))))
+      (unless (ellama--session-compact
+               session :automatic t :on-done #'continue)
+        (continue)))))
 
 (defun ellama-tools--make-agent-error-callback (session)
   "Return error callback for plan-and-act loop of SESSION.
@@ -4147,26 +4180,26 @@ and restarts the loop."
   (let ((session session))
     (lambda (err)
       (let* ((extra (ellama-session-extra session))
-             (state (plist-get extra :agent-loop)))
+             (state (plist-get extra :agent-loop))
+             (message (ellama-tools--agent-error-message err)))
         (unless (and state (plist-get state :completed))
           (let* ((count (or (plist-get state :consecutive-error-count) 0))
                  (new-count (1+ count)))
             (message "Agent loop error: %s (consecutive: %d)"
-                     (error-message-string err) new-count)
+                     message new-count)
             (if (>= new-count 2)
                 (progn
                   (message "Compacting session after repeated errors...")
-                  (ellama--session-compact session :automatic t)
-                  (setq state (ellama-tools--agent-state-put state :consecutive-error-count 0))
+                  (setq state
+                        (ellama-tools--agent-state-put
+                         state :consecutive-error-count 0))
                   (ellama-tools--agent-put-state session state)
-                  (ellama-tools--agent-loop-handler
-                   nil session nil nil
-                   (ellama-tools--make-agent-error-callback session)))
-              (setq state (ellama-tools--agent-state-put state :consecutive-error-count new-count))
+                  (ellama-tools--compact-and-continue-agent session))
+              (setq state
+                    (ellama-tools--agent-state-put
+                     state :consecutive-error-count new-count))
               (ellama-tools--agent-put-state session state)
-              (ellama-tools--agent-loop-handler
-               nil session nil nil
-               (ellama-tools--make-agent-error-callback session)))))))))
+              (ellama-tools--continue-agent-after-error session))))))))
 
 (defun ellama-tools-start-plan-and-act
     (session buffer prompt &optional system tools max-steps)
@@ -4204,6 +4237,7 @@ automatic continuations."
      buffer "Status" "Planning started.")
     (list :system agent-system
           :tools combined-tools
+          :on-error (ellama-tools--make-agent-error-callback session)
           :on-done (ellama-tools--make-agent-loop-handler
                     session buffer agent-system))))
 
@@ -4229,6 +4263,7 @@ SYSTEM and TOOLS can override the stored runtime values."
      (ellama-tools--session-extra-with session :tools combined-tools))
     (list :system agent-system
           :tools combined-tools
+          :on-error (ellama-tools--make-agent-error-callback session)
           :on-done (ellama-tools--make-agent-loop-handler
                     session buffer agent-system))))
 
@@ -4424,8 +4459,8 @@ When the task is COMPLETE you MUST call `report_result` exactly once."
         (and (buffer-live-p session-buffer) session-buffer))
       (and (buffer-live-p buffer) buffer)))
 
-(defun ellama--subagent-loop-handler (_text &optional session buffer system error-cb)
-  "Continue subagent SESSION loop in BUFFER with SYSTEM message.
+(defun ellama--subagent-loop-handler (text &optional session buffer system error-cb)
+  "Continue subagent SESSION loop after TEXT in BUFFER with SYSTEM message.
 ERROR-CB is called on non-tool LLM errors to track consecutive failures."
   (let* ((session (or session ellama--current-session))
          (extra (and (ellama-session-p session)
@@ -4438,6 +4473,10 @@ ERROR-CB is called on non-tool LLM errors to track consecutive failures."
          (tools (plist-get extra :tools))
          (system (or system (plist-get extra :system)))
          (buffer (ellama-tools--subagent-buffer session buffer)))
+    (when (and (stringp text)
+               (plist-get extra :consecutive-error-count))
+      (setq extra (plist-put extra :consecutive-error-count 0))
+      (ellama-tools--set-session-extra session extra))
     (cond
      ((not (ellama-session-p session))
       (message "Subagent session is not available."))
@@ -4479,6 +4518,24 @@ ERROR-CB is called on non-tool LLM errors to track consecutive failures."
        text session buffer system
        (ellama-tools--make-subagent-error-callback session)))))
 
+(defun ellama-tools--continue-subagent-after-error (session)
+  "Continue subagent SESSION after an LLM error."
+  (ellama--subagent-loop-handler
+   nil session nil nil
+   (ellama-tools--make-subagent-error-callback session)))
+
+(defun ellama-tools--compact-and-continue-subagent (session)
+  "Compact subagent SESSION and continue the loop."
+  (let (continued)
+    (cl-labels
+        ((continue ()
+           (unless continued
+             (setq continued t)
+             (ellama-tools--continue-subagent-after-error session))))
+      (unless (ellama--session-compact
+               session :automatic t :on-done #'continue)
+        (continue)))))
+
 (defun ellama-tools--make-subagent-error-callback (session)
   "Return error callback for subagent loop of SESSION.
 Increments consecutive-error-count; if it reaches 2, compacts the session
@@ -4487,23 +4544,19 @@ and restarts the loop."
     (lambda (err)
       (let* ((extra (ellama-session-extra session))
              (count (or (plist-get extra :consecutive-error-count) 0))
-             (new-count (1+ count)))
+             (new-count (1+ count))
+             (message (ellama-tools--agent-error-message err)))
         (message "Subagent error: %s (consecutive: %d)"
-                 (error-message-string err) new-count)
+                 message new-count)
         (if (>= new-count 2)
             (progn
               (message "Compacting subagent session after repeated errors...")
-              (ellama--session-compact session :automatic t)
               (ellama-tools--set-session-extra
                session (plist-put extra :consecutive-error-count 0))
-              (ellama--subagent-loop-handler
-               nil session nil nil
-               (ellama-tools--make-subagent-error-callback session)))
+              (ellama-tools--compact-and-continue-subagent session))
           (ellama-tools--set-session-extra
            session (plist-put extra :consecutive-error-count new-count))
-          (ellama--subagent-loop-handler
-           nil session nil nil
-           (ellama-tools--make-subagent-error-callback session)))))))
+          (ellama-tools--continue-subagent-after-error session))))))
 
 (defun ellama-tools-task-tool
     (callback &optional description role template template-base arguments)
