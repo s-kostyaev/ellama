@@ -433,6 +433,9 @@ generated text string.
   ~*ellama-debug*~ buffer with a separator for easier tracking of debug
   information. The debug output includes the raw text being processed and is
   appended to the end of the debug buffer each time.
+- ~ellama-undo-on-error~: Undo partial buffer insertions when an LLM request
+  fails. Disabled by default; when nil, Ellama keeps partial output inserted
+  before the error.
 - ~ellama-tools-allow-all~: Allow ~ellama~ using all the tools without user
   confirmation. Dangerous. Use at your own risk.
 - ~ellama-tools-allowed~: List of allowed ~ellama~ tools. Tools from this list
@@ -442,10 +445,18 @@ generated text string.
 - ~ellama-tools-read-file-default-mode~: Default mode for the ~read_file~
   tool. Use ~auto~ to read text files as text and supported image files as
   media, ~text~ to force text reading, or ~image~ to force image handling.
+- ~ellama-tools-dlp-safe-read-file-regexps~: Canonical file-name regexps whose
+  ~read_file~-style outputs skip output DLP scans. Defaults to Ellama source
+  files in the loaded Ellama directory. Input DLP, other tool outputs, access
+  checks and output line budgets still apply.
 - ~ellama-tools-edit-before-shell-commands~: Shell hook plists to run before
-  mutating edit tools write files.
+  mutating edit tools write files. Hooks run asynchronously from Emacs' UI, but
+  the edit tool result is returned to the agent only after hook processing
+  finishes.
 - ~ellama-tools-edit-after-shell-commands~: Shell hook plists to run after
-  mutating edit tools write files.
+  mutating edit tools write files. Hooks run asynchronously from Emacs' UI, but
+  the edit tool result is returned to the agent only after hook processing
+  finishes.
 - ~ellama-tools-use-srt~: Run shell-based tools (~shell_command~, ~grep~ and
   ~grep_in_file~) via the external ~srt~ sandbox runtime. Disabled by default.
   If enabled, non-shell file tools also perform local filesystem checks derived
@@ -478,6 +489,8 @@ generated text string.
   Skills.
 - ~ellama-skills-local-path~: Project-relative path for local Agent Skills.
   Default value is ~"skills"~.
+- ~ellama-tools-agent-default-max-steps~: Default maximum number of automatic
+  continuation steps for ~ellama-plan-and-act~. Default value is 40.
 - ~ellama-tools-subagent-default-max-steps~: Default maximum number of
   auto-continue steps for a sub-agent. Default value is 30.
 - ~ellama-tools-subagent-loop-detection-enabled~: Detect repeated identical tool
@@ -649,6 +662,13 @@ Ellama finishes the subtask with a loop-detected result. A later repeated call
 after a different tool call is treated as a new recovery opportunity, not as an
 immediate hard loop.
 
+If a sub-agent LLM request fails before producing a tool result, Ellama keeps
+the sub-agent loop alive. The first consecutive request error records the
+failure and immediately continues the sub-agent. The second consecutive request
+error resets the counter, compacts the sub-agent session automatically, and
+continues the loop after compaction finishes or is skipped. Any successful
+sub-agent response resets the consecutive error counter.
+
 The tool accepts either a free-form ~description~ or a prompt template:
 
 #+begin_src json
@@ -686,6 +706,12 @@ starts with a planning turn, asks the model to submit a checklist, and then
 continues automatically through the checklist until the agent reports a result,
 marks the plan complete, becomes blocked, or reaches
 ~ellama-tools-agent-default-max-steps~.
+
+If the LLM request fails before the loop receives a usable response, Ellama
+continues the same agent loop instead of stopping it. The first consecutive
+request error is recorded and the loop continues. The second consecutive request
+error triggers automatic session compaction, resets the error counter, and then
+continues the loop. A successful response resets the consecutive error counter.
 
 The loop adds temporary controller tools to the session:
 
@@ -730,6 +756,11 @@ Before hooks run after access checks and syntax validation, but before the file
 is written.  A failing before hook blocks the edit.  After hooks run after a
 successful write; failure is reported to the agent and does not roll back the
 edit.
+
+Hook processes are started asynchronously, so long-running hooks do not block
+the Emacs UI. They are still blocking from the agent's point of view: the edit
+tool callback runs only after all relevant before/after hooks finish, and the
+agent receives the final hook status together with the edit result.
 
 Example project-local configuration:
 
@@ -815,6 +846,11 @@ Key settings:
   in ~enforce~ mode (~allow~, ~warn~, ~block~, ~redact~).
 - ~ellama-tools-dlp-output-warn-behavior~: Handling for output ~warn~ verdicts
   (~allow~, ~confirm~, or ~block~).
+- ~ellama-tools-dlp-safe-read-file-regexps~: Canonical file-name regexps whose
+  file-reading outputs skip output DLP scans. This is for trusted source files
+  that should not prompt on every agent read. It does not bypass input DLP,
+  non-read tool output DLP, irreversible checks, ~srt~ checks, or line-budget
+  truncation.
 - ~ellama-tools-dlp-policy-overrides~: Per-tool/per-arg overrides and
   exceptions.  For structured input args, nested string values are scanned with
   path-like arg names (for example ~payload.items[0].token~).  Override ~:arg~
@@ -849,6 +885,25 @@ Key settings:
   before a single line is truncated (default ~4000~).
 - ~ellama-tools-output-line-budget-save-overflow-file~: Save full overflowing
   output to a temp file when the output source file is unknown (default ~t~).
+
+Trusted read-file outputs:
+
+~ellama-tools-dlp-safe-read-file-regexps~ lets users mark known source files as
+safe for output DLP. By default, Ellama marks its own loaded ~ellama*.el~ source
+files safe, so autonomous agents can inspect Ellama internals without repeated
+DLP approval prompts. The match is performed against the canonical file name.
+Only output scans for file-reading tools are skipped; DLP still scans tool
+inputs and outputs from other tools.
+
+Example:
+
+#+BEGIN_SRC emacs-lisp
+  (setopt ellama-tools-dlp-safe-read-file-regexps
+          (list (concat "\\`"
+                        (regexp-quote
+                         (file-truename "/path/to/ellama/"))
+                        "ellama\\(?:-[[:alnum:]-]+\\)?\\.el\\'")))
+#+END_SRC
 
 Enforcement behavior (v1):
 
@@ -1645,6 +1700,11 @@ To contribute, submit a pull request or report a bug. This library is part of
 GNU ELPA; major contributions must be from someone with FSF
 papers. Alternatively, you can write a module and share it on a different
 archive like MELPA.
+
+For local validation, run ~make check-elisp~ before pushing Elisp changes. It
+formats Elisp files, byte-compiles, runs the ERT suite, native-compiles, and
+runs checkdoc. Byte and native compilation warnings are treated as failures, so
+warnings block the same way test failures do.
 
 * GNU Free Documentation License
 :PROPERTIES:
