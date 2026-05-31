@@ -2484,6 +2484,49 @@ Return list with result and prompt."
       (when (file-exists-p file)
         (delete-file file)))))
 
+(ert-deftest test-ellama-tools-edit-before-hook-async-callback-after-hook ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((file (make-temp-file "ellama-before-hook-async-"))
+        (ellama-tools-edit-before-shell-commands
+         '((:command "sleep 0.1; printf before-ok" :show-output t)))
+        (ellama-tools-edit-after-shell-commands nil)
+        (result :pending))
+    (unwind-protect
+        (progn
+          (should-not
+           (ellama-tools-write-file-tool-async
+            (lambda (output)
+              (setq result output))
+            file "x"))
+          (should (eq result :pending))
+          (let ((deadline (+ (float-time) 3.0)))
+            (while (and (eq result :pending)
+                        (< (float-time) deadline))
+              (accept-process-output nil 0.01)))
+          (when (eq result :pending)
+            (ert-fail "Timeout waiting for async edit hook"))
+          (should (string-match-p "Before edit hook completed" result))
+          (should (string-match-p "before-ok" result))
+          (should (string-match-p "Wrote 1 characters" result))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (equal (buffer-string) "x"))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-tools-edit-tools-are-registered-async ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-enabled nil))
+    (ellama-tools-enable-all)
+    (dolist (name '("write_file" "append_file" "prepend_file" "edit_file"))
+      (let ((tool (seq-find (lambda (candidate)
+                              (string= (llm-tool-name candidate) name))
+                            ellama-tools-enabled)))
+        (should tool)
+        (should (llm-tool-async tool))))))
+
 (ert-deftest test-ellama-tools-edit-hook-receives-context ()
   (ellama-test--ensure-local-ellama-tools)
   (let* ((dir (make-temp-file "ellama-hook-context-" t))

@@ -351,6 +351,10 @@ The guard applies before output is sent back to the LLM."
   'ellama-tools-output-sections
   "Text property storing independently processed output sections.")
 
+(defconst ellama-tools--async-edit-started
+  'ellama-tools-async-edit-started
+  "Sentinel returned when an asynchronous edit tool has started.")
+
 (defcustom ellama-tools-subagent-continue-prompt "Task not marked complete. Continue working. If you are done, YOU MUST use the `report_result` tool."
   "Prompt sent to sub-agent to keep the loop going."
   :type 'string
@@ -2651,6 +2655,78 @@ OPERATION and TOOL-NAME describe the edit.  Return result plist."
               :output output
               :show-output (plist-get hook :show-output))))))
 
+(defun ellama-tools--edit-shell-hook-result
+    (phase command name status output show-output)
+  "Return edit shell hook result plist.
+PHASE, COMMAND, NAME, STATUS, OUTPUT and SHOW-OUTPUT describe one hook run."
+  (list :phase phase
+        :command command
+        :name name
+        :status status
+        :output output
+        :show-output show-output))
+
+(defun ellama-tools--run-edit-shell-hook-async
+    (phase file-name operation tool-name spec callback)
+  "Run edit shell hook SPEC asynchronously and call CALLBACK with result.
+PHASE, FILE-NAME, OPERATION and TOOL-NAME describe the edit."
+  (let* ((hook (ellama-tools--edit-shell-hook-normalize spec))
+         (command (plist-get hook :command))
+         (error-message (plist-get hook :error))
+         (name (plist-get hook :name))
+         (show-output (plist-get hook :show-output))
+         (root (ellama-tools--edit-project-root file-name)))
+    (if error-message
+        (funcall callback
+                 (ellama-tools--edit-shell-hook-result
+                  phase nil nil 1 error-message t))
+      (let* ((default-directory (file-name-as-directory root))
+             (process-environment
+              (ellama-tools--edit-shell-hook-env
+               phase file-name operation tool-name root hook))
+             (argv (ellama-tools--command-argv
+                    shell-file-name
+                    shell-command-switch
+                    (concat "exec 2>&1; " command)))
+             (buffer (generate-new-buffer " *ellama-edit-hook*"))
+             process)
+        (condition-case err
+            (progn
+              (setq process
+                    (make-process
+                     :name "ellama-edit-hook"
+                     :buffer buffer
+                     :command argv
+                     :noquery t
+                     :sentinel
+                     (lambda (proc _event)
+                       (when (memq (process-status proc) '(exit signal))
+                         (let* ((status (process-exit-status proc))
+                                (output
+                                 (if (buffer-live-p buffer)
+                                     (with-current-buffer buffer
+                                       (string-trim-right
+                                        (buffer-string) "\n"))
+                                   "")))
+                           (when (buffer-live-p buffer)
+                             (kill-buffer buffer))
+                           (funcall
+                            callback
+                            (ellama-tools--edit-shell-hook-result
+                             phase command name status output
+                             show-output)))))))
+              (set-process-query-on-exit-flag process nil))
+          (error
+           (when (buffer-live-p buffer)
+             (kill-buffer buffer))
+           (funcall
+            callback
+            (ellama-tools--edit-shell-hook-result
+             phase command name 1
+             (format "Failed to run edit shell hook: %s"
+                     (error-message-string err))
+             show-output))))))))
+
 (defun ellama-tools--edit-shell-hook-failed-p (result)
   "Return non-nil when edit shell hook RESULT fail."
   (not (equal (plist-get result :status) 0)))
@@ -2716,6 +2792,39 @@ failure.  After hooks run all commands."
               (throw 'blocked nil))))))
     (list :failed failed :sections (nreverse sections))))
 
+(defun ellama-tools--run-edit-shell-hooks-async
+    (phase file-name operation tool-name callback)
+  "Run edit shell hooks asynchronously and call CALLBACK with result.
+PHASE, FILE-NAME, OPERATION and TOOL-NAME describe the edit.  Before hooks
+stop on the first failure.  After hooks run all commands."
+  (let ((hooks (ellama-tools--edit-shell-hooks-for-file file-name phase)))
+    (cl-labels
+        ((run
+           (remaining sections failed)
+           (if (not remaining)
+               (funcall callback
+                        (list :failed failed
+                              :sections (nreverse sections)))
+             (ellama-tools--run-edit-shell-hook-async
+              phase file-name operation tool-name (car remaining)
+              (lambda (result)
+                (let ((next-sections sections)
+                      (next-failed failed))
+                  (when (ellama-tools--edit-shell-hook-visible-p result)
+                    (push (ellama-tools--edit-shell-hook-section
+                           tool-name result)
+                          next-sections))
+                  (when (ellama-tools--edit-shell-hook-failed-p result)
+                    (setq next-failed t))
+                  (if (and next-failed (eq phase 'before))
+                      (funcall callback
+                               (list :failed t
+                                     :sections (nreverse next-sections)))
+                    (run (cdr remaining)
+                         next-sections
+                         next-failed))))))))
+      (run hooks nil nil))))
+
 (defun ellama-tools--refresh-file-buffer-after-hooks (file-name)
   "Refresh unmodified visiting buffer for FILE-NAME after shell hooks."
   (let ((expanded (expand-file-name file-name)))
@@ -2757,6 +2866,29 @@ successful edit, optionally combined with visible hook output."
         (ellama-tools--edit-output
          success-message before-sections after-sections)))))
 
+(defun ellama-tools--run-edit-with-shell-hooks-async
+    (tool-name operation file-name edit-fn success-message callback)
+  "Run edit shell hooks asynchronously and call CALLBACK with result.
+TOOL-NAME, OPERATION, FILE-NAME, EDIT-FN and SUCCESS-MESSAGE describe the
+edit.  CALLBACK receives the final tool output after all relevant hooks finish."
+  (ellama-tools--run-edit-shell-hooks-async
+   'before file-name operation tool-name
+   (lambda (before)
+     (let ((before-sections (plist-get before :sections)))
+       (if (plist-get before :failed)
+           (funcall callback
+                    (ellama-tools--sectioned-output before-sections))
+         (funcall edit-fn)
+         (ellama-tools--run-edit-shell-hooks-async
+          'after file-name operation tool-name
+          (lambda (after)
+            (let ((after-sections (plist-get after :sections)))
+              (ellama-tools--refresh-file-buffer-after-hooks file-name)
+              (funcall
+               callback
+               (ellama-tools--edit-output
+                success-message before-sections after-sections))))))))))
+
 (defun ellama-tools--current-file-content (file-name)
   "Return current FILE-NAME content, or an empty string when missing.
 Prefer an existing visiting buffer so append and prepend preserve unsaved
@@ -2770,8 +2902,29 @@ buffer contents, matching their historical behavior."
           (buffer-string))
       "")))
 
-(defun ellama-tools-write-file-tool (file-name content)
-  "Write CONTENT to the file FILE-NAME."
+(defun ellama-tools--sync-edit-runner
+    (tool-name operation file-name edit-fn success-message)
+  "Run edit hooks synchronously for TOOL-NAME and return tool output.
+OPERATION, FILE-NAME, EDIT-FN and SUCCESS-MESSAGE describe the edit."
+  (ellama-tools--run-edit-with-shell-hooks
+   tool-name operation file-name edit-fn success-message))
+
+(defun ellama-tools--async-edit-runner (callback)
+  "Return edit runner that reports final output to CALLBACK."
+  (lambda (tool-name operation file-name edit-fn success-message)
+    (ellama-tools--run-edit-with-shell-hooks-async
+     tool-name operation file-name edit-fn success-message callback)
+    ellama-tools--async-edit-started))
+
+(defun ellama-tools--return-async-edit-result (callback result)
+  "Send RESULT to CALLBACK unless asynchronous edit hooks already started."
+  (unless (eq result ellama-tools--async-edit-started)
+    (funcall callback result))
+  nil)
+
+(defun ellama-tools--write-file-tool-with-runner
+    (file-name content edit-runner)
+  "Write CONTENT to FILE-NAME using EDIT-RUNNER for hooks."
   (or (ellama-tools--tool-check-file-access file-name 'write)
       (ellama-tools--file-parent-directory-error-message "write" file-name)
       (when (file-directory-p file-name)
@@ -2791,7 +2944,8 @@ buffer contents, matching their historical behavior."
                                   content)))
             (if rejection
                 rejection
-              (ellama-tools--run-edit-with-shell-hooks
+              (funcall
+               edit-runner
                "write_file" "write" file-name
                (lambda ()
                  (ellama-tools--write-file-buffer-content
@@ -2806,11 +2960,25 @@ buffer contents, matching their historical behavior."
                  file-name
                  (error-message-string err))))))
 
+(defun ellama-tools-write-file-tool (file-name content)
+  "Write CONTENT to the file FILE-NAME."
+  (ellama-tools--write-file-tool-with-runner
+   file-name content #'ellama-tools--sync-edit-runner))
+
+(defun ellama-tools-write-file-tool-async (callback file-name content)
+  "Write CONTENT to FILE-NAME and call CALLBACK with the result."
+  (ellama-tools--return-async-edit-result
+   callback
+   (ellama-tools--write-file-tool-with-runner
+    file-name content (ellama-tools--async-edit-runner callback))))
+
 (ellama-tools-define-tool
  '(:function
-   ellama-tools-write-file-tool
+   ellama-tools-write-file-tool-async
    :name
    "write_file"
+   :async
+   t
    :args
    ((:name
      "file_name"
@@ -2827,8 +2995,9 @@ buffer contents, matching their historical behavior."
    :description
    "Write CONTENT to the file FILE_NAME."))
 
-(defun ellama-tools-append-file-tool (file-name content)
-  "Append CONTENT to the file FILE-NAME."
+(defun ellama-tools--append-file-tool-with-runner
+    (file-name content edit-runner)
+  "Append CONTENT to FILE-NAME using EDIT-RUNNER for hooks."
   (or (ellama-tools--tool-check-file-access file-name 'write)
       (ellama-tools--file-parent-directory-error-message "append to" file-name)
       (when (file-directory-p file-name)
@@ -2848,7 +3017,8 @@ buffer contents, matching their historical behavior."
                                   candidate)))
             (if rejection
                 rejection
-              (ellama-tools--run-edit-with-shell-hooks
+              (funcall
+               edit-runner
                "append_file" "append" file-name
                (lambda ()
                  (ellama-tools--write-file-buffer-content
@@ -2863,11 +3033,25 @@ buffer contents, matching their historical behavior."
                  file-name
                  (error-message-string err))))))
 
+(defun ellama-tools-append-file-tool (file-name content)
+  "Append CONTENT to the file FILE-NAME."
+  (ellama-tools--append-file-tool-with-runner
+   file-name content #'ellama-tools--sync-edit-runner))
+
+(defun ellama-tools-append-file-tool-async (callback file-name content)
+  "Append CONTENT to FILE-NAME and call CALLBACK with the result."
+  (ellama-tools--return-async-edit-result
+   callback
+   (ellama-tools--append-file-tool-with-runner
+    file-name content (ellama-tools--async-edit-runner callback))))
+
 (ellama-tools-define-tool
  '(:function
-   ellama-tools-append-file-tool
+   ellama-tools-append-file-tool-async
    :name
    "append_file"
+   :async
+   t
    :args
    ((:name
      "file_name"
@@ -2884,8 +3068,9 @@ buffer contents, matching their historical behavior."
    :description
    "Append CONTENT to the file FILE-NAME."))
 
-(defun ellama-tools-prepend-file-tool (file-name content)
-  "Prepend CONTENT to the file FILE-NAME."
+(defun ellama-tools--prepend-file-tool-with-runner
+    (file-name content edit-runner)
+  "Prepend CONTENT to FILE-NAME using EDIT-RUNNER for hooks."
   (or (ellama-tools--tool-check-file-access file-name 'write)
       (ellama-tools--file-parent-directory-error-message "prepend to" file-name)
       (when (file-directory-p file-name)
@@ -2905,7 +3090,8 @@ buffer contents, matching their historical behavior."
                                   candidate)))
             (if rejection
                 rejection
-              (ellama-tools--run-edit-with-shell-hooks
+              (funcall
+               edit-runner
                "prepend_file" "prepend" file-name
                (lambda ()
                  (ellama-tools--write-file-buffer-content
@@ -2920,11 +3106,25 @@ buffer contents, matching their historical behavior."
                  file-name
                  (error-message-string err))))))
 
+(defun ellama-tools-prepend-file-tool (file-name content)
+  "Prepend CONTENT to the file FILE-NAME."
+  (ellama-tools--prepend-file-tool-with-runner
+   file-name content #'ellama-tools--sync-edit-runner))
+
+(defun ellama-tools-prepend-file-tool-async (callback file-name content)
+  "Prepend CONTENT to FILE-NAME and call CALLBACK with the result."
+  (ellama-tools--return-async-edit-result
+   callback
+   (ellama-tools--prepend-file-tool-with-runner
+    file-name content (ellama-tools--async-edit-runner callback))))
+
 (ellama-tools-define-tool
  '(:function
-   ellama-tools-prepend-file-tool
+   ellama-tools-prepend-file-tool-async
    :name
    "prepend_file"
+   :async
+   t
    :args
    ((:name
      "file_name"
@@ -3090,8 +3290,9 @@ TIMEOUT is the optional command timeout in seconds."
         (insert content)
         (save-buffer)))))
 
-(defun ellama-tools-edit-file-tool (file-name oldcontent newcontent)
-  "Edit file FILE-NAME.
+(defun ellama-tools--edit-file-tool-with-runner
+    (file-name oldcontent newcontent edit-runner)
+  "Edit FILE-NAME using EDIT-RUNNER for hooks.
 Replace OLDCONTENT with NEWCONTENT."
   (or (ellama-tools--tool-check-file-access file-name 'read)
       (ellama-tools--tool-check-file-access file-name 'write)
@@ -3113,7 +3314,8 @@ Replace OLDCONTENT with NEWCONTENT."
                                   candidate)))
             (if rejection
                 rejection
-              (ellama-tools--run-edit-with-shell-hooks
+              (funcall
+               edit-runner
                "edit_file" "edit" file-name
                (lambda ()
                  (ellama-tools--write-file-buffer-content
@@ -3123,11 +3325,29 @@ Replace OLDCONTENT with NEWCONTENT."
                        (ellama-tools--balanced-edit-success-suffix
                         decision)))))))))
 
+(defun ellama-tools-edit-file-tool (file-name oldcontent newcontent)
+  "Edit file FILE-NAME.
+Replace OLDCONTENT with NEWCONTENT."
+  (ellama-tools--edit-file-tool-with-runner
+   file-name oldcontent newcontent #'ellama-tools--sync-edit-runner))
+
+(defun ellama-tools-edit-file-tool-async
+    (callback file-name oldcontent newcontent)
+  "Edit FILE-NAME and call CALLBACK with the result.
+Replace OLDCONTENT with NEWCONTENT."
+  (ellama-tools--return-async-edit-result
+   callback
+   (ellama-tools--edit-file-tool-with-runner
+    file-name oldcontent newcontent
+    (ellama-tools--async-edit-runner callback))))
+
 (ellama-tools-define-tool
  '(:function
-   ellama-tools-edit-file-tool
+   ellama-tools-edit-file-tool-async
    :name
    "edit_file"
+   :async
+   t
    :args
    ((:name
      "file_name"
