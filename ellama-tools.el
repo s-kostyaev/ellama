@@ -351,10 +351,6 @@ The guard applies before output is sent back to the LLM."
   'ellama-tools-output-sections
   "Text property storing independently processed output sections.")
 
-(defconst ellama-tools--async-edit-started
-  'ellama-tools-async-edit-started
-  "Sentinel returned when an asynchronous edit tool has started.")
-
 (defcustom ellama-tools-subagent-continue-prompt "Task not marked complete. Continue working. If you are done, YOU MUST use the `report_result` tool."
   "Prompt sent to sub-agent to keep the loop going."
   :type 'string
@@ -2613,48 +2609,6 @@ describe the edit."
     (format "ELLAMA_HOOK_NAME=%s" (or (plist-get spec :name) "")))
    (ellama-tools--process-environment-with-cat-pager)))
 
-(defun ellama-tools--run-edit-shell-hook
-    (phase file-name operation tool-name spec)
-  "Run edit shell hook SPEC for PHASE and FILE-NAME.
-OPERATION and TOOL-NAME describe the edit.  Return result plist."
-  (let* ((hook (ellama-tools--edit-shell-hook-normalize spec))
-         (command (plist-get hook :command))
-         (error-message (plist-get hook :error))
-         (root (ellama-tools--edit-project-root file-name)))
-    (if error-message
-        (list :phase phase
-              :status 1
-              :output error-message
-              :show-output t)
-      (let* ((default-directory (file-name-as-directory root))
-             (process-environment
-              (ellama-tools--edit-shell-hook-env
-               phase file-name operation tool-name root hook))
-             (argv (ellama-tools--command-argv
-                    shell-file-name
-                    shell-command-switch
-                    (concat "exec 2>&1; " command)))
-             status
-             output)
-        (condition-case err
-            (with-temp-buffer
-              (setq status
-                    (apply #'call-process
-                           (car argv) nil t nil (cdr argv)))
-              (setq output
-                    (string-trim-right (buffer-string) "\n")))
-          (error
-           (setq status 1)
-           (setq output
-                 (format "Failed to run edit shell hook: %s"
-                         (error-message-string err)))))
-        (list :phase phase
-              :command command
-              :name (plist-get hook :name)
-              :status status
-              :output output
-              :show-output (plist-get hook :show-output))))))
-
 (defun ellama-tools--edit-shell-hook-result
     (phase command name status output show-output)
   "Return edit shell hook result plist.
@@ -2666,7 +2620,7 @@ PHASE, COMMAND, NAME, STATUS, OUTPUT and SHOW-OUTPUT describe one hook run."
         :output output
         :show-output show-output))
 
-(defun ellama-tools--run-edit-shell-hook-async
+(defun ellama-tools--run-edit-shell-hook
     (phase file-name operation tool-name spec callback)
   "Run edit shell hook SPEC asynchronously and call CALLBACK with result.
 PHASE, FILE-NAME, OPERATION and TOOL-NAME describe the edit."
@@ -2772,27 +2726,6 @@ PHASE, FILE-NAME, OPERATION and TOOL-NAME describe the edit."
    nil))
 
 (defun ellama-tools--run-edit-shell-hooks
-    (phase file-name operation tool-name)
-  "Run edit shell hooks for PHASE and FILE-NAME.
-OPERATION and TOOL-NAME describe the edit.  Before hooks stop on the first
-failure.  After hooks run all commands."
-  (let ((hooks (ellama-tools--edit-shell-hooks-for-file file-name phase))
-        sections
-        failed)
-    (catch 'blocked
-      (dolist (hook hooks)
-        (let ((result (ellama-tools--run-edit-shell-hook
-                       phase file-name operation tool-name hook)))
-          (when (ellama-tools--edit-shell-hook-visible-p result)
-            (push (ellama-tools--edit-shell-hook-section tool-name result)
-                  sections))
-          (when (ellama-tools--edit-shell-hook-failed-p result)
-            (setq failed t)
-            (when (eq phase 'before)
-              (throw 'blocked nil))))))
-    (list :failed failed :sections (nreverse sections))))
-
-(defun ellama-tools--run-edit-shell-hooks-async
     (phase file-name operation tool-name callback)
   "Run edit shell hooks asynchronously and call CALLBACK with result.
 PHASE, FILE-NAME, OPERATION and TOOL-NAME describe the edit.  Before hooks
@@ -2805,7 +2738,7 @@ stop on the first failure.  After hooks run all commands."
                (funcall callback
                         (list :failed failed
                               :sections (nreverse sections)))
-             (ellama-tools--run-edit-shell-hook-async
+             (ellama-tools--run-edit-shell-hook
               phase file-name operation tool-name (car remaining)
               (lambda (result)
                 (let ((next-sections sections)
@@ -2849,29 +2782,11 @@ BEFORE-SECTIONS and AFTER-SECTIONS are visible shell hook output sections."
       main-message)))
 
 (defun ellama-tools--run-edit-with-shell-hooks
-    (tool-name operation file-name edit-fn success-message)
-  "Run edit shell hooks around EDIT-FN for FILE-NAME.
-TOOL-NAME and OPERATION describe the edit.  SUCCESS-MESSAGE is returned on
-successful edit, optionally combined with visible hook output."
-  (let* ((before (ellama-tools--run-edit-shell-hooks
-                  'before file-name operation tool-name))
-         (before-sections (plist-get before :sections)))
-    (if (plist-get before :failed)
-        (ellama-tools--sectioned-output before-sections)
-      (funcall edit-fn)
-      (let* ((after (ellama-tools--run-edit-shell-hooks
-                     'after file-name operation tool-name))
-             (after-sections (plist-get after :sections)))
-        (ellama-tools--refresh-file-buffer-after-hooks file-name)
-        (ellama-tools--edit-output
-         success-message before-sections after-sections)))))
-
-(defun ellama-tools--run-edit-with-shell-hooks-async
     (tool-name operation file-name edit-fn success-message callback)
   "Run edit shell hooks asynchronously and call CALLBACK with result.
 TOOL-NAME, OPERATION, FILE-NAME, EDIT-FN and SUCCESS-MESSAGE describe the
 edit.  CALLBACK receives the final tool output after all relevant hooks finish."
-  (ellama-tools--run-edit-shell-hooks-async
+  (ellama-tools--run-edit-shell-hooks
    'before file-name operation tool-name
    (lambda (before)
      (let ((before-sections (plist-get before :sections)))
@@ -2879,7 +2794,7 @@ edit.  CALLBACK receives the final tool output after all relevant hooks finish."
            (funcall callback
                     (ellama-tools--sectioned-output before-sections))
          (funcall edit-fn)
-         (ellama-tools--run-edit-shell-hooks-async
+         (ellama-tools--run-edit-shell-hooks
           'after file-name operation tool-name
           (lambda (after)
             (let ((after-sections (plist-get after :sections)))
@@ -2902,79 +2817,53 @@ buffer contents, matching their historical behavior."
           (buffer-string))
       "")))
 
-(defun ellama-tools--sync-edit-runner
-    (tool-name operation file-name edit-fn success-message)
-  "Run edit hooks synchronously for TOOL-NAME and return tool output.
-OPERATION, FILE-NAME, EDIT-FN and SUCCESS-MESSAGE describe the edit."
-  (ellama-tools--run-edit-with-shell-hooks
-   tool-name operation file-name edit-fn success-message))
-
-(defun ellama-tools--async-edit-runner (callback)
-  "Return edit runner that reports final output to CALLBACK."
-  (lambda (tool-name operation file-name edit-fn success-message)
-    (ellama-tools--run-edit-with-shell-hooks-async
-     tool-name operation file-name edit-fn success-message callback)
-    ellama-tools--async-edit-started))
-
-(defun ellama-tools--return-async-edit-result (callback result)
-  "Send RESULT to CALLBACK unless asynchronous edit hooks already started."
-  (unless (eq result ellama-tools--async-edit-started)
-    (funcall callback result))
-  nil)
-
-(defun ellama-tools--write-file-tool-with-runner
-    (file-name content edit-runner)
-  "Write CONTENT to FILE-NAME using EDIT-RUNNER for hooks."
-  (or (ellama-tools--tool-check-file-access file-name 'write)
-      (ellama-tools--file-parent-directory-error-message "write" file-name)
-      (when (file-directory-p file-name)
-        (format "Cannot write %s: path is a directory." file-name))
-      (ellama-tools--read-before-write-check "Write" file-name)
-      (condition-case err
-          (let* ((original (when (file-exists-p file-name)
-                             (ellama-tools--current-file-content file-name)))
-                 (decision
-                  (ellama-tools--balanced-edit-check-candidate
-                   "Write" file-name content original nil content))
-                 (rejection (plist-get decision :rejection))
-                 (auto-fixed (plist-get decision :auto-fixed))
-                 (fixed-text (plist-get decision :fixed-text))
-                 (text-to-write (if (and auto-fixed fixed-text)
-                                    fixed-text
-                                  content)))
-            (if rejection
-                rejection
-              (funcall
-               edit-runner
-               "write_file" "write" file-name
-               (lambda ()
-                 (ellama-tools--write-file-buffer-content
-                  file-name text-to-write))
-               (format "Wrote %d characters to %s%s."
-                       (length content)
-                       file-name
-                       (ellama-tools--balanced-edit-success-suffix
-                        decision)))))
-        (file-error
-         (format "Cannot write %s: %s"
-                 file-name
-                 (error-message-string err))))))
-
-(defun ellama-tools-write-file-tool (file-name content)
-  "Write CONTENT to the file FILE-NAME."
-  (ellama-tools--write-file-tool-with-runner
-   file-name content #'ellama-tools--sync-edit-runner))
-
-(defun ellama-tools-write-file-tool-async (callback file-name content)
+(defun ellama-tools-write-file-tool (callback file-name content)
   "Write CONTENT to FILE-NAME and call CALLBACK with the result."
-  (ellama-tools--return-async-edit-result
-   callback
-   (ellama-tools--write-file-tool-with-runner
-    file-name content (ellama-tools--async-edit-runner callback))))
+  (let ((result
+         (or (ellama-tools--tool-check-file-access file-name 'write)
+             (ellama-tools--file-parent-directory-error-message
+              "write" file-name)
+             (when (file-directory-p file-name)
+               (format "Cannot write %s: path is a directory." file-name))
+             (ellama-tools--read-before-write-check "Write" file-name)
+             (condition-case err
+                 (let* ((original (when (file-exists-p file-name)
+                                    (ellama-tools--current-file-content
+                                     file-name)))
+                        (decision
+                         (ellama-tools--balanced-edit-check-candidate
+                          "Write" file-name content original nil content))
+                        (rejection (plist-get decision :rejection))
+                        (auto-fixed (plist-get decision :auto-fixed))
+                        (fixed-text (plist-get decision :fixed-text))
+                        (text-to-write (if (and auto-fixed fixed-text)
+                                           fixed-text
+                                         content)))
+                   (if rejection
+                       rejection
+                     (ellama-tools--run-edit-with-shell-hooks
+                      "write_file" "write" file-name
+                      (lambda ()
+                        (ellama-tools--write-file-buffer-content
+                         file-name text-to-write))
+                      (format "Wrote %d characters to %s%s."
+                              (length content)
+                              file-name
+                              (ellama-tools--balanced-edit-success-suffix
+                               decision))
+                      callback)
+                     nil))
+               (file-error
+                (format "Cannot write %s: %s"
+                        file-name
+                        (error-message-string err)))))))
+    (when result
+      (funcall callback result)))
+  nil)
 
 (ellama-tools-define-tool
  '(:function
-   ellama-tools-write-file-tool-async
+   ellama-tools-write-file-tool
    :name
    "write_file"
    :async
@@ -2995,59 +2884,53 @@ OPERATION, FILE-NAME, EDIT-FN and SUCCESS-MESSAGE describe the edit."
    :description
    "Write CONTENT to the file FILE_NAME."))
 
-(defun ellama-tools--append-file-tool-with-runner
-    (file-name content edit-runner)
-  "Append CONTENT to FILE-NAME using EDIT-RUNNER for hooks."
-  (or (ellama-tools--tool-check-file-access file-name 'write)
-      (ellama-tools--file-parent-directory-error-message "append to" file-name)
-      (when (file-directory-p file-name)
-        (format "Cannot append to %s: path is a directory." file-name))
-      (ellama-tools--read-before-write-check "Append" file-name)
-      (condition-case err
-          (let* ((original (ellama-tools--current-file-content file-name))
-                 (candidate (concat original content))
-                 (decision
-                  (ellama-tools--balanced-edit-check-candidate
-                   "Append" file-name candidate original nil content))
-                 (rejection (plist-get decision :rejection))
-                 (auto-fixed (plist-get decision :auto-fixed))
-                 (fixed-text (plist-get decision :fixed-text))
-                 (text-to-write (if (and auto-fixed fixed-text)
-                                    fixed-text
-                                  candidate)))
-            (if rejection
-                rejection
-              (funcall
-               edit-runner
-               "append_file" "append" file-name
-               (lambda ()
-                 (ellama-tools--write-file-buffer-content
-                  file-name text-to-write))
-               (format "Appended %d characters to %s%s."
-                       (length content)
-                       file-name
-                       (ellama-tools--balanced-edit-success-suffix
-                        decision)))))
-        (file-error
-         (format "Cannot append to %s: %s"
-                 file-name
-                 (error-message-string err))))))
-
-(defun ellama-tools-append-file-tool (file-name content)
-  "Append CONTENT to the file FILE-NAME."
-  (ellama-tools--append-file-tool-with-runner
-   file-name content #'ellama-tools--sync-edit-runner))
-
-(defun ellama-tools-append-file-tool-async (callback file-name content)
+(defun ellama-tools-append-file-tool (callback file-name content)
   "Append CONTENT to FILE-NAME and call CALLBACK with the result."
-  (ellama-tools--return-async-edit-result
-   callback
-   (ellama-tools--append-file-tool-with-runner
-    file-name content (ellama-tools--async-edit-runner callback))))
+  (let ((result
+         (or (ellama-tools--tool-check-file-access file-name 'write)
+             (ellama-tools--file-parent-directory-error-message
+              "append to" file-name)
+             (when (file-directory-p file-name)
+               (format "Cannot append to %s: path is a directory." file-name))
+             (ellama-tools--read-before-write-check "Append" file-name)
+             (condition-case err
+                 (let* ((original
+                         (ellama-tools--current-file-content file-name))
+                        (candidate (concat original content))
+                        (decision
+                         (ellama-tools--balanced-edit-check-candidate
+                          "Append" file-name candidate original nil content))
+                        (rejection (plist-get decision :rejection))
+                        (auto-fixed (plist-get decision :auto-fixed))
+                        (fixed-text (plist-get decision :fixed-text))
+                        (text-to-write (if (and auto-fixed fixed-text)
+                                           fixed-text
+                                         candidate)))
+                   (if rejection
+                       rejection
+                     (ellama-tools--run-edit-with-shell-hooks
+                      "append_file" "append" file-name
+                      (lambda ()
+                        (ellama-tools--write-file-buffer-content
+                         file-name text-to-write))
+                      (format "Appended %d characters to %s%s."
+                              (length content)
+                              file-name
+                              (ellama-tools--balanced-edit-success-suffix
+                               decision))
+                      callback)
+                     nil))
+               (file-error
+                (format "Cannot append to %s: %s"
+                        file-name
+                        (error-message-string err)))))))
+    (when result
+      (funcall callback result)))
+  nil)
 
 (ellama-tools-define-tool
  '(:function
-   ellama-tools-append-file-tool-async
+   ellama-tools-append-file-tool
    :name
    "append_file"
    :async
@@ -3068,59 +2951,54 @@ OPERATION, FILE-NAME, EDIT-FN and SUCCESS-MESSAGE describe the edit."
    :description
    "Append CONTENT to the file FILE-NAME."))
 
-(defun ellama-tools--prepend-file-tool-with-runner
-    (file-name content edit-runner)
-  "Prepend CONTENT to FILE-NAME using EDIT-RUNNER for hooks."
-  (or (ellama-tools--tool-check-file-access file-name 'write)
-      (ellama-tools--file-parent-directory-error-message "prepend to" file-name)
-      (when (file-directory-p file-name)
-        (format "Cannot prepend to %s: path is a directory." file-name))
-      (ellama-tools--read-before-write-check "Prepend" file-name)
-      (condition-case err
-          (let* ((original (ellama-tools--current-file-content file-name))
-                 (candidate (concat content original))
-                 (decision
-                  (ellama-tools--balanced-edit-check-candidate
-                   "Prepend" file-name candidate original nil content))
-                 (rejection (plist-get decision :rejection))
-                 (auto-fixed (plist-get decision :auto-fixed))
-                 (fixed-text (plist-get decision :fixed-text))
-                 (text-to-write (if (and auto-fixed fixed-text)
-                                    fixed-text
-                                  candidate)))
-            (if rejection
-                rejection
-              (funcall
-               edit-runner
-               "prepend_file" "prepend" file-name
-               (lambda ()
-                 (ellama-tools--write-file-buffer-content
-                  file-name text-to-write))
-               (format "Prepended %d characters to %s%s."
-                       (length content)
-                       file-name
-                       (ellama-tools--balanced-edit-success-suffix
-                        decision)))))
-        (file-error
-         (format "Cannot prepend to %s: %s"
-                 file-name
-                 (error-message-string err))))))
-
-(defun ellama-tools-prepend-file-tool (file-name content)
-  "Prepend CONTENT to the file FILE-NAME."
-  (ellama-tools--prepend-file-tool-with-runner
-   file-name content #'ellama-tools--sync-edit-runner))
-
-(defun ellama-tools-prepend-file-tool-async (callback file-name content)
+(defun ellama-tools-prepend-file-tool (callback file-name content)
   "Prepend CONTENT to FILE-NAME and call CALLBACK with the result."
-  (ellama-tools--return-async-edit-result
-   callback
-   (ellama-tools--prepend-file-tool-with-runner
-    file-name content (ellama-tools--async-edit-runner callback))))
+  (let ((result
+         (or (ellama-tools--tool-check-file-access file-name 'write)
+             (ellama-tools--file-parent-directory-error-message
+              "prepend to" file-name)
+             (when (file-directory-p file-name)
+               (format "Cannot prepend to %s: path is a directory."
+                       file-name))
+             (ellama-tools--read-before-write-check "Prepend" file-name)
+             (condition-case err
+                 (let* ((original
+                         (ellama-tools--current-file-content file-name))
+                        (candidate (concat content original))
+                        (decision
+                         (ellama-tools--balanced-edit-check-candidate
+                          "Prepend" file-name candidate original nil content))
+                        (rejection (plist-get decision :rejection))
+                        (auto-fixed (plist-get decision :auto-fixed))
+                        (fixed-text (plist-get decision :fixed-text))
+                        (text-to-write (if (and auto-fixed fixed-text)
+                                           fixed-text
+                                         candidate)))
+                   (if rejection
+                       rejection
+                     (ellama-tools--run-edit-with-shell-hooks
+                      "prepend_file" "prepend" file-name
+                      (lambda ()
+                        (ellama-tools--write-file-buffer-content
+                         file-name text-to-write))
+                      (format "Prepended %d characters to %s%s."
+                              (length content)
+                              file-name
+                              (ellama-tools--balanced-edit-success-suffix
+                               decision))
+                      callback)
+                     nil))
+               (file-error
+                (format "Cannot prepend to %s: %s"
+                        file-name
+                        (error-message-string err)))))))
+    (when result
+      (funcall callback result)))
+  nil)
 
 (ellama-tools-define-tool
  '(:function
-   ellama-tools-prepend-file-tool-async
+   ellama-tools-prepend-file-tool
    :name
    "prepend_file"
    :async
@@ -3290,60 +3168,50 @@ TIMEOUT is the optional command timeout in seconds."
         (insert content)
         (save-buffer)))))
 
-(defun ellama-tools--edit-file-tool-with-runner
-    (file-name oldcontent newcontent edit-runner)
-  "Edit FILE-NAME using EDIT-RUNNER for hooks.
-Replace OLDCONTENT with NEWCONTENT."
-  (or (ellama-tools--tool-check-file-access file-name 'read)
-      (ellama-tools--tool-check-file-access file-name 'write)
-      (let ((content (with-temp-buffer
-                       (insert-file-contents-literally file-name)
-                       (buffer-string))))
-        (ellama-tools--mark-file-read file-name)
-        (if (not (string-match (regexp-quote oldcontent) content))
-            (ellama-tools--edit-file-old-content-not-found-message file-name)
-          (let* ((candidate (replace-match newcontent t t content))
-                 (decision
-                  (ellama-tools--balanced-edit-check-candidate
-                   "Edit" file-name candidate content oldcontent newcontent))
-                 (rejection (plist-get decision :rejection))
-                 (auto-fixed (plist-get decision :auto-fixed))
-                 (fixed-text (plist-get decision :fixed-text))
-                 (text-to-write (if (and auto-fixed fixed-text)
-                                    fixed-text
-                                  candidate)))
-            (if rejection
-                rejection
-              (funcall
-               edit-runner
-               "edit_file" "edit" file-name
-               (lambda ()
-                 (ellama-tools--write-file-buffer-content
-                  file-name text-to-write))
-               (format "Edited %s%s."
-                       file-name
-                       (ellama-tools--balanced-edit-success-suffix
-                        decision)))))))))
-
-(defun ellama-tools-edit-file-tool (file-name oldcontent newcontent)
-  "Edit file FILE-NAME.
-Replace OLDCONTENT with NEWCONTENT."
-  (ellama-tools--edit-file-tool-with-runner
-   file-name oldcontent newcontent #'ellama-tools--sync-edit-runner))
-
-(defun ellama-tools-edit-file-tool-async
-    (callback file-name oldcontent newcontent)
+(defun ellama-tools-edit-file-tool (callback file-name oldcontent newcontent)
   "Edit FILE-NAME and call CALLBACK with the result.
 Replace OLDCONTENT with NEWCONTENT."
-  (ellama-tools--return-async-edit-result
-   callback
-   (ellama-tools--edit-file-tool-with-runner
-    file-name oldcontent newcontent
-    (ellama-tools--async-edit-runner callback))))
+  (let ((result
+         (or (ellama-tools--tool-check-file-access file-name 'read)
+             (ellama-tools--tool-check-file-access file-name 'write)
+             (let ((content (with-temp-buffer
+                              (insert-file-contents-literally file-name)
+                              (buffer-string))))
+               (ellama-tools--mark-file-read file-name)
+               (if (not (string-match (regexp-quote oldcontent) content))
+                   (ellama-tools--edit-file-old-content-not-found-message
+                    file-name)
+                 (let* ((candidate (replace-match newcontent t t content))
+                        (decision
+                         (ellama-tools--balanced-edit-check-candidate
+                          "Edit" file-name candidate content oldcontent
+                          newcontent))
+                        (rejection (plist-get decision :rejection))
+                        (auto-fixed (plist-get decision :auto-fixed))
+                        (fixed-text (plist-get decision :fixed-text))
+                        (text-to-write (if (and auto-fixed fixed-text)
+                                           fixed-text
+                                         candidate)))
+                   (if rejection
+                       rejection
+                     (ellama-tools--run-edit-with-shell-hooks
+                      "edit_file" "edit" file-name
+                      (lambda ()
+                        (ellama-tools--write-file-buffer-content
+                         file-name text-to-write))
+                      (format "Edited %s%s."
+                              file-name
+                              (ellama-tools--balanced-edit-success-suffix
+                               decision))
+                      callback)
+                     nil)))))))
+    (when result
+      (funcall callback result)))
+  nil)
 
 (ellama-tools-define-tool
  '(:function
-   ellama-tools-edit-file-tool-async
+   ellama-tools-edit-file-tool
    :name
    "edit_file"
    :async

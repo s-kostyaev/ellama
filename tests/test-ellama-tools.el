@@ -156,6 +156,21 @@
       (ert-fail (format "Timeout while waiting result for: %s" cmd)))
     result))
 
+(defun ellama-test--wait-tool-result (function &rest args)
+  "Call asynchronous tool FUNCTION with ARGS and wait for result."
+  (let ((result :pending)
+        (deadline (+ (float-time) 3.0)))
+    (apply function
+           (lambda (res)
+             (setq result res))
+           args)
+    (while (and (eq result :pending)
+                (< (float-time) deadline))
+      (accept-process-output nil 0.01))
+    (when (eq result :pending)
+      (ert-fail "Timeout waiting for asynchronous tool result"))
+    result))
+
 (defun ellama-test--named-tool-no-args ()
   "Return constant string."
   "zero")
@@ -654,7 +669,8 @@ Return list with result and prompt."
          (let ((default-directory dir)
                (ellama-tools-use-srt t)
                (ellama-tools-srt-args (list "--settings" settings-file)))
-           (let ((msg (ellama-tools-write-file-tool
+           (let ((msg (ellama-test--wait-tool-result
+                       #'ellama-tools-write-file-tool
                        (expand-file-name "x.txt" dir) "x")))
              (should (stringp msg))
              (should (string-match-p "srt policy denied write access" msg))
@@ -2230,7 +2246,8 @@ Return list with result and prompt."
         (progn
           (with-temp-file file
             (insert "abcde"))
-          (ellama-tools-edit-file-tool file "ab" "XX")
+          (ellama-test--wait-tool-result
+           #'ellama-tools-edit-file-tool file "ab" "XX")
           (with-temp-buffer
             (insert-file-contents file)
             (should (equal (buffer-string) "XXcde"))))
@@ -2245,7 +2262,9 @@ Return list with result and prompt."
           (with-temp-file file
             (insert "alpha\nbeta\n"))
           (setq result
-                (ellama-tools-edit-file-tool file "alpha\\nbeta" "changed"))
+                (ellama-test--wait-tool-result
+                 #'ellama-tools-edit-file-tool
+                 file "alpha\\nbeta" "changed"))
           (should (string-match-p "No replacement made" result))
           (should (string-match-p "escaped \\\\n sequences" result))
           (with-temp-buffer
@@ -2375,15 +2394,18 @@ Return list with result and prompt."
         (progn
           (should (string-match-p
                    (format "Wrote 6 characters to %s\\." (regexp-quote file))
-                   (ellama-tools-write-file-tool file "middle")))
+                   (ellama-test--wait-tool-result
+                    #'ellama-tools-write-file-tool file "middle")))
           (should (string-match-p
                    (format "Appended 5 characters to %s\\."
                            (regexp-quote file))
-                   (ellama-tools-append-file-tool file "-tail")))
+                   (ellama-test--wait-tool-result
+                    #'ellama-tools-append-file-tool file "-tail")))
           (should (string-match-p
                    (format "Prepended 5 characters to %s\\."
                            (regexp-quote file))
-                   (ellama-tools-prepend-file-tool file "head-")))
+                   (ellama-test--wait-tool-result
+                    #'ellama-tools-prepend-file-tool file "head-")))
           (with-temp-buffer
             (insert-file-contents file)
             (should (equal (buffer-string) "head-middle-tail"))))
@@ -2397,7 +2419,8 @@ Return list with result and prompt."
         (ellama-tools-edit-after-shell-commands
          '((:command "printf after-ok" :show-output t))))
     (unwind-protect
-        (let ((msg (ellama-tools-write-file-tool file "x")))
+        (let ((msg (ellama-test--wait-tool-result
+                    #'ellama-tools-write-file-tool file "x")))
           (should (string-match-p "Wrote 1 characters" msg))
           (should (string-match-p "After edit hook completed" msg))
           (should (string-match-p "after-ok" msg))
@@ -2416,7 +2439,8 @@ Return list with result and prompt."
         (ellama-tools-edit-after-shell-commands
          '((:command "printf hidden"))))
     (unwind-protect
-        (let ((msg (ellama-tools-write-file-tool file "x")))
+        (let ((msg (ellama-test--wait-tool-result
+                    #'ellama-tools-write-file-tool file "x")))
           (should (string-match-p "Wrote 1 characters" msg))
           (should-not (string-match-p "After edit hook completed" msg))
           (should-not (string-match-p "hidden" msg)))
@@ -2432,7 +2456,8 @@ Return list with result and prompt."
         (ellama-tools-edit-after-shell-commands
          '((:command "printf after-fail; exit 3"))))
     (unwind-protect
-        (let ((msg (ellama-tools-write-file-tool file "x")))
+        (let ((msg (ellama-test--wait-tool-result
+                    #'ellama-tools-write-file-tool file "x")))
           (should (string-match-p "Wrote 1 characters" msg))
           (should (string-match-p
                    "After edit hook failed with exit status 3" msg))
@@ -2455,7 +2480,8 @@ Return list with result and prompt."
         (progn
           (with-temp-file file
             (insert "old"))
-          (let ((msg (ellama-tools-write-file-tool file "new")))
+          (let ((msg (ellama-test--wait-tool-result
+                      #'ellama-tools-write-file-tool file "new")))
             (should (string-match-p
                      "Before edit hook failed with exit status 4" msg))
             (should (string-match-p "before-fail" msg))
@@ -2475,7 +2501,8 @@ Return list with result and prompt."
          '((:command "printf before-ok" :show-output t)))
         (ellama-tools-edit-after-shell-commands nil))
     (unwind-protect
-        (let ((msg (ellama-tools-write-file-tool file "x")))
+        (let ((msg (ellama-test--wait-tool-result
+                    #'ellama-tools-write-file-tool file "x")))
           (should (string-match-p "Before edit hook completed" msg))
           (should (string-match-p "before-ok" msg))
           (should (string-match-p "Wrote 1 characters" msg)))
@@ -2494,7 +2521,7 @@ Return list with result and prompt."
     (unwind-protect
         (progn
           (should-not
-           (ellama-tools-write-file-tool-async
+           (ellama-tools-write-file-tool
             (lambda (output)
               (setq result output))
             file "x"))
@@ -2540,7 +2567,8 @@ Return list with result and prompt."
          (ellama-tools-edit-after-shell-commands
           `((:command ,hook-command :show-output t))))
     (unwind-protect
-        (let ((msg (ellama-tools-write-file-tool file "x")))
+        (let ((msg (ellama-test--wait-tool-result
+                    #'ellama-tools-write-file-tool file "x")))
           (should (string-match-p "write|write_file" msg))
           (should (string-match-p (regexp-quote dir) msg)))
       (when-let* ((buffer (get-file-buffer file)))
@@ -2561,7 +2589,8 @@ Return list with result and prompt."
     (setenv "PAGER" "less")
     (setenv "GIT_PAGER" "less")
     (unwind-protect
-        (let ((msg (ellama-tools-write-file-tool file "x")))
+        (let ((msg (ellama-test--wait-tool-result
+                    #'ellama-tools-write-file-tool file "x")))
           (should (string-match-p "After edit hook completed" msg))
           (should (string-match-p "cat|cat" msg)))
       (when-let* ((buffer (get-file-buffer file)))
@@ -2579,13 +2608,15 @@ Return list with result and prompt."
     (unwind-protect
         (progn
           (write-region "old" nil file nil 'silent)
-          (let ((result (ellama-tools-write-file-tool file "new")))
+          (let ((result (ellama-test--wait-tool-result
+                         #'ellama-tools-write-file-tool file "new")))
             (should (string-match-p "Write refused" result))
             (should (string-match-p "read_file" result))
             (with-temp-buffer
               (insert-file-contents file)
               (should (equal (buffer-string) "old"))))
-          (let ((result (ellama-tools-write-file-tool file "new")))
+          (let ((result (ellama-test--wait-tool-result
+                         #'ellama-tools-write-file-tool file "new")))
             (should (string-match-p "Wrote 3 characters" result))
             (with-temp-buffer
               (insert-file-contents file)
@@ -2606,7 +2637,8 @@ Return list with result and prompt."
         (progn
           (write-region "old" nil file nil 'silent)
           (ellama-tools-read-file-tool file "text")
-          (let ((result (ellama-tools-write-file-tool file "new")))
+          (let ((result (ellama-test--wait-tool-result
+                         #'ellama-tools-write-file-tool file "new")))
             (should (string-match-p "Wrote 3 characters" result))
             (with-temp-buffer
               (insert-file-contents file)
@@ -2626,9 +2658,11 @@ Return list with result and prompt."
     (unwind-protect
         (progn
           (write-region "old" nil file nil 'silent)
-          (let ((result (ellama-tools-edit-file-tool file "old" "mid")))
+          (let ((result (ellama-test--wait-tool-result
+                         #'ellama-tools-edit-file-tool file "old" "mid")))
             (should (string-match-p "Edited" result)))
-          (let ((result (ellama-tools-write-file-tool file "new")))
+          (let ((result (ellama-test--wait-tool-result
+                         #'ellama-tools-write-file-tool file "new")))
             (should (string-match-p "Wrote 3 characters" result))
             (with-temp-buffer
               (insert-file-contents file)
@@ -2649,7 +2683,8 @@ Return list with result and prompt."
         (ellama-tools-output-line-budget-max-line-length 200)
         (ellama-tools-output-line-budget-save-overflow-file nil))
     (unwind-protect
-        (let* ((raw (ellama-tools-write-file-tool file "x"))
+        (let* ((raw (ellama-test--wait-tool-result
+                     #'ellama-tools-write-file-tool file "x"))
                (msg (ellama-tools--postprocess-output-result
                      "write_file" raw nil nil)))
           (should (string-match-p "Wrote 1 characters" msg))
@@ -2669,7 +2704,8 @@ Return list with result and prompt."
           (with-current-buffer (find-file-noselect file)
             (erase-buffer)
             (insert "buffer"))
-          (ellama-tools-append-file-tool file "-tail")
+          (ellama-test--wait-tool-result
+           #'ellama-tools-append-file-tool file "-tail")
           (with-current-buffer (find-file-noselect file)
             (should (equal (buffer-string) "buffer-tail")))
           (with-temp-buffer
@@ -2688,7 +2724,8 @@ Return list with result and prompt."
         (progn
           (with-temp-file file
             (insert original))
-          (let ((msg (ellama-tools-edit-file-tool
+          (let ((msg (ellama-test--wait-tool-result
+                      #'ellama-tools-edit-file-tool
                       file
                       "(defun sample ()\n  (message \"ok\"))"
                       "(defun sample ()\n  (message \"ok\")")))
@@ -2708,7 +2745,8 @@ Return list with result and prompt."
     (unwind-protect
         (progn
           (delete-file file)
-          (let ((msg (ellama-tools-write-file-tool
+          (let ((msg (ellama-test--wait-tool-result
+                      #'ellama-tools-write-file-tool
                       file
                       "(defun sample ()\n  (message \"ok\")\n")))
             (should (string-match-p "Write rejected" msg))
@@ -2731,10 +2769,12 @@ Return list with result and prompt."
           (with-temp-file prepend-file
             (insert original))
           ;; Unexpected closers are now auto-fixed, so append succeeds
-          (let ((msg (ellama-tools-append-file-tool append-file ")")))
+          (let ((msg (ellama-test--wait-tool-result
+                      #'ellama-tools-append-file-tool append-file ")")))
             (should (string-match-p "auto-fixed unexpected closers" msg)))
           ;; Missing closers still block the edit
-          (let ((msg (ellama-tools-prepend-file-tool prepend-file "(")))
+          (let ((msg (ellama-test--wait-tool-result
+                      #'ellama-tools-prepend-file-tool prepend-file "(")))
             (should (string-match-p "Prepend rejected" msg))
             (should (string-match-p "Missing closers" msg)))
           ;; Append file was auto-fixed to original content
@@ -2756,7 +2796,9 @@ Return list with result and prompt."
   (let ((file (make-temp-file "ellama-write-text-" nil ".txt")))
     (unwind-protect
         (progn
-          (let ((msg (ellama-tools-write-file-tool file "plain text (\n")))
+          (let ((msg (ellama-test--wait-tool-result
+                      #'ellama-tools-write-file-tool
+                      file "plain text (\n")))
             (should (string-match-p "Wrote 13 characters" msg))
             (should-not (string-match-p "syntax validation" msg)))
           (with-temp-buffer
@@ -2775,7 +2817,8 @@ Return list with result and prompt."
          (file (expand-file-name "note.txt" dir)))
     (when (file-exists-p dir)
       (delete-directory dir t))
-    (let ((msg (ellama-tools-write-file-tool file "x")))
+    (let ((msg (ellama-test--wait-tool-result
+                #'ellama-tools-write-file-tool file "x")))
       (should (string-match-p "Cannot write" msg))
       (should (string-match-p (regexp-quote file) msg)))))
 
@@ -2790,7 +2833,8 @@ Return list with result and prompt."
                     (ellama-tools-read-file-tool dir))))
           (should (string-match-p
                    "path is a directory"
-                   (ellama-tools-write-file-tool dir "x")))
+                   (ellama-test--wait-tool-result
+                    #'ellama-tools-write-file-tool dir "x")))
           (should (string-match-p
                    "is a directory, not a file"
                    (json-parse-string
