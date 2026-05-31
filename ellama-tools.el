@@ -4144,8 +4144,7 @@ ERROR-CB is called on non-tool LLM errors to track consecutive failures."
        text session buffer system
        (ellama-tools--make-agent-error-callback session)))))
 
-(declare-function ellama--session-compact "ellama"
-                  (session &key automatic on-done))
+(declare-function ellama--session-compact "ellama" (session &rest args))
 
 (defun ellama-tools--agent-error-message (err)
   "Return human-readable message for agent loop ERR."
