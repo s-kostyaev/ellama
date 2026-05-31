@@ -24,6 +24,7 @@ build:
 		--eval "(package-initialize)" \
 		--eval "(require 'cl-lib)" \
 		--eval "(setq load-prefer-newer t)" \
+		--eval "(setq byte-compile-error-on-warn t)" \
 		--eval "(setq load-path (cl-remove-if (lambda (dir) (string-match-p \"/elpa/org-[^/]+/?$$\" dir)) (cons (expand-file-name \".\") load-path)))" \
 		-f batch-byte-compile ellama*.el
 
@@ -76,7 +77,7 @@ test-srt-integration-linux: docker-build-srt-parity
 		make test-srt-integration
 
 check-compile-warnings:
-	emacs --batch --eval "(package-initialize)" --eval "(setq load-prefer-newer t)" --eval "(setq native-comp-eln-load-path (list default-directory))" -L . -f batch-native-compile $(ELLAMA_COMPILE_ORDER)
+	emacs --batch --eval "(package-initialize)" --eval "(setq load-prefer-newer t)" --eval "(setq byte-compile-error-on-warn t)" --eval "(setq native-comp-eln-load-path (list default-directory))" -L . -f batch-native-compile $(ELLAMA_COMPILE_ORDER)
 
 checkdocs:
 	emacs -Q -batch \
