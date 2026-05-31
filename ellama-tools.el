@@ -199,6 +199,21 @@ Use `image' to force image handling."
                  (const image))
   :group 'ellama)
 
+(defcustom ellama-tools-dlp-safe-read-file-regexps
+  (let* ((base-file (or load-file-name buffer-file-name default-directory))
+         (base-dir (file-name-directory (expand-file-name base-file)))
+         (safe-dir (condition-case nil
+                       (file-truename base-dir)
+                     (file-error base-dir))))
+    (list (concat "\\`"
+                  (regexp-quote safe-dir)
+                  "ellama\\(?:-[[:alnum:]-]+\\)?\\.el\\'")))
+  "Regexps matching file names whose read outputs skip DLP scans.
+Only output scans from file-reading tools are skipped.  Input scans and
+outputs from all other tools still use DLP."
+  :type '(repeat regexp)
+  :group 'ellama-tools-dlp)
+
 (defcustom ellama-tools-shell-command-default-timeout 5
   "Default timeout in seconds for the `shell_command' tool."
   :type 'number
@@ -633,6 +648,23 @@ TOOL-METADATA may include `:tool-origin', `:server-id' and
     (list :kind kind
           :path (expand-file-name path))))
 
+(defun ellama-tools--canonical-file-name-for-dlp (file-name)
+  "Return canonical FILE-NAME for DLP matching, or nil."
+  (when (and (stringp file-name) (not (string-empty-p file-name)))
+    (let ((expanded (expand-file-name file-name)))
+      (condition-case nil
+          (file-truename expanded)
+        (file-error expanded)))))
+
+(defun ellama-tools--dlp-safe-read-file-p (file-name)
+  "Return non-nil when FILE-NAME is safe for read-output DLP scans."
+  (when-let* ((path (ellama-tools--canonical-file-name-for-dlp file-name)))
+    (seq-some
+     (lambda (regexp)
+       (and (stringp regexp)
+            (string-match-p regexp path)))
+     ellama-tools-dlp-safe-read-file-regexps)))
+
 (defun ellama-tools--tool-output-source-info (tool-name values)
   "Return source info plist for TOOL-NAME using VALUES."
   (pcase tool-name
@@ -649,9 +681,13 @@ TOOL-METADATA may include `:tool-origin', `:server-id' and
   "Build output context plist from TOOL-PLIST and CALL-ARGS."
   (let* ((tool-name (plist-get tool-plist :name))
          (async (plist-get tool-plist :async))
-         (values (ellama-tools--tool-call-values async call-args)))
-    (list :source-info (ellama-tools--tool-output-source-info
-                        tool-name values))))
+         (values (ellama-tools--tool-call-values async call-args))
+         (source-info (ellama-tools--tool-output-source-info
+                       tool-name values)))
+    (list :source-info source-info
+          :skip-dlp-output (and (eq (plist-get source-info :kind) 'file)
+                                (ellama-tools--dlp-safe-read-file-p
+                                 (plist-get source-info :path))))))
 
 (defun ellama-tools--parse-json-string-value (text)
   "Return decoded JSON string from TEXT, or nil when decode fails."
@@ -879,12 +915,18 @@ TOOL-METADATA may provide identity fields for scan context."
       (_
        text))))
 
+(defun ellama-tools--skip-output-dlp-p (output-context)
+  "Return non-nil when OUTPUT-CONTEXT should disable output DLP."
+  (plist-get output-context :skip-dlp-output))
+
 (defun ellama-tools--postprocess-output-string
     (tool-name text &optional output-context tool-metadata)
   "Apply output guard and DLP filtering for TOOL-NAME TEXT.
 Use OUTPUT-CONTEXT to control budget notices and overflow metadata.
 TOOL-METADATA may provide tool identity details for DLP scans."
-  (let ((dlp-filtered (if ellama-tools-dlp-enabled
+  (let ((dlp-filtered (if (and ellama-tools-dlp-enabled
+                               (not (ellama-tools--skip-output-dlp-p
+                                     output-context)))
                           (ellama-tools--dlp-handle-output-string
                            tool-name text tool-metadata)
                         text)))
@@ -933,7 +975,9 @@ TOOL-METADATA may provide tool identity details for DLP scans."
          (output-context (plist-get section :output-context))
          (section-tool-name (format "%s/%s" tool-name kind))
          (dlp-filtered
-          (if (and scan-output ellama-tools-dlp-enabled)
+          (if (and scan-output
+                   ellama-tools-dlp-enabled
+                   (not (ellama-tools--skip-output-dlp-p output-context)))
               (ellama-tools--dlp-handle-output-string
                section-tool-name text tool-metadata)
             text)))
