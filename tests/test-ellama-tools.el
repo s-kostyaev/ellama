@@ -3235,6 +3235,89 @@ END_ELLAMA_AGENT_STATE"))
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
 
+(ert-deftest test-ellama-agent-loop-handler-compacts-before-controller-continue ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((buffer (generate-new-buffer " *ellama-agent-compact-test*"))
+         (provider (make-llm-fake))
+         (prompt (llm-make-chat-prompt "user 1" :context "System"))
+         (base-tool (llm-make-tool :name "read_file" :function #'ignore))
+         (session
+          (make-ellama-session
+           :id "agent-compact"
+           :provider provider
+           :prompt prompt
+           :extra (list :uid "agent-compact-uid"
+                        :tools (list base-tool)
+                        :agent-loop
+                        (list :phase 'acting
+                              :plan (list (list :id 1
+                                                :title "Keep going"
+                                                :status 'pending))
+                              :step-count 0
+                              :max-steps 3
+                              :completed nil
+                              :system "System"))))
+         (ellama-response-process-method 'async)
+         (ellama-spinner-enabled nil)
+         (ellama-session-auto-compact-enabled t)
+         (ellama-session-auto-compact-token-threshold 100)
+         (ellama-session-auto-compact-provider (make-llm-fake))
+         (ellama-session-auto-compact-keep-last-turns 2)
+         (ellama-session-auto-compact-show-message nil)
+         (ellama-session-hide-org-quotes nil)
+         (call-count 0)
+         compact-callback
+         main-prompt)
+    (llm-chat-prompt-append-response prompt "assistant 1" 'assistant)
+    (llm-chat-prompt-append-response prompt "user 2")
+    (llm-chat-prompt-append-response prompt "assistant 2" 'assistant)
+    (llm-chat-prompt-append-response prompt "user 3")
+    (llm-chat-prompt-append-response prompt "assistant 3" 'assistant)
+    (llm-chat-prompt-append-response prompt "user 4")
+    (llm-chat-prompt-append-response prompt "assistant 4" 'assistant)
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer
+            (org-mode)
+            (setq-local ellama--current-session session))
+          (cl-letf (((symbol-function 'ellama-get-session-buffer)
+                     (lambda (id)
+                       (and (member id '("agent-compact"
+                                         "agent-compact-uid"))
+                            buffer)))
+                    ((symbol-function 'llm-count-tokens)
+                     (lambda (_provider _text) 120))
+                    ((symbol-function 'llm-chat-async)
+                     (lambda (_provider sent-prompt response-callback
+                                        _error-callback
+                                        &optional _multi-output)
+                       (setq call-count (1+ call-count))
+                       (if (= call-count 1)
+                           (progn
+                             (setq compact-callback response-callback)
+                             'compact-request)
+                         (setq main-prompt sent-prompt)
+                         'main-request))))
+            (funcall
+             (ellama-tools--make-agent-loop-handler session buffer "System")
+             "Previous response")
+            (should (= call-count 1))
+            (should compact-callback)
+            (should-not main-prompt)
+            (should (ellama--session-extra-get
+                     session :auto-compact-in-progress))
+            (funcall compact-callback '(:text "Summary"))
+            (should (= call-count 2))
+            (should (eq main-prompt (ellama-session-prompt session)))
+            (should (string-match-p
+                     "Current plan state"
+                     (llm-chat-prompt-to-text main-prompt)))
+            (should (string-match-p
+                     "Next pending item: Keep going"
+                     (llm-chat-prompt-to-text main-prompt)))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
 (ert-deftest test-ellama-agent-report-result-restores-original-tools ()
   (ellama-test--ensure-local-ellama-tools)
   (let* ((buffer (generate-new-buffer " *ellama-agent-done-test*"))

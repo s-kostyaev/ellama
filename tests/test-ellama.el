@@ -1457,6 +1457,55 @@ detailed comparison to help you decide:
 (ert-deftest test-ellama-session-auto-compact-enabled-by-default ()
   (should ellama-session-auto-compact-enabled))
 
+(ert-deftest test-ellama-stream-preflight-auto-compacts-before-request ()
+  (let* ((provider (make-llm-fake))
+         (session (ellama-test--compact-session provider))
+         (ellama-response-process-method 'async)
+         (ellama-spinner-enabled nil)
+         (ellama-session-auto-compact-enabled t)
+         (ellama-session-auto-compact-token-threshold 100)
+         (ellama-session-auto-compact-provider (make-llm-fake))
+         (ellama-session-auto-compact-keep-last-turns 2)
+         (ellama-session-auto-compact-show-message nil)
+         (ellama-session-hide-org-quotes nil)
+         (call-count 0)
+         compact-callback
+         main-prompt
+         done-text)
+    (cl-letf (((symbol-function 'llm-count-tokens)
+               (lambda (_provider _text) 120))
+              ((symbol-function 'llm-chat-async)
+               (lambda (_provider prompt response-callback
+                                  _error-callback &optional _multi-output)
+                 (setq call-count (1+ call-count))
+                 (if (= call-count 1)
+                     (progn
+                       (setq compact-callback response-callback)
+                       'compact-request)
+                   (setq main-prompt prompt)
+                   'main-request))))
+      (with-temp-buffer
+        (setq-local ellama--current-session session)
+        (ellama-stream "continue after compaction"
+                       :session session
+                       :on-done (lambda (text)
+                                  (setq done-text text)))
+        (should (= call-count 1))
+        (should compact-callback)
+        (should (ellama--session-extra-get
+                 session :auto-compact-in-progress))
+        (should-not main-prompt)
+        (should-not done-text)
+        (funcall compact-callback '(:text "Summary"))
+        (should (= call-count 2))
+        (should-not (ellama--session-extra-get
+                     session :auto-compact-in-progress))
+        (should (eq ellama--current-request 'main-request))
+        (should (eq main-prompt (ellama-session-prompt session)))
+        (should (string-match-p
+                 "continue after compaction"
+                 (llm-chat-prompt-to-text main-prompt)))))))
+
 (ert-deftest test-ellama-session-auto-compact-needed-above-threshold ()
   (let* ((provider (make-llm-fake))
          (session (ellama-test--compact-session provider))

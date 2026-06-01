@@ -1888,6 +1888,32 @@ REQUEST-CONTEXT is the active request context."
      :on-done on-done
      :request-context request-context)))
 
+(cl-defun ellama--session-auto-compact-before-request-maybe
+    (session provider prompt buffer &key on-done request-context)
+  "Compact SESSION before sending PROMPT when estimated context is too large.
+PROVIDER is the session provider.  BUFFER is the chat buffer.
+ON-DONE is called after asynchronous compaction succeeds or fails.
+REQUEST-CONTEXT is the active request context."
+  (when (and ellama-session-auto-compact-enabled
+             (ellama-session-p session)
+             (llm-chat-prompt-p prompt)
+             (not (ellama--session-extra-get
+                   session :auto-compact-in-progress)))
+    (when-let* ((token-count
+                 (ellama--session-compact-estimate-prompt-tokens
+                  provider prompt))
+                (threshold
+                 (ellama--session-auto-compact-threshold provider))
+                ((>= token-count threshold)))
+      (ellama--session-compact
+       session
+       :provider provider
+       :buffer buffer
+       :token-count token-count
+       :automatic t
+       :on-done on-done
+       :request-context request-context))))
+
 (defun ellama--active-session-by-id (id)
   "Return active session matching display ID."
   (catch 'session
@@ -3604,7 +3630,16 @@ failure (with BUFFER current).
                           request-context))
                    (ellama--set-session-request-context
                     session request-context)))))
-          (start-request))))))
+          (unless
+              (ellama--session-auto-compact-before-request-maybe
+               session provider llm-prompt buffer
+               :request-context request-context
+               :on-done
+               (lambda ()
+                 (when (ellama-session-p session)
+                   (setq llm-prompt (ellama-session-prompt session)))
+                 (start-request)))
+            (start-request)))))))
 
 (defun ellama-chain (initial-prompt forms &optional acc)
   "Call chain of FORMS on INITIAL-PROMPT.
