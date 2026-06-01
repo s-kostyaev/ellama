@@ -1,6 +1,6 @@
 # Makefile for ellama project
 
-.PHONY: build test test-detailed test-integration test-srt-integration docker-build-srt-parity test-srt-integration-linux check-compile-warnings checkdocs manual format-elisp install-git-hooks refill-news refill-readme check-elisp check-readme check-news
+.PHONY: build test test-detailed test-integration test-srt-integration docker-build-srt-parity test-srt-integration-linux check-compile-warnings checkdocs manual format-elisp install-git-hooks refill-news refill-readme check-elisp check-readme check-news check-custom-variables
 
 SRT_PARITY_DOCKER_IMAGE ?= ellama-srt-parity:latest
 SRT_PARITY_DOCKERFILE ?= docker/srt-parity-linux.Dockerfile
@@ -117,3 +117,6 @@ check-elisp: format-elisp build test check-compile-warnings checkdocs
 check-readme: refill-readme manual
 
 check-news: refill-news
+
+check-custom-variables:
+	./scripts/check-custom-variables.sh
