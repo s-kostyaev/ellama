@@ -3638,7 +3638,11 @@ failure (with BUFFER current).
                (lambda ()
                  (when (ellama-session-p session)
                    (setq llm-prompt (ellama-session-prompt session)))
-                 (start-request)))
+                 (setq request-context
+                       (ellama--make-request-context
+                        (list buffer reasoning-buffer)))
+                 (with-current-buffer buffer
+                   (start-request))))
             (start-request)))))))
 
 (defun ellama-chain (initial-prompt forms &optional acc)

@@ -3267,7 +3267,8 @@ END_ELLAMA_AGENT_STATE"))
          (ellama-session-hide-org-quotes nil)
          (call-count 0)
          compact-callback
-         main-prompt)
+         main-prompt
+         callback-buffer)
     (llm-chat-prompt-append-response prompt "assistant 1" 'assistant)
     (llm-chat-prompt-append-response prompt "user 2")
     (llm-chat-prompt-append-response prompt "assistant 2" 'assistant)
@@ -3306,8 +3307,17 @@ END_ELLAMA_AGENT_STATE"))
             (should-not main-prompt)
             (should (ellama--session-extra-get
                      session :auto-compact-in-progress))
-            (funcall compact-callback '(:text "Summary"))
+            (setq callback-buffer
+                  (generate-new-buffer " *ellama-agent-compact-callback*"))
+            (with-current-buffer callback-buffer
+              (funcall compact-callback '(:text "Summary")))
             (should (= call-count 2))
+            (with-current-buffer buffer
+              (should (eq ellama--current-request 'main-request))
+              (should ellama--change-group))
+            (with-current-buffer callback-buffer
+              (should-not (eq ellama--current-request 'main-request))
+              (should-not ellama--change-group))
             (should (eq main-prompt (ellama-session-prompt session)))
             (should (string-match-p
                      "Current plan state"
@@ -3316,7 +3326,9 @@ END_ELLAMA_AGENT_STATE"))
                      "Next pending item: Keep going"
                      (llm-chat-prompt-to-text main-prompt)))))
       (when (buffer-live-p buffer)
-        (kill-buffer buffer)))))
+        (kill-buffer buffer))
+      (when (buffer-live-p callback-buffer)
+        (kill-buffer callback-buffer)))))
 
 (ert-deftest test-ellama-agent-report-result-restores-original-tools ()
   (ellama-test--ensure-local-ellama-tools)

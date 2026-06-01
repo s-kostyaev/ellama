@@ -1471,7 +1471,9 @@ detailed comparison to help you decide:
          (call-count 0)
          compact-callback
          main-prompt
-         done-text)
+         done-text
+         target-buffer
+         callback-buffer)
     (cl-letf (((symbol-function 'llm-count-tokens)
                (lambda (_provider _text) 120))
               ((symbol-function 'llm-chat-async)
@@ -1484,27 +1486,43 @@ detailed comparison to help you decide:
                        'compact-request)
                    (setq main-prompt prompt)
                    'main-request))))
-      (with-temp-buffer
-        (setq-local ellama--current-session session)
-        (ellama-stream "continue after compaction"
-                       :session session
-                       :on-done (lambda (text)
-                                  (setq done-text text)))
-        (should (= call-count 1))
-        (should compact-callback)
-        (should (ellama--session-extra-get
-                 session :auto-compact-in-progress))
-        (should-not main-prompt)
-        (should-not done-text)
-        (funcall compact-callback '(:text "Summary"))
-        (should (= call-count 2))
-        (should-not (ellama--session-extra-get
+      (unwind-protect
+          (progn
+            (setq target-buffer
+                  (generate-new-buffer " *ellama-preflight-target*"))
+            (setq callback-buffer
+                  (generate-new-buffer " *ellama-preflight-callback*"))
+            (with-current-buffer target-buffer
+              (setq-local ellama--current-session session)
+              (ellama-stream "continue after compaction"
+                             :session session
+                             :on-done (lambda (text)
+                                        (setq done-text text))))
+            (should (= call-count 1))
+            (should compact-callback)
+            (should (ellama--session-extra-get
                      session :auto-compact-in-progress))
-        (should (eq ellama--current-request 'main-request))
-        (should (eq main-prompt (ellama-session-prompt session)))
-        (should (string-match-p
-                 "continue after compaction"
-                 (llm-chat-prompt-to-text main-prompt)))))))
+            (should-not main-prompt)
+            (should-not done-text)
+            (with-current-buffer callback-buffer
+              (funcall compact-callback '(:text "Summary")))
+            (should (= call-count 2))
+            (should-not (ellama--session-extra-get
+                         session :auto-compact-in-progress))
+            (with-current-buffer target-buffer
+              (should (eq ellama--current-request 'main-request))
+              (should ellama--change-group))
+            (with-current-buffer callback-buffer
+              (should-not (eq ellama--current-request 'main-request))
+              (should-not ellama--change-group))
+            (should (eq main-prompt (ellama-session-prompt session)))
+            (should (string-match-p
+                     "continue after compaction"
+                     (llm-chat-prompt-to-text main-prompt))))
+        (when (buffer-live-p target-buffer)
+          (kill-buffer target-buffer))
+        (when (buffer-live-p callback-buffer)
+          (kill-buffer callback-buffer))))))
 
 (ert-deftest test-ellama-session-auto-compact-needed-above-threshold ()
   (let* ((provider (make-llm-fake))
