@@ -4536,6 +4536,15 @@ RESULT for the agent."
           session :tool-loop-state loop-state)))
       replacement)))
 
+(defun ellama-tools--subagent-tool-error-result (name err)
+  "Return a tool result for sub-agent tool NAME error ERR."
+  (format
+   "Tool `%s` failed: %s\n\nNext action: choose a different tool call or \
+different arguments.  If no different useful action exists, call \
+`report_result` with the blocker."
+   name
+   (error-message-string err)))
+
 (defun ellama-tools--wrap-subagent-tool (tool session)
   "Return TOOL wrapped with sub-agent loop detection for SESSION."
   (let* ((wrapped-tool (copy-sequence tool))
@@ -4548,16 +4557,30 @@ RESULT for the agent."
        (if (and async args (functionp (car args)))
            (let ((callback (car args))
                  (call-args (cdr args)))
-             (apply
-              function
-              (lambda (result)
-                (funcall
-                 callback
-                 (or (ellama-tools--subagent-trace-tool-call
-                      session name call-args result)
-                     result)))
-              call-args))
-         (let ((result (apply function args)))
+             (condition-case err
+                 (apply
+                  function
+                  (lambda (result)
+                    (funcall
+                     callback
+                     (or (ellama-tools--subagent-trace-tool-call
+                          session name call-args result)
+                         result)))
+                  call-args)
+               (error
+                (let ((result
+                       (ellama-tools--subagent-tool-error-result name err)))
+                  (funcall
+                   callback
+                   (or (ellama-tools--subagent-trace-tool-call
+                        session name call-args result)
+                       result))
+                  nil))))
+         (let ((result
+                (condition-case err
+                    (apply function args)
+                  (error
+                   (ellama-tools--subagent-tool-error-result name err)))))
            (or (ellama-tools--subagent-trace-tool-call
                 session name args result)
                result)))))

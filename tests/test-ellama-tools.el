@@ -3663,6 +3663,72 @@ END_ELLAMA_AGENT_STATE"))
                   :loop-recovery-count)
                  2)))))
 
+(ert-deftest test-ellama-subagent-tool-error-continues-as-result ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((session
+          (make-ellama-session
+           :id "worker-tool-error"
+           :extra (list :tool-loop-state
+                        (ellama-tools--subagent-loop-state))))
+         (tool
+          (llm-make-tool
+           :name "directory_tree"
+           :function (lambda (&rest _args)
+                       (signal
+                        'file-error
+                        '("Opening directory" "Operation not permitted"
+                          "/blocked")))))
+         (wrapped (car (ellama-tools--wrap-subagent-tools
+                        (list tool) session)))
+         (function (llm-tool-function wrapped))
+         (ellama-tools-subagent-loop-detection-enabled t))
+    (let ((result (funcall function "/parent")))
+      (should (stringp result))
+      (should (string-match-p "Tool `directory_tree` failed" result))
+      (should (string-match-p "Operation not permitted" result))
+      (should (string-match-p "choose a different tool call" result)))
+    (let* ((extra (ellama-session-extra session))
+           (loop-state (plist-get extra :tool-loop-state))
+           (history (plist-get loop-state :tool-history)))
+      (should (equal (plist-get (car history) :name)
+                     "directory_tree"))
+      (should (equal (plist-get (car history) :args)
+                     '("/parent"))))))
+
+(ert-deftest test-ellama-subagent-async-tool-error-continues-as-result ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((callback-result nil)
+         (session
+          (make-ellama-session
+           :id "worker-async-tool-error"
+           :extra (list :tool-loop-state
+                        (ellama-tools--subagent-loop-state))))
+         (tool
+          (llm-make-tool
+           :name "write_file"
+           :async t
+           :function (lambda (&rest _args)
+                       (error "Cannot schedule async tool"))))
+         (wrapped (car (ellama-tools--wrap-subagent-tools
+                        (list tool) session)))
+         (function (llm-tool-function wrapped))
+         (ellama-tools-subagent-loop-detection-enabled t))
+    (should-not (funcall function
+                         (lambda (result)
+                           (setq callback-result result))
+                         "file.el"
+                         "content"))
+    (should (stringp callback-result))
+    (should (string-match-p "Tool `write_file` failed" callback-result))
+    (should (string-match-p "Cannot schedule async tool" callback-result))
+    (let* ((extra (ellama-session-extra session))
+           (loop-state (plist-get extra :tool-loop-state))
+           (history (plist-get loop-state :tool-history)))
+      (should (equal (plist-get (car history) :name)
+                     "write_file"))
+      (should (equal (plist-get (car history) :args)
+                     '("file.el" "content"))))))
+
 (ert-deftest test-ellama-tools-task-tool-role-fallback-and-report-priority ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((ellama--current-session-id "parent-1")
