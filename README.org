@@ -398,6 +398,53 @@ generated text string.
 - ~ellama-image-context-default-scope~: Default scope for image context added
   interactively. Use ~ephemeral~ for one request only, or ~persistent~ to keep
   image context until it is removed or reset.
+- ~ellama-always-show-chain-steps~: Show chain of intermediate steps during
+  reasoning.
+- ~ellama-blueprints~: Directory or list of directories for blueprint storage.
+- ~ellama-command-map~: Keymap for ellama commands.
+- ~ellama-completion-provider~: LLM provider for code completion tasks.
+- ~ellama-eval-default-max-steps~: Default maximum number of steps in eval loop.
+- ~ellama-eval-keep-workspaces~: Whether to keep workspaces after eval
+  completion.
+- ~ellama-eval-loop-detection-enabled~: Enable detection of infinite loops in
+  eval loops.
+- ~ellama-eval-loop-detection-max-traces~: Maximum number of traces for loop
+  detection.
+- ~ellama-eval-loop-detection-repeated-threshold~: Threshold for repeated
+  elements to trigger loop detection.
+- ~ellama-eval-timeout-seconds~: Timeout in seconds for eval operations.
+- ~ellama-markdown-to-org-converter~: Method for markdown to org conversion.
+- ~ellama-pandoc-markdown-to-org-args~: Arguments for pandoc markdown-to-org
+  conversion.
+- ~ellama-pandoc-program~: Path to pandoc executable for markdown-to-org
+  conversion.
+- ~ellama-tools-agent-continue-prompt~: Prompt template for agent continue
+  operation.
+- ~ellama-tools-agent-planning-prompt~: Prompt template for agent planning.
+- ~ellama-tools-balanced-edit-enabled~: Enable balanced edit mode for tools.
+- ~ellama-tools-balanced-edit-modes~: Major modes eligible for balanced edit
+  mode.
+- ~ellama-tools-dlp-env-secret-entropy-threshold~: Entropy threshold for
+  detecting environment secrets.
+- ~ellama-tools-dlp-env-secret-heuristic-stages~: Stages in env secret heuristic
+  detection.
+- ~ellama-tools-dlp-env-secret-max-length~: Maximum length for environment
+  secret detection.
+- ~ellama-tools-dlp-env-secret-min-length~: Minimum length for environment
+  secret detection.
+- ~ellama-tools-dlp-env-secret-min-score~: Minimum score for environment secret
+  heuristic.
+- ~ellama-tools-dlp-message-prefix~: Prefix for DLP messages in logs.
+- ~ellama-tools-dlp-redaction-placeholder-format~: Format template for DLP
+  redaction placeholders.
+- ~ellama-tools-irreversible-high-confidence-block-rules~: Rules for blocking
+  high-confidence irreversible actions.
+- ~ellama-tools-read-before-write-enabled~: Enable read-before-write for tool
+  operations.
+- ~ellama-tools-shell-command-default-timeout~: Default timeout for shell
+  command execution.
+- ~ellama-transient-system-show-limit~: Maximum number of system elements to
+  show in transient.
 - ~ellama-session-remove-reasoning~: Remove internal reasoning from the session
   after ellama provide an answer. This can improve long-term communication with
   reasoning models. Enabled by default.

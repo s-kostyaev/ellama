@@ -545,6 +545,60 @@ argument generated text string.
    • ‘ellama-image-context-default-scope’: Default scope for image
      context added interactively.  Use ‘ephemeral’ for one request only,
      or ‘persistent’ to keep image context until it is removed or reset.
+   • ‘ellama-always-show-chain-steps’: Show chain of intermediate steps
+     during reasoning.
+   • ‘ellama-blueprints’: Directory or list of directories for blueprint
+     storage.
+   • ‘ellama-command-map’: Keymap for ellama commands.
+   • ‘ellama-completion-provider’: LLM provider for code completion
+     tasks.
+   • ‘ellama-eval-default-max-steps’: Default maximum number of steps in
+     eval loop.
+   • ‘ellama-eval-keep-workspaces’: Whether to keep workspaces after
+     eval completion.
+   • ‘ellama-eval-loop-detection-enabled’: Enable detection of infinite
+     loops in eval loops.
+   • ‘ellama-eval-loop-detection-max-traces’: Maximum number of traces
+     for loop detection.
+   • ‘ellama-eval-loop-detection-repeated-threshold’: Threshold for
+     repeated elements to trigger loop detection.
+   • ‘ellama-eval-timeout-seconds’: Timeout in seconds for eval
+     operations.
+   • ‘ellama-markdown-to-org-converter’: Method for markdown to org
+     conversion.
+   • ‘ellama-pandoc-markdown-to-org-args’: Arguments for pandoc
+     markdown-to-org conversion.
+   • ‘ellama-pandoc-program’: Path to pandoc executable for
+     markdown-to-org conversion.
+   • ‘ellama-tools-agent-continue-prompt’: Prompt template for agent
+     continue operation.
+   • ‘ellama-tools-agent-planning-prompt’: Prompt template for agent
+     planning.
+   • ‘ellama-tools-balanced-edit-enabled’: Enable balanced edit mode for
+     tools.
+   • ‘ellama-tools-balanced-edit-modes’: Major modes eligible for
+     balanced edit mode.
+   • ‘ellama-tools-dlp-env-secret-entropy-threshold’: Entropy threshold
+     for detecting environment secrets.
+   • ‘ellama-tools-dlp-env-secret-heuristic-stages’: Stages in env
+     secret heuristic detection.
+   • ‘ellama-tools-dlp-env-secret-max-length’: Maximum length for
+     environment secret detection.
+   • ‘ellama-tools-dlp-env-secret-min-length’: Minimum length for
+     environment secret detection.
+   • ‘ellama-tools-dlp-env-secret-min-score’: Minimum score for
+     environment secret heuristic.
+   • ‘ellama-tools-dlp-message-prefix’: Prefix for DLP messages in logs.
+   • ‘ellama-tools-dlp-redaction-placeholder-format’: Format template
+     for DLP redaction placeholders.
+   • ‘ellama-tools-irreversible-high-confidence-block-rules’: Rules for
+     blocking high-confidence irreversible actions.
+   • ‘ellama-tools-read-before-write-enabled’: Enable read-before-write
+     for tool operations.
+   • ‘ellama-tools-shell-command-default-timeout’: Default timeout for
+     shell command execution.
+   • ‘ellama-transient-system-show-limit’: Maximum number of system
+     elements to show in transient.
    • ‘ellama-session-remove-reasoning’: Remove internal reasoning from
      the session after ellama provide an answer.  This can improve
      long-term communication with reasoning models.  Enabled by default.
@@ -2594,45 +2648,45 @@ Node: Installation3973
 Node: Commands8987
 Node: Keymap17925
 Node: Configuration20812
-Node: Session Provider Keys34578
-Node: Session Compaction36439
-Node: Image Input38733
-Node: Task Tool Subagents40878
-Node: Plan-and-Act Agent Loop44052
-Node: Edit Tool Shell Hooks46633
-Node: DLP for Tool Input/Output48926
-Node: SRT Filesystem Policy for Tools64925
-Node: Context Management70594
-Node: Transient Menus for Context Management71662
-Node: Managing the Context73341
-Node: Considerations74116
-Node: Minor modes74709
-Node: ellama-context-header-line-mode76697
-Node: ellama-context-header-line-global-mode77522
-Node: ellama-context-mode-line-mode78242
-Node: ellama-context-mode-line-global-mode79090
-Node: Ellama Session Header Line Mode79794
-Node: Enabling and Disabling80363
-Node: Customization80810
-Node: Ellama Session Mode Line Mode81098
-Node: Enabling and Disabling (1)81683
-Node: Customization (1)82130
-Node: Using Blueprints82424
-Node: Key Components of Ellama Blueprints83064
-Node: Creating and Managing Blueprints83671
-Node: Blueprints files84649
-Node: Variable Management85070
-Node: Keymap and Mode85523
-Node: Transient Menus86459
-Node: Running Blueprints programmatically87005
-Node: MCP Integration87592
-Node: Agent Skills88827
-Node: Directory Structure89190
-Node: Creating a Skill90217
-Node: How it works90592
-Node: Acknowledgments90983
-Node: Contributions91694
-Node: GNU Free Documentation License92368
+Node: Session Provider Keys37385
+Node: Session Compaction39246
+Node: Image Input41540
+Node: Task Tool Subagents43685
+Node: Plan-and-Act Agent Loop46859
+Node: Edit Tool Shell Hooks49440
+Node: DLP for Tool Input/Output51733
+Node: SRT Filesystem Policy for Tools67732
+Node: Context Management73401
+Node: Transient Menus for Context Management74469
+Node: Managing the Context76148
+Node: Considerations76923
+Node: Minor modes77516
+Node: ellama-context-header-line-mode79504
+Node: ellama-context-header-line-global-mode80329
+Node: ellama-context-mode-line-mode81049
+Node: ellama-context-mode-line-global-mode81897
+Node: Ellama Session Header Line Mode82601
+Node: Enabling and Disabling83170
+Node: Customization83617
+Node: Ellama Session Mode Line Mode83905
+Node: Enabling and Disabling (1)84490
+Node: Customization (1)84937
+Node: Using Blueprints85231
+Node: Key Components of Ellama Blueprints85871
+Node: Creating and Managing Blueprints86478
+Node: Blueprints files87456
+Node: Variable Management87877
+Node: Keymap and Mode88330
+Node: Transient Menus89266
+Node: Running Blueprints programmatically89812
+Node: MCP Integration90399
+Node: Agent Skills91634
+Node: Directory Structure91997
+Node: Creating a Skill93024
+Node: How it works93399
+Node: Acknowledgments93790
+Node: Contributions94501
+Node: GNU Free Documentation License95175
 
 End Tag Table
 
