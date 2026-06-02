@@ -114,7 +114,7 @@ refill-readme:
 
 check-elisp: format-elisp build test check-compile-warnings checkdocs
 
-check-readme: refill-readme manual
+check-readme: refill-readme manual check-custom-variables
 
 check-news: refill-news
 
