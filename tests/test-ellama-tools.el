@@ -3223,7 +3223,16 @@ Return list with result and prompt."
             (should-not stream-calls)
             (should (= (plist-get (ellama-tools--agent-state session)
                                   :consecutive-error-count)
-                       2))))
+                       2))
+            (should (eq (plist-get (ellama-tools--agent-state session)
+                                   :phase)
+                        'blocked))
+            (with-current-buffer buffer
+              (should (string-match-p "Ellama Agent Blocked:"
+                                      (buffer-string)))
+              (should (string-suffix-p
+                       "\n\n** User:\n"
+                       (buffer-string))))))
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
 
@@ -3515,7 +3524,10 @@ END_ELLAMA_AGENT_STATE"))
                            (list base-tool)))
             (with-current-buffer buffer
               (should (string-match-p "Ellama Agent Done:"
-                                      (buffer-string))))))
+                                      (buffer-string)))
+              (should (string-suffix-p
+                       "\n\n** User:\n"
+                       (buffer-string))))))
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
 

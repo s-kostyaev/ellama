@@ -58,6 +58,7 @@
 (defvar ellama-provider)
 (defvar ellama-coding-provider)
 (defvar ellama-assistant-nick)
+(defvar ellama-user-nick)
 (defvar ellama--current-session)
 (defvar ellama--current-session-id)
 
@@ -4074,6 +4075,35 @@ TEMPLATE-BASE, ROLE and ARGUMENTS are used for template rendering and hints."
      (ellama-tools--session-extra-with
       session :tools (and had-tools tools)))))
 
+(defun ellama-tools--agent-append-user-header (buffer)
+  "Append user heading to BUFFER after a finished plan-and-act loop."
+  (when (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (let ((header
+             (concat (ellama-get-nick-prefix-for-mode)
+                     " " ellama-user-nick ":")))
+        (unless (save-excursion
+                  (goto-char (point-max))
+                  (skip-chars-backward " \t\n")
+                  (beginning-of-line)
+                  (looking-at-p (regexp-quote header)))
+          (save-excursion
+            (goto-char (point-max))
+            (unless (bobp)
+              (unless (bolp)
+                (insert "\n"))
+              (unless (save-excursion
+                        (forward-line -1)
+                        (looking-at-p "[[:space:]]*$"))
+                (insert "\n")))
+            (insert header "\n")))))))
+
+(defun ellama-tools--agent-finish (session buffer)
+  "Restore SESSION tools and append a user heading in BUFFER."
+  (ellama-tools--agent-restore-tools session)
+  (ellama-tools--agent-append-user-header
+   (ellama-tools--agent-session-buffer session buffer)))
+
 (defun ellama-tools-agent-active-p (session)
   "Return non-nil when SESSION has a running plan-and-act loop."
   (when-let* ((state (ellama-tools--agent-state session)))
@@ -4128,7 +4158,7 @@ TEMPLATE-BASE, ROLE and ARGUMENTS are used for template rendering and hints."
     (setq state (ellama-tools--agent-state-put state :result result))
     (ellama-tools--agent-put-state session state)
     (ellama-tools--agent-insert-state session nil "Done")
-    (ellama-tools--agent-restore-tools session)
+    (ellama-tools--agent-finish session nil)
     "Result received. Plan-and-act loop completed."))
 
 (defun ellama-tools--agent-system-message (system)
@@ -4225,28 +4255,29 @@ ERROR-CB is called on non-tool LLM errors to track consecutive failures."
      ((not (ellama-session-p session))
       (message "Plan-and-act session is not available."))
      (done
-      (message "Plan-and-act loop finished."))
+      (message "Plan-and-act loop finished.")
+      (ellama-tools--agent-finish session buffer))
      ((eq phase 'done)
       (setq state (ellama-tools--agent-state-put state :completed t))
       (ellama-tools--agent-put-state session state)
       (ellama-tools--agent-insert-state session buffer "Done")
-      (ellama-tools--agent-restore-tools session))
+      (ellama-tools--agent-finish session buffer))
      ((eq phase 'blocked)
       (ellama-tools--agent-insert-state session buffer "Blocked")
-      (ellama-tools--agent-restore-tools session))
+      (ellama-tools--agent-finish session buffer))
      ((>= steps max)
       (setq state (ellama-tools--agent-state-put state :phase 'blocked))
       (setq state (ellama-tools--agent-state-put
                    state :blocked (format "Max steps (%d) reached." max)))
       (ellama-tools--agent-put-state session state)
       (ellama-tools--agent-insert-state session buffer "Blocked")
-      (ellama-tools--agent-restore-tools session))
+      (ellama-tools--agent-finish session buffer))
      ((ellama-tools--agent-plan-complete-p state)
       (setq state (ellama-tools--agent-state-put state :phase 'done))
       (setq state (ellama-tools--agent-state-put state :completed t))
       (ellama-tools--agent-put-state session state)
       (ellama-tools--agent-insert-state session buffer "Done")
-      (ellama-tools--agent-restore-tools session))
+      (ellama-tools--agent-finish session buffer))
      (t
       (setq state (ellama-tools--agent-state-put state :step-count (1+ steps)))
       (ellama-tools--agent-put-state session state)
@@ -4302,12 +4333,31 @@ ERROR-CB is called on non-tool LLM errors to track consecutive failures."
              (setq continued t)
              (if (ellama--session-extra-get
                   session :auto-compact-last-error)
-                 (message "Agent loop stopped after compaction error: %s"
-                          (ellama--session-extra-get
-                           session :auto-compact-last-error))
+                 (let* ((error (ellama--session-extra-get
+                                session :auto-compact-last-error))
+                        (state (ellama-tools--agent-state session))
+                        (buffer (ellama-tools--agent-session-buffer
+                                 session nil)))
+                   (message "Agent loop stopped after compaction error: %s"
+                            error)
+                   (when state
+                     (setq state
+                           (ellama-tools--agent-state-put
+                            state :phase 'blocked))
+                     (setq state
+                           (ellama-tools--agent-state-put
+                            state :blocked
+                            (format "Context compaction failed: %s" error)))
+                     (ellama-tools--agent-put-state session state)
+                     (ellama-tools--agent-insert-state
+                      session buffer "Blocked"))
+                   (ellama-tools--agent-finish session buffer))
                (ellama-tools--continue-agent-after-error session)))))
-      (ellama--session-compact
-       session :automatic t :on-done #'continue))))
+      (unless (ellama--session-compact
+               session :automatic t :on-done #'continue)
+        (when (ellama--session-extra-get
+               session :auto-compact-last-error)
+          (continue))))))
 
 (defun ellama-tools--make-agent-error-callback (session)
   "Return error callback for plan-and-act loop of SESSION.
@@ -4696,8 +4746,11 @@ ERROR-CB is called on non-tool LLM errors to track consecutive failures."
                           (ellama--session-extra-get
                            session :auto-compact-last-error))
                (ellama-tools--continue-subagent-after-error session)))))
-      (ellama--session-compact
-       session :automatic t :on-done #'continue))))
+      (unless (ellama--session-compact
+               session :automatic t :on-done #'continue)
+        (when (ellama--session-extra-get
+               session :auto-compact-last-error)
+          (continue))))))
 
 (defun ellama-tools--make-subagent-error-callback (session)
   "Return error callback for subagent loop of SESSION.
