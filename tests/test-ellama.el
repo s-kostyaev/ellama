@@ -1060,7 +1060,8 @@ detailed comparison to help you decide:
                                        :prompt nil
                                        :extra '(:uid "agent-session-uid")))
          (session-buffer (generate-new-buffer " *ellama-agent-chat-test*"))
-         (stream-call nil))
+         (stream-call nil)
+         (scroll-call nil))
     (unwind-protect
         (progn
           (with-current-buffer session-buffer
@@ -1068,6 +1069,9 @@ detailed comparison to help you decide:
           (ellama--register-session session session-buffer t)
           (cl-letf (((symbol-function 'display-buffer)
                      (lambda (&rest _args) nil))
+                    ((symbol-function 'ellama--scroll)
+                     (lambda (&optional buffer point)
+                       (setq scroll-call (list buffer point))))
                     ((symbol-function 'ellama-stream)
                      (lambda (prompt &rest args)
                        (setq stream-call (list prompt args)))))
@@ -1087,6 +1091,7 @@ detailed comparison to help you decide:
                      "agent_update_plan"
                      "agent_report_result"
                      "read_file")))
+          (should (eq (car scroll-call) session-buffer))
           (with-current-buffer session-buffer
             (let ((text (buffer-string)))
               (should (string-match-p "User:" text))

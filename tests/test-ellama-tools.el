@@ -3252,6 +3252,7 @@ Return list with result and prompt."
                                       :completed nil
                                       :system "System"))))
          (stream-call nil)
+         (scroll-call nil)
          (state-text
           "BEGIN_ELLAMA_AGENT_STATE
 phase: acting
@@ -3270,7 +3271,10 @@ END_ELLAMA_AGENT_STATE"))
                             buffer)))
                     ((symbol-function 'ellama-stream)
                      (lambda (prompt &rest args)
-                       (setq stream-call (list prompt args)))))
+                       (setq stream-call (list prompt args))))
+                    ((symbol-function 'ellama--scroll)
+                     (lambda (&optional scroll-buffer point)
+                       (setq scroll-call (list scroll-buffer point)))))
             (let ((ellama--current-session nil))
               (funcall
                (ellama-tools--make-agent-loop-handler
@@ -3292,6 +3296,7 @@ END_ELLAMA_AGENT_STATE"))
                                     (car stream-call)))
             (should (string-match-p "Next pending item: Inspect code"
                                     (car stream-call)))
+            (should (eq (car scroll-call) buffer))
             (with-current-buffer buffer
               (should (string-match-p "Ellama Agent Plan:"
                                       (buffer-string)))
@@ -3581,6 +3586,7 @@ END_ELLAMA_AGENT_STATE"))
          (role-tool (llm-make-tool :name "read_file" :function #'ignore))
          (system "System")
          (stream-call nil)
+         (scroll-call nil)
          (updated-extra nil)
          (session
           (make-ellama-session
@@ -3606,7 +3612,10 @@ END_ELLAMA_AGENT_STATE"))
                        (setq updated-extra extra)))
                     ((symbol-function 'ellama-stream)
                      (lambda (prompt &rest args)
-                       (setq stream-call (list prompt args)))))
+                       (setq stream-call (list prompt args))))
+                    ((symbol-function 'ellama--scroll)
+                     (lambda (&optional scroll-buffer point)
+                       (setq scroll-call (list scroll-buffer point)))))
             (with-temp-buffer
               (let ((ellama--current-session nil))
                 (funcall
@@ -3625,6 +3634,7 @@ END_ELLAMA_AGENT_STATE"))
             (should (equal (plist-get (cadr stream-call) :system)
                            system))
             (should (functionp (plist-get (cadr stream-call) :on-done)))
+            (should (eq (car scroll-call) worker-buffer))
             (with-current-buffer worker-buffer
               (should (string-match-p "Previous response"
                                       (buffer-string)))

@@ -47,6 +47,7 @@
 (declare-function ellama-get-session-buffer "ellama" (id))
 (declare-function ellama-get-nick-prefix-for-mode "ellama" ())
 (declare-function ellama--fill-long-lines "ellama" (string))
+(declare-function ellama--scroll "ellama" (&optional buffer point))
 (declare-function ellama-image-file-p "ellama" (file-name))
 (declare-function ellama--image-mime-type "ellama" (file-name))
 (declare-function ellama--file-size "ellama" (file-name))
@@ -4215,6 +4216,7 @@ result/blocked fields instead."
               "\n\n"
               (ellama-get-nick-prefix-for-mode)
               " " ellama-assistant-nick ":\n")
+      (ellama--scroll buffer (point))
       (point))))
 
 (defun ellama-tools--agent-apply-text-update (session text)
@@ -4470,6 +4472,7 @@ Return insertion point for sub-agent response."
         (insert prefix " Main agent:\n"
                 (ellama--fill-long-lines description) "\n\n"
                 prefix " " ellama-assistant-nick ":\n")
+        (ellama--scroll buffer (point))
         (point)))))
 
 (defun ellama-tools--make-report-result-tool (callback session)

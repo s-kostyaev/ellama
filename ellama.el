@@ -4188,6 +4188,7 @@ after compaction."
            (ellama--fill-long-lines prompt) "\n\n"
            (ellama-get-nick-prefix-for-mode)
            " " ellama-assistant-nick ":\n"))
+        (ellama--scroll buffer)
         (let* ((agent
                 (if (and (not create-session)
                          (ellama-tools-agent-active-p session))
