@@ -1726,6 +1726,7 @@ REQUESTED-KEPT-TURNS is the configured recent turn count."
 
 (defun ellama--session-compact-handle-async-error (session err)
   "Reset SESSION compaction state and report asynchronous ERR."
+  (ellama--session-extra-put session :auto-compact-last-error err)
   (ellama--session-compact-reset session nil)
   (message "Ellama context compaction failed: %s" err))
 
@@ -1823,14 +1824,22 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
                       (lambda (response)
                         (unless completed
                           (condition-case compact-err
-                              (ellama--session-compact-apply
-                               session prompt provider buffer original-context
-                               interactions old-interactions recent-interactions
-                               before-token-count
-                               (if (stringp response)
-                                   response
-                                 (plist-get response :text))
-                               requested-keep-turns)
+                              (progn
+                                (ellama--session-extra-put
+                                 session :auto-compact-last-error nil)
+                                (prog1
+                                    (ellama--session-compact-apply
+                                     session prompt provider buffer
+                                     original-context
+                                     interactions old-interactions
+                                     recent-interactions before-token-count
+                                     (if (stringp response)
+                                         response
+                                       (plist-get response :text))
+                                     requested-keep-turns)
+                                  (ellama--session-extra-put
+                                   session
+                                   :auto-compact-skip-next-preflight t)))
                             (error
                              (ellama--session-compact-handle-async-error
                               session (error-message-string compact-err))))
@@ -1865,6 +1874,8 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
     (error
      (if automatic
          (progn
+           (ellama--session-extra-put
+            session :auto-compact-last-error (error-message-string err))
            (message "Ellama context compaction failed: %s"
                     (error-message-string err))
            nil)
@@ -1899,20 +1910,26 @@ REQUEST-CONTEXT is the active request context."
              (llm-chat-prompt-p prompt)
              (not (ellama--session-extra-get
                    session :auto-compact-in-progress)))
-    (when-let* ((token-count
-                 (ellama--session-compact-estimate-prompt-tokens
-                  provider prompt))
-                (threshold
-                 (ellama--session-auto-compact-threshold provider))
-                ((>= token-count threshold)))
-      (ellama--session-compact
-       session
-       :provider provider
-       :buffer buffer
-       :token-count token-count
-       :automatic t
-       :on-done on-done
-       :request-context request-context))))
+    (if (ellama--session-extra-get
+         session :auto-compact-skip-next-preflight)
+        (progn
+          (ellama--session-extra-put
+           session :auto-compact-skip-next-preflight nil)
+          nil)
+      (when-let* ((token-count
+                   (ellama--session-compact-estimate-prompt-tokens
+                    provider prompt))
+                  (threshold
+                   (ellama--session-auto-compact-threshold provider))
+                  ((>= token-count threshold)))
+        (ellama--session-compact
+         session
+         :provider provider
+         :buffer buffer
+         :token-count token-count
+         :automatic t
+         :on-done on-done
+         :request-context request-context)))))
 
 (defun ellama--active-session-by-id (id)
   "Return active session matching display ID."

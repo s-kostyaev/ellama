@@ -3159,14 +3159,71 @@ Return list with result and prompt."
               (funcall callback "temporary failure again")
               (should (= (plist-get (ellama-tools--agent-state session)
                                     :consecutive-error-count)
-                         0))
+                         2))
               (should (= compact-count 1))
               (should (= (length stream-calls) 1))
               (should (functionp compact-done))
               (funcall compact-done)
               (should (= (length stream-calls) 2))
+              (funcall (ellama-tools--make-agent-loop-handler
+                        session buffer "System")
+                       "Recovered response")
+              (should (= (plist-get (ellama-tools--agent-state session)
+                                    :consecutive-error-count)
+                         0))
               (should (string-match-p "Current plan state"
                                       (caar stream-calls))))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest test-ellama-agent-error-callback-stops-when-compact-fails ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((buffer (generate-new-buffer " *ellama-agent-compact-error-test*"))
+         (session
+          (make-ellama-session
+           :id "agent-compact-error"
+           :extra (list :uid "agent-compact-error-uid"
+                        :tools nil
+                        :agent-loop
+                        (list :phase 'acting
+                              :plan (list (list :id 1
+                                                :title "Keep working"
+                                                :status 'pending))
+                              :step-count 0
+                              :consecutive-error-count 1
+                              :max-steps 5
+                              :completed nil
+                              :system "System"))))
+         (stream-calls nil)
+         (compact-count 0))
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer
+            (org-mode))
+          (cl-letf (((symbol-function 'ellama-get-session-buffer)
+                     (lambda (id)
+                       (and (member id '("agent-compact-error"
+                                         "agent-compact-error-uid"))
+                            buffer)))
+                    ((symbol-function 'ellama-stream)
+                     (lambda (prompt &rest args)
+                       (push (list prompt args) stream-calls)))
+                    ((symbol-function 'ellama--session-compact)
+                     (lambda (compact-session &rest _args)
+                       (setq compact-count (1+ compact-count))
+                       (ellama--session-extra-put
+                        compact-session :auto-compact-last-error
+                        "summary server unavailable")
+                       nil))
+                    ((symbol-function 'message)
+                     (lambda (&rest _args) nil)))
+            (funcall (ellama-tools--make-agent-error-callback session)
+                     "temporary failure again")
+            (should (= compact-count 1))
+            (should-not stream-calls)
+            (should (= (plist-get (ellama-tools--agent-state session)
+                                  :consecutive-error-count)
+                       2))))
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
 
@@ -3329,6 +3386,97 @@ END_ELLAMA_AGENT_STATE"))
         (kill-buffer buffer))
       (when (buffer-live-p callback-buffer)
         (kill-buffer callback-buffer)))))
+
+(ert-deftest test-ellama-agent-loop-handler-continues-after-response-compaction ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((buffer
+          (generate-new-buffer " *ellama-agent-response-compact-test*"))
+         (provider (make-llm-fake))
+         (prompt (llm-make-chat-prompt "user 1" :context "System"))
+         (base-tool (llm-make-tool :name "read_file" :function #'ignore))
+         (session
+          (make-ellama-session
+           :id "agent-response-compact"
+           :provider provider
+           :prompt prompt
+           :extra (list :uid "agent-response-compact-uid"
+                        :tools (list base-tool)
+                        :agent-loop
+                        (list :phase 'acting
+                              :plan (list (list :id 1
+                                                :title "Keep going"
+                                                :status 'pending))
+                              :step-count 0
+                              :max-steps 3
+                              :completed nil
+                              :system "System"))))
+         (ellama-response-process-method 'async)
+         (ellama-spinner-enabled nil)
+         (ellama-session-auto-compact-enabled t)
+         (ellama-session-auto-compact-token-threshold 100)
+         (ellama-session-auto-compact-provider (make-llm-fake))
+         (ellama-session-auto-compact-keep-last-turns 2)
+         (ellama-session-auto-compact-show-message nil)
+         (ellama-session-hide-org-quotes nil)
+         (call-count 0)
+         compact-callback
+         continuation-prompt)
+    (llm-chat-prompt-append-response prompt "assistant 1" 'assistant)
+    (llm-chat-prompt-append-response prompt "user 2")
+    (llm-chat-prompt-append-response prompt "assistant 2" 'assistant)
+    (llm-chat-prompt-append-response prompt "user 3")
+    (llm-chat-prompt-append-response prompt "assistant 3" 'assistant)
+    (llm-chat-prompt-append-response prompt "user 4")
+    (llm-chat-prompt-append-response prompt "assistant 4" 'assistant)
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer
+            (org-mode)
+            (setq-local ellama--current-session session)
+            (setq-local ellama--change-group (prepare-change-group))
+            (activate-change-group ellama--change-group))
+          (cl-letf (((symbol-function 'ellama-get-session-buffer)
+                     (lambda (id)
+                       (and (member id '("agent-response-compact"
+                                         "agent-response-compact-uid"))
+                            buffer)))
+                    ((symbol-function 'llm-count-tokens)
+                     (lambda (_provider _text) 120))
+                    ((symbol-function 'llm-chat-async)
+                     (lambda (_provider sent-prompt response-callback
+                                        _error-callback
+                                        &optional _multi-output)
+                       (setq call-count (1+ call-count))
+                       (if (= call-count 1)
+                           (progn
+                             (setq compact-callback response-callback)
+                             'compact-request)
+                         (setq continuation-prompt sent-prompt)
+                         'continuation-request))))
+            (with-current-buffer buffer
+              (funcall
+               (ellama--response-handler
+                #'ignore nil buffer
+                (ellama-tools--make-agent-loop-handler
+                 session buffer "System")
+                #'ignore provider prompt t #'identity)
+               '(:text "Controller response"
+                       :input-tokens 90
+                       :output-tokens 20)))
+            (should (= call-count 1))
+            (should compact-callback)
+            (should-not continuation-prompt)
+            (funcall compact-callback '(:text "Summary"))
+            (should (= call-count 2))
+            (should (llm-chat-prompt-p continuation-prompt))
+            (should (string-match-p
+                     "Current plan state"
+                     (llm-chat-prompt-to-text continuation-prompt)))
+            (should (string-match-p
+                     "Next pending item: Keep going"
+                     (llm-chat-prompt-to-text continuation-prompt)))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
 
 (ert-deftest test-ellama-agent-report-result-restores-original-tools ()
   (ellama-test--ensure-local-ellama-tools)
@@ -3527,14 +3675,68 @@ END_ELLAMA_AGENT_STATE"))
               (funcall callback "temporary failure again")
               (should (= (plist-get (ellama-session-extra session)
                                     :consecutive-error-count)
-                         0))
+                         2))
               (should (= compact-count 1))
               (should (= (length stream-calls) 1))
               (should (functionp compact-done))
               (funcall compact-done)
               (should (= (length stream-calls) 2))
+              (funcall (ellama-tools--make-subagent-loop-handler
+                        session worker-buffer "System")
+                       "Recovered response")
+              (should (= (plist-get (ellama-session-extra session)
+                                    :consecutive-error-count)
+                         0))
               (should (equal (caar stream-calls)
                              ellama-tools-subagent-continue-prompt)))))
+      (when (buffer-live-p worker-buffer)
+        (kill-buffer worker-buffer)))))
+
+(ert-deftest test-ellama-subagent-error-callback-stops-when-compact-fails ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((worker-buffer
+          (generate-new-buffer " *ellama-worker-compact-error-test*"))
+         (session
+          (make-ellama-session
+           :id "worker-compact-error"
+           :extra (list :uid "worker-compact-error-uid"
+                        :task-completed nil
+                        :step-count 0
+                        :consecutive-error-count 1
+                        :max-steps 5
+                        :tools nil
+                        :system "System"
+                        :result-callback #'ignore)))
+         (stream-calls nil)
+         (compact-count 0))
+    (unwind-protect
+        (progn
+          (with-current-buffer worker-buffer
+            (org-mode))
+          (cl-letf (((symbol-function 'ellama-get-session-buffer)
+                     (lambda (id)
+                       (and (member id '("worker-compact-error"
+                                         "worker-compact-error-uid"))
+                            worker-buffer)))
+                    ((symbol-function 'ellama-stream)
+                     (lambda (prompt &rest args)
+                       (push (list prompt args) stream-calls)))
+                    ((symbol-function 'ellama--session-compact)
+                     (lambda (compact-session &rest _args)
+                       (setq compact-count (1+ compact-count))
+                       (ellama--session-extra-put
+                        compact-session :auto-compact-last-error
+                        "summary server unavailable")
+                       nil))
+                    ((symbol-function 'message)
+                     (lambda (&rest _args) nil)))
+            (funcall (ellama-tools--make-subagent-error-callback session)
+                     "temporary failure again")
+            (should (= compact-count 1))
+            (should-not stream-calls)
+            (should (= (plist-get (ellama-session-extra session)
+                                  :consecutive-error-count)
+                       2))))
       (when (buffer-live-p worker-buffer)
         (kill-buffer worker-buffer)))))
 

@@ -4277,6 +4277,7 @@ ERROR-CB is called on non-tool LLM errors to track consecutive failures."
        (ellama-tools--make-agent-error-callback session)))))
 
 (declare-function ellama--session-compact "ellama" (session &rest args))
+(declare-function ellama--session-extra-get "ellama" (session key))
 
 (defun ellama-tools--agent-error-message (err)
   "Return human-readable message for agent loop ERR."
@@ -4299,10 +4300,14 @@ ERROR-CB is called on non-tool LLM errors to track consecutive failures."
         ((continue ()
            (unless continued
              (setq continued t)
-             (ellama-tools--continue-agent-after-error session))))
-      (unless (ellama--session-compact
-               session :automatic t :on-done #'continue)
-        (continue)))))
+             (if (ellama--session-extra-get
+                  session :auto-compact-last-error)
+                 (message "Agent loop stopped after compaction error: %s"
+                          (ellama--session-extra-get
+                           session :auto-compact-last-error))
+               (ellama-tools--continue-agent-after-error session)))))
+      (ellama--session-compact
+       session :automatic t :on-done #'continue))))
 
 (defun ellama-tools--make-agent-error-callback (session)
   "Return error callback for plan-and-act loop of SESSION.
@@ -4323,7 +4328,7 @@ and restarts the loop."
                   (message "Compacting session after repeated errors...")
                   (setq state
                         (ellama-tools--agent-state-put
-                         state :consecutive-error-count 0))
+                         state :consecutive-error-count new-count))
                   (ellama-tools--agent-put-state session state)
                   (ellama-tools--compact-and-continue-agent session))
               (setq state
@@ -4685,10 +4690,14 @@ ERROR-CB is called on non-tool LLM errors to track consecutive failures."
         ((continue ()
            (unless continued
              (setq continued t)
-             (ellama-tools--continue-subagent-after-error session))))
-      (unless (ellama--session-compact
-               session :automatic t :on-done #'continue)
-        (continue)))))
+             (if (ellama--session-extra-get
+                  session :auto-compact-last-error)
+                 (message "Subagent stopped after compaction error: %s"
+                          (ellama--session-extra-get
+                           session :auto-compact-last-error))
+               (ellama-tools--continue-subagent-after-error session)))))
+      (ellama--session-compact
+       session :automatic t :on-done #'continue))))
 
 (defun ellama-tools--make-subagent-error-callback (session)
   "Return error callback for subagent loop of SESSION.
@@ -4706,7 +4715,7 @@ and restarts the loop."
             (progn
               (message "Compacting subagent session after repeated errors...")
               (ellama-tools--set-session-extra
-               session (plist-put extra :consecutive-error-count 0))
+               session (plist-put extra :consecutive-error-count new-count))
               (ellama-tools--compact-and-continue-subagent session))
           (ellama-tools--set-session-extra
            session (plist-put extra :consecutive-error-count new-count))
