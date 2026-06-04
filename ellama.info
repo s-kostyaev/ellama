@@ -13,33 +13,35 @@ Copyright (C) 2023-2026 Free Software Foundation, Inc.
      (a) The FSF’s Back-Cover Text is: “You have the freedom to copy and
      modify this GNU manual.”
 
-Ellama is an Emacs interface for working with large language models.  It
-can be used as a chat client, a set of command-oriented writing and
-coding helpers, or an agentic workspace that lets an LLM plan, call
-tools, inspect context, and continue work across turns.
+Ellama brings large language models into Emacs without turning Emacs
+into a web app.  You can use it for ordinary chat, one-shot commands
+over the current buffer or region, and longer sessions that keep their
+history.  It also has agent loops for work that needs several steps:
+make a plan, call tools, read project context, and continue from the
+previous turn.
 
-Ellama uses the llm (https://elpa.gnu.org/packages/llm.html) package for
-provider support.  Ollama works out of the box when a local model is
-available, and the same interface can be configured for
+Ellama is not tied to one backend.  It uses the llm
+(https://elpa.gnu.org/packages/llm.html) package, so Ollama works with a
+local model, and the same Ellama commands can be configured for
 OpenAI-compatible APIs, OpenAI, Claude, Gemini, Vertex, GPT4All,
-LlamaCpp, and other llm providers.  Provider-specific features such as
-streaming, model lists, image input, tool use, token limits, and model
-switching are enabled when the selected provider supports them.
+LlamaCpp, and other llm providers.  When a provider supports extra
+capabilities, Ellama uses them: streaming responses, model lists, image
+input, tool calls, token limits, and interactive model switching.
 
-The package keeps persistent chat sessions, can attach buffers, files,
-directories, Info nodes, selections, and images as context, and
-automatically compacts long conversations before they exceed the
-provider context window.  It also includes task-oriented commands for
-translation, summarization, proofreading, code review and editing,
-extraction, formatting, commit-message generation, and interactive
-provider selection.
+Context is first-class.  A request can include buffers, files,
+directories, Info nodes, selections, and images.  Chat sessions can be
+saved, resumed, renamed, compacted manually, or compacted automatically
+before they run past the model context window.  The everyday commands
+cover translation, summarization, proofreading, code review and editing,
+extraction, formatting, commit-message generation, and provider
+selection.
 
-For agentic workflows, Ellama provides a plan-and-act loop and task-tool
-subagents.  Agents can use configurable tools, project instructions from
-‘AGENTS.md’, reusable skills, and blueprint prompts.  Tool execution is
-guarded by filesystem policy checks, edit hooks, and DLP scans so
-projects can decide which reads, writes, shell commands, and tool
-outputs are allowed.
+For tool-using agents, Ellama reads project instructions from
+‘AGENTS.md’, can load reusable skills and blueprint prompts, and runs
+plan-and-act loops or subagents from the task tool.  Tool calls are
+still subject to project policy: filesystem checks, edit hooks, and DLP
+scans can block or warn on reads, writes, shell commands, and tool
+output.
 
 The name "ellama" is derived from "Emacs Large LAnguage Model
 Assistant".
@@ -67,33 +69,35 @@ Copyright (C) 2023-2026 Free Software Foundation, Inc.
      (a) The FSF’s Back-Cover Text is: “You have the freedom to copy and
      modify this GNU manual.”
 
-Ellama is an Emacs interface for working with large language models.  It
-can be used as a chat client, a set of command-oriented writing and
-coding helpers, or an agentic workspace that lets an LLM plan, call
-tools, inspect context, and continue work across turns.
+Ellama brings large language models into Emacs without turning Emacs
+into a web app.  You can use it for ordinary chat, one-shot commands
+over the current buffer or region, and longer sessions that keep their
+history.  It also has agent loops for work that needs several steps:
+make a plan, call tools, read project context, and continue from the
+previous turn.
 
-Ellama uses the llm (https://elpa.gnu.org/packages/llm.html) package for
-provider support.  Ollama works out of the box when a local model is
-available, and the same interface can be configured for
+Ellama is not tied to one backend.  It uses the llm
+(https://elpa.gnu.org/packages/llm.html) package, so Ollama works with a
+local model, and the same Ellama commands can be configured for
 OpenAI-compatible APIs, OpenAI, Claude, Gemini, Vertex, GPT4All,
-LlamaCpp, and other llm providers.  Provider-specific features such as
-streaming, model lists, image input, tool use, token limits, and model
-switching are enabled when the selected provider supports them.
+LlamaCpp, and other llm providers.  When a provider supports extra
+capabilities, Ellama uses them: streaming responses, model lists, image
+input, tool calls, token limits, and interactive model switching.
 
-The package keeps persistent chat sessions, can attach buffers, files,
-directories, Info nodes, selections, and images as context, and
-automatically compacts long conversations before they exceed the
-provider context window.  It also includes task-oriented commands for
-translation, summarization, proofreading, code review and editing,
-extraction, formatting, commit-message generation, and interactive
-provider selection.
+Context is first-class.  A request can include buffers, files,
+directories, Info nodes, selections, and images.  Chat sessions can be
+saved, resumed, renamed, compacted manually, or compacted automatically
+before they run past the model context window.  The everyday commands
+cover translation, summarization, proofreading, code review and editing,
+extraction, formatting, commit-message generation, and provider
+selection.
 
-For agentic workflows, Ellama provides a plan-and-act loop and task-tool
-subagents.  Agents can use configurable tools, project instructions from
-‘AGENTS.md’, reusable skills, and blueprint prompts.  Tool execution is
-guarded by filesystem policy checks, edit hooks, and DLP scans so
-projects can decide which reads, writes, shell commands, and tool
-outputs are allowed.
+For tool-using agents, Ellama reads project instructions from
+‘AGENTS.md’, can load reusable skills and blueprint prompts, and runs
+plan-and-act loops or subagents from the task tool.  Tool calls are
+still subject to project policy: filesystem checks, edit hooks, and DLP
+scans can block or warn on reads, writes, shell commands, and tool
+output.
 
 The name "ellama" is derived from "Emacs Large LAnguage Model
 Assistant".
@@ -2692,50 +2696,50 @@ their use in free software.
 
 
 Tag Table:
-Node: Top2463
-Node: Installation6141
-Node: Commands11155
-Node: Keymap20506
-Node: Configuration23393
-Node: Session Provider Keys39966
-Node: Session Compaction41827
-Node: Image Input44121
-Node: Task Tool Subagents46266
-Node: Plan-and-Act Agent Loop49440
-Node: Edit Tool Shell Hooks52021
-Node: DLP for Tool Input/Output54314
-Node: SRT Filesystem Policy for Tools70313
-Node: Context Management75982
-Node: Transient Menus for Context Management77050
-Node: Managing the Context78729
-Node: Considerations79504
-Node: Minor modes80097
-Node: ellama-context-header-line-mode82085
-Node: ellama-context-header-line-global-mode82910
-Node: ellama-context-mode-line-mode83630
-Node: ellama-context-mode-line-global-mode84478
-Node: Ellama Session Header Line Mode85182
-Node: Enabling and Disabling85751
-Node: Customization86198
-Node: Ellama Session Mode Line Mode86486
-Node: Enabling and Disabling (1)87071
-Node: Customization (1)87518
-Node: Using Blueprints87812
-Node: Key Components of Ellama Blueprints88452
-Node: Creating and Managing Blueprints89059
-Node: Blueprints files90037
-Node: Variable Management90458
-Node: Keymap and Mode90911
-Node: Transient Menus91847
-Node: Running Blueprints programmatically92393
-Node: MCP Integration92980
-Node: Agent Skills94215
-Node: Directory Structure94578
-Node: Creating a Skill95605
-Node: How it works95980
-Node: Acknowledgments96371
-Node: Contributions97082
-Node: GNU Free Documentation License97756
+Node: Top2526
+Node: Installation6267
+Node: Commands11281
+Node: Keymap20632
+Node: Configuration23519
+Node: Session Provider Keys40092
+Node: Session Compaction41953
+Node: Image Input44247
+Node: Task Tool Subagents46392
+Node: Plan-and-Act Agent Loop49566
+Node: Edit Tool Shell Hooks52147
+Node: DLP for Tool Input/Output54440
+Node: SRT Filesystem Policy for Tools70439
+Node: Context Management76108
+Node: Transient Menus for Context Management77176
+Node: Managing the Context78855
+Node: Considerations79630
+Node: Minor modes80223
+Node: ellama-context-header-line-mode82211
+Node: ellama-context-header-line-global-mode83036
+Node: ellama-context-mode-line-mode83756
+Node: ellama-context-mode-line-global-mode84604
+Node: Ellama Session Header Line Mode85308
+Node: Enabling and Disabling85877
+Node: Customization86324
+Node: Ellama Session Mode Line Mode86612
+Node: Enabling and Disabling (1)87197
+Node: Customization (1)87644
+Node: Using Blueprints87938
+Node: Key Components of Ellama Blueprints88578
+Node: Creating and Managing Blueprints89185
+Node: Blueprints files90163
+Node: Variable Management90584
+Node: Keymap and Mode91037
+Node: Transient Menus91973
+Node: Running Blueprints programmatically92519
+Node: MCP Integration93106
+Node: Agent Skills94341
+Node: Directory Structure94704
+Node: Creating a Skill95731
+Node: How it works96106
+Node: Acknowledgments96497
+Node: Contributions97208
+Node: GNU Free Documentation License97882
 
 End Tag Table
 

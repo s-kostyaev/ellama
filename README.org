@@ -6,31 +6,32 @@
 [[https://stable.melpa.org/#/ellama][file:https://stable.melpa.org/packages/ellama-badge.svg]]
 [[https://elpa.gnu.org/packages/ellama.html][file:https://elpa.gnu.org/packages/ellama.svg]]
 
-Ellama is an Emacs interface for working with large language models.  It can be
-used as a chat client, a set of command-oriented writing and coding helpers, or
-an agentic workspace that lets an LLM plan, call tools, inspect context, and
-continue work across turns.
+Ellama brings large language models into Emacs without turning Emacs into a web
+app.  You can use it for ordinary chat, one-shot commands over the current
+buffer or region, and longer sessions that keep their history.  It also has
+agent loops for work that needs several steps: make a plan, call tools, read
+project context, and continue from the previous turn.
 
-Ellama uses the [[https://elpa.gnu.org/packages/llm.html][llm]] package for
-provider support.  Ollama works out of the box when a local model is available,
-and the same interface can be configured for OpenAI-compatible APIs, OpenAI,
-Claude, Gemini, Vertex, GPT4All, LlamaCpp, and other llm providers.
-Provider-specific features such as streaming, model lists, image input, tool
-use, token limits, and model switching are enabled when the selected provider
-supports them.
+Ellama is not tied to one backend.  It uses the
+[[https://elpa.gnu.org/packages/llm.html][llm]] package, so Ollama works with a
+local model, and the same Ellama commands can be configured for
+OpenAI-compatible APIs, OpenAI, Claude, Gemini, Vertex, GPT4All, LlamaCpp, and
+other llm providers.  When a provider supports extra capabilities, Ellama uses
+them: streaming responses, model lists, image input, tool calls, token limits,
+and interactive model switching.
 
-The package keeps persistent chat sessions, can attach buffers, files,
-directories, Info nodes, selections, and images as context, and automatically
-compacts long conversations before they exceed the provider context window.  It
-also includes task-oriented commands for translation, summarization,
+Context is first-class.  A request can include buffers, files, directories, Info
+nodes, selections, and images.  Chat sessions can be saved, resumed, renamed,
+compacted manually, or compacted automatically before they run past the model
+context window.  The everyday commands cover translation, summarization,
 proofreading, code review and editing, extraction, formatting, commit-message
-generation, and interactive provider selection.
+generation, and provider selection.
 
-For agentic workflows, Ellama provides a plan-and-act loop and task-tool
-subagents.  Agents can use configurable tools, project instructions from
-~AGENTS.md~, reusable skills, and blueprint prompts.  Tool execution is guarded
-by filesystem policy checks, edit hooks, and DLP scans so projects can decide
-which reads, writes, shell commands, and tool outputs are allowed.
+For tool-using agents, Ellama reads project instructions from ~AGENTS.md~, can
+load reusable skills and blueprint prompts, and runs plan-and-act loops or
+subagents from the task tool.  Tool calls are still subject to project policy:
+filesystem checks, edit hooks, and DLP scans can block or warn on reads, writes,
+shell commands, and tool output.
 
 The name "ellama" is derived from "Emacs Large LAnguage Model Assistant".
 [[file:imgs/reasoning-models.gif]]
