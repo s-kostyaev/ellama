@@ -6,15 +6,33 @@
 [[https://stable.melpa.org/#/ellama][file:https://stable.melpa.org/packages/ellama-badge.svg]]
 [[https://elpa.gnu.org/packages/ellama.html][file:https://elpa.gnu.org/packages/ellama.svg]]
 
-Ellama is a tool for interacting with large language models from Emacs. It
-allows you to ask questions and receive responses from the LLMs. Ellama can
-perform various tasks such as translation, code review, summarization, enhancing
-grammar/spelling or wording and more through the Emacs interface. Ellama
-natively supports streaming output, making it effortless to use with your
-preferred text editor.
+Ellama is an Emacs interface for working with large language models.  It can be
+used as a chat client, a set of command-oriented writing and coding helpers, or
+an agentic workspace that lets an LLM plan, call tools, inspect context, and
+continue work across turns.
 
-The name "ellama" is derived from "Emacs Large LAnguage Model
-Assistant". Previous sentence was written by Ellama itself.
+Ellama uses the [[https://elpa.gnu.org/packages/llm.html][llm]] package for
+provider support.  Ollama works out of the box when a local model is available,
+and the same interface can be configured for OpenAI-compatible APIs, OpenAI,
+Claude, Gemini, Vertex, GPT4All, LlamaCpp, and other llm providers.
+Provider-specific features such as streaming, model lists, image input, tool
+use, token limits, and model switching are enabled when the selected provider
+supports them.
+
+The package keeps persistent chat sessions, can attach buffers, files,
+directories, Info nodes, selections, and images as context, and automatically
+compacts long conversations before they exceed the provider context window.  It
+also includes task-oriented commands for translation, summarization,
+proofreading, code review and editing, extraction, formatting, commit-message
+generation, and interactive provider selection.
+
+For agentic workflows, Ellama provides a plan-and-act loop and task-tool
+subagents.  Agents can use configurable tools, project instructions from
+~AGENTS.md~, reusable skills, and blueprint prompts.  Tool execution is guarded
+by filesystem policy checks, edit hooks, and DLP scans so projects can decide
+which reads, writes, shell commands, and tool outputs are allowed.
+
+The name "ellama" is derived from "Emacs Large LAnguage Model Assistant".
 [[file:imgs/reasoning-models.gif]]
 
 * Installation
