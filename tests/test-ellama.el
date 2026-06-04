@@ -320,6 +320,30 @@ STYLE controls partial message shape.  Default value is `word-leading'."
      '((read_file . "\"one\\ntwo\"")))
     "read_file\n  one\n  two")))
 
+(ert-deftest test-ellama-handle-partial-scrolls-tool-results ()
+  (let ((buffer (generate-new-buffer " *ellama-tool-results-test*"))
+        (reasoning-buffer (generate-new-buffer " *ellama-tool-reasoning-test*"))
+        (ellama-auto-scroll t)
+        (scroll-call nil))
+    (unwind-protect
+        (progn
+          (cl-letf (((symbol-function 'ellama--scroll)
+                     (lambda (&optional scroll-buffer point)
+                       (setq scroll-call (list scroll-buffer point)))))
+            (let ((insert-text (ellama--insert buffer nil #'identity)))
+              (funcall
+               (ellama--handle-partial insert-text #'ignore reasoning-buffer)
+               '(:tool-results ((read_file . "\"one\\ntwo\""))))))
+          (should (eq (car scroll-call) buffer))
+          (should (markerp (cadr scroll-call)))
+          (with-current-buffer buffer
+            (should (string-match-p "read_file" (buffer-string)))
+            (should (string-match-p "one" (buffer-string)))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (when (buffer-live-p reasoning-buffer)
+        (kill-buffer reasoning-buffer)))))
+
 (ert-deftest test-ellama-default-stream-filter-translates-org-think ()
   (with-temp-buffer
     (org-mode)

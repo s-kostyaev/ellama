@@ -3108,6 +3108,48 @@ Return list with result and prompt."
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
 
+(ert-deftest test-ellama-agent-update-plan-scrolls-report ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((buffer (generate-new-buffer " *ellama-agent-update-test*"))
+         (session (make-ellama-session
+                   :id "agent-update"
+                   :extra (list :uid "agent-update-uid"
+                                :agent-loop
+                                (list :phase 'acting
+                                      :plan (list (list :id 1
+                                                        :title "Inspect"
+                                                        :status 'pending))
+                                      :completed nil))))
+         (scroll-call nil))
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer
+            (org-mode))
+          (cl-letf (((symbol-function 'ellama-get-session-buffer)
+                     (lambda (id)
+                       (and (member id '("agent-update"
+                                         "agent-update-uid"))
+                            buffer)))
+                    ((symbol-function 'ellama--scroll)
+                     (lambda (&optional scroll-buffer point)
+                       (setq scroll-call (list scroll-buffer point)))))
+            (let ((ellama-tools--current-session session))
+              (should (equal
+                       (ellama-tools-agent-update-plan-tool
+                        "- [X] Inspect\n- [ ] Implement"
+                        "Inspection done")
+                       "Plan updated.")))
+            (should (eq (car scroll-call) buffer))
+            (with-current-buffer buffer
+              (should (string-match-p "Ellama Agent Status:"
+                                      (buffer-string)))
+              (should (string-match-p "Status: Inspection done"
+                                      (buffer-string)))
+              (should (string-match-p "- \\[X\\] Inspect"
+                                      (buffer-string))))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
 (ert-deftest test-ellama-agent-error-callback-continues-and-compacts-on-repeat ()
   (ellama-test--ensure-local-ellama-tools)
   (let* ((buffer (generate-new-buffer " *ellama-agent-error-test*"))

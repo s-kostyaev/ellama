@@ -4009,13 +4009,15 @@ TEMPLATE-BASE, ROLE and ARGUMENTS are used for template rendering and hints."
         (insert (ellama-get-nick-prefix-for-mode)
                 " Ellama Agent " title ":\n"
                 (or body "")
-                "\n\n")))))
+                "\n\n")
+        (ellama--scroll buffer (point))))))
 
 (defun ellama-tools--agent-insert-state (session buffer title)
   "Insert SESSION plan-and-act state into BUFFER with TITLE."
   (when-let* ((state (ellama-tools--agent-state session)))
     (let ((plan (ellama-tools--agent-render-plan state))
           (phase (plist-get state :phase))
+          (status (plist-get state :status))
           (result (plist-get state :result))
           (blocked (plist-get state :blocked)))
       (ellama-tools--agent-insert-note
@@ -4024,6 +4026,7 @@ TEMPLATE-BASE, ROLE and ARGUMENTS are used for template rendering and hints."
        (string-join
         (delq nil
               (list (format "Phase: %s" phase)
+                    (when status (format "Status: %s" status))
                     (unless (string-empty-p plan) plan)
                     (when blocked (format "Blocked: %s" blocked))
                     (when result (format "Result: %s" result))))
