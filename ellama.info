@@ -382,6 +382,12 @@ File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Top
    • ‘ellama-tools-disable-all’: Disable all enabled tools
      simultaneously.  Use this command to reset the system to a minimal
      state, ensuring no tools are active.
+   • ‘ellama-tools-dlp-show-incident-stats’: Show a summary buffer with
+     recent DLP incident statistics.
+   • ‘ellama-tools-dlp-clear-session-bypasses’: Clear session-scoped DLP
+     bypasses.
+   • ‘ellama-tools-dlp-reset-runtime-state’: Reset in-memory DLP runtime
+     state, including incident logs and detector caches.
 
 
 File: ellama.info,  Node: Keymap,  Next: Configuration,  Prev: Commands,  Up: Top
@@ -2646,47 +2652,47 @@ Tag Table:
 Node: Top1379
 Node: Installation3973
 Node: Commands8987
-Node: Keymap17925
-Node: Configuration20812
-Node: Session Provider Keys37385
-Node: Session Compaction39246
-Node: Image Input41540
-Node: Task Tool Subagents43685
-Node: Plan-and-Act Agent Loop46859
-Node: Edit Tool Shell Hooks49440
-Node: DLP for Tool Input/Output51733
-Node: SRT Filesystem Policy for Tools67732
-Node: Context Management73401
-Node: Transient Menus for Context Management74469
-Node: Managing the Context76148
-Node: Considerations76923
-Node: Minor modes77516
-Node: ellama-context-header-line-mode79504
-Node: ellama-context-header-line-global-mode80329
-Node: ellama-context-mode-line-mode81049
-Node: ellama-context-mode-line-global-mode81897
-Node: Ellama Session Header Line Mode82601
-Node: Enabling and Disabling83170
-Node: Customization83617
-Node: Ellama Session Mode Line Mode83905
-Node: Enabling and Disabling (1)84490
-Node: Customization (1)84937
-Node: Using Blueprints85231
-Node: Key Components of Ellama Blueprints85871
-Node: Creating and Managing Blueprints86478
-Node: Blueprints files87456
-Node: Variable Management87877
-Node: Keymap and Mode88330
-Node: Transient Menus89266
-Node: Running Blueprints programmatically89812
-Node: MCP Integration90399
-Node: Agent Skills91634
-Node: Directory Structure91997
-Node: Creating a Skill93024
-Node: How it works93399
-Node: Acknowledgments93790
-Node: Contributions94501
-Node: GNU Free Documentation License95175
+Node: Keymap18270
+Node: Configuration21157
+Node: Session Provider Keys37730
+Node: Session Compaction39591
+Node: Image Input41885
+Node: Task Tool Subagents44030
+Node: Plan-and-Act Agent Loop47204
+Node: Edit Tool Shell Hooks49785
+Node: DLP for Tool Input/Output52078
+Node: SRT Filesystem Policy for Tools68077
+Node: Context Management73746
+Node: Transient Menus for Context Management74814
+Node: Managing the Context76493
+Node: Considerations77268
+Node: Minor modes77861
+Node: ellama-context-header-line-mode79849
+Node: ellama-context-header-line-global-mode80674
+Node: ellama-context-mode-line-mode81394
+Node: ellama-context-mode-line-global-mode82242
+Node: Ellama Session Header Line Mode82946
+Node: Enabling and Disabling83515
+Node: Customization83962
+Node: Ellama Session Mode Line Mode84250
+Node: Enabling and Disabling (1)84835
+Node: Customization (1)85282
+Node: Using Blueprints85576
+Node: Key Components of Ellama Blueprints86216
+Node: Creating and Managing Blueprints86823
+Node: Blueprints files87801
+Node: Variable Management88222
+Node: Keymap and Mode88675
+Node: Transient Menus89611
+Node: Running Blueprints programmatically90157
+Node: MCP Integration90744
+Node: Agent Skills91979
+Node: Directory Structure92342
+Node: Creating a Skill93369
+Node: How it works93744
+Node: Acknowledgments94135
+Node: Contributions94846
+Node: GNU Free Documentation License95520
 
 End Tag Table
 

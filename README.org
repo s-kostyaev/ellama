@@ -253,6 +253,11 @@ More sophisticated configuration example:
   needed.
 - ~ellama-tools-disable-all~: Disable all enabled tools simultaneously. Use this
   command to reset the system to a minimal state, ensuring no tools are active.
+- ~ellama-tools-dlp-show-incident-stats~: Show a summary buffer with recent DLP
+  incident statistics.
+- ~ellama-tools-dlp-clear-session-bypasses~: Clear session-scoped DLP bypasses.
+- ~ellama-tools-dlp-reset-runtime-state~: Reset in-memory DLP runtime state,
+  including incident logs and detector caches.
 
 * Keymap
 
