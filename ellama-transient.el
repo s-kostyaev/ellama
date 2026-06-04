@@ -880,7 +880,7 @@ ARGS used for transient arguments."
    ("-e" "Create Ephemeral Session" "--ephemeral")]
   ["Main"
    [("c" "Chat" ellama-transient-chat)
-    ("i" "Chat with image" ellama-transient-chat-with-image)
+    ("I" "Chat with image" ellama-transient-chat-with-image)
     ("b" "Chat with blueprint" ellama-blueprint-select)
     ("B" "Blueprint Commands" ellama-transient-blueprint-menu)
     ("T" "Tools Commands" ellama-transient-tools-menu)]
