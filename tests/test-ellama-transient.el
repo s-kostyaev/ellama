@@ -33,6 +33,12 @@
 (require 'ert)
 (require 'llm-ollama)
 (require 'llm-openai)
+(require 'llm-provider-utils)
+
+(cl-defstruct (ellama-transient-test-provider
+               (:include llm-standard-chat-provider))
+  chat-model
+  url)
 
 (ert-deftest test-ellama-fill-transient-ollama-model-populates-fields ()
   (let ((provider (make-llm-ollama
@@ -95,6 +101,20 @@
     (should (equal ellama-transient-model-name "LFM2.5"))
     (should (= ellama-transient-temperature 0.4))
     (should (equal ellama-transient-url "http://127.0.0.1:8000/v1"))))
+
+(ert-deftest test-ellama-fill-transient-model-generic-provider ()
+  (let ((provider (make-ellama-transient-test-provider
+                   :chat-model "generic-model"
+                   :url "http://127.0.0.1:9000"
+                   :default-chat-temperature 0.25))
+        (ellama-transient-model-name "")
+        (ellama-transient-temperature 0.7)
+        (ellama-transient-url nil))
+    (ellama-fill-transient-model provider)
+    (should (eq ellama-transient-provider provider))
+    (should (equal ellama-transient-model-name "generic-model"))
+    (should (= ellama-transient-temperature 0.25))
+    (should (equal ellama-transient-url "http://127.0.0.1:9000"))))
 
 (ert-deftest test-ellama-transient-reset-model-fields-and-descriptions ()
   (let ((ellama-transient-model-name "model")
@@ -234,6 +254,30 @@
                      "http://old/v1"))
       (should (let ((key (llm-openai-compatible-key provider)))
                 (equal (if (functionp key) (funcall key) key) "secret"))))))
+
+(ert-deftest test-ellama-construct-provider-from-transient-generic-provider ()
+  (let ((base (make-ellama-transient-test-provider
+               :chat-model "old-model"
+               :url "http://old"
+               :default-chat-temperature 0.1))
+        (ellama-transient-model-name "new-model")
+        (ellama-transient-temperature 0.8)
+        (ellama-transient-url "http://new")
+        (ellama-transient-provider nil))
+    (let ((provider (ellama-construct-provider-from-transient base)))
+      (should (ellama-transient-test-provider-p provider))
+      (should-not (eq provider base))
+      (should (equal (ellama-transient-test-provider-chat-model provider)
+                     "new-model"))
+      (should (equal (ellama-transient-test-provider-url provider)
+                     "http://new"))
+      (should (= (ellama-transient-test-provider-default-chat-temperature
+                  provider)
+                 0.8))
+      (should (equal (ellama-transient-test-provider-chat-model base)
+                     "old-model"))
+      (should (equal (ellama-transient-test-provider-url base)
+                     "http://old")))))
 
 (ert-deftest test-ellama-transient-provider-candidates-hide-provider-values ()
   (let* ((secret "transient-secret")

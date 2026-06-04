@@ -295,12 +295,13 @@ File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Top
      using Ellama.
    • ‘ellama-provider-select’: Select ellama provider.
    • ‘ellama-select-model’: Change the current provider model
-     interactively.  The model transient supports Ollama and
-     OpenAI-compatible providers, including URL editing for compatible
-     APIs.  It can also set the maximum number of output tokens.  Use
-     "Reset model fields" to clear model, temperature, context-length,
-     and max-token overrides and let the provider use its defaults;
-     reset values are shown as ‘default’ in the transient.
+     interactively.  The model transient supports Ollama,
+     OpenAI-compatible providers, and providers with a ‘chat-model’
+     slot.  URL editing is available when the provider has a ‘url’ slot.
+     It can also set the maximum number of output tokens.  Use "Reset
+     model fields" to clear model, temperature, context-length, and
+     max-token overrides and let the provider use its defaults; reset
+     values are shown as ‘default’ in the transient.
    • ‘ellama-code-complete’: Complete selected code or code in the
      current buffer according to a provided change using Ellama.
    • ‘ellama-code-add’: Generate and insert new code based on
@@ -2652,47 +2653,47 @@ Tag Table:
 Node: Top1379
 Node: Installation3973
 Node: Commands8987
-Node: Keymap18270
-Node: Configuration21157
-Node: Session Provider Keys37730
-Node: Session Compaction39591
-Node: Image Input41885
-Node: Task Tool Subagents44030
-Node: Plan-and-Act Agent Loop47204
-Node: Edit Tool Shell Hooks49785
-Node: DLP for Tool Input/Output52078
-Node: SRT Filesystem Policy for Tools68077
-Node: Context Management73746
-Node: Transient Menus for Context Management74814
-Node: Managing the Context76493
-Node: Considerations77268
-Node: Minor modes77861
-Node: ellama-context-header-line-mode79849
-Node: ellama-context-header-line-global-mode80674
-Node: ellama-context-mode-line-mode81394
-Node: ellama-context-mode-line-global-mode82242
-Node: Ellama Session Header Line Mode82946
-Node: Enabling and Disabling83515
-Node: Customization83962
-Node: Ellama Session Mode Line Mode84250
-Node: Enabling and Disabling (1)84835
-Node: Customization (1)85282
-Node: Using Blueprints85576
-Node: Key Components of Ellama Blueprints86216
-Node: Creating and Managing Blueprints86823
-Node: Blueprints files87801
-Node: Variable Management88222
-Node: Keymap and Mode88675
-Node: Transient Menus89611
-Node: Running Blueprints programmatically90157
-Node: MCP Integration90744
-Node: Agent Skills91979
-Node: Directory Structure92342
-Node: Creating a Skill93369
-Node: How it works93744
-Node: Acknowledgments94135
-Node: Contributions94846
-Node: GNU Free Documentation License95520
+Node: Keymap18338
+Node: Configuration21225
+Node: Session Provider Keys37798
+Node: Session Compaction39659
+Node: Image Input41953
+Node: Task Tool Subagents44098
+Node: Plan-and-Act Agent Loop47272
+Node: Edit Tool Shell Hooks49853
+Node: DLP for Tool Input/Output52146
+Node: SRT Filesystem Policy for Tools68145
+Node: Context Management73814
+Node: Transient Menus for Context Management74882
+Node: Managing the Context76561
+Node: Considerations77336
+Node: Minor modes77929
+Node: ellama-context-header-line-mode79917
+Node: ellama-context-header-line-global-mode80742
+Node: ellama-context-mode-line-mode81462
+Node: ellama-context-mode-line-global-mode82310
+Node: Ellama Session Header Line Mode83014
+Node: Enabling and Disabling83583
+Node: Customization84030
+Node: Ellama Session Mode Line Mode84318
+Node: Enabling and Disabling (1)84903
+Node: Customization (1)85350
+Node: Using Blueprints85644
+Node: Key Components of Ellama Blueprints86284
+Node: Creating and Managing Blueprints86891
+Node: Blueprints files87869
+Node: Variable Management88290
+Node: Keymap and Mode88743
+Node: Transient Menus89679
+Node: Running Blueprints programmatically90225
+Node: MCP Integration90812
+Node: Agent Skills92047
+Node: Directory Structure92410
+Node: Creating a Skill93437
+Node: How it works93812
+Node: Acknowledgments94203
+Node: Contributions94914
+Node: GNU Free Documentation License95588
 
 End Tag Table
 
