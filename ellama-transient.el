@@ -38,7 +38,7 @@
 
 (defcustom ellama-transient-system-show-limit 45
   "Maximum length of system message to show."
-  :type 'ingeger
+  :type 'integer
   :group 'ellama)
 
 (defvaralias 'ellama-transient-ollama-model-name
@@ -57,6 +57,10 @@
                   (image prompt &optional create-session &rest args))
 (declare-function ellama-chat-with-image "ellama"
                   (image prompt &optional create-session &rest args))
+(declare-function ellama--provider-slot-offset "ellama" (provider slot))
+(declare-function ellama--provider-slot-value "ellama" (provider slot))
+(declare-function ellama--provider-with-slot-value "ellama"
+                  (provider slot value))
 
 (defun ellama-transient-system-show ()
   "Show transient system message."
@@ -255,8 +259,8 @@ strings, because they may contain API keys."
                                  (format "Port (%s)" ellama-transient-port)
                                "Port")))
     ("u" "Set URL" ellama-transient-set-url
-     :if (lambda () (ellama-transient--openai-compatible-provider-p
-                     ellama-transient-provider))
+     :if (lambda () (ellama-transient--provider-slot-present-p
+                     ellama-transient-provider 'url))
      :transient t
      :description (lambda () (if ellama-transient-url
                                  (format "URL (%s)" ellama-transient-url)
@@ -320,6 +324,11 @@ FORMAT is used for non-default VALUE."
        (fboundp 'llm-openai-p)
        (llm-openai-p provider)))
 
+(defun ellama-transient--provider-slot-present-p (provider slot)
+  "Return non-nil when PROVIDER has SLOT."
+  (and provider
+       (ellama--provider-slot-offset provider slot)))
+
 (defun ellama-transient--alist (value)
   "Return VALUE as an alist."
   (cond
@@ -369,7 +378,18 @@ FORMAT is used for non-default VALUE."
    ((ellama-transient--openai-compatible-provider-p provider)
     (llm-openai-compatible-chat-model provider))
    ((ellama-transient--openai-provider-p provider)
-    (llm-openai-chat-model provider))))
+    (llm-openai-chat-model provider))
+   ((ellama-transient--provider-slot-present-p provider 'chat-model)
+    (ellama--provider-slot-value provider 'chat-model))))
+
+(defun ellama-transient--provider-url (provider)
+  "Return API URL from PROVIDER."
+  (declare-function llm-openai-compatible-url "ext:llm-openai")
+  (cond
+   ((ellama-transient--openai-compatible-provider-p provider)
+    (llm-openai-compatible-url provider))
+   ((ellama-transient--provider-slot-present-p provider 'url)
+    (ellama--provider-slot-value provider 'url))))
 
 (defun ellama-transient--provider-models (provider)
   "Return available chat models for PROVIDER."
@@ -411,14 +431,12 @@ FORMAT is used for non-default VALUE."
 
 (defun ellama-fill-transient-model (provider)
   "Set transient model fields from PROVIDER."
-  (declare-function llm-openai-compatible-url "ext:llm-openai")
   (setq ellama-transient-provider provider)
   (when-let ((model (ellama-transient--provider-model provider)))
     (setq ellama-transient-model-name model))
   (setq ellama-transient-temperature
         (ellama-transient--standard-temperature provider))
-  (when (ellama-transient--openai-compatible-provider-p provider)
-    (setq ellama-transient-url (llm-openai-compatible-url provider)))
+  (setq ellama-transient-url (ellama-transient--provider-url provider))
   (ellama-transient--fill-ollama provider))
 
 (defalias 'ellama-fill-transient-ollama-model
@@ -496,6 +514,20 @@ FORMAT is used for non-default VALUE."
           (ellama-transient--effective-model provider))))
   provider)
 
+(defun ellama-transient--set-generic-provider-fields (provider)
+  "Set generic PROVIDER fields from transient."
+  (when (ellama-transient--provider-slot-present-p provider 'chat-model)
+    (setq provider
+          (ellama--provider-with-slot-value
+           provider 'chat-model
+           (ellama-transient--effective-model provider))))
+  (when (and ellama-transient-url
+             (ellama-transient--provider-slot-present-p provider 'url))
+    (setq provider
+          (ellama--provider-with-slot-value
+           provider 'url ellama-transient-url)))
+  provider)
+
 (defun ellama-construct-provider-from-transient (&optional base-provider)
   "Make provider from transient menu using BASE-PROVIDER."
   (declare-function make-llm-ollama "ext:llm-ollama")
@@ -514,6 +546,9 @@ FORMAT is used for non-default VALUE."
            ((not base-provider)
             (require 'llm-ollama)
             (make-llm-ollama))
+           ((or (recordp base-provider)
+                (vectorp base-provider))
+            (copy-sequence base-provider))
            (t
             (error "Provider type does not support transient model changes")))))
     (ellama-transient--set-standard-temperature provider)
@@ -522,7 +557,10 @@ FORMAT is used for non-default VALUE."
       (ellama-transient--set-ollama-fields provider))
      ((or (ellama-transient--openai-compatible-provider-p provider)
           (ellama-transient--openai-provider-p provider))
-      (ellama-transient--set-openai-fields provider)))
+      (ellama-transient--set-openai-fields provider))
+     (t
+      (setq provider
+            (ellama-transient--set-generic-provider-fields provider))))
     provider))
 
 (defun ellama-construct-ollama-provider-from-transient ()
@@ -842,7 +880,7 @@ ARGS used for transient arguments."
    ("-e" "Create Ephemeral Session" "--ephemeral")]
   ["Main"
    [("c" "Chat" ellama-transient-chat)
-    ("i" "Chat with image" ellama-transient-chat-with-image)
+    ("I" "Chat with image" ellama-transient-chat-with-image)
     ("b" "Chat with blueprint" ellama-blueprint-select)
     ("B" "Blueprint Commands" ellama-transient-blueprint-menu)
     ("T" "Tools Commands" ellama-transient-tools-menu)]

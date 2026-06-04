@@ -87,6 +87,28 @@ Block output for a specific tool in enforce mode:
          :action block)))
 ```
 
+## Trusted Read-File Outputs
+
+Use `ellama-tools-dlp-safe-read-file-regexps` for source files whose
+`read_file` output is trusted and should not prompt on every autonomous-agent
+read.  The setting matches canonical file names and skips only output DLP for
+file-reading tools.  Input DLP, outputs from other tools, irreversible checks,
+`srt` filesystem checks, and output line-budget truncation still apply.
+
+By default, Ellama marks the loaded Ellama source files safe:
+`ellama.el`, `ellama-tools.el`, and other top-level `ellama-*.el` files in the
+same directory.
+
+Example for a source checkout:
+
+```elisp
+(setq ellama-tools-dlp-safe-read-file-regexps
+      (list (concat "\\`"
+                    (regexp-quote
+                     (file-truename "/path/to/ellama/"))
+                    "ellama\\(?:-[[:alnum:]-]+\\)?\\.el\\'")))
+```
+
 ## Suggested Enforcement Progression
 
 1. `monitor` globally with logging enabled.

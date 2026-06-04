@@ -1,3 +1,38 @@
+* Version 1.27.0
+
+- Added ~ellama-undo-on-error~. Users can now choose whether failed LLM requests
+  roll back partial buffer changes or leave the generated text in place.
+- Made plan-and-act and subagent loops more resilient after LLM failures. The
+  loops continue after the first error, compact the session after repeated
+  errors, resume after successful compaction, and stop cleanly when compaction
+  cannot recover the session.
+- Made subagent tool errors part of the conversation instead of aborting the
+  provider tool-use path. Synchronous and asynchronous tool failures are now
+  returned as tool results so the worker can inspect the error and keep going.
+- Added preflight session compaction before oversized requests are sent. This
+  covers regular ~ellama-stream~ calls and plan-and-act controller turns, and it
+  resumes the deferred request in the target session buffer after compaction.
+- Changed edit tools to use asynchronous hook handling. Hooks no longer block
+  the Emacs UI, while agents still receive the tool result only after the hooks
+  have finished.
+- Tightened project checks. Byte and native compiler warnings now fail ~make
+  check-elisp~, README custom-variable coverage is checked, and documented
+  public commands are checked against real interactive commands.
+- Added configurable trusted read-file handling for DLP. Prompt-injection scans
+  can be skipped for safe file-reading outputs without disabling DLP for other
+  tools.
+- Improved agent buffer updates. Agent prompts, controller continuations, plan
+  reports, and visible tool/status output now trigger the same auto-scrolling
+  behavior as normal chat insertions, and finished plan-and-act loops append the
+  next user heading.
+- Extended interactive model editing beyond Ollama and OpenAI-compatible
+  providers. The model transient can now read and update providers with a
+  generic ~chat-model~ slot, and URL editing is available for providers with a
+  ~url~ slot.
+- Refreshed the documentation for the current agent, DLP, compaction, provider,
+  skill, blueprint, and tooling behavior. The chat-with-image transient key was
+  also moved from ~i~ to ~I~ to avoid a key conflict.
+
 * Version 1.26.0
 
 - Auto-fix unexpected closing delimiters in file edits. When syntax validation

@@ -10,14 +10,14 @@ Based on the output write changelog in org-mode list format. Use org quoting
 (~quoted-text~) instead of markdown quoting (`quoted-text`). Every changelog
 element should be ended with full stop. Changelog shouldn't be too short or too
 long, use detailed description for major changes and concise description for
-minor changes.
+minor changes. Humanize it before writing using **humanize-writing** skill.
 
 Call shell_command tools with "git --no-pager tag -l --points-at=main" argument
 to see previously released version. Based on this information and
 minority/majority of the changes you can fill version variable. If you are not
 sure, ask the user using ask_user tool with your variants of the version.
 
-Write it to ./NEWS.org using prepend_file tool
+Write it to ./NEWS.org using **prepend_file** tool
 with header:
 
 * Version {version}

@@ -320,6 +320,30 @@ STYLE controls partial message shape.  Default value is `word-leading'."
      '((read_file . "\"one\\ntwo\"")))
     "read_file\n  one\n  two")))
 
+(ert-deftest test-ellama-handle-partial-scrolls-tool-results ()
+  (let ((buffer (generate-new-buffer " *ellama-tool-results-test*"))
+        (reasoning-buffer (generate-new-buffer " *ellama-tool-reasoning-test*"))
+        (ellama-auto-scroll t)
+        (scroll-call nil))
+    (unwind-protect
+        (progn
+          (cl-letf (((symbol-function 'ellama--scroll)
+                     (lambda (&optional scroll-buffer point)
+                       (setq scroll-call (list scroll-buffer point)))))
+            (let ((insert-text (ellama--insert buffer nil #'identity)))
+              (funcall
+               (ellama--handle-partial insert-text #'ignore reasoning-buffer)
+               '(:tool-results ((read_file . "\"one\\ntwo\""))))))
+          (should (eq (car scroll-call) buffer))
+          (should (markerp (cadr scroll-call)))
+          (with-current-buffer buffer
+            (should (string-match-p "read_file" (buffer-string)))
+            (should (string-match-p "one" (buffer-string)))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (when (buffer-live-p reasoning-buffer)
+        (kill-buffer reasoning-buffer)))))
+
 (ert-deftest test-ellama-default-stream-filter-translates-org-think ()
   (with-temp-buffer
     (org-mode)
@@ -1060,7 +1084,8 @@ detailed comparison to help you decide:
                                        :prompt nil
                                        :extra '(:uid "agent-session-uid")))
          (session-buffer (generate-new-buffer " *ellama-agent-chat-test*"))
-         (stream-call nil))
+         (stream-call nil)
+         (scroll-call nil))
     (unwind-protect
         (progn
           (with-current-buffer session-buffer
@@ -1068,6 +1093,9 @@ detailed comparison to help you decide:
           (ellama--register-session session session-buffer t)
           (cl-letf (((symbol-function 'display-buffer)
                      (lambda (&rest _args) nil))
+                    ((symbol-function 'ellama--scroll)
+                     (lambda (&optional buffer point)
+                       (setq scroll-call (list buffer point))))
                     ((symbol-function 'ellama-stream)
                      (lambda (prompt &rest args)
                        (setq stream-call (list prompt args)))))
@@ -1075,6 +1103,7 @@ detailed comparison to help you decide:
           (should (equal (car stream-call) "Do work"))
           (should (eq (plist-get (cadr stream-call) :session)
                       session))
+          (should (functionp (plist-get (cadr stream-call) :on-error)))
           (should (functionp (plist-get (cadr stream-call) :on-done)))
           (should (string-match-p
                    "PLAN AND ACT INSTRUCTIONS"
@@ -1086,6 +1115,7 @@ detailed comparison to help you decide:
                      "agent_update_plan"
                      "agent_report_result"
                      "read_file")))
+          (should (eq (car scroll-call) session-buffer))
           (with-current-buffer session-buffer
             (let ((text (buffer-string)))
               (should (string-match-p "User:" text))
@@ -1139,6 +1169,7 @@ detailed comparison to help you decide:
                       session))
           (should (equal (plist-get (cadr stream-call) :system)
                          "Existing system"))
+          (should (functionp (plist-get (cadr stream-call) :on-error)))
           (should (functionp (plist-get (cadr stream-call) :on-done)))
           (should (equal (plist-get
                           (car (plist-get
@@ -1347,6 +1378,7 @@ detailed comparison to help you decide:
       (should (eq (plist-get (cadr stream-call) :session) session))
       (should (equal (plist-get (cadr stream-call) :system)
                      "Agent system"))
+      (should (functionp (plist-get (cadr stream-call) :on-error)))
       (should (functionp (plist-get (cadr stream-call) :on-done)))
       (should (not (eq (plist-get (cadr stream-call) :on-done)
                        #'ellama-chat-done)))
@@ -1453,6 +1485,73 @@ detailed comparison to help you decide:
 
 (ert-deftest test-ellama-session-auto-compact-enabled-by-default ()
   (should ellama-session-auto-compact-enabled))
+
+(ert-deftest test-ellama-stream-preflight-auto-compacts-before-request ()
+  (let* ((provider (make-llm-fake))
+         (session (ellama-test--compact-session provider))
+         (ellama-response-process-method 'async)
+         (ellama-spinner-enabled nil)
+         (ellama-session-auto-compact-enabled t)
+         (ellama-session-auto-compact-token-threshold 100)
+         (ellama-session-auto-compact-provider (make-llm-fake))
+         (ellama-session-auto-compact-keep-last-turns 2)
+         (ellama-session-auto-compact-show-message nil)
+         (ellama-session-hide-org-quotes nil)
+         (call-count 0)
+         compact-callback
+         main-prompt
+         done-text
+         target-buffer
+         callback-buffer)
+    (cl-letf (((symbol-function 'llm-count-tokens)
+               (lambda (_provider _text) 120))
+              ((symbol-function 'llm-chat-async)
+               (lambda (_provider prompt response-callback
+                                  _error-callback &optional _multi-output)
+                 (setq call-count (1+ call-count))
+                 (if (= call-count 1)
+                     (progn
+                       (setq compact-callback response-callback)
+                       'compact-request)
+                   (setq main-prompt prompt)
+                   'main-request))))
+      (unwind-protect
+          (progn
+            (setq target-buffer
+                  (generate-new-buffer " *ellama-preflight-target*"))
+            (setq callback-buffer
+                  (generate-new-buffer " *ellama-preflight-callback*"))
+            (with-current-buffer target-buffer
+              (setq-local ellama--current-session session)
+              (ellama-stream "continue after compaction"
+                             :session session
+                             :on-done (lambda (text)
+                                        (setq done-text text))))
+            (should (= call-count 1))
+            (should compact-callback)
+            (should (ellama--session-extra-get
+                     session :auto-compact-in-progress))
+            (should-not main-prompt)
+            (should-not done-text)
+            (with-current-buffer callback-buffer
+              (funcall compact-callback '(:text "Summary")))
+            (should (= call-count 2))
+            (should-not (ellama--session-extra-get
+                         session :auto-compact-in-progress))
+            (with-current-buffer target-buffer
+              (should (eq ellama--current-request 'main-request))
+              (should ellama--change-group))
+            (with-current-buffer callback-buffer
+              (should-not (eq ellama--current-request 'main-request))
+              (should-not ellama--change-group))
+            (should (eq main-prompt (ellama-session-prompt session)))
+            (should (string-match-p
+                     "continue after compaction"
+                     (llm-chat-prompt-to-text main-prompt))))
+        (when (buffer-live-p target-buffer)
+          (kill-buffer target-buffer))
+        (when (buffer-live-p callback-buffer)
+          (kill-buffer callback-buffer))))))
 
 (ert-deftest test-ellama-session-auto-compact-needed-above-threshold ()
   (let* ((provider (make-llm-fake))
@@ -2051,6 +2150,27 @@ detailed comparison to help you decide:
         (should (null error-captured))
         (should (equal done-text "Recovered answer"))
         (should (equal (buffer-string) "Recovered answer"))))))
+
+(ert-deftest test-ellama-error-handler-deactivates-before-on-error ()
+  (let ((ellama-spinner-enabled nil)
+        (ellama-undo-on-error nil)
+        (active-request-during-callback :unset))
+    (with-temp-buffer
+      (let* ((request-context (ellama--make-request-context
+                               (list (current-buffer))))
+             (handler (ellama--error-handler
+                       (current-buffer)
+                       (lambda (_msg)
+                         (setq active-request-during-callback
+                               ellama--current-request))
+                       nil nil request-context)))
+        (setq ellama--change-group (prepare-change-group))
+        (activate-change-group ellama--change-group)
+        (ellama--set-current-request
+         'request (list (current-buffer)) request-context)
+        (funcall handler 'error "temporary failure")
+        (should (null active-request-during-callback))
+        (should (null ellama--current-request))))))
 
 (ert-deftest test-ellama-normalize-tool-use-args-decodes-unibyte-json ()
   (let* ((raw-json

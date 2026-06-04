@@ -47,6 +47,7 @@
 (declare-function ellama-get-session-buffer "ellama" (id))
 (declare-function ellama-get-nick-prefix-for-mode "ellama" ())
 (declare-function ellama--fill-long-lines "ellama" (string))
+(declare-function ellama--scroll "ellama" (&optional buffer point))
 (declare-function ellama-image-file-p "ellama" (file-name))
 (declare-function ellama--image-mime-type "ellama" (file-name))
 (declare-function ellama--file-size "ellama" (file-name))
@@ -58,6 +59,7 @@
 (defvar ellama-provider)
 (defvar ellama-coding-provider)
 (defvar ellama-assistant-nick)
+(defvar ellama-user-nick)
 (defvar ellama--current-session)
 (defvar ellama--current-session-id)
 
@@ -198,6 +200,21 @@ Use `image' to force image handling."
                  (const text)
                  (const image))
   :group 'ellama)
+
+(defcustom ellama-tools-dlp-safe-read-file-regexps
+  (let* ((base-file (or load-file-name buffer-file-name default-directory))
+         (base-dir (file-name-directory (expand-file-name base-file)))
+         (safe-dir (condition-case nil
+                       (file-truename base-dir)
+                     (file-error base-dir))))
+    (list (concat "\\`"
+                  (regexp-quote safe-dir)
+                  "ellama\\(?:-[[:alnum:]-]+\\)?\\.el\\'")))
+  "Regexps matching file names whose read outputs skip DLP scans.
+Only output scans from file-reading tools are skipped.  Input scans and
+outputs from all other tools still use DLP."
+  :type '(repeat regexp)
+  :group 'ellama-tools-dlp)
 
 (defcustom ellama-tools-shell-command-default-timeout 5
   "Default timeout in seconds for the `shell_command' tool."
@@ -633,6 +650,23 @@ TOOL-METADATA may include `:tool-origin', `:server-id' and
     (list :kind kind
           :path (expand-file-name path))))
 
+(defun ellama-tools--canonical-file-name-for-dlp (file-name)
+  "Return canonical FILE-NAME for DLP matching, or nil."
+  (when (and (stringp file-name) (not (string-empty-p file-name)))
+    (let ((expanded (expand-file-name file-name)))
+      (condition-case nil
+          (file-truename expanded)
+        (file-error expanded)))))
+
+(defun ellama-tools--dlp-safe-read-file-p (file-name)
+  "Return non-nil when FILE-NAME is safe for read-output DLP scans."
+  (when-let* ((path (ellama-tools--canonical-file-name-for-dlp file-name)))
+    (seq-some
+     (lambda (regexp)
+       (and (stringp regexp)
+            (string-match-p regexp path)))
+     ellama-tools-dlp-safe-read-file-regexps)))
+
 (defun ellama-tools--tool-output-source-info (tool-name values)
   "Return source info plist for TOOL-NAME using VALUES."
   (pcase tool-name
@@ -649,9 +683,13 @@ TOOL-METADATA may include `:tool-origin', `:server-id' and
   "Build output context plist from TOOL-PLIST and CALL-ARGS."
   (let* ((tool-name (plist-get tool-plist :name))
          (async (plist-get tool-plist :async))
-         (values (ellama-tools--tool-call-values async call-args)))
-    (list :source-info (ellama-tools--tool-output-source-info
-                        tool-name values))))
+         (values (ellama-tools--tool-call-values async call-args))
+         (source-info (ellama-tools--tool-output-source-info
+                       tool-name values)))
+    (list :source-info source-info
+          :skip-dlp-output (and (eq (plist-get source-info :kind) 'file)
+                                (ellama-tools--dlp-safe-read-file-p
+                                 (plist-get source-info :path))))))
 
 (defun ellama-tools--parse-json-string-value (text)
   "Return decoded JSON string from TEXT, or nil when decode fails."
@@ -879,12 +917,18 @@ TOOL-METADATA may provide identity fields for scan context."
       (_
        text))))
 
+(defun ellama-tools--skip-output-dlp-p (output-context)
+  "Return non-nil when OUTPUT-CONTEXT should disable output DLP."
+  (plist-get output-context :skip-dlp-output))
+
 (defun ellama-tools--postprocess-output-string
     (tool-name text &optional output-context tool-metadata)
   "Apply output guard and DLP filtering for TOOL-NAME TEXT.
 Use OUTPUT-CONTEXT to control budget notices and overflow metadata.
 TOOL-METADATA may provide tool identity details for DLP scans."
-  (let ((dlp-filtered (if ellama-tools-dlp-enabled
+  (let ((dlp-filtered (if (and ellama-tools-dlp-enabled
+                               (not (ellama-tools--skip-output-dlp-p
+                                     output-context)))
                           (ellama-tools--dlp-handle-output-string
                            tool-name text tool-metadata)
                         text)))
@@ -933,7 +977,9 @@ TOOL-METADATA may provide tool identity details for DLP scans."
          (output-context (plist-get section :output-context))
          (section-tool-name (format "%s/%s" tool-name kind))
          (dlp-filtered
-          (if (and scan-output ellama-tools-dlp-enabled)
+          (if (and scan-output
+                   ellama-tools-dlp-enabled
+                   (not (ellama-tools--skip-output-dlp-p output-context)))
               (ellama-tools--dlp-handle-output-string
                section-tool-name text tool-metadata)
             text)))
@@ -2565,19 +2611,31 @@ describe the edit."
     (format "ELLAMA_HOOK_NAME=%s" (or (plist-get spec :name) "")))
    (ellama-tools--process-environment-with-cat-pager)))
 
+(defun ellama-tools--edit-shell-hook-result
+    (phase command name status output show-output)
+  "Return edit shell hook result plist.
+PHASE, COMMAND, NAME, STATUS, OUTPUT and SHOW-OUTPUT describe one hook run."
+  (list :phase phase
+        :command command
+        :name name
+        :status status
+        :output output
+        :show-output show-output))
+
 (defun ellama-tools--run-edit-shell-hook
-    (phase file-name operation tool-name spec)
-  "Run edit shell hook SPEC for PHASE and FILE-NAME.
-OPERATION and TOOL-NAME describe the edit.  Return result plist."
+    (phase file-name operation tool-name spec callback)
+  "Run edit shell hook SPEC asynchronously and call CALLBACK with result.
+PHASE, FILE-NAME, OPERATION and TOOL-NAME describe the edit."
   (let* ((hook (ellama-tools--edit-shell-hook-normalize spec))
          (command (plist-get hook :command))
          (error-message (plist-get hook :error))
+         (name (plist-get hook :name))
+         (show-output (plist-get hook :show-output))
          (root (ellama-tools--edit-project-root file-name)))
     (if error-message
-        (list :phase phase
-              :status 1
-              :output error-message
-              :show-output t)
+        (funcall callback
+                 (ellama-tools--edit-shell-hook-result
+                  phase nil nil 1 error-message t))
       (let* ((default-directory (file-name-as-directory root))
              (process-environment
               (ellama-tools--edit-shell-hook-env
@@ -2586,26 +2644,44 @@ OPERATION and TOOL-NAME describe the edit.  Return result plist."
                     shell-file-name
                     shell-command-switch
                     (concat "exec 2>&1; " command)))
-             status
-             output)
+             (buffer (generate-new-buffer " *ellama-edit-hook*"))
+             process)
         (condition-case err
-            (with-temp-buffer
-              (setq status
-                    (apply #'call-process
-                           (car argv) nil t nil (cdr argv)))
-              (setq output
-                    (string-trim-right (buffer-string) "\n")))
+            (progn
+              (setq process
+                    (make-process
+                     :name "ellama-edit-hook"
+                     :buffer buffer
+                     :command argv
+                     :noquery t
+                     :sentinel
+                     (lambda (proc _event)
+                       (when (memq (process-status proc) '(exit signal))
+                         (let* ((status (process-exit-status proc))
+                                (output
+                                 (if (buffer-live-p buffer)
+                                     (with-current-buffer buffer
+                                       (string-trim-right
+                                        (buffer-string) "\n"))
+                                   "")))
+                           (when (buffer-live-p buffer)
+                             (kill-buffer buffer))
+                           (funcall
+                            callback
+                            (ellama-tools--edit-shell-hook-result
+                             phase command name status output
+                             show-output)))))))
+              (set-process-query-on-exit-flag process nil))
           (error
-           (setq status 1)
-           (setq output
-                 (format "Failed to run edit shell hook: %s"
-                         (error-message-string err)))))
-        (list :phase phase
-              :command command
-              :name (plist-get hook :name)
-              :status status
-              :output output
-              :show-output (plist-get hook :show-output))))))
+           (when (buffer-live-p buffer)
+             (kill-buffer buffer))
+           (funcall
+            callback
+            (ellama-tools--edit-shell-hook-result
+             phase command name 1
+             (format "Failed to run edit shell hook: %s"
+                     (error-message-string err))
+             show-output))))))))
 
 (defun ellama-tools--edit-shell-hook-failed-p (result)
   "Return non-nil when edit shell hook RESULT fail."
@@ -2652,25 +2728,37 @@ OPERATION and TOOL-NAME describe the edit.  Return result plist."
    nil))
 
 (defun ellama-tools--run-edit-shell-hooks
-    (phase file-name operation tool-name)
-  "Run edit shell hooks for PHASE and FILE-NAME.
-OPERATION and TOOL-NAME describe the edit.  Before hooks stop on the first
-failure.  After hooks run all commands."
-  (let ((hooks (ellama-tools--edit-shell-hooks-for-file file-name phase))
-        sections
-        failed)
-    (catch 'blocked
-      (dolist (hook hooks)
-        (let ((result (ellama-tools--run-edit-shell-hook
-                       phase file-name operation tool-name hook)))
-          (when (ellama-tools--edit-shell-hook-visible-p result)
-            (push (ellama-tools--edit-shell-hook-section tool-name result)
-                  sections))
-          (when (ellama-tools--edit-shell-hook-failed-p result)
-            (setq failed t)
-            (when (eq phase 'before)
-              (throw 'blocked nil))))))
-    (list :failed failed :sections (nreverse sections))))
+    (phase file-name operation tool-name callback)
+  "Run edit shell hooks asynchronously and call CALLBACK with result.
+PHASE, FILE-NAME, OPERATION and TOOL-NAME describe the edit.  Before hooks
+stop on the first failure.  After hooks run all commands."
+  (let ((hooks (ellama-tools--edit-shell-hooks-for-file file-name phase)))
+    (cl-labels
+        ((run
+           (remaining sections failed)
+           (if (not remaining)
+               (funcall callback
+                        (list :failed failed
+                              :sections (nreverse sections)))
+             (ellama-tools--run-edit-shell-hook
+              phase file-name operation tool-name (car remaining)
+              (lambda (result)
+                (let ((next-sections sections)
+                      (next-failed failed))
+                  (when (ellama-tools--edit-shell-hook-visible-p result)
+                    (push (ellama-tools--edit-shell-hook-section
+                           tool-name result)
+                          next-sections))
+                  (when (ellama-tools--edit-shell-hook-failed-p result)
+                    (setq next-failed t))
+                  (if (and next-failed (eq phase 'before))
+                      (funcall callback
+                               (list :failed t
+                                     :sections (nreverse next-sections)))
+                    (run (cdr remaining)
+                         next-sections
+                         next-failed))))))))
+      (run hooks nil nil))))
 
 (defun ellama-tools--refresh-file-buffer-after-hooks (file-name)
   "Refresh unmodified visiting buffer for FILE-NAME after shell hooks."
@@ -2696,22 +2784,27 @@ BEFORE-SECTIONS and AFTER-SECTIONS are visible shell hook output sections."
       main-message)))
 
 (defun ellama-tools--run-edit-with-shell-hooks
-    (tool-name operation file-name edit-fn success-message)
-  "Run edit shell hooks around EDIT-FN for FILE-NAME.
-TOOL-NAME and OPERATION describe the edit.  SUCCESS-MESSAGE is returned on
-successful edit, optionally combined with visible hook output."
-  (let* ((before (ellama-tools--run-edit-shell-hooks
-                  'before file-name operation tool-name))
-         (before-sections (plist-get before :sections)))
-    (if (plist-get before :failed)
-        (ellama-tools--sectioned-output before-sections)
-      (funcall edit-fn)
-      (let* ((after (ellama-tools--run-edit-shell-hooks
-                     'after file-name operation tool-name))
-             (after-sections (plist-get after :sections)))
-        (ellama-tools--refresh-file-buffer-after-hooks file-name)
-        (ellama-tools--edit-output
-         success-message before-sections after-sections)))))
+    (tool-name operation file-name edit-fn success-message callback)
+  "Run edit shell hooks asynchronously and call CALLBACK with result.
+TOOL-NAME, OPERATION, FILE-NAME, EDIT-FN and SUCCESS-MESSAGE describe the
+edit.  CALLBACK receives the final tool output after all relevant hooks finish."
+  (ellama-tools--run-edit-shell-hooks
+   'before file-name operation tool-name
+   (lambda (before)
+     (let ((before-sections (plist-get before :sections)))
+       (if (plist-get before :failed)
+           (funcall callback
+                    (ellama-tools--sectioned-output before-sections))
+         (funcall edit-fn)
+         (ellama-tools--run-edit-shell-hooks
+          'after file-name operation tool-name
+          (lambda (after)
+            (let ((after-sections (plist-get after :sections)))
+              (ellama-tools--refresh-file-buffer-after-hooks file-name)
+              (funcall
+               callback
+               (ellama-tools--edit-output
+                success-message before-sections after-sections))))))))))
 
 (defun ellama-tools--current-file-content (file-name)
   "Return current FILE-NAME content, or an empty string when missing.
@@ -2726,47 +2819,57 @@ buffer contents, matching their historical behavior."
           (buffer-string))
       "")))
 
-(defun ellama-tools-write-file-tool (file-name content)
-  "Write CONTENT to the file FILE-NAME."
-  (or (ellama-tools--tool-check-file-access file-name 'write)
-      (ellama-tools--file-parent-directory-error-message "write" file-name)
-      (when (file-directory-p file-name)
-        (format "Cannot write %s: path is a directory." file-name))
-      (ellama-tools--read-before-write-check "Write" file-name)
-      (condition-case err
-          (let* ((original (when (file-exists-p file-name)
-                             (ellama-tools--current-file-content file-name)))
-                 (decision
-                  (ellama-tools--balanced-edit-check-candidate
-                   "Write" file-name content original nil content))
-                 (rejection (plist-get decision :rejection))
-                 (auto-fixed (plist-get decision :auto-fixed))
-                 (fixed-text (plist-get decision :fixed-text))
-                 (text-to-write (if (and auto-fixed fixed-text)
-                                    fixed-text
-                                  content)))
-            (if rejection
-                rejection
-              (ellama-tools--run-edit-with-shell-hooks
-               "write_file" "write" file-name
-               (lambda ()
-                 (ellama-tools--write-file-buffer-content
-                  file-name text-to-write))
-               (format "Wrote %d characters to %s%s."
-                       (length content)
-                       file-name
-                       (ellama-tools--balanced-edit-success-suffix
-                        decision)))))
-        (file-error
-         (format "Cannot write %s: %s"
-                 file-name
-                 (error-message-string err))))))
+(defun ellama-tools-write-file-tool (callback file-name content)
+  "Write CONTENT to FILE-NAME and call CALLBACK with the result."
+  (let ((result
+         (or (ellama-tools--tool-check-file-access file-name 'write)
+             (ellama-tools--file-parent-directory-error-message
+              "write" file-name)
+             (when (file-directory-p file-name)
+               (format "Cannot write %s: path is a directory." file-name))
+             (ellama-tools--read-before-write-check "Write" file-name)
+             (condition-case err
+                 (let* ((original (when (file-exists-p file-name)
+                                    (ellama-tools--current-file-content
+                                     file-name)))
+                        (decision
+                         (ellama-tools--balanced-edit-check-candidate
+                          "Write" file-name content original nil content))
+                        (rejection (plist-get decision :rejection))
+                        (auto-fixed (plist-get decision :auto-fixed))
+                        (fixed-text (plist-get decision :fixed-text))
+                        (text-to-write (if (and auto-fixed fixed-text)
+                                           fixed-text
+                                         content)))
+                   (if rejection
+                       rejection
+                     (ellama-tools--run-edit-with-shell-hooks
+                      "write_file" "write" file-name
+                      (lambda ()
+                        (ellama-tools--write-file-buffer-content
+                         file-name text-to-write))
+                      (format "Wrote %d characters to %s%s."
+                              (length content)
+                              file-name
+                              (ellama-tools--balanced-edit-success-suffix
+                               decision))
+                      callback)
+                     nil))
+               (file-error
+                (format "Cannot write %s: %s"
+                        file-name
+                        (error-message-string err)))))))
+    (when result
+      (funcall callback result)))
+  nil)
 
 (ellama-tools-define-tool
  '(:function
    ellama-tools-write-file-tool
    :name
    "write_file"
+   :async
+   t
    :args
    ((:name
      "file_name"
@@ -2783,47 +2886,57 @@ buffer contents, matching their historical behavior."
    :description
    "Write CONTENT to the file FILE_NAME."))
 
-(defun ellama-tools-append-file-tool (file-name content)
-  "Append CONTENT to the file FILE-NAME."
-  (or (ellama-tools--tool-check-file-access file-name 'write)
-      (ellama-tools--file-parent-directory-error-message "append to" file-name)
-      (when (file-directory-p file-name)
-        (format "Cannot append to %s: path is a directory." file-name))
-      (ellama-tools--read-before-write-check "Append" file-name)
-      (condition-case err
-          (let* ((original (ellama-tools--current-file-content file-name))
-                 (candidate (concat original content))
-                 (decision
-                  (ellama-tools--balanced-edit-check-candidate
-                   "Append" file-name candidate original nil content))
-                 (rejection (plist-get decision :rejection))
-                 (auto-fixed (plist-get decision :auto-fixed))
-                 (fixed-text (plist-get decision :fixed-text))
-                 (text-to-write (if (and auto-fixed fixed-text)
-                                    fixed-text
-                                  candidate)))
-            (if rejection
-                rejection
-              (ellama-tools--run-edit-with-shell-hooks
-               "append_file" "append" file-name
-               (lambda ()
-                 (ellama-tools--write-file-buffer-content
-                  file-name text-to-write))
-               (format "Appended %d characters to %s%s."
-                       (length content)
-                       file-name
-                       (ellama-tools--balanced-edit-success-suffix
-                        decision)))))
-        (file-error
-         (format "Cannot append to %s: %s"
-                 file-name
-                 (error-message-string err))))))
+(defun ellama-tools-append-file-tool (callback file-name content)
+  "Append CONTENT to FILE-NAME and call CALLBACK with the result."
+  (let ((result
+         (or (ellama-tools--tool-check-file-access file-name 'write)
+             (ellama-tools--file-parent-directory-error-message
+              "append to" file-name)
+             (when (file-directory-p file-name)
+               (format "Cannot append to %s: path is a directory." file-name))
+             (ellama-tools--read-before-write-check "Append" file-name)
+             (condition-case err
+                 (let* ((original
+                         (ellama-tools--current-file-content file-name))
+                        (candidate (concat original content))
+                        (decision
+                         (ellama-tools--balanced-edit-check-candidate
+                          "Append" file-name candidate original nil content))
+                        (rejection (plist-get decision :rejection))
+                        (auto-fixed (plist-get decision :auto-fixed))
+                        (fixed-text (plist-get decision :fixed-text))
+                        (text-to-write (if (and auto-fixed fixed-text)
+                                           fixed-text
+                                         candidate)))
+                   (if rejection
+                       rejection
+                     (ellama-tools--run-edit-with-shell-hooks
+                      "append_file" "append" file-name
+                      (lambda ()
+                        (ellama-tools--write-file-buffer-content
+                         file-name text-to-write))
+                      (format "Appended %d characters to %s%s."
+                              (length content)
+                              file-name
+                              (ellama-tools--balanced-edit-success-suffix
+                               decision))
+                      callback)
+                     nil))
+               (file-error
+                (format "Cannot append to %s: %s"
+                        file-name
+                        (error-message-string err)))))))
+    (when result
+      (funcall callback result)))
+  nil)
 
 (ellama-tools-define-tool
  '(:function
    ellama-tools-append-file-tool
    :name
    "append_file"
+   :async
+   t
    :args
    ((:name
      "file_name"
@@ -2840,47 +2953,58 @@ buffer contents, matching their historical behavior."
    :description
    "Append CONTENT to the file FILE-NAME."))
 
-(defun ellama-tools-prepend-file-tool (file-name content)
-  "Prepend CONTENT to the file FILE-NAME."
-  (or (ellama-tools--tool-check-file-access file-name 'write)
-      (ellama-tools--file-parent-directory-error-message "prepend to" file-name)
-      (when (file-directory-p file-name)
-        (format "Cannot prepend to %s: path is a directory." file-name))
-      (ellama-tools--read-before-write-check "Prepend" file-name)
-      (condition-case err
-          (let* ((original (ellama-tools--current-file-content file-name))
-                 (candidate (concat content original))
-                 (decision
-                  (ellama-tools--balanced-edit-check-candidate
-                   "Prepend" file-name candidate original nil content))
-                 (rejection (plist-get decision :rejection))
-                 (auto-fixed (plist-get decision :auto-fixed))
-                 (fixed-text (plist-get decision :fixed-text))
-                 (text-to-write (if (and auto-fixed fixed-text)
-                                    fixed-text
-                                  candidate)))
-            (if rejection
-                rejection
-              (ellama-tools--run-edit-with-shell-hooks
-               "prepend_file" "prepend" file-name
-               (lambda ()
-                 (ellama-tools--write-file-buffer-content
-                  file-name text-to-write))
-               (format "Prepended %d characters to %s%s."
-                       (length content)
-                       file-name
-                       (ellama-tools--balanced-edit-success-suffix
-                        decision)))))
-        (file-error
-         (format "Cannot prepend to %s: %s"
-                 file-name
-                 (error-message-string err))))))
+(defun ellama-tools-prepend-file-tool (callback file-name content)
+  "Prepend CONTENT to FILE-NAME and call CALLBACK with the result."
+  (let ((result
+         (or (ellama-tools--tool-check-file-access file-name 'write)
+             (ellama-tools--file-parent-directory-error-message
+              "prepend to" file-name)
+             (when (file-directory-p file-name)
+               (format "Cannot prepend to %s: path is a directory."
+                       file-name))
+             (ellama-tools--read-before-write-check "Prepend" file-name)
+             (condition-case err
+                 (let* ((original
+                         (ellama-tools--current-file-content file-name))
+                        (candidate (concat content original))
+                        (decision
+                         (ellama-tools--balanced-edit-check-candidate
+                          "Prepend" file-name candidate original nil content))
+                        (rejection (plist-get decision :rejection))
+                        (auto-fixed (plist-get decision :auto-fixed))
+                        (fixed-text (plist-get decision :fixed-text))
+                        (text-to-write (if (and auto-fixed fixed-text)
+                                           fixed-text
+                                         candidate)))
+                   (if rejection
+                       rejection
+                     (ellama-tools--run-edit-with-shell-hooks
+                      "prepend_file" "prepend" file-name
+                      (lambda ()
+                        (ellama-tools--write-file-buffer-content
+                         file-name text-to-write))
+                      (format "Prepended %d characters to %s%s."
+                              (length content)
+                              file-name
+                              (ellama-tools--balanced-edit-success-suffix
+                               decision))
+                      callback)
+                     nil))
+               (file-error
+                (format "Cannot prepend to %s: %s"
+                        file-name
+                        (error-message-string err)))))))
+    (when result
+      (funcall callback result)))
+  nil)
 
 (ellama-tools-define-tool
  '(:function
    ellama-tools-prepend-file-tool
    :name
    "prepend_file"
+   :async
+   t
    :args
    ((:name
      "file_name"
@@ -3046,44 +3170,54 @@ TIMEOUT is the optional command timeout in seconds."
         (insert content)
         (save-buffer)))))
 
-(defun ellama-tools-edit-file-tool (file-name oldcontent newcontent)
-  "Edit file FILE-NAME.
+(defun ellama-tools-edit-file-tool (callback file-name oldcontent newcontent)
+  "Edit FILE-NAME and call CALLBACK with the result.
 Replace OLDCONTENT with NEWCONTENT."
-  (or (ellama-tools--tool-check-file-access file-name 'read)
-      (ellama-tools--tool-check-file-access file-name 'write)
-      (let ((content (with-temp-buffer
-                       (insert-file-contents-literally file-name)
-                       (buffer-string))))
-        (ellama-tools--mark-file-read file-name)
-        (if (not (string-match (regexp-quote oldcontent) content))
-            (ellama-tools--edit-file-old-content-not-found-message file-name)
-          (let* ((candidate (replace-match newcontent t t content))
-                 (decision
-                  (ellama-tools--balanced-edit-check-candidate
-                   "Edit" file-name candidate content oldcontent newcontent))
-                 (rejection (plist-get decision :rejection))
-                 (auto-fixed (plist-get decision :auto-fixed))
-                 (fixed-text (plist-get decision :fixed-text))
-                 (text-to-write (if (and auto-fixed fixed-text)
-                                    fixed-text
-                                  candidate)))
-            (if rejection
-                rejection
-              (ellama-tools--run-edit-with-shell-hooks
-               "edit_file" "edit" file-name
-               (lambda ()
-                 (ellama-tools--write-file-buffer-content
-                  file-name text-to-write))
-               (format "Edited %s%s."
-                       file-name
-                       (ellama-tools--balanced-edit-success-suffix
-                        decision)))))))))
+  (let ((result
+         (or (ellama-tools--tool-check-file-access file-name 'read)
+             (ellama-tools--tool-check-file-access file-name 'write)
+             (let ((content (with-temp-buffer
+                              (insert-file-contents-literally file-name)
+                              (buffer-string))))
+               (ellama-tools--mark-file-read file-name)
+               (if (not (string-match (regexp-quote oldcontent) content))
+                   (ellama-tools--edit-file-old-content-not-found-message
+                    file-name)
+                 (let* ((candidate (replace-match newcontent t t content))
+                        (decision
+                         (ellama-tools--balanced-edit-check-candidate
+                          "Edit" file-name candidate content oldcontent
+                          newcontent))
+                        (rejection (plist-get decision :rejection))
+                        (auto-fixed (plist-get decision :auto-fixed))
+                        (fixed-text (plist-get decision :fixed-text))
+                        (text-to-write (if (and auto-fixed fixed-text)
+                                           fixed-text
+                                         candidate)))
+                   (if rejection
+                       rejection
+                     (ellama-tools--run-edit-with-shell-hooks
+                      "edit_file" "edit" file-name
+                      (lambda ()
+                        (ellama-tools--write-file-buffer-content
+                         file-name text-to-write))
+                      (format "Edited %s%s."
+                              file-name
+                              (ellama-tools--balanced-edit-success-suffix
+                               decision))
+                      callback)
+                     nil)))))))
+    (when result
+      (funcall callback result)))
+  nil)
 
 (ellama-tools-define-tool
  '(:function
    ellama-tools-edit-file-tool
    :name
    "edit_file"
+   :async
+   t
    :args
    ((:name
      "file_name"
@@ -3875,13 +4009,15 @@ TEMPLATE-BASE, ROLE and ARGUMENTS are used for template rendering and hints."
         (insert (ellama-get-nick-prefix-for-mode)
                 " Ellama Agent " title ":\n"
                 (or body "")
-                "\n\n")))))
+                "\n\n")
+        (ellama--scroll buffer (point))))))
 
 (defun ellama-tools--agent-insert-state (session buffer title)
   "Insert SESSION plan-and-act state into BUFFER with TITLE."
   (when-let* ((state (ellama-tools--agent-state session)))
     (let ((plan (ellama-tools--agent-render-plan state))
           (phase (plist-get state :phase))
+          (status (plist-get state :status))
           (result (plist-get state :result))
           (blocked (plist-get state :blocked)))
       (ellama-tools--agent-insert-note
@@ -3890,6 +4026,7 @@ TEMPLATE-BASE, ROLE and ARGUMENTS are used for template rendering and hints."
        (string-join
         (delq nil
               (list (format "Phase: %s" phase)
+                    (when status (format "Status: %s" status))
                     (unless (string-empty-p plan) plan)
                     (when blocked (format "Blocked: %s" blocked))
                     (when result (format "Result: %s" result))))
@@ -3941,6 +4078,35 @@ TEMPLATE-BASE, ROLE and ARGUMENTS are used for template rendering and hints."
      session
      (ellama-tools--session-extra-with
       session :tools (and had-tools tools)))))
+
+(defun ellama-tools--agent-append-user-header (buffer)
+  "Append user heading to BUFFER after a finished plan-and-act loop."
+  (when (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (let ((header
+             (concat (ellama-get-nick-prefix-for-mode)
+                     " " ellama-user-nick ":")))
+        (unless (save-excursion
+                  (goto-char (point-max))
+                  (skip-chars-backward " \t\n")
+                  (beginning-of-line)
+                  (looking-at-p (regexp-quote header)))
+          (save-excursion
+            (goto-char (point-max))
+            (unless (bobp)
+              (unless (bolp)
+                (insert "\n"))
+              (unless (save-excursion
+                        (forward-line -1)
+                        (looking-at-p "[[:space:]]*$"))
+                (insert "\n")))
+            (insert header "\n")))))))
+
+(defun ellama-tools--agent-finish (session buffer)
+  "Restore SESSION tools and append a user heading in BUFFER."
+  (ellama-tools--agent-restore-tools session)
+  (ellama-tools--agent-append-user-header
+   (ellama-tools--agent-session-buffer session buffer)))
 
 (defun ellama-tools-agent-active-p (session)
   "Return non-nil when SESSION has a running plan-and-act loop."
@@ -3996,7 +4162,7 @@ TEMPLATE-BASE, ROLE and ARGUMENTS are used for template rendering and hints."
     (setq state (ellama-tools--agent-state-put state :result result))
     (ellama-tools--agent-put-state session state)
     (ellama-tools--agent-insert-state session nil "Done")
-    (ellama-tools--agent-restore-tools session)
+    (ellama-tools--agent-finish session nil)
     "Result received. Plan-and-act loop completed."))
 
 (defun ellama-tools--agent-system-message (system)
@@ -4053,6 +4219,7 @@ result/blocked fields instead."
               "\n\n"
               (ellama-get-nick-prefix-for-mode)
               " " ellama-assistant-nick ":\n")
+      (ellama--scroll buffer (point))
       (point))))
 
 (defun ellama-tools--agent-apply-text-update (session text)
@@ -4063,8 +4230,9 @@ result/blocked fields instead."
       (ellama-tools--agent-put-state session merged)
       merged)))
 
-(defun ellama-tools--agent-loop-handler (text &optional session buffer system)
-  "Continue plan-and-act SESSION loop after TEXT in BUFFER with SYSTEM message."
+(defun ellama-tools--agent-loop-handler (text &optional session buffer system error-cb)
+  "Continue plan-and-act SESSION loop after TEXT in BUFFER with SYSTEM message.
+ERROR-CB is called on non-tool LLM errors to track consecutive failures."
   (let* ((session (or session ellama--current-session))
          (parsed (and (ellama-session-p session)
                       (ellama-tools--agent-apply-text-update session text)))
@@ -4082,32 +4250,39 @@ result/blocked fields instead."
     (when parsed
       (ellama-tools--agent-insert-state
        session buffer (if (plist-get parsed :plan) "Plan" "Status")))
+    (when (and (stringp text)
+               (plist-get state :consecutive-error-count))
+      (setq state
+            (ellama-tools--agent-state-put
+             state :consecutive-error-count 0))
+      (ellama-tools--agent-put-state session state))
     (cond
      ((not (ellama-session-p session))
       (message "Plan-and-act session is not available."))
      (done
-      (message "Plan-and-act loop finished."))
+      (message "Plan-and-act loop finished.")
+      (ellama-tools--agent-finish session buffer))
      ((eq phase 'done)
       (setq state (ellama-tools--agent-state-put state :completed t))
       (ellama-tools--agent-put-state session state)
       (ellama-tools--agent-insert-state session buffer "Done")
-      (ellama-tools--agent-restore-tools session))
+      (ellama-tools--agent-finish session buffer))
      ((eq phase 'blocked)
       (ellama-tools--agent-insert-state session buffer "Blocked")
-      (ellama-tools--agent-restore-tools session))
+      (ellama-tools--agent-finish session buffer))
      ((>= steps max)
       (setq state (ellama-tools--agent-state-put state :phase 'blocked))
       (setq state (ellama-tools--agent-state-put
                    state :blocked (format "Max steps (%d) reached." max)))
       (ellama-tools--agent-put-state session state)
       (ellama-tools--agent-insert-state session buffer "Blocked")
-      (ellama-tools--agent-restore-tools session))
+      (ellama-tools--agent-finish session buffer))
      ((ellama-tools--agent-plan-complete-p state)
       (setq state (ellama-tools--agent-state-put state :phase 'done))
       (setq state (ellama-tools--agent-state-put state :completed t))
       (ellama-tools--agent-put-state session state)
       (ellama-tools--agent-insert-state session buffer "Done")
-      (ellama-tools--agent-restore-tools session))
+      (ellama-tools--agent-finish session buffer))
      (t
       (setq state (ellama-tools--agent-state-put state :step-count (1+ steps)))
       (ellama-tools--agent-put-state session state)
@@ -4122,6 +4297,7 @@ result/blocked fields instead."
                 :session session
                 :tools tools
                 :system system
+                :on-error error-cb
                 :on-done
                 (ellama-tools--make-agent-loop-handler
                  session buffer system))
@@ -4130,8 +4306,91 @@ result/blocked fields instead."
 
 (defun ellama-tools--make-agent-loop-handler (session &optional buffer system)
   "Return plan-and-act loop handler for SESSION, BUFFER and SYSTEM."
-  (lambda (text)
-    (ellama-tools--agent-loop-handler text session buffer system)))
+  (let ((session session))
+    (lambda (text)
+      (ellama-tools--agent-loop-handler
+       text session buffer system
+       (ellama-tools--make-agent-error-callback session)))))
+
+(declare-function ellama--session-compact "ellama" (session &rest args))
+(declare-function ellama--session-extra-get "ellama" (session key))
+
+(defun ellama-tools--agent-error-message (err)
+  "Return human-readable message for agent loop ERR."
+  (cond
+   ((stringp err) err)
+   ((and (consp err) (symbolp (car err)))
+    (error-message-string err))
+   (t (format "%s" err))))
+
+(defun ellama-tools--continue-agent-after-error (session)
+  "Continue plan-and-act SESSION after an LLM error."
+  (ellama-tools--agent-loop-handler
+   nil session nil nil
+   (ellama-tools--make-agent-error-callback session)))
+
+(defun ellama-tools--compact-and-continue-agent (session)
+  "Compact plan-and-act SESSION and continue the loop."
+  (let (continued)
+    (cl-labels
+        ((continue ()
+           (unless continued
+             (setq continued t)
+             (if (ellama--session-extra-get
+                  session :auto-compact-last-error)
+                 (let* ((error (ellama--session-extra-get
+                                session :auto-compact-last-error))
+                        (state (ellama-tools--agent-state session))
+                        (buffer (ellama-tools--agent-session-buffer
+                                 session nil)))
+                   (message "Agent loop stopped after compaction error: %s"
+                            error)
+                   (when state
+                     (setq state
+                           (ellama-tools--agent-state-put
+                            state :phase 'blocked))
+                     (setq state
+                           (ellama-tools--agent-state-put
+                            state :blocked
+                            (format "Context compaction failed: %s" error)))
+                     (ellama-tools--agent-put-state session state)
+                     (ellama-tools--agent-insert-state
+                      session buffer "Blocked"))
+                   (ellama-tools--agent-finish session buffer))
+               (ellama-tools--continue-agent-after-error session)))))
+      (unless (ellama--session-compact
+               session :automatic t :on-done #'continue)
+        (when (ellama--session-extra-get
+               session :auto-compact-last-error)
+          (continue))))))
+
+(defun ellama-tools--make-agent-error-callback (session)
+  "Return error callback for plan-and-act loop of SESSION.
+Increments consecutive-error-count; if it reaches 2, compacts the session
+and restarts the loop."
+  (let ((session session))
+    (lambda (err)
+      (let* ((extra (ellama-session-extra session))
+             (state (plist-get extra :agent-loop))
+             (message (ellama-tools--agent-error-message err)))
+        (unless (and state (plist-get state :completed))
+          (let* ((count (or (plist-get state :consecutive-error-count) 0))
+                 (new-count (1+ count)))
+            (message "Agent loop error: %s (consecutive: %d)"
+                     message new-count)
+            (if (>= new-count 2)
+                (progn
+                  (message "Compacting session after repeated errors...")
+                  (setq state
+                        (ellama-tools--agent-state-put
+                         state :consecutive-error-count new-count))
+                  (ellama-tools--agent-put-state session state)
+                  (ellama-tools--compact-and-continue-agent session))
+              (setq state
+                    (ellama-tools--agent-state-put
+                     state :consecutive-error-count new-count))
+              (ellama-tools--agent-put-state session state)
+              (ellama-tools--continue-agent-after-error session))))))))
 
 (defun ellama-tools-start-plan-and-act
     (session buffer prompt &optional system tools max-steps)
@@ -4152,6 +4411,7 @@ automatic continuations."
                       :plan nil
                       :task prompt
                       :step-count 0
+                      :consecutive-error-count 0
                       :max-steps (or max-steps
                                      ellama-tools-agent-default-max-steps)
                       :completed nil
@@ -4168,6 +4428,7 @@ automatic continuations."
      buffer "Status" "Planning started.")
     (list :system agent-system
           :tools combined-tools
+          :on-error (ellama-tools--make-agent-error-callback session)
           :on-done (ellama-tools--make-agent-loop-handler
                     session buffer agent-system))))
 
@@ -4193,6 +4454,7 @@ SYSTEM and TOOLS can override the stored runtime values."
      (ellama-tools--session-extra-with session :tools combined-tools))
     (list :system agent-system
           :tools combined-tools
+          :on-error (ellama-tools--make-agent-error-callback session)
           :on-done (ellama-tools--make-agent-loop-handler
                     session buffer agent-system))))
 
@@ -4213,6 +4475,7 @@ Return insertion point for sub-agent response."
         (insert prefix " Main agent:\n"
                 (ellama--fill-long-lines description) "\n\n"
                 prefix " " ellama-assistant-nick ":\n")
+        (ellama--scroll buffer (point))
         (point)))))
 
 (defun ellama-tools--make-report-result-tool (callback session)
@@ -4334,6 +4597,15 @@ RESULT for the agent."
           session :tool-loop-state loop-state)))
       replacement)))
 
+(defun ellama-tools--subagent-tool-error-result (name err)
+  "Return a tool result for sub-agent tool NAME error ERR."
+  (format
+   "Tool `%s` failed: %s\n\nNext action: choose a different tool call or \
+different arguments.  If no different useful action exists, call \
+`report_result` with the blocker."
+   name
+   (error-message-string err)))
+
 (defun ellama-tools--wrap-subagent-tool (tool session)
   "Return TOOL wrapped with sub-agent loop detection for SESSION."
   (let* ((wrapped-tool (copy-sequence tool))
@@ -4346,16 +4618,30 @@ RESULT for the agent."
        (if (and async args (functionp (car args)))
            (let ((callback (car args))
                  (call-args (cdr args)))
-             (apply
-              function
-              (lambda (result)
-                (funcall
-                 callback
-                 (or (ellama-tools--subagent-trace-tool-call
-                      session name call-args result)
-                     result)))
-              call-args))
-         (let ((result (apply function args)))
+             (condition-case err
+                 (apply
+                  function
+                  (lambda (result)
+                    (funcall
+                     callback
+                     (or (ellama-tools--subagent-trace-tool-call
+                          session name call-args result)
+                         result)))
+                  call-args)
+               (error
+                (let ((result
+                       (ellama-tools--subagent-tool-error-result name err)))
+                  (funcall
+                   callback
+                   (or (ellama-tools--subagent-trace-tool-call
+                        session name call-args result)
+                       result))
+                  nil))))
+         (let ((result
+                (condition-case err
+                    (apply function args)
+                  (error
+                   (ellama-tools--subagent-tool-error-result name err)))))
            (or (ellama-tools--subagent-trace-tool-call
                 session name args result)
                result)))))
@@ -4388,8 +4674,9 @@ When the task is COMPLETE you MUST call `report_result` exactly once."
         (and (buffer-live-p session-buffer) session-buffer))
       (and (buffer-live-p buffer) buffer)))
 
-(defun ellama--subagent-loop-handler (_text &optional session buffer system)
-  "Continue subagent SESSION loop in BUFFER with SYSTEM message."
+(defun ellama--subagent-loop-handler (text &optional session buffer system error-cb)
+  "Continue subagent SESSION loop after TEXT in BUFFER with SYSTEM message.
+ERROR-CB is called on non-tool LLM errors to track consecutive failures."
   (let* ((session (or session ellama--current-session))
          (extra (and (ellama-session-p session)
                      (ellama-session-extra session)))
@@ -4401,6 +4688,10 @@ When the task is COMPLETE you MUST call `report_result` exactly once."
          (tools (plist-get extra :tools))
          (system (or system (plist-get extra :system)))
          (buffer (ellama-tools--subagent-buffer session buffer)))
+    (when (and (stringp text)
+               (plist-get extra :consecutive-error-count))
+      (setq extra (plist-put extra :consecutive-error-count 0))
+      (ellama-tools--set-session-extra session extra))
     (cond
      ((not (ellama-session-p session))
       (message "Subagent session is not available."))
@@ -4426,6 +4717,7 @@ When the task is COMPLETE you MUST call `report_result` exactly once."
                 :session session
                 :tools tools
                 :system system
+                :on-error error-cb
                 :on-done
                 (ellama-tools--make-subagent-loop-handler
                  session buffer system))
@@ -4434,10 +4726,59 @@ When the task is COMPLETE you MUST call `report_result` exactly once."
 
 (defun ellama-tools--make-subagent-loop-handler
     (session &optional buffer system)
-  "Return subagent loop handler for SESSION.
-BUFFER is the session buffer.  SYSTEM is the initial system prompt."
-  (lambda (text)
-    (ellama--subagent-loop-handler text session buffer system)))
+  "Return subagent loop handler for SESSION, BUFFER and SYSTEM."
+  (let ((session session))
+    (lambda (text)
+      (ellama--subagent-loop-handler
+       text session buffer system
+       (ellama-tools--make-subagent-error-callback session)))))
+
+(defun ellama-tools--continue-subagent-after-error (session)
+  "Continue subagent SESSION after an LLM error."
+  (ellama--subagent-loop-handler
+   nil session nil nil
+   (ellama-tools--make-subagent-error-callback session)))
+
+(defun ellama-tools--compact-and-continue-subagent (session)
+  "Compact subagent SESSION and continue the loop."
+  (let (continued)
+    (cl-labels
+        ((continue ()
+           (unless continued
+             (setq continued t)
+             (if (ellama--session-extra-get
+                  session :auto-compact-last-error)
+                 (message "Subagent stopped after compaction error: %s"
+                          (ellama--session-extra-get
+                           session :auto-compact-last-error))
+               (ellama-tools--continue-subagent-after-error session)))))
+      (unless (ellama--session-compact
+               session :automatic t :on-done #'continue)
+        (when (ellama--session-extra-get
+               session :auto-compact-last-error)
+          (continue))))))
+
+(defun ellama-tools--make-subagent-error-callback (session)
+  "Return error callback for subagent loop of SESSION.
+Increments consecutive-error-count; if it reaches 2, compacts the session
+and restarts the loop."
+  (let ((session session))
+    (lambda (err)
+      (let* ((extra (ellama-session-extra session))
+             (count (or (plist-get extra :consecutive-error-count) 0))
+             (new-count (1+ count))
+             (message (ellama-tools--agent-error-message err)))
+        (message "Subagent error: %s (consecutive: %d)"
+                 message new-count)
+        (if (>= new-count 2)
+            (progn
+              (message "Compacting subagent session after repeated errors...")
+              (ellama-tools--set-session-extra
+               session (plist-put extra :consecutive-error-count new-count))
+              (ellama-tools--compact-and-continue-subagent session))
+          (ellama-tools--set-session-extra
+           session (plist-put extra :consecutive-error-count new-count))
+          (ellama-tools--continue-subagent-after-error session))))))
 
 (defun ellama-tools-task-tool
     (callback &optional description role template template-base arguments)
@@ -4500,6 +4841,7 @@ ARGUMENTS  – object with template substitution values."
             :result-callback callback
             :task-completed nil
             :step-count 0
+            :consecutive-error-count 0
             :max-steps steps-limit
             :tool-loop-state (ellama-tools--subagent-loop-state)
             :system subagent-system))
@@ -4513,6 +4855,7 @@ ARGUMENTS  – object with template substitution values."
            :buffer worker-buffer
            :point worker-point
            :session worker
+           :on-error (ellama-tools--make-subagent-error-callback worker)
            :on-done (ellama-tools--make-subagent-loop-handler
                      worker worker-buffer subagent-system)
            :tools all-tools
