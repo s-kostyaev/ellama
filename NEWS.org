@@ -1,3 +1,10 @@
+* Version 1.27.2
+
+- Fixed ~make~ recipes when a sandboxed caller inherits a stale ~TMPDIR~.
+  Ellama now keeps valid temporary directories and falls back to ~/tmp~ only
+  when the inherited directory no longer exists, which prevents Org from failing
+  while loading during ~srt make check-elisp~.
+
 * Version 1.27.1
 
 - Added copyright notice to ~extract-commands.el~ script.
