@@ -1,5 +1,7 @@
 ;;; extract-commands.el --- Extract documented public commands -*- lexical-binding: t -*-
 
+;; Copyright (C) 2026  Free Software Foundation, Inc.
+
 ;; This script reads Ellama source files as forms.  It intentionally does not
 ;; load the project, because loading depends on user packages and local runtime
 ;; state and can silently miss commands in batch checks.

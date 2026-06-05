@@ -1,3 +1,6 @@
+* Version 1.27.1
+
+- Added copyright notice to ~extract-commands.el~ script.
 * Version 1.27.0
 
 - Added ~ellama-undo-on-error~. Users can now choose whether failed LLM requests
