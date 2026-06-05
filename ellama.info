@@ -26,15 +26,16 @@ local model, and the same Ellama commands can be configured for
 OpenAI-compatible APIs, OpenAI, Claude, Gemini, Vertex, GPT4All,
 LlamaCpp, and other llm providers.  When a provider supports extra
 capabilities, Ellama uses them: streaming responses, model lists, image
-input, tool calls, token limits, and interactive model switching.
+and audio input, tool calls, token limits, and interactive model
+switching.
 
 Context is first-class.  A request can include buffers, files,
-directories, Info nodes, selections, and images.  Chat sessions can be
-saved, resumed, renamed, compacted manually, or compacted automatically
-before they run past the model context window.  The everyday commands
-cover translation, summarization, proofreading, code review and editing,
-extraction, formatting, commit-message generation, and provider
-selection.
+directories, Info nodes, selections, images, and audio files.  Chat
+sessions can be saved, resumed, renamed, compacted manually, or
+compacted automatically before they run past the model context window.
+The everyday commands cover translation, summarization, proofreading,
+code review and editing, extraction, formatting, commit-message
+generation, and provider selection.
 
 For tool-using agents, Ellama reads project instructions from
 ‘AGENTS.md’, can load reusable skills and blueprint prompts, and runs
@@ -82,15 +83,16 @@ local model, and the same Ellama commands can be configured for
 OpenAI-compatible APIs, OpenAI, Claude, Gemini, Vertex, GPT4All,
 LlamaCpp, and other llm providers.  When a provider supports extra
 capabilities, Ellama uses them: streaming responses, model lists, image
-input, tool calls, token limits, and interactive model switching.
+and audio input, tool calls, token limits, and interactive model
+switching.
 
 Context is first-class.  A request can include buffers, files,
-directories, Info nodes, selections, and images.  Chat sessions can be
-saved, resumed, renamed, compacted manually, or compacted automatically
-before they run past the model context window.  The everyday commands
-cover translation, summarization, proofreading, code review and editing,
-extraction, formatting, commit-message generation, and provider
-selection.
+directories, Info nodes, selections, images, and audio files.  Chat
+sessions can be saved, resumed, renamed, compacted manually, or
+compacted automatically before they run past the model context window.
+The everyday commands cover translation, summarization, proofreading,
+code review and editing, extraction, formatting, commit-message
+generation, and provider selection.
 
 For tool-using agents, Ellama reads project instructions from
 ‘AGENTS.md’, can load reusable skills and blueprint prompts, and runs
@@ -124,6 +126,7 @@ Configuration
 * Session Provider Keys::
 * Session Compaction::
 * Image Input::
+* Audio Input::
 * Task Tool Subagents::
 * Plan-and-Act Agent Loop::
 * Edit Tool Shell Hooks::
@@ -306,6 +309,26 @@ File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Top
    • ‘ellama-chat-with-images’: Ask Ellama about multiple image files.
      If called with universal argument (‘C-u’) will start new session
      with llm model interactive selection.
+   • ‘ellama-ask-audio’: Ask Ellama about one audio file by adding it as
+     ephemeral context for the request.  If called with universal
+     argument (‘C-u’) will start new session with llm model interactive
+     selection.
+   • ‘ellama-chat-with-audio’: Ask Ellama about one audio file.  If
+     called with universal argument (‘C-u’) will start new session with
+     llm model interactive selection.
+   • ‘ellama-chat-with-audios’: Ask Ellama about multiple audio files.
+     If called with universal argument (‘C-u’) will start new session
+     with llm model interactive selection.
+   • ‘ellama-ask-audio-recording’: Record a short audio message from the
+     microphone and ask Ellama about it.
+   • ‘ellama-chat-with-audio-recording’: Record a short audio message
+     from the microphone and send it to chat.
+   • ‘ellama-record-audio’: Record a short audio message from the
+     microphone and return the recorded file.
+   • ‘ellama-start-audio-recording’: Start microphone recording without
+     a fixed duration.
+   • ‘ellama-stop-audio-recording’: Stop microphone recording and return
+     the recorded file.
    • ‘ellama-write’: This command allows you to generate text using an
      LLM.  When called interactively, it prompts for an instruction that
      is then used to generate text based on the context.  If a region is
@@ -380,6 +403,13 @@ File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Top
      session context.
    • ‘ellama-context-add-file’: Add file to context.
    • ‘ellama-context-add-image’: Add image file to context.
+   • ‘ellama-context-add-audio’: Add audio file to context.
+   • ‘ellama-context-add-audio-recording’: Record a short audio message
+     and add it to context.
+   • ‘ellama-context-start-audio-recording’: Start microphone recording
+     without a fixed duration.
+   • ‘ellama-context-stop-audio-recording’: Stop microphone recording
+     and add the recorded file to context.
    • ‘ellama-context-add-directory’: Add all files in directory to the
      context.
    • ‘ellama-context-add-buffer’: Add buffer to context.
@@ -451,47 +481,54 @@ In any buffer where there is active ellama streaming, you can press
 Here is a table of keybindings and their associated functions in Ellama,
 using the ‘ellama-keymap-prefix’ prefix (not set by default):
 
-Keymap   Function                          Description
---------------------------------------------------------------------------
-"w"      ellama-write                      Write
-"c c"    ellama-code-complete              Code complete
-"c a"    ellama-code-add                   Code add
-"c e"    ellama-code-edit                  Code edit
-"c i"    ellama-code-improve               Code improve
-"c r"    ellama-code-review                Code review
-"c m"    ellama-generate-commit-message    Generate commit message
-"s s"    ellama-summarize                  Summarize
-"s w"    ellama-summarize-webpage          Summarize webpage
-"s c"    ellama-summarize-killring         Summarize killring
-"s l"    ellama-load-session               Session Load
-"s r"    ellama-session-rename             Session rename
-"s d"    ellama-session-delete             Session delete
-"s a"    ellama-session-switch             Session activate
-"P"      ellama-proofread                  Proofread
-"i w"    ellama-improve-wording            Improve wording
-"i g"    ellama-improve-grammar            Improve grammar and spelling
-"i c"    ellama-improve-conciseness        Improve conciseness
-"m l"    ellama-make-list                  Make list
-"m t"    ellama-make-table                 Make table
-"m f"    ellama-make-format                Make format
-"a a"    ellama-ask-about                  Ask about
-"a i"    ellama-chat                       Chat (ask interactively)
-"a I"    ellama-ask-image                  Ask image
-"a l"    ellama-ask-line                   Ask current line
-"a s"    ellama-ask-selection              Ask selection
-"t t"    ellama-translate                  Text translate
-"t b"    ellama-translate-buffer           Translate buffer
-"t e"    ellama-chat-translation-enable    Translation enable
-"t d"    ellama-chat-translation-disable   Translation disable
-"t c"    ellama-complete                   Text complete
-"d w"    ellama-define-word                Define word
-"x b"    ellama-context-add-buffer         Context add buffer
-"x f"    ellama-context-add-file           Context add file
-"x d"    ellama-context-add-directory      Context add directory
-"x s"    ellama-context-add-selection      Context add selection
-"x i"    ellama-context-add-info-node      Context add info node
-"x r"    ellama-context-reset              Context reset
-"p s"    ellama-provider-select            Provider select
+Keymap   Function                               Description
+-------------------------------------------------------------------------------
+"w"      ellama-write                           Write
+"c c"    ellama-code-complete                   Code complete
+"c a"    ellama-code-add                        Code add
+"c e"    ellama-code-edit                       Code edit
+"c i"    ellama-code-improve                    Code improve
+"c r"    ellama-code-review                     Code review
+"c m"    ellama-generate-commit-message         Generate commit message
+"s s"    ellama-summarize                       Summarize
+"s w"    ellama-summarize-webpage               Summarize webpage
+"s c"    ellama-summarize-killring              Summarize killring
+"s l"    ellama-load-session                    Session Load
+"s r"    ellama-session-rename                  Session rename
+"s d"    ellama-session-delete                  Session delete
+"s a"    ellama-session-switch                  Session activate
+"P"      ellama-proofread                       Proofread
+"i w"    ellama-improve-wording                 Improve wording
+"i g"    ellama-improve-grammar                 Improve grammar and spelling
+"i c"    ellama-improve-conciseness             Improve conciseness
+"m l"    ellama-make-list                       Make list
+"m t"    ellama-make-table                      Make table
+"m f"    ellama-make-format                     Make format
+"a a"    ellama-ask-about                       Ask about
+"a i"    ellama-chat                            Chat (ask interactively)
+"a I"    ellama-ask-image                       Ask image
+"a A"    ellama-ask-audio                       Ask audio
+"a R"    ellama-ask-audio-recording             Record audio and ask
+"a l"    ellama-ask-line                        Ask current line
+"a s"    ellama-ask-selection                   Ask selection
+"t t"    ellama-translate                       Text translate
+"t b"    ellama-translate-buffer                Translate buffer
+"t e"    ellama-chat-translation-enable         Translation enable
+"t d"    ellama-chat-translation-disable        Translation disable
+"t c"    ellama-complete                        Text complete
+"d w"    ellama-define-word                     Define word
+"x b"    ellama-context-add-buffer              Context add buffer
+"x f"    ellama-context-add-file                Context add file
+"x d"    ellama-context-add-directory           Context add directory
+"x I"    ellama-context-add-image               Context add image
+"x A"    ellama-context-add-audio               Context add audio
+"x R"    ellama-context-add-audio-recording     Context record audio
+"x S"    ellama-context-start-audio-recording   Start audio recording
+"x E"    ellama-context-stop-audio-recording    Stop audio recording
+"x s"    ellama-context-add-selection           Context add selection
+"x i"    ellama-context-add-info-node           Context add info node
+"x r"    ellama-context-reset                   Context reset
+"p s"    ellama-provider-select                 Provider select
 
 
 File: ellama.info,  Node: Configuration,  Next: Context Management,  Prev: Keymap,  Up: Top
@@ -780,6 +817,7 @@ argument generated text string.
 * Session Provider Keys::
 * Session Compaction::
 * Image Input::
+* Audio Input::
 * Task Tool Subagents::
 * Plan-and-Act Agent Loop::
 * Edit Tool Shell Hooks::
@@ -877,7 +915,7 @@ Example configuration:
      (setopt ellama-session-auto-compact-provider ellama-summarization-provider)
 
 
-File: ellama.info,  Node: Image Input,  Next: Task Tool Subagents,  Prev: Session Compaction,  Up: Configuration
+File: ellama.info,  Node: Image Input,  Next: Audio Input,  Prev: Session Compaction,  Up: Configuration
 
 4.3 Image Input
 ===============
@@ -930,9 +968,63 @@ Tool calls can request image handling explicitly:
      }
 
 
-File: ellama.info,  Node: Task Tool Subagents,  Next: Plan-and-Act Agent Loop,  Prev: Image Input,  Up: Configuration
+File: ellama.info,  Node: Audio Input,  Next: Task Tool Subagents,  Prev: Image Input,  Up: Configuration
 
-4.4 Task Tool Subagents
+4.4 Audio Input
+===============
+
+Ellama can also send audio files to providers with the ‘audio-input’
+capability.  The default supported extensions are WAV, MP3, M4A, AAC,
+FLAC, OGG, Opus and WebM.  Audio is sent as multipart media, the same
+transport used for image input.  Set ‘ellama-audio-file-extensions’ if
+your provider accepts another format.
+
+Use ‘M-x ellama-ask-audio’ for one audio file, or ‘M-x
+ellama-chat-with-audio’ inside a chat workflow.  For several files, use
+‘M-x ellama-chat-with-audios’.  These commands add audio as ephemeral
+context for the next request, so the file is not kept around unless you
+add it as persistent context yourself.
+
+Programmatic calls can pass audio directly:
+
+     (ellama-chat "Transcribe this note." nil
+                  :audios '("/path/to/note.wav"))
+
+     (ellama-stream "Summarize the meeting."
+                    :audio "/path/to/meeting.mp3")
+
+Use ‘:media’ when a request mixes images and audio:
+
+     (ellama-chat "Compare the screenshot with the spoken notes." nil
+                  :media '("/path/to/screenshot.png"
+                           "/path/to/notes.wav"))
+
+Microphone recording is available when the platform has a recording
+command.  On macOS Ellama uses ‘afrecord’.  On GNU/Linux it uses
+‘arecord’.  Set ‘ellama-audio-recording-command’ if you need another
+program or extra arguments.
+
+For short messages, use ‘M-x ellama-ask-audio-recording’ or ‘M-x
+ellama-context-add-audio-recording’.  Ellama records for
+‘ellama-audio-recording-duration’ seconds and writes a temporary WAV
+file by default.  Set ‘ellama-audio-recording-file-extension’ if your
+recorder writes another format.
+
+For longer messages, start and stop recording yourself:
+
+     M-x ellama-context-start-audio-recording
+     ...speak for as long as needed...
+     M-x ellama-context-stop-audio-recording
+
+While recording is active, the mode line shows ‘ellama:recording’.
+Stopping the recording adds the file to context, using
+‘ellama-audio-context-default-scope’ to decide whether it is ephemeral
+or persistent.
+
+
+File: ellama.info,  Node: Task Tool Subagents,  Next: Plan-and-Act Agent Loop,  Prev: Audio Input,  Up: Configuration
+
+4.5 Task Tool Subagents
 =======================
 
 The ‘task’ tool delegates work to an asynchronous sub-agent.  The parent
@@ -1002,7 +1094,7 @@ files.
 
 File: ellama.info,  Node: Plan-and-Act Agent Loop,  Next: Edit Tool Shell Hooks,  Prev: Task Tool Subagents,  Up: Configuration
 
-4.5 Plan-and-Act Agent Loop
+4.6 Plan-and-Act Agent Loop
 ===========================
 
 ‘ellama-plan-and-act’ runs a local agent in the current Ellama chat
@@ -1053,7 +1145,7 @@ canonical state is the session state used by the continuation handler.
 
 File: ellama.info,  Node: Edit Tool Shell Hooks,  Next: DLP for Tool Input/Output,  Prev: Plan-and-Act Agent Loop,  Up: Configuration
 
-4.6 Edit Tool Shell Hooks
+4.7 Edit Tool Shell Hooks
 =========================
 
 Projects can define shell commands that run around mutating edit tools:
@@ -1102,7 +1194,7 @@ and is not scanned by tool output DLP.
 
 File: ellama.info,  Node: DLP for Tool Input/Output,  Next: SRT Filesystem Policy for Tools,  Prev: Edit Tool Shell Hooks,  Up: Configuration
 
-4.7 DLP for Tool Input/Output
+4.8 DLP for Tool Input/Output
 =============================
 
 Ellama includes an optional DLP (Data Loss Prevention) layer for tool
@@ -1451,7 +1543,7 @@ Troubleshooting:
 
 File: ellama.info,  Node: SRT Filesystem Policy for Tools,  Prev: DLP for Tool Input/Output,  Up: Configuration
 
-4.8 SRT Filesystem Policy for Tools
+4.9 SRT Filesystem Policy for Tools
 ===================================
 
 When ‘ellama-tools-use-srt’ is non-nil, the ‘srt’ settings file is the
@@ -1685,6 +1777,8 @@ Context Commands:
         • “d” "Add Directory" ‘ellama-transient-add-directory’
         • “f” "Add File" ‘ellama-transient-add-file’
         • “I” "Add Image" ‘ellama-transient-add-image’
+        • “A” "Add Audio" ‘ellama-transient-add-audio’
+        • “R” "Record Audio" ‘ellama-transient-add-audio-recording’
         • “s” "Add Selection" ‘ellama-transient-add-selection’
         • “i” "Add Info Node" ‘ellama-transient-add-info-node’
    • Manage: Provides options for managing the global context.
@@ -1694,6 +1788,10 @@ Context Commands:
           Deletes an element by name.
         • “r” "Context reset" ‘ellama-context-reset’ - Clears the entire
           global context.
+   • Recording: Provides start and stop commands for long microphone
+     recordings.
+        • “S” "Start Recording" ‘ellama-transient-start-audio-recording’
+        • “E” "Stop Recording" ‘ellama-transient-stop-audio-recording’
    • Quit: (“q” "Quit" ‘transient-quit-one’) - Closes the context
      commands transient menu.
 
@@ -2696,50 +2794,51 @@ their use in free software.
 
 
 Tag Table:
-Node: Top2526
-Node: Installation6267
-Node: Commands11281
-Node: Keymap20632
-Node: Configuration23519
-Node: Session Provider Keys40092
-Node: Session Compaction41953
-Node: Image Input44247
-Node: Task Tool Subagents46392
-Node: Plan-and-Act Agent Loop49566
-Node: Edit Tool Shell Hooks52147
-Node: DLP for Tool Input/Output54440
-Node: SRT Filesystem Policy for Tools70439
-Node: Context Management76108
-Node: Transient Menus for Context Management77176
-Node: Managing the Context78855
-Node: Considerations79630
-Node: Minor modes80223
-Node: ellama-context-header-line-mode82211
-Node: ellama-context-header-line-global-mode83036
-Node: ellama-context-mode-line-mode83756
-Node: ellama-context-mode-line-global-mode84604
-Node: Ellama Session Header Line Mode85308
-Node: Enabling and Disabling85877
-Node: Customization86324
-Node: Ellama Session Mode Line Mode86612
-Node: Enabling and Disabling (1)87197
-Node: Customization (1)87644
-Node: Using Blueprints87938
-Node: Key Components of Ellama Blueprints88578
-Node: Creating and Managing Blueprints89185
-Node: Blueprints files90163
-Node: Variable Management90584
-Node: Keymap and Mode91037
-Node: Transient Menus91973
-Node: Running Blueprints programmatically92519
-Node: MCP Integration93106
-Node: Agent Skills94341
-Node: Directory Structure94704
-Node: Creating a Skill95731
-Node: How it works96106
-Node: Acknowledgments96497
-Node: Contributions97208
-Node: GNU Free Documentation License97882
+Node: Top2548
+Node: Installation6327
+Node: Commands11341
+Node: Keymap22275
+Node: Configuration25834
+Node: Session Provider Keys42423
+Node: Session Compaction44284
+Node: Image Input46578
+Node: Audio Input48715
+Node: Task Tool Subagents50933
+Node: Plan-and-Act Agent Loop54107
+Node: Edit Tool Shell Hooks56688
+Node: DLP for Tool Input/Output58981
+Node: SRT Filesystem Policy for Tools74980
+Node: Context Management80649
+Node: Transient Menus for Context Management81717
+Node: Managing the Context83791
+Node: Considerations84566
+Node: Minor modes85159
+Node: ellama-context-header-line-mode87147
+Node: ellama-context-header-line-global-mode87972
+Node: ellama-context-mode-line-mode88692
+Node: ellama-context-mode-line-global-mode89540
+Node: Ellama Session Header Line Mode90244
+Node: Enabling and Disabling90813
+Node: Customization91260
+Node: Ellama Session Mode Line Mode91548
+Node: Enabling and Disabling (1)92133
+Node: Customization (1)92580
+Node: Using Blueprints92874
+Node: Key Components of Ellama Blueprints93514
+Node: Creating and Managing Blueprints94121
+Node: Blueprints files95099
+Node: Variable Management95520
+Node: Keymap and Mode95973
+Node: Transient Menus96909
+Node: Running Blueprints programmatically97455
+Node: MCP Integration98042
+Node: Agent Skills99277
+Node: Directory Structure99640
+Node: Creating a Skill100667
+Node: How it works101042
+Node: Acknowledgments101433
+Node: Contributions102144
+Node: GNU Free Documentation License102818
 
 End Tag Table
 

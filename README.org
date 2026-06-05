@@ -17,15 +17,15 @@ Ellama is not tied to one backend.  It uses the
 local model, and the same Ellama commands can be configured for
 OpenAI-compatible APIs, OpenAI, Claude, Gemini, Vertex, GPT4All, LlamaCpp, and
 other llm providers.  When a provider supports extra capabilities, Ellama uses
-them: streaming responses, model lists, image input, tool calls, token limits,
-and interactive model switching.
+them: streaming responses, model lists, image and audio input, tool calls, token
+limits, and interactive model switching.
 
 Context is first-class.  A request can include buffers, files, directories, Info
-nodes, selections, and images.  Chat sessions can be saved, resumed, renamed,
-compacted manually, or compacted automatically before they run past the model
-context window.  The everyday commands cover translation, summarization,
-proofreading, code review and editing, extraction, formatting, commit-message
-generation, and provider selection.
+nodes, selections, images, and audio files.  Chat sessions can be saved,
+resumed, renamed, compacted manually, or compacted automatically before they run
+past the model context window.  The everyday commands cover translation,
+summarization, proofreading, code review and editing, extraction, formatting,
+commit-message generation, and provider selection.
 
 For tool-using agents, Ellama reads project instructions from ~AGENTS.md~, can
 load reusable skills and blueprint prompts, and runs plan-and-act loops or
@@ -164,6 +164,25 @@ More sophisticated configuration example:
 - ~ellama-chat-with-images~: Ask Ellama about multiple image files. If called
   with universal argument (~C-u~) will start new session with llm model
   interactive selection.
+- ~ellama-ask-audio~: Ask Ellama about one audio file by adding it as ephemeral
+  context for the request. If called with universal argument (~C-u~) will start
+  new session with llm model interactive selection.
+- ~ellama-chat-with-audio~: Ask Ellama about one audio file. If called with
+  universal argument (~C-u~) will start new session with llm model interactive
+  selection.
+- ~ellama-chat-with-audios~: Ask Ellama about multiple audio files. If called
+  with universal argument (~C-u~) will start new session with llm model
+  interactive selection.
+- ~ellama-ask-audio-recording~: Record a short audio message from the microphone
+  and ask Ellama about it.
+- ~ellama-chat-with-audio-recording~: Record a short audio message from the
+  microphone and send it to chat.
+- ~ellama-record-audio~: Record a short audio message from the microphone and
+  return the recorded file.
+- ~ellama-start-audio-recording~: Start microphone recording without a fixed
+  duration.
+- ~ellama-stop-audio-recording~: Stop microphone recording and return the
+  recorded file.
 - ~ellama-write~: This command allows you to generate text using an LLM. When
   called interactively, it prompts for an instruction that is then used to
   generate text based on the context. If a region is active, the selected text
@@ -231,6 +250,13 @@ More sophisticated configuration example:
 - ~ellama-session-compact~: Select and compact an active Ellama session context.
 - ~ellama-context-add-file~: Add file to context.
 - ~ellama-context-add-image~: Add image file to context.
+- ~ellama-context-add-audio~: Add audio file to context.
+- ~ellama-context-add-audio-recording~: Record a short audio message and add it
+  to context.
+- ~ellama-context-start-audio-recording~: Start microphone recording without a
+  fixed duration.
+- ~ellama-context-stop-audio-recording~: Stop microphone recording and add the
+  recorded file to context.
 - ~ellama-context-add-directory~: Add all files in directory to the context.
 - ~ellama-context-add-buffer~: Add buffer to context.
 - ~ellama-context-add-selection~: Add selected region to context.
@@ -290,47 +316,54 @@ will cancel current stream.
 Here is a table of keybindings and their associated functions in Ellama, using
 the ~ellama-keymap-prefix~ prefix (not set by default):
 
-| Keymap | Function                        | Description                  |
-|--------+---------------------------------+------------------------------|
-| "w"    | ellama-write                    | Write                        |
-| "c c"  | ellama-code-complete            | Code complete                |
-| "c a"  | ellama-code-add                 | Code add                     |
-| "c e"  | ellama-code-edit                | Code edit                    |
-| "c i"  | ellama-code-improve             | Code improve                 |
-| "c r"  | ellama-code-review              | Code review                  |
-| "c m"  | ellama-generate-commit-message  | Generate commit message      |
-| "s s"  | ellama-summarize                | Summarize                    |
-| "s w"  | ellama-summarize-webpage        | Summarize webpage            |
-| "s c"  | ellama-summarize-killring       | Summarize killring           |
-| "s l"  | ellama-load-session             | Session Load                 |
-| "s r"  | ellama-session-rename           | Session rename               |
-| "s d"  | ellama-session-delete           | Session delete               |
-| "s a"  | ellama-session-switch           | Session activate             |
-| "P"    | ellama-proofread                | Proofread                    |
-| "i w"  | ellama-improve-wording          | Improve wording              |
-| "i g"  | ellama-improve-grammar          | Improve grammar and spelling |
-| "i c"  | ellama-improve-conciseness      | Improve conciseness          |
-| "m l"  | ellama-make-list                | Make list                    |
-| "m t"  | ellama-make-table               | Make table                   |
-| "m f"  | ellama-make-format              | Make format                  |
-| "a a"  | ellama-ask-about                | Ask about                    |
-| "a i"  | ellama-chat                     | Chat (ask interactively)     |
-| "a I"  | ellama-ask-image                | Ask image                    |
-| "a l"  | ellama-ask-line                 | Ask current line             |
-| "a s"  | ellama-ask-selection            | Ask selection                |
-| "t t"  | ellama-translate                | Text translate               |
-| "t b"  | ellama-translate-buffer         | Translate buffer             |
-| "t e"  | ellama-chat-translation-enable  | Translation enable           |
-| "t d"  | ellama-chat-translation-disable | Translation disable          |
-| "t c"  | ellama-complete                 | Text complete                |
-| "d w"  | ellama-define-word              | Define word                  |
-| "x b"  | ellama-context-add-buffer       | Context add buffer           |
-| "x f"  | ellama-context-add-file         | Context add file             |
-| "x d"  | ellama-context-add-directory    | Context add directory        |
-| "x s"  | ellama-context-add-selection    | Context add selection        |
-| "x i"  | ellama-context-add-info-node    | Context add info node        |
-| "x r"  | ellama-context-reset            | Context reset                |
-| "p s"  | ellama-provider-select          | Provider select              |
+| Keymap | Function                             | Description                  |
+|--------+--------------------------------------+------------------------------|
+| "w"    | ellama-write                         | Write                        |
+| "c c"  | ellama-code-complete                 | Code complete                |
+| "c a"  | ellama-code-add                      | Code add                     |
+| "c e"  | ellama-code-edit                     | Code edit                    |
+| "c i"  | ellama-code-improve                  | Code improve                 |
+| "c r"  | ellama-code-review                   | Code review                  |
+| "c m"  | ellama-generate-commit-message       | Generate commit message      |
+| "s s"  | ellama-summarize                     | Summarize                    |
+| "s w"  | ellama-summarize-webpage             | Summarize webpage            |
+| "s c"  | ellama-summarize-killring            | Summarize killring           |
+| "s l"  | ellama-load-session                  | Session Load                 |
+| "s r"  | ellama-session-rename                | Session rename               |
+| "s d"  | ellama-session-delete                | Session delete               |
+| "s a"  | ellama-session-switch                | Session activate             |
+| "P"    | ellama-proofread                     | Proofread                    |
+| "i w"  | ellama-improve-wording               | Improve wording              |
+| "i g"  | ellama-improve-grammar               | Improve grammar and spelling |
+| "i c"  | ellama-improve-conciseness           | Improve conciseness          |
+| "m l"  | ellama-make-list                     | Make list                    |
+| "m t"  | ellama-make-table                    | Make table                   |
+| "m f"  | ellama-make-format                   | Make format                  |
+| "a a"  | ellama-ask-about                     | Ask about                    |
+| "a i"  | ellama-chat                          | Chat (ask interactively)     |
+| "a I"  | ellama-ask-image                     | Ask image                    |
+| "a A"  | ellama-ask-audio                     | Ask audio                    |
+| "a R"  | ellama-ask-audio-recording           | Record audio and ask         |
+| "a l"  | ellama-ask-line                      | Ask current line             |
+| "a s"  | ellama-ask-selection                 | Ask selection                |
+| "t t"  | ellama-translate                     | Text translate               |
+| "t b"  | ellama-translate-buffer              | Translate buffer             |
+| "t e"  | ellama-chat-translation-enable       | Translation enable           |
+| "t d"  | ellama-chat-translation-disable      | Translation disable          |
+| "t c"  | ellama-complete                      | Text complete                |
+| "d w"  | ellama-define-word                   | Define word                  |
+| "x b"  | ellama-context-add-buffer            | Context add buffer           |
+| "x f"  | ellama-context-add-file              | Context add file             |
+| "x d"  | ellama-context-add-directory         | Context add directory        |
+| "x I"  | ellama-context-add-image             | Context add image            |
+| "x A"  | ellama-context-add-audio             | Context add audio            |
+| "x R"  | ellama-context-add-audio-recording   | Context record audio         |
+| "x S"  | ellama-context-start-audio-recording | Start audio recording        |
+| "x E"  | ellama-context-stop-audio-recording  | Stop audio recording         |
+| "x s"  | ellama-context-add-selection         | Context add selection        |
+| "x i"  | ellama-context-add-info-node         | Context add info node        |
+| "x r"  | ellama-context-reset                 | Context reset                |
+| "p s"  | ellama-provider-select               | Provider select              |
 
 * Configuration
 
@@ -708,6 +741,59 @@ Tool calls can request image handling explicitly:
   "mode": "image"
 }
 #+END_SRC
+
+** Audio Input
+
+Ellama can also send audio files to providers with the ~audio-input~ capability.
+The default supported extensions are WAV, MP3, M4A, AAC, FLAC, OGG, Opus and
+WebM.  Audio is sent as multipart media, the same transport used for image
+input.  Set ~ellama-audio-file-extensions~ if your provider accepts another
+format.
+
+Use ~M-x ellama-ask-audio~ for one audio file, or ~M-x ellama-chat-with-audio~
+inside a chat workflow.  For several files, use ~M-x ellama-chat-with-audios~.
+These commands add audio as ephemeral context for the next request, so the file
+is not kept around unless you add it as persistent context yourself.
+
+Programmatic calls can pass audio directly:
+
+#+BEGIN_SRC emacs-lisp
+  (ellama-chat "Transcribe this note." nil
+               :audios '("/path/to/note.wav"))
+
+  (ellama-stream "Summarize the meeting."
+                 :audio "/path/to/meeting.mp3")
+#+END_SRC
+
+Use ~:media~ when a request mixes images and audio:
+
+#+BEGIN_SRC emacs-lisp
+  (ellama-chat "Compare the screenshot with the spoken notes." nil
+               :media '("/path/to/screenshot.png"
+                        "/path/to/notes.wav"))
+#+END_SRC
+
+Microphone recording is available when the platform has a recording command. On
+macOS Ellama uses ~afrecord~. On GNU/Linux it uses ~arecord~. Set
+~ellama-audio-recording-command~ if you need another program or extra arguments.
+
+For short messages, use ~M-x ellama-ask-audio-recording~ or ~M-x
+ellama-context-add-audio-recording~.  Ellama records for
+~ellama-audio-recording-duration~ seconds and writes a temporary WAV file by
+default.  Set ~ellama-audio-recording-file-extension~ if your recorder writes
+another format.
+
+For longer messages, start and stop recording yourself:
+
+#+BEGIN_SRC text
+M-x ellama-context-start-audio-recording
+...speak for as long as needed...
+M-x ellama-context-stop-audio-recording
+#+END_SRC
+
+While recording is active, the mode line shows ~ellama:recording~.  Stopping the
+recording adds the file to context, using ~ellama-audio-context-default-scope~
+to decide whether it is ephemeral or persistent.
 
 ** Task Tool Subagents
 
@@ -1405,6 +1491,8 @@ Context Commands:
     - “d” "Add Directory" ~ellama-transient-add-directory~
     - “f” "Add File" ~ellama-transient-add-file~
     - “I” "Add Image" ~ellama-transient-add-image~
+    - “A” "Add Audio" ~ellama-transient-add-audio~
+    - “R” "Record Audio" ~ellama-transient-add-audio-recording~
     - “s” "Add Selection" ~ellama-transient-add-selection~
     - “i” "Add Info Node" ~ellama-transient-add-info-node~
 - Manage: Provides options for managing the global context.
@@ -1414,6 +1502,9 @@ Context Commands:
       element by name.
     - “r” "Context reset" ~ellama-context-reset~ - Clears the entire global
       context.
+- Recording: Provides start and stop commands for long microphone recordings.
+    - “S” "Start Recording" ~ellama-transient-start-audio-recording~
+    - “E” "Stop Recording" ~ellama-transient-stop-audio-recording~
 - Quit: (“q” "Quit" ~transient-quit-one~) - Closes the context commands
   transient menu.
 
