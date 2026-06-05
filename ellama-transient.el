@@ -52,11 +52,20 @@
 (defvar ellama-transient-provider nil)
 (defvar ellama--current-session-uid)
 (defvar ellama-max-tokens)
+(defvar ellama-audio-recording-duration)
 
 (declare-function ellama-ask-image "ellama"
                   (image prompt &optional create-session &rest args))
+(declare-function ellama-ask-audio "ellama"
+                  (audio prompt &optional create-session &rest args))
+(declare-function ellama-ask-audio-recording "ellama"
+                  (duration prompt &optional create-session &rest args))
 (declare-function ellama-chat-with-image "ellama"
                   (image prompt &optional create-session &rest args))
+(declare-function ellama-chat-with-audio "ellama"
+                  (audio prompt &optional create-session &rest args))
+(declare-function ellama-chat-with-audio-recording "ellama"
+                  (duration prompt &optional create-session &rest args))
 (declare-function ellama--provider-slot-offset "ellama" (provider slot))
 (declare-function ellama--provider-slot-value "ellama" (provider slot))
 (declare-function ellama--provider-with-slot-value "ellama"
@@ -692,6 +701,24 @@ FORMAT is used for non-default VALUE."
    (transient-arg-value "--new-session" args)
    :ephemeral (transient-arg-value "--ephemeral" args)))
 
+(transient-define-suffix ellama-transient-ask-audio (&optional args)
+  "Ask about an audio file.  ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-ask-audio
+   (read-file-name "Audio: " nil nil t)
+   (read-string "Ask Ellama: ")
+   (transient-arg-value "--new-session" args)
+   :ephemeral (transient-arg-value "--ephemeral" args)))
+
+(transient-define-suffix ellama-transient-ask-audio-recording (&optional args)
+  "Record audio and ask about it.  ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-ask-audio-recording
+   (read-number "Record seconds: " ellama-audio-recording-duration)
+   (read-string "Ask Ellama: ")
+   (transient-arg-value "--new-session" args)
+   :ephemeral (transient-arg-value "--ephemeral" args)))
+
 ;;;###autoload (autoload 'ellama-transient-ask-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-ask-menu ()
   "Ask Commands."
@@ -705,7 +732,9 @@ FORMAT is used for non-default VALUE."
     ("l" "Ask Line" ellama-transient-ask-line)
     ("s" "Ask Selection" ellama-transient-ask-selection)
     ("a" "Ask About" ellama-transient-ask-about)
-    ("i" "Ask Image" ellama-transient-ask-image)]
+    ("i" "Ask Image" ellama-transient-ask-image)
+    ("A" "Ask Audio" ellama-transient-ask-audio)
+    ("R" "Record Audio" ellama-transient-ask-audio-recording)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 ;;;###autoload (autoload 'ellama-transient-translate-menu "ellama-transient" nil t)
@@ -752,6 +781,35 @@ ARGS used for transient arguments."
    (when (transient-arg-value "--ephemeral" args)
      'ephemeral)))
 
+(transient-define-suffix ellama-transient-add-audio (&optional args)
+  "Add audio to context.
+ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-context-add-audio
+   (when (transient-arg-value "--ephemeral" args)
+     'ephemeral)))
+
+(transient-define-suffix ellama-transient-add-audio-recording (&optional args)
+  "Record audio and add it to context.
+ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-context-add-audio-recording
+   (when (transient-arg-value "--ephemeral" args)
+     'ephemeral)))
+
+(transient-define-suffix ellama-transient-start-audio-recording ()
+  "Start microphone recording for context."
+  (interactive)
+  (ellama-context-start-audio-recording))
+
+(transient-define-suffix ellama-transient-stop-audio-recording (&optional args)
+  "Stop microphone recording and add it to context.
+ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-context-stop-audio-recording
+   (when (transient-arg-value "--ephemeral" args)
+     'ephemeral)))
+
 (transient-define-suffix ellama-transient-add-selection (&optional args)
   "Add current selection to context.
 ARGS used for transient arguments."
@@ -784,12 +842,19 @@ ARGS used for transient arguments."
     ("d" "Add Directory" ellama-transient-add-directory)
     ("f" "Add File" ellama-transient-add-file)
     ("I" "Add Image" ellama-transient-add-image)
+    ("A" "Add Audio" ellama-transient-add-audio)
+    ("R" "Record Audio" ellama-transient-add-audio-recording)
     ("s" "Add Selection" ellama-transient-add-selection)
     ("i" "Add Info Node" ellama-transient-add-info-node)]
    ["Manage"
     ("m" "Manage context" ellama-context-manage)
     ("D" "Delete element" ellama-context-element-remove-by-name)
     ("r" "Context reset" ellama-context-reset)]
+   ["Recording"
+    ("S" "Start Recording" ellama-transient-start-audio-recording
+     :transient t)
+    ("E" "Stop Recording" ellama-transient-stop-audio-recording
+     :transient t)]
    ["Quit" ("q" "Quit" transient-quit-one)]])
 
 ;;;###autoload (autoload 'ellama-transient-blueprint-menu "ellama-transient" nil t)
@@ -869,6 +934,24 @@ ARGS used for transient arguments."
    (transient-arg-value "--new-session" args)
    :ephemeral (transient-arg-value "--ephemeral" args)))
 
+(transient-define-suffix ellama-transient-chat-with-audio (&optional args)
+  "Chat with Ellama about an audio file.  ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-chat-with-audio
+   (read-file-name "Audio: " nil nil t)
+   (read-string "Ask Ellama: ")
+   (transient-arg-value "--new-session" args)
+   :ephemeral (transient-arg-value "--ephemeral" args)))
+
+(transient-define-suffix ellama-transient-chat-with-audio-recording (&optional args)
+  "Record audio and chat with Ellama about it.  ARGS used for transient arguments."
+  (interactive (list (transient-args transient-current-command)))
+  (ellama-chat-with-audio-recording
+   (read-number "Record seconds: " ellama-audio-recording-duration)
+   (read-string "Ask Ellama: ")
+   (transient-arg-value "--new-session" args)
+   :ephemeral (transient-arg-value "--ephemeral" args)))
+
 ;;;###autoload (autoload 'ellama-transient-main-menu "ellama-transient" nil t)
 (transient-define-prefix ellama-transient-main-menu ()
   "Main Menu."
@@ -881,6 +964,8 @@ ARGS used for transient arguments."
   ["Main"
    [("c" "Chat" ellama-transient-chat)
     ("I" "Chat with image" ellama-transient-chat-with-image)
+    ("E" "Chat with audio" ellama-transient-chat-with-audio)
+    ("M" "Record audio chat" ellama-transient-chat-with-audio-recording)
     ("b" "Chat with blueprint" ellama-blueprint-select)
     ("B" "Blueprint Commands" ellama-transient-blueprint-menu)
     ("T" "Tools Commands" ellama-transient-tools-menu)]

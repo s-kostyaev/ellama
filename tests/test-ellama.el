@@ -1197,12 +1197,33 @@ detailed comparison to help you decide:
       (when (file-exists-p file-name)
         (delete-file file-name)))))
 
+(defun ellama-test--with-temp-audio-file (body)
+  "Call BODY with a tiny temporary WAV file."
+  (let ((file-name (make-temp-file "ellama-audio-" nil ".wav")))
+    (unwind-protect
+        (progn
+          (with-temp-buffer
+            (set-buffer-multibyte nil)
+            (insert "RIFF\0\0\0\0WAVE")
+            (write-region nil nil file-name nil 'silent))
+          (funcall body file-name))
+      (when (file-exists-p file-name)
+        (delete-file file-name)))))
+
 (ert-deftest test-ellama-file-to-llm-media ()
   (ellama-test--with-temp-image-file
    (lambda (file-name)
      (let ((media (ellama--file-to-llm-media file-name)))
        (should (llm-media-p media))
        (should (equal (llm-media-mime-type media) "image/png"))
+       (should-not (multibyte-string-p (llm-media-data media)))))))
+
+(ert-deftest test-ellama-audio-file-to-llm-media ()
+  (ellama-test--with-temp-audio-file
+   (lambda (file-name)
+     (let ((media (ellama--file-to-llm-media file-name)))
+       (should (llm-media-p media))
+       (should (equal (llm-media-mime-type media) "audio/wav"))
        (should-not (multibyte-string-p (llm-media-data media)))))))
 
 (ert-deftest test-ellama-stream-builds-multipart-with-images ()
@@ -1237,6 +1258,38 @@ detailed comparison to help you decide:
          (should (llm-media-p (cadr parts)))
          (should (equal (llm-media-mime-type (cadr parts)) "image/png")))))))
 
+(ert-deftest test-ellama-stream-builds-multipart-with-audios ()
+  (ellama-test--with-temp-audio-file
+   (lambda (file-name)
+     (let* ((provider (make-llm-fake))
+            (ellama-provider provider)
+            (ellama-response-process-method 'streaming)
+            (ellama-spinner-enabled nil)
+            (ellama-fill-paragraphs nil)
+            captured-prompt
+            done-text)
+       (cl-letf (((symbol-function 'llm-capabilities)
+                  (lambda (_provider) '(audio-input)))
+                 ((symbol-function 'llm-chat-streaming)
+                  (lambda (_provider prompt _partial-callback response-callback
+                                     _error-callback &optional _multi-output)
+                    (setq captured-prompt prompt)
+                    (funcall response-callback '(:text "ok"))
+                    nil)))
+         (with-temp-buffer
+           (ellama-stream "Transcribe audio"
+                          :provider provider
+                          :audios (list file-name)
+                          :on-done (lambda (text) (setq done-text text)))))
+       (should (equal done-text "ok"))
+       (let* ((content (llm-chat-prompt-interaction-content
+                        (car (llm-chat-prompt-interactions captured-prompt))))
+              (parts (llm-multipart-parts content)))
+         (should (llm-multipart-p content))
+         (should (equal (car parts) "Transcribe audio"))
+         (should (llm-media-p (cadr parts)))
+         (should (equal (llm-media-mime-type (cadr parts)) "audio/wav")))))))
+
 (ert-deftest test-ellama-stream-rejects-images-without-provider-support ()
   (ellama-test--with-temp-image-file
    (lambda (file-name)
@@ -1249,6 +1302,19 @@ detailed comparison to help you decide:
             (ellama-stream "Describe image"
                            :provider provider
                            :images (list file-name)))))))))
+
+(ert-deftest test-ellama-stream-rejects-audios-without-provider-support ()
+  (ellama-test--with-temp-audio-file
+   (lambda (file-name)
+     (let ((provider (make-llm-fake))
+           (ellama-response-process-method 'streaming))
+       (cl-letf (((symbol-function 'llm-capabilities)
+                  (lambda (_provider) nil)))
+         (should-error
+          (with-temp-buffer
+            (ellama-stream "Transcribe audio"
+                           :provider provider
+                           :audios (list file-name)))))))))
 
 (ert-deftest test-ellama-prompt-attach-pending-tool-media ()
   (ellama-test--with-temp-image-file
@@ -1269,7 +1335,7 @@ detailed comparison to help you decide:
                         (car (last (llm-chat-prompt-interactions prompt)))))
               (parts (llm-multipart-parts content)))
          (should (llm-multipart-p content))
-         (should (string-match-p "Images read by tools" (car parts)))
+         (should (string-match-p "Media read by tools" (car parts)))
          (should (llm-media-p (cadr parts))))))))
 
 (ert-deftest test-ellama-ask-image-adds-ephemeral-context ()
@@ -1297,6 +1363,81 @@ detailed comparison to help you decide:
     (should (equal (nreverse context-calls)
                    '(("/tmp/one.png" t) ("/tmp/two.png" t))))
     (should (equal chat-call '("Compare them" nil (:ephemeral t))))))
+
+(ert-deftest test-ellama-ask-audio-adds-ephemeral-context ()
+  (let (context-call chat-call)
+    (cl-letf (((symbol-function 'ellama-context-add-audio-file)
+               (lambda (file-name &optional ephemeral)
+                 (setq context-call (list file-name ephemeral))))
+              ((symbol-function 'ellama-chat)
+               (lambda (prompt create-session &rest args)
+                 (setq chat-call (list prompt create-session args)))))
+      (ellama-ask-audio "/tmp/audio.wav" "Transcribe it" t :ephemeral t))
+    (should (equal context-call '("/tmp/audio.wav" t)))
+    (should (equal chat-call '("Transcribe it" t (:ephemeral t))))))
+
+(ert-deftest test-ellama-chat-with-audios-adds-ephemeral-context ()
+  (let (context-calls chat-call)
+    (cl-letf (((symbol-function 'ellama-context-add-audio-file)
+               (lambda (file-name &optional ephemeral)
+                 (push (list file-name ephemeral) context-calls)))
+              ((symbol-function 'ellama-chat)
+               (lambda (prompt create-session &rest args)
+                 (setq chat-call (list prompt create-session args)))))
+      (ellama-chat-with-audios
+       '("/tmp/one.wav" "/tmp/two.wav") "Compare them" nil :ephemeral t))
+    (should (equal (nreverse context-calls)
+                   '(("/tmp/one.wav" t) ("/tmp/two.wav" t))))
+    (should (equal chat-call '("Compare them" nil (:ephemeral t))))))
+
+(ert-deftest test-ellama-audio-recording-command-replaces-placeholders ()
+  (let ((ellama-audio-recording-command
+         '("recorder" "--seconds" "%d" "--output" "%f")))
+    (should (equal (ellama--audio-recording-command "/tmp/a.wav" 12)
+                   '("recorder" "--seconds" "12" "--output" "/tmp/a.wav")))))
+
+(ert-deftest test-ellama-audio-recording-command-rejects-duration-placeholder-for-start-stop ()
+  (let ((ellama-audio-recording-command
+         '("recorder" "--seconds" "%d" "--output" "%f")))
+    (should-error (ellama--audio-recording-command "/tmp/a.wav"))))
+
+(ert-deftest test-ellama-audio-recording-command-uses-default-when-nil ()
+  (let ((ellama-audio-recording-command nil))
+    (cl-letf (((symbol-function 'ellama--default-audio-recording-command)
+               (lambda (&optional duration)
+                 (list "recorder" (number-to-string duration) "%f"))))
+      (should (equal (ellama--audio-recording-command "/tmp/a.wav" 3)
+                     '("recorder" "3" "/tmp/a.wav"))))))
+
+(ert-deftest test-ellama-audio-recording-shows-recording-lighter ()
+  (ellama-test--with-temp-audio-file
+   (lambda (file-name)
+     (let ((ellama-audio-recording-command '("recorder" "%f"))
+           (ellama--audio-recording-process nil)
+           (ellama--audio-recording-file nil)
+           (live t))
+       (ellama-audio-recording-mode -1)
+       (cl-letf (((symbol-function 'start-process)
+                  (lambda (&rest _args) 'process))
+                 ((symbol-function 'set-process-query-on-exit-flag)
+                  (lambda (&rest _args) nil))
+                 ((symbol-function 'process-live-p)
+                  (lambda (_process) live))
+                 ((symbol-function 'interrupt-process)
+                  (lambda (_process) (setq live nil)))
+                 ((symbol-function 'kill-process)
+                  (lambda (_process) (setq live nil)))
+                 ((symbol-function 'accept-process-output)
+                  (lambda (&rest _args) nil)))
+         (unwind-protect
+             (progn
+               (ellama-start-audio-recording file-name)
+               (should ellama-audio-recording-mode)
+               (should (equal (ellama-stop-audio-recording) file-name))
+               (should-not ellama-audio-recording-mode))
+           (ellama-audio-recording-mode -1)
+           (setq ellama--audio-recording-process nil
+                 ellama--audio-recording-file nil)))))))
 
 (ert-deftest test-ellama-chat-send-last-message-displays-ephemeral-image-context ()
   (ellama-test--with-temp-image-file
