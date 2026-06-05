@@ -6,6 +6,11 @@ SRT_PARITY_DOCKER_IMAGE ?= ellama-srt-parity:latest
 SRT_PARITY_DOCKERFILE ?= docker/srt-parity-linux.Dockerfile
 SRT_PARITY_DOCKER_RUN_FLAGS ?= --rm --privileged
 
+# Emacs uses TMPDIR while loading Org.  When a sandboxed caller inherits a
+# stale temporary directory, fall back to the system temp root for all recipes.
+override TMPDIR := $(or $(wildcard $(TMPDIR)),/tmp)
+export TMPDIR
+
 # This order is based on the packages dependency graph.
 ELLAMA_COMPILE_ORDER = \
 	ellama-tools-dlp.el \
