@@ -1404,10 +1404,42 @@ detailed comparison to help you decide:
 (ert-deftest test-ellama-audio-recording-command-uses-default-when-nil ()
   (let ((ellama-audio-recording-command nil))
     (cl-letf (((symbol-function 'ellama--default-audio-recording-command)
-               (lambda (&optional duration)
+               (lambda (_file-name &optional duration)
                  (list "recorder" (number-to-string duration) "%f"))))
       (should (equal (ellama--audio-recording-command "/tmp/a.wav" 3)
                      '("recorder" "3" "/tmp/a.wav"))))))
+
+(ert-deftest test-ellama-default-audio-recording-command-uses-ffmpeg-on-macos ()
+  (let ((system-type 'darwin))
+    (cl-letf (((symbol-function 'executable-find)
+               (lambda (program)
+                 (and (equal program "ffmpeg") "/usr/local/bin/ffmpeg"))))
+      (should
+       (equal
+        (ellama--default-audio-recording-command "/tmp/a.wav" 12)
+        '("ffmpeg" "-nostdin" "-hide_banner" "-loglevel" "error"
+          "-f" "avfoundation" "-i" "none:default" "-t" "%d"
+          "-y" "%f"))))))
+
+(ert-deftest test-ellama-default-audio-recording-command-uses-arecord-on-linux ()
+  (let ((system-type 'gnu/linux))
+    (cl-letf (((symbol-function 'executable-find)
+               (lambda (program)
+                 (and (equal program "arecord") "/usr/bin/arecord"))))
+      (should
+       (equal
+        (ellama--default-audio-recording-command "/tmp/a.wav")
+        '("arecord" "-q" "-f" "cd" "%f"))))))
+
+(ert-deftest test-ellama-default-audio-recording-command-falls-back-to-sox ()
+  (let ((system-type 'darwin))
+    (cl-letf (((symbol-function 'executable-find)
+               (lambda (program)
+                 (and (equal program "rec") "/usr/local/bin/rec"))))
+      (should
+       (equal
+        (ellama--default-audio-recording-command "/tmp/a.wav" 7)
+        '("rec" "%f" "trim" "0" "%d"))))))
 
 (ert-deftest test-ellama-audio-recording-shows-recording-lighter ()
   (ellama-test--with-temp-audio-file

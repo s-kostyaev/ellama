@@ -999,10 +999,10 @@ Use ‘:media’ when a request mixes images and audio:
                   :media '("/path/to/screenshot.png"
                            "/path/to/notes.wav"))
 
-Microphone recording is available when the platform has a recording
-command.  On macOS Ellama uses ‘afrecord’.  On GNU/Linux it uses
-‘arecord’.  Set ‘ellama-audio-recording-command’ if you need another
-program or extra arguments.
+Ellama selects an installed microphone recorder automatically.  On macOS
+it tries FFmpeg and then SoX.  On GNU/Linux it tries ‘arecord’, FFmpeg,
+and then SoX.  Set ‘ellama-audio-recording-command’ if you need another
+program, input device, or extra arguments.
 
 For short messages, use ‘M-x ellama-ask-audio-recording’ or ‘M-x
 ellama-context-add-audio-recording’.  Ellama records for
@@ -2803,42 +2803,42 @@ Node: Session Provider Keys42423
 Node: Session Compaction44284
 Node: Image Input46578
 Node: Audio Input48715
-Node: Task Tool Subagents50933
-Node: Plan-and-Act Agent Loop54107
-Node: Edit Tool Shell Hooks56688
-Node: DLP for Tool Input/Output58981
-Node: SRT Filesystem Policy for Tools74980
-Node: Context Management80649
-Node: Transient Menus for Context Management81717
-Node: Managing the Context83791
-Node: Considerations84566
-Node: Minor modes85159
-Node: ellama-context-header-line-mode87147
-Node: ellama-context-header-line-global-mode87972
-Node: ellama-context-mode-line-mode88692
-Node: ellama-context-mode-line-global-mode89540
-Node: Ellama Session Header Line Mode90244
-Node: Enabling and Disabling90813
-Node: Customization91260
-Node: Ellama Session Mode Line Mode91548
-Node: Enabling and Disabling (1)92133
-Node: Customization (1)92580
-Node: Using Blueprints92874
-Node: Key Components of Ellama Blueprints93514
-Node: Creating and Managing Blueprints94121
-Node: Blueprints files95099
-Node: Variable Management95520
-Node: Keymap and Mode95973
-Node: Transient Menus96909
-Node: Running Blueprints programmatically97455
-Node: MCP Integration98042
-Node: Agent Skills99277
-Node: Directory Structure99640
-Node: Creating a Skill100667
-Node: How it works101042
-Node: Acknowledgments101433
-Node: Contributions102144
-Node: GNU Free Documentation License102818
+Node: Task Tool Subagents50959
+Node: Plan-and-Act Agent Loop54133
+Node: Edit Tool Shell Hooks56714
+Node: DLP for Tool Input/Output59007
+Node: SRT Filesystem Policy for Tools75006
+Node: Context Management80675
+Node: Transient Menus for Context Management81743
+Node: Managing the Context83817
+Node: Considerations84592
+Node: Minor modes85185
+Node: ellama-context-header-line-mode87173
+Node: ellama-context-header-line-global-mode87998
+Node: ellama-context-mode-line-mode88718
+Node: ellama-context-mode-line-global-mode89566
+Node: Ellama Session Header Line Mode90270
+Node: Enabling and Disabling90839
+Node: Customization91286
+Node: Ellama Session Mode Line Mode91574
+Node: Enabling and Disabling (1)92159
+Node: Customization (1)92606
+Node: Using Blueprints92900
+Node: Key Components of Ellama Blueprints93540
+Node: Creating and Managing Blueprints94147
+Node: Blueprints files95125
+Node: Variable Management95546
+Node: Keymap and Mode95999
+Node: Transient Menus96935
+Node: Running Blueprints programmatically97481
+Node: MCP Integration98068
+Node: Agent Skills99303
+Node: Directory Structure99666
+Node: Creating a Skill100693
+Node: How it works101068
+Node: Acknowledgments101459
+Node: Contributions102170
+Node: GNU Free Documentation License102844
 
 End Tag Table
 

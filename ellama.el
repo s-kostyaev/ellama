@@ -186,10 +186,13 @@ SVG is intentionally out of scope for the initial image input support."
   "File extension for microphone recordings."
   :type 'string)
 
-(defcustom ellama-audio-recording-command nil
+(defcustom ellama-audio-recording-command
+  #'ellama--default-audio-recording-command
   "Command used to record audio from the microphone.
-When nil, Ellama uses a platform default: `afrecord' on macOS or
-`arecord' on GNU/Linux when available.
+The default function selects an installed recorder for the current
+platform.  On macOS it tries FFmpeg and SoX.  On GNU/Linux it tries
+`arecord', FFmpeg, and SoX.  A nil value keeps this automatic
+selection for backward compatibility.
 
 When a list of strings, `%f' is replaced with the output file name
 and `%d' with the duration in seconds.  The first element is the
@@ -1446,20 +1449,32 @@ CONTEXT will be ignored.  Use global context instead.
    "ellama-audio-" nil
    (concat "." ellama-audio-recording-file-extension)))
 
-(defun ellama--default-audio-recording-command (&optional duration)
+(defun ellama--default-audio-recording-command (_file-name &optional duration)
   "Return default microphone recording command for current platform.
 DURATION nil means record until the process is interrupted."
-  (cond
-   ((and (eq system-type 'darwin)
-         (executable-find "afrecord"))
-    (append '("afrecord" "-f" "WAVE")
-            (when duration '("-d" "%d"))
-            '("%f")))
-   ((and (eq system-type 'gnu/linux)
-         (executable-find "arecord"))
-    (append '("arecord" "-q" "-f" "cd")
-            (when duration '("-d" "%d"))
-            '("%f")))))
+  (let ((duration-args (when duration '("-t" "%d"))))
+    (cond
+     ((and (eq system-type 'darwin)
+           (executable-find "ffmpeg"))
+      (append '("ffmpeg" "-nostdin" "-hide_banner" "-loglevel" "error"
+                "-f" "avfoundation" "-i" "none:default")
+              duration-args
+              '("-y" "%f")))
+     ((and (eq system-type 'gnu/linux)
+           (executable-find "arecord"))
+      (append '("arecord" "-q" "-f" "cd")
+              (when duration '("-d" "%d"))
+              '("%f")))
+     ((and (eq system-type 'gnu/linux)
+           (executable-find "ffmpeg"))
+      (append '("ffmpeg" "-nostdin" "-hide_banner" "-loglevel" "error"
+                "-f" "pulse" "-i" "default")
+              duration-args
+              '("-y" "%f")))
+     ((and (memq system-type '(darwin gnu/linux))
+           (executable-find "rec"))
+      (append '("rec" "%f")
+              (when duration '("trim" "0" "%d")))))))
 
 (defun ellama--audio-recording-command (file-name &optional duration)
   "Return command list to record FILE-NAME for DURATION seconds."
@@ -1469,7 +1484,8 @@ DURATION nil means record until the process is interrupted."
                   ((and ellama-audio-recording-command
                         (listp ellama-audio-recording-command))
                    ellama-audio-recording-command)
-                  (t (ellama--default-audio-recording-command duration)))))
+                  (t (ellama--default-audio-recording-command
+                      file-name duration)))))
     (unless command
       (error "No audio recording command available; customize ellama-audio-recording-command"))
     (when (and (not duration)

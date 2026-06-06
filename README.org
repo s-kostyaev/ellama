@@ -773,9 +773,10 @@ Use ~:media~ when a request mixes images and audio:
                         "/path/to/notes.wav"))
 #+END_SRC
 
-Microphone recording is available when the platform has a recording command. On
-macOS Ellama uses ~afrecord~. On GNU/Linux it uses ~arecord~. Set
-~ellama-audio-recording-command~ if you need another program or extra arguments.
+Ellama selects an installed microphone recorder automatically.  On macOS it
+tries FFmpeg and then SoX.  On GNU/Linux it tries ~arecord~, FFmpeg, and then
+SoX.  Set ~ellama-audio-recording-command~ if you need another program, input
+device, or extra arguments.
 
 For short messages, use ~M-x ellama-ask-audio-recording~ or ~M-x
 ellama-context-add-audio-recording~.  Ellama records for
