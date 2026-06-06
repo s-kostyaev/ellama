@@ -780,6 +780,12 @@ device, or extra arguments.  On macOS, allow microphone access for Emacs in
 System Settings under Privacy & Security > Microphone.  If Emacs runs in a
 terminal, allow access for that terminal instead.
 
+FFmpeg recordings use dynamic speech normalization by default.  This helps when
+the microphone input is quiet and reduces the chance that an audio model will
+invent speech from a weak signal.  Set ~ellama-audio-recording-ffmpeg-filter~ to
+nil to keep the original input level, or replace it with another FFmpeg audio
+filter.
+
 *** macOS microphone permission
 
 Emacs may be missing from the Microphone list when its application bundle has no

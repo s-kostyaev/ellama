@@ -1011,6 +1011,12 @@ access for Emacs in System Settings under Privacy & Security >
 Microphone.  If Emacs runs in a terminal, allow access for that terminal
 instead.
 
+FFmpeg recordings use dynamic speech normalization by default.  This
+helps when the microphone input is quiet and reduces the chance that an
+audio model will invent speech from a weak signal.  Set
+‘ellama-audio-recording-ffmpeg-filter’ to nil to keep the original input
+level, or replace it with another FFmpeg audio filter.
+
 * Menu:
 
 * macOS microphone permission::
@@ -2853,43 +2859,43 @@ Node: Session Provider Keys42469
 Node: Session Compaction44330
 Node: Image Input46624
 Node: Audio Input48761
-Node: macOS microphone permission50505
-Node: Task Tool Subagents52666
-Node: Plan-and-Act Agent Loop55840
-Node: Edit Tool Shell Hooks58421
-Node: DLP for Tool Input/Output60714
-Node: SRT Filesystem Policy for Tools76713
-Node: Context Management82382
-Node: Transient Menus for Context Management83450
-Node: Managing the Context85524
-Node: Considerations86299
-Node: Minor modes86892
-Node: ellama-context-header-line-mode88880
-Node: ellama-context-header-line-global-mode89705
-Node: ellama-context-mode-line-mode90425
-Node: ellama-context-mode-line-global-mode91273
-Node: Ellama Session Header Line Mode91977
-Node: Enabling and Disabling92546
-Node: Customization92993
-Node: Ellama Session Mode Line Mode93281
-Node: Enabling and Disabling (1)93866
-Node: Customization (1)94313
-Node: Using Blueprints94607
-Node: Key Components of Ellama Blueprints95247
-Node: Creating and Managing Blueprints95854
-Node: Blueprints files96832
-Node: Variable Management97253
-Node: Keymap and Mode97706
-Node: Transient Menus98642
-Node: Running Blueprints programmatically99188
-Node: MCP Integration99775
-Node: Agent Skills101010
-Node: Directory Structure101373
-Node: Creating a Skill102400
-Node: How it works102775
-Node: Acknowledgments103166
-Node: Contributions103877
-Node: GNU Free Documentation License104551
+Node: macOS microphone permission50835
+Node: Task Tool Subagents52996
+Node: Plan-and-Act Agent Loop56170
+Node: Edit Tool Shell Hooks58751
+Node: DLP for Tool Input/Output61044
+Node: SRT Filesystem Policy for Tools77043
+Node: Context Management82712
+Node: Transient Menus for Context Management83780
+Node: Managing the Context85854
+Node: Considerations86629
+Node: Minor modes87222
+Node: ellama-context-header-line-mode89210
+Node: ellama-context-header-line-global-mode90035
+Node: ellama-context-mode-line-mode90755
+Node: ellama-context-mode-line-global-mode91603
+Node: Ellama Session Header Line Mode92307
+Node: Enabling and Disabling92876
+Node: Customization93323
+Node: Ellama Session Mode Line Mode93611
+Node: Enabling and Disabling (1)94196
+Node: Customization (1)94643
+Node: Using Blueprints94937
+Node: Key Components of Ellama Blueprints95577
+Node: Creating and Managing Blueprints96184
+Node: Blueprints files97162
+Node: Variable Management97583
+Node: Keymap and Mode98036
+Node: Transient Menus98972
+Node: Running Blueprints programmatically99518
+Node: MCP Integration100105
+Node: Agent Skills101340
+Node: Directory Structure101703
+Node: Creating a Skill102730
+Node: How it works103105
+Node: Acknowledgments103496
+Node: Contributions104207
+Node: GNU Free Documentation License104881
 
 End Tag Table
 

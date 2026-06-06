@@ -1410,7 +1410,8 @@ detailed comparison to help you decide:
                      '("recorder" "3" "/tmp/a.wav"))))))
 
 (ert-deftest test-ellama-default-audio-recording-command-uses-ffmpeg-on-macos ()
-  (let ((system-type 'darwin))
+  (let ((system-type 'darwin)
+        (ellama-audio-recording-ffmpeg-filter "normalize"))
     (cl-letf (((symbol-function 'executable-find)
                (lambda (program)
                  (and (equal program "ffmpeg") "/usr/local/bin/ffmpeg"))))
@@ -1418,8 +1419,20 @@ detailed comparison to help you decide:
        (equal
         (ellama--default-audio-recording-command "/tmp/a.wav" 12)
         '("ffmpeg" "-nostdin" "-hide_banner" "-loglevel" "error"
-          "-f" "avfoundation" "-i" "none:default" "-t" "%d"
-          "-y" "%f"))))))
+          "-f" "avfoundation" "-i" "none:default" "-af" "normalize"
+          "-t" "%d" "-y" "%f"))))))
+
+(ert-deftest test-ellama-default-audio-recording-command-can-disable-filter ()
+  (let ((system-type 'darwin)
+        (ellama-audio-recording-ffmpeg-filter nil))
+    (cl-letf (((symbol-function 'executable-find)
+               (lambda (program)
+                 (and (equal program "ffmpeg") "/usr/local/bin/ffmpeg"))))
+      (should
+       (equal
+        (ellama--default-audio-recording-command "/tmp/a.wav")
+        '("ffmpeg" "-nostdin" "-hide_banner" "-loglevel" "error"
+          "-f" "avfoundation" "-i" "none:default" "-y" "%f"))))))
 
 (ert-deftest test-ellama-default-audio-recording-command-uses-arecord-on-linux ()
   (let ((system-type 'gnu/linux))

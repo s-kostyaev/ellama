@@ -186,6 +186,13 @@ SVG is intentionally out of scope for the initial image input support."
   "File extension for microphone recordings."
   :type 'string)
 
+(defcustom ellama-audio-recording-ffmpeg-filter
+  "dynaudnorm=f=150:g=7:p=0.9:m=20:r=0.1:b=1"
+  "FFmpeg audio filter used for microphone recordings.
+The default dynamically raises quiet speech while limiting peaks.
+Set this to nil to record without filtering."
+  :type '(choice (const nil) string))
+
 (defcustom ellama-audio-recording-command
   #'ellama--default-audio-recording-command
   "Command used to record audio from the microphone.
@@ -1458,6 +1465,8 @@ DURATION nil means record until the process is interrupted."
            (executable-find "ffmpeg"))
       (append '("ffmpeg" "-nostdin" "-hide_banner" "-loglevel" "error"
                 "-f" "avfoundation" "-i" "none:default")
+              (when ellama-audio-recording-ffmpeg-filter
+                (list "-af" ellama-audio-recording-ffmpeg-filter))
               duration-args
               '("-y" "%f")))
      ((and (eq system-type 'gnu/linux)
@@ -1469,6 +1478,8 @@ DURATION nil means record until the process is interrupted."
            (executable-find "ffmpeg"))
       (append '("ffmpeg" "-nostdin" "-hide_banner" "-loglevel" "error"
                 "-f" "pulse" "-i" "default")
+              (when ellama-audio-recording-ffmpeg-filter
+                (list "-af" ellama-audio-recording-ffmpeg-filter))
               duration-args
               '("-y" "%f")))
      ((and (memq system-type '(darwin gnu/linux))
