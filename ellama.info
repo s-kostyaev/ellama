@@ -133,6 +133,10 @@ Configuration
 * DLP for Tool Input/Output::
 * SRT Filesystem Policy for Tools::
 
+Audio Input
+
+* macOS microphone permission::
+
 Context Management
 
 * Transient Menus for Context Management::
@@ -1006,6 +1010,49 @@ program, input device, or extra arguments.  On macOS, allow microphone
 access for Emacs in System Settings under Privacy & Security >
 Microphone.  If Emacs runs in a terminal, allow access for that terminal
 instead.
+
+* Menu:
+
+* macOS microphone permission::
+
+
+File: ellama.info,  Node: macOS microphone permission,  Up: Audio Input
+
+4.4.1 macOS microphone permission
+---------------------------------
+
+Emacs may be missing from the Microphone list when its application
+bundle has no ‘NSMicrophoneUsageDescription’ entry.  This can happen
+with some ‘emacs-plus’ builds.  In that case macOS cannot display the
+permission prompt, and FFmpeg may exit with ‘Abort trap: 6’ or report
+that no audio device was found.
+
+Quit Emacs, set ‘APP’ to the installed application bundle, and check the
+entry:
+
+     APP=/Applications/Emacs.app
+     plutil -extract NSMicrophoneUsageDescription raw \
+       "$APP/Contents/Info.plist"
+
+If ‘plutil’ reports that the key is missing, add it, re-sign the
+application, and reset the microphone permission:
+
+     /usr/libexec/PlistBuddy \
+       -c 'Add :NSMicrophoneUsageDescription string Ellama records audio from the microphone.' \
+       "$APP/Contents/Info.plist"
+
+     codesign --force --deep --sign - "$APP"
+
+     BUNDLE_ID=$(plutil -extract CFBundleIdentifier raw \
+       "$APP/Contents/Info.plist")
+     tccutil reset Microphone "$BUNDLE_ID"
+     open "$APP"
+
+Start a recording after Emacs opens.  macOS should now ask for
+microphone access, and Emacs should appear in System Settings under
+Privacy & Security > Microphone.  A package upgrade may replace the
+application bundle, so repeat these steps if the entry disappears after
+upgrading Emacs.
 
 For short messages, use ‘M-x ellama-ask-audio-recording’ or ‘M-x
 ellama-context-add-audio-recording’.  Ellama records for
@@ -2798,50 +2845,51 @@ their use in free software.
 
 Tag Table:
 Node: Top2548
-Node: Installation6327
-Node: Commands11341
-Node: Keymap22275
-Node: Configuration25834
-Node: Session Provider Keys42423
-Node: Session Compaction44284
-Node: Image Input46578
-Node: Audio Input48715
-Node: Task Tool Subagents51132
-Node: Plan-and-Act Agent Loop54306
-Node: Edit Tool Shell Hooks56887
-Node: DLP for Tool Input/Output59180
-Node: SRT Filesystem Policy for Tools75179
-Node: Context Management80848
-Node: Transient Menus for Context Management81916
-Node: Managing the Context83990
-Node: Considerations84765
-Node: Minor modes85358
-Node: ellama-context-header-line-mode87346
-Node: ellama-context-header-line-global-mode88171
-Node: ellama-context-mode-line-mode88891
-Node: ellama-context-mode-line-global-mode89739
-Node: Ellama Session Header Line Mode90443
-Node: Enabling and Disabling91012
-Node: Customization91459
-Node: Ellama Session Mode Line Mode91747
-Node: Enabling and Disabling (1)92332
-Node: Customization (1)92779
-Node: Using Blueprints93073
-Node: Key Components of Ellama Blueprints93713
-Node: Creating and Managing Blueprints94320
-Node: Blueprints files95298
-Node: Variable Management95719
-Node: Keymap and Mode96172
-Node: Transient Menus97108
-Node: Running Blueprints programmatically97654
-Node: MCP Integration98241
-Node: Agent Skills99476
-Node: Directory Structure99839
-Node: Creating a Skill100866
-Node: How it works101241
-Node: Acknowledgments101632
-Node: Contributions102343
-Node: GNU Free Documentation License103017
+Node: Installation6373
+Node: Commands11387
+Node: Keymap22321
+Node: Configuration25880
+Node: Session Provider Keys42469
+Node: Session Compaction44330
+Node: Image Input46624
+Node: Audio Input48761
+Node: macOS microphone permission50505
+Node: Task Tool Subagents52666
+Node: Plan-and-Act Agent Loop55840
+Node: Edit Tool Shell Hooks58421
+Node: DLP for Tool Input/Output60714
+Node: SRT Filesystem Policy for Tools76713
+Node: Context Management82382
+Node: Transient Menus for Context Management83450
+Node: Managing the Context85524
+Node: Considerations86299
+Node: Minor modes86892
+Node: ellama-context-header-line-mode88880
+Node: ellama-context-header-line-global-mode89705
+Node: ellama-context-mode-line-mode90425
+Node: ellama-context-mode-line-global-mode91273
+Node: Ellama Session Header Line Mode91977
+Node: Enabling and Disabling92546
+Node: Customization92993
+Node: Ellama Session Mode Line Mode93281
+Node: Enabling and Disabling (1)93866
+Node: Customization (1)94313
+Node: Using Blueprints94607
+Node: Key Components of Ellama Blueprints95247
+Node: Creating and Managing Blueprints95854
+Node: Blueprints files96832
+Node: Variable Management97253
+Node: Keymap and Mode97706
+Node: Transient Menus98642
+Node: Running Blueprints programmatically99188
+Node: MCP Integration99775
+Node: Agent Skills101010
+Node: Directory Structure101373
+Node: Creating a Skill102400
+Node: How it works102775
+Node: Acknowledgments103166
+Node: Contributions103877
+Node: GNU Free Documentation License104551
 
 End Tag Table
 

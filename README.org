@@ -780,6 +780,42 @@ device, or extra arguments.  On macOS, allow microphone access for Emacs in
 System Settings under Privacy & Security > Microphone.  If Emacs runs in a
 terminal, allow access for that terminal instead.
 
+*** macOS microphone permission
+
+Emacs may be missing from the Microphone list when its application bundle has no
+~NSMicrophoneUsageDescription~ entry.  This can happen with some ~emacs-plus~
+builds.  In that case macOS cannot display the permission prompt, and FFmpeg may
+exit with ~Abort trap: 6~ or report that no audio device was found.
+
+Quit Emacs, set ~APP~ to the installed application bundle, and check the entry:
+
+#+BEGIN_SRC shell
+  APP=/Applications/Emacs.app
+  plutil -extract NSMicrophoneUsageDescription raw \
+    "$APP/Contents/Info.plist"
+#+END_SRC
+
+If ~plutil~ reports that the key is missing, add it, re-sign the application,
+and reset the microphone permission:
+
+#+BEGIN_SRC shell
+  /usr/libexec/PlistBuddy \
+    -c 'Add :NSMicrophoneUsageDescription string Ellama records audio from the microphone.' \
+    "$APP/Contents/Info.plist"
+
+  codesign --force --deep --sign - "$APP"
+
+  BUNDLE_ID=$(plutil -extract CFBundleIdentifier raw \
+    "$APP/Contents/Info.plist")
+  tccutil reset Microphone "$BUNDLE_ID"
+  open "$APP"
+#+END_SRC
+
+Start a recording after Emacs opens.  macOS should now ask for microphone
+access, and Emacs should appear in System Settings under Privacy & Security >
+Microphone.  A package upgrade may replace the application bundle, so repeat
+these steps if the entry disappears after upgrading Emacs.
+
 For short messages, use ~M-x ellama-ask-audio-recording~ or ~M-x
 ellama-context-add-audio-recording~.  Ellama records for
 ~ellama-audio-recording-duration~ seconds and writes a temporary WAV file by
