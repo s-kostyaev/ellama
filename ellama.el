@@ -1316,6 +1316,39 @@ CONTEXT will be ignored.  Use global context instead.
   "Return non-nil when PROVIDER supports audio input."
   (ellama--provider-supports-capability-p provider 'audio-input))
 
+(defun ellama--tree-contains-input-audio-p (value)
+  "Return non-nil if VALUE has an OpenAI input_audio content part."
+  (cond
+   ((vectorp value)
+    (seq-some #'ellama--tree-contains-input-audio-p value))
+   ((consp value)
+    (or (and (eq (car value) :type)
+             (equal (cadr value) "input_audio"))
+        (ellama--tree-contains-input-audio-p (car value))
+        (ellama--tree-contains-input-audio-p (cdr value))))))
+
+(defun ellama--openai-compatible-audio-input-supported-p (provider)
+  "Return non-nil when PROVIDER serializes OpenAI audio input correctly."
+  (condition-case nil
+      (let ((request
+              (llm-provider-chat-request
+               provider
+               (llm-make-chat-prompt
+                (llm-make-multipart
+                 "audio input probe"
+                 (make-llm-media :mime-type "audio/wav" :data "")))
+               nil)))
+        (ellama--tree-contains-input-audio-p request))
+    (error nil)))
+
+(defun ellama--validate-provider-audio-transport (provider)
+  "Validate that PROVIDER can serialize audio media."
+  (when (and (fboundp 'llm-openai-compatible-p)
+             (llm-openai-compatible-p provider)
+             (not (ellama--openai-compatible-audio-input-supported-p provider)))
+    (error
+     "Installed llm does not support OpenAI-compatible audio input; update llm to a version with input_audio support")))
+
 (defun ellama--normalize-media-files (files media-kind)
   "Normalize FILES argument to a list of file names for MEDIA-KIND."
   (cond
@@ -1350,7 +1383,9 @@ CONTEXT will be ignored.  Use global context instead.
                (pcase capability
                  ('image-input "image input")
                  ('audio-input "audio input")
-                 (_ (symbol-name capability))))))))
+                 (_ (symbol-name capability)))))
+      (when (eq capability 'audio-input)
+        (ellama--validate-provider-audio-transport provider)))))
 
 (defun ellama--validate-image-input (provider image-files)
   "Validate IMAGE-FILES for PROVIDER."

@@ -1290,6 +1290,67 @@ detailed comparison to help you decide:
          (should (llm-media-p (cadr parts)))
          (should (equal (llm-media-mime-type (cadr parts)) "audio/wav")))))))
 
+(ert-deftest test-ellama-stream-builds-multipart-with-audio-context ()
+  (ellama-test--with-temp-audio-file
+   (lambda (file-name)
+     (let* ((provider (make-llm-fake))
+            (ellama-context-global nil)
+            (ellama-context-ephemeral
+             (list (ellama-context-element-audio-file :name file-name)))
+            (ellama-response-process-method 'streaming)
+            (ellama-spinner-enabled nil)
+            (ellama-fill-paragraphs nil)
+            captured-prompt)
+       (cl-letf (((symbol-function 'llm-capabilities)
+                  (lambda (_provider) '(audio-input)))
+                 ((symbol-function 'llm-chat-streaming)
+                  (lambda (_provider prompt _partial-callback response-callback
+                                     _error-callback &optional _multi-output)
+                    (setq captured-prompt prompt)
+                    (funcall response-callback '(:text "ok"))
+                    nil)))
+         (with-temp-buffer
+           (ellama-stream "Transcribe audio" :provider provider)))
+       (should-not ellama-context-ephemeral)
+       (let* ((content
+               (llm-chat-prompt-interaction-content
+                (car (llm-chat-prompt-interactions captured-prompt))))
+              (parts (llm-multipart-parts content)))
+         (should (llm-multipart-p content))
+         (should (string-match-p "Transcribe audio" (car parts)))
+         (should (llm-media-p (cadr parts)))
+         (should (equal (llm-media-mime-type (cadr parts)) "audio/wav")))))))
+
+(ert-deftest test-ellama-rejects-broken-openai-compatible-audio-transport ()
+  (let ((provider
+         (make-llm-openai-compatible :chat-model "audio-model")))
+    (cl-letf (((symbol-function 'llm-capabilities)
+               (lambda (_provider) '(audio-input)))
+              ((symbol-function 'llm-provider-chat-request)
+               (lambda (&rest _args)
+                 '(:messages
+                   [(:role "user"
+                           :content
+                           [(:type "image_url"
+                                   :image_url (:url "data:audio/wav;base64,"))])]))))
+      (should-error
+       (ellama--validate-provider-audio-transport provider)
+       :type 'error))))
+
+(ert-deftest test-ellama-accepts-openai-compatible-input-audio-transport ()
+  (let ((provider
+         (make-llm-openai-compatible :chat-model "audio-model")))
+    (cl-letf (((symbol-function 'llm-capabilities)
+               (lambda (_provider) '(audio-input)))
+              ((symbol-function 'llm-provider-chat-request)
+               (lambda (&rest _args)
+                 '(:messages
+                   [(:role "user"
+                           :content
+                           [(:type "input_audio"
+                                   :input_audio (:data "" :format "wav"))])]))))
+      (ellama--validate-provider-audio-transport provider))))
+
 (ert-deftest test-ellama-stream-rejects-images-without-provider-support ()
   (ellama-test--with-temp-image-file
    (lambda (file-name)
