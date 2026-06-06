@@ -1,6 +1,6 @@
 # Makefile for ellama project
 
-.PHONY: build test test-detailed test-integration test-srt-integration docker-build-srt-parity test-srt-integration-linux check-compile-warnings checkdocs manual format-elisp install-git-hooks refill-news refill-readme check-elisp check-readme check-news check-custom-variables check-commands
+.PHONY: build test test-detailed test-integration test-srt-integration docker-build-srt-parity test-srt-integration-linux check-compile-warnings checkdocs manual format-elisp install-git-hooks refill-news refill-readme check-elisp check-readme check-news check-custom-variables check-commands check-transient-dup-keys
 
 SRT_PARITY_DOCKER_IMAGE ?= ellama-srt-parity:latest
 SRT_PARITY_DOCKERFILE ?= docker/srt-parity-linux.Dockerfile
@@ -117,7 +117,7 @@ refill-news:
 refill-readme:
 	emacs -batch --eval $(subst FILE,./README.org,$(refill-org))
 
-check-elisp: format-elisp build test check-compile-warnings checkdocs
+check-elisp: format-elisp build test check-compile-warnings checkdocs check-transient-dup-keys
 
 check-readme: refill-readme manual check-custom-variables check-commands
 
@@ -128,3 +128,6 @@ check-custom-variables:
 
 check-commands:
 	./scripts/check-commands.sh
+
+check-transient-dup-keys:
+	./scripts/check-transient-dup-keys.sh
