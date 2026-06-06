@@ -744,8 +744,8 @@ argument generated text string.
      in the confirmation prompt.  Default value 50.
    • ‘ellama-tools-read-file-default-mode’: Default mode for the
      ‘read_file’ tool.  Use ‘auto’ to read text files as text and
-     supported image files as media, ‘text’ to force text reading, or
-     ‘image’ to force image handling.
+     supported image or audio files as media.  Use ‘text’, ‘image’, or
+     ‘audio’ to force a specific mode.
    • ‘ellama-tools-dlp-safe-read-file-regexps’: Canonical file-name
      regexps whose ‘read_file’-style outputs skip output DLP scans.
      Defaults to Ellama source files in the loaded Ellama directory.
@@ -953,16 +953,19 @@ and then removed.  Set ‘ellama-image-context-default-scope’ to
 reset.  The context transient menu also provides "Add Image"; combine it
 with ‘--ephemeral’ to force one-request image context.
 
-The built-in ‘read_file’ tool supports image files through a
+The built-in ‘read_file’ tool supports image and audio files through a
 configurable read mode:
 
-   • ‘auto’: read text files as text and queue supported image files as
-     image input
+   • ‘auto’: read text files as text and queue supported media files for
+     model input
    • ‘text’: force text reading, even for files with image-like
      extensions
    • ‘image’: force image handling and return a clear text error for
      unsupported image types, missing sessions, or providers without
      ‘image-input’
+   • ‘audio’: force audio handling and return a clear text error for
+     unsupported audio types, missing sessions, or providers without
+     ‘audio-input’
 
 Tool calls can request image handling explicitly:
 
@@ -995,6 +998,18 @@ ellama-chat-with-audio’ inside a chat workflow.  For several files, use
 ‘M-x ellama-chat-with-audios’.  These commands add audio as ephemeral
 context for the next request, so the file is not kept around unless you
 add it as persistent context yourself.
+
+The ‘read_file’ tool also accepts audio.  In ‘auto’ mode it recognizes
+supported audio extensions; use ‘audio’ to request audio handling
+explicitly:
+
+     {
+       "file_name": "/path/to/recording.wav",
+       "mode": "audio"
+     }
+
+The tool queues the recording as media for the next model turn.  It does
+not return binary audio as text.
 
 Programmatic calls can pass audio directly:
 
@@ -2862,47 +2877,47 @@ Node: Installation6373
 Node: Commands11387
 Node: Keymap22321
 Node: Configuration25880
-Node: Session Provider Keys42469
-Node: Session Compaction44330
-Node: Image Input46624
-Node: Audio Input48761
-Node: macOS microphone permission51227
-Node: Task Tool Subagents53388
-Node: Plan-and-Act Agent Loop56562
-Node: Edit Tool Shell Hooks59143
-Node: DLP for Tool Input/Output61436
-Node: SRT Filesystem Policy for Tools77435
-Node: Context Management83104
-Node: Transient Menus for Context Management84172
-Node: Managing the Context86246
-Node: Considerations87021
-Node: Minor modes87614
-Node: ellama-context-header-line-mode89602
-Node: ellama-context-header-line-global-mode90427
-Node: ellama-context-mode-line-mode91147
-Node: ellama-context-mode-line-global-mode91995
-Node: Ellama Session Header Line Mode92699
-Node: Enabling and Disabling93268
-Node: Customization93715
-Node: Ellama Session Mode Line Mode94003
-Node: Enabling and Disabling (1)94588
-Node: Customization (1)95035
-Node: Using Blueprints95329
-Node: Key Components of Ellama Blueprints95969
-Node: Creating and Managing Blueprints96576
-Node: Blueprints files97554
-Node: Variable Management97975
-Node: Keymap and Mode98428
-Node: Transient Menus99364
-Node: Running Blueprints programmatically99910
-Node: MCP Integration100497
-Node: Agent Skills101732
-Node: Directory Structure102095
-Node: Creating a Skill103122
-Node: How it works103497
-Node: Acknowledgments103888
-Node: Contributions104599
-Node: GNU Free Documentation License105273
+Node: Session Provider Keys42475
+Node: Session Compaction44336
+Node: Image Input46630
+Node: Audio Input48945
+Node: macOS microphone permission51764
+Node: Task Tool Subagents53925
+Node: Plan-and-Act Agent Loop57099
+Node: Edit Tool Shell Hooks59680
+Node: DLP for Tool Input/Output61973
+Node: SRT Filesystem Policy for Tools77972
+Node: Context Management83641
+Node: Transient Menus for Context Management84709
+Node: Managing the Context86783
+Node: Considerations87558
+Node: Minor modes88151
+Node: ellama-context-header-line-mode90139
+Node: ellama-context-header-line-global-mode90964
+Node: ellama-context-mode-line-mode91684
+Node: ellama-context-mode-line-global-mode92532
+Node: Ellama Session Header Line Mode93236
+Node: Enabling and Disabling93805
+Node: Customization94252
+Node: Ellama Session Mode Line Mode94540
+Node: Enabling and Disabling (1)95125
+Node: Customization (1)95572
+Node: Using Blueprints95866
+Node: Key Components of Ellama Blueprints96506
+Node: Creating and Managing Blueprints97113
+Node: Blueprints files98091
+Node: Variable Management98512
+Node: Keymap and Mode98965
+Node: Transient Menus99901
+Node: Running Blueprints programmatically100447
+Node: MCP Integration101034
+Node: Agent Skills102269
+Node: Directory Structure102632
+Node: Creating a Skill103659
+Node: How it works104034
+Node: Acknowledgments104425
+Node: Contributions105136
+Node: GNU Free Documentation License105810
 
 End Tag Table
 

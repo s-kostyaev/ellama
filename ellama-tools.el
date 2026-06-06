@@ -50,8 +50,11 @@
 (declare-function ellama--scroll "ellama" (&optional buffer point))
 (declare-function ellama-image-file-p "ellama" (file-name))
 (declare-function ellama--image-mime-type "ellama" (file-name))
+(declare-function ellama-audio-file-p "ellama" (file-name))
+(declare-function ellama--audio-mime-type "ellama" (file-name))
 (declare-function ellama--file-size "ellama" (file-name))
 (declare-function ellama--provider-supports-image-input-p "ellama" (provider))
+(declare-function ellama--provider-supports-audio-input-p "ellama" (provider))
 (declare-function ellama--session-add-pending-tool-media
                   "ellama" (session file-name))
 (declare-function ellama-stream "ellama" (prompt &rest args))
@@ -193,12 +196,14 @@ Tools from this list will work without user confirmation."
 
 (defcustom ellama-tools-read-file-default-mode 'auto
   "Default mode for the `read_file' tool.
-Use `auto' to read text files as text and supported image files as media.
+Use `auto' to read text files as text and supported media files as media.
 Use `text' to force text reading.
-Use `image' to force image handling."
+Use `image' to force image handling.
+Use `audio' to force audio handling."
   :type '(choice (const auto)
                  (const text)
-                 (const image))
+                 (const image)
+                 (const audio))
   :group 'ellama)
 
 (defcustom ellama-tools-dlp-safe-read-file-regexps
@@ -2112,9 +2117,37 @@ TIMEOUT is the timeout in seconds used when RESULT reports a timeout."
               (ellama--image-mime-type file-name)
               (ellama--file-size file-name))))))
 
+(defun ellama-tools--read-audio-file-tool (file-name)
+  "Queue audio FILE-NAME for model input and return textual tool output."
+  (cond
+   ((not (ellama-audio-file-p file-name))
+    (format "File %s is not a supported audio file." file-name))
+   ((not (ellama-session-p
+          (or ellama--current-session ellama-tools--current-session)))
+    "Cannot attach audio file: no active Ellama session.")
+   ((not (ellama--provider-supports-audio-input-p
+          (ellama-session-provider
+           (or ellama--current-session ellama-tools--current-session))))
+    (format "Provider %s does not support audio input."
+            (llm-name
+             (ellama-session-provider
+              (or ellama--current-session ellama-tools--current-session)))))
+   (t
+    (ellama--session-add-pending-tool-media
+     (or ellama--current-session ellama-tools--current-session)
+     file-name)
+    (let* ((expanded (expand-file-name file-name))
+           (link (if (provided-mode-derived-p major-mode 'org-mode)
+                     (format "[[file:%s][%s]]" expanded file-name)
+                   (format "[%s](file://%s)" file-name expanded))))
+      (format "Audio file queued for model input: %s (%s, %d bytes)."
+              link
+              (ellama--audio-mime-type file-name)
+              (ellama--file-size file-name))))))
+
 (defun ellama-tools-read-file-tool (file-name &optional mode)
   "Read the file FILE-NAME.
-MODE can be `auto', `text' or `image'."
+MODE can be `auto', `text', `image' or `audio'."
   (or (ellama-tools--tool-check-file-access file-name 'read)
       (let ((result
              (cond
@@ -2126,9 +2159,13 @@ MODE can be `auto', `text' or `image'."
                (pcase (ellama-tools--read-file-mode mode)
                  ('auto
                   (prog1
-                      (if (ellama-image-file-p file-name)
-                          (ellama-tools--read-image-file-tool file-name)
-                        (ellama-tools--read-file-as-text file-name))
+                      (cond
+                       ((ellama-image-file-p file-name)
+                        (ellama-tools--read-image-file-tool file-name))
+                       ((ellama-audio-file-p file-name)
+                        (ellama-tools--read-audio-file-tool file-name))
+                       (t
+                        (ellama-tools--read-file-as-text file-name)))
                     (ellama-tools--mark-file-read file-name)))
                  ('text
                   (prog1
@@ -2138,9 +2175,15 @@ MODE can be `auto', `text' or `image'."
                   (prog1
                       (ellama-tools--read-image-file-tool file-name)
                     (ellama-tools--mark-file-read file-name)))
+                 ('audio
+                  (prog1
+                      (ellama-tools--read-audio-file-tool file-name)
+                    (ellama-tools--mark-file-read file-name)))
                  (_
                   (format
-                   "Unsupported read_file mode %S. Use auto, text or image."
+                   (concat
+                    "Unsupported read_file mode %S. "
+                    "Use auto, text, image or audio.")
                    mode)))))))
         (json-encode result))))
 
@@ -2163,9 +2206,9 @@ MODE can be `auto', `text' or `image'."
      :optional
      t
      :enum
-     ["auto" "text" "image"]
+     ["auto" "text" "image" "audio"]
      :description
-     "Read mode: auto, text, or image."))
+     "Read mode: auto, text, image, or audio."))
    :description
    "Read the file FILE_NAME."))
 

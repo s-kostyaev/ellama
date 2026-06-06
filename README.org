@@ -548,8 +548,8 @@ generated text string.
 - ~ellama-tools-argument-max-length~: Max length of function argument in the
   confirmation prompt. Default value 50.
 - ~ellama-tools-read-file-default-mode~: Default mode for the ~read_file~
-  tool. Use ~auto~ to read text files as text and supported image files as
-  media, ~text~ to force text reading, or ~image~ to force image handling.
+  tool. Use ~auto~ to read text files as text and supported image or audio files
+  as media. Use ~text~, ~image~, or ~audio~ to force a specific mode.
 - ~ellama-tools-dlp-safe-read-file-regexps~: Canonical file-name regexps whose
   ~read_file~-style outputs skip output DLP scans. Defaults to Ellama source
   files in the loaded Ellama directory. Input DLP, other tool outputs, access
@@ -725,13 +725,16 @@ until it is removed or the context is reset. The context transient menu also
 provides "Add Image"; combine it with ~--ephemeral~ to force one-request image
 context.
 
-The built-in ~read_file~ tool supports image files through a configurable read
-mode:
+The built-in ~read_file~ tool supports image and audio files through a
+configurable read mode:
 
-- ~auto~: read text files as text and queue supported image files as image input
+- ~auto~: read text files as text and queue supported media files for model
+  input
 - ~text~: force text reading, even for files with image-like extensions
 - ~image~: force image handling and return a clear text error for unsupported
   image types, missing sessions, or providers without ~image-input~
+- ~audio~: force audio handling and return a clear text error for unsupported
+  audio types, missing sessions, or providers without ~audio-input~
 
 Tool calls can request image handling explicitly:
 
@@ -760,6 +763,19 @@ Use ~M-x ellama-ask-audio~ for one audio file, or ~M-x ellama-chat-with-audio~
 inside a chat workflow.  For several files, use ~M-x ellama-chat-with-audios~.
 These commands add audio as ephemeral context for the next request, so the file
 is not kept around unless you add it as persistent context yourself.
+
+The ~read_file~ tool also accepts audio.  In ~auto~ mode it recognizes supported
+audio extensions; use ~audio~ to request audio handling explicitly:
+
+#+BEGIN_SRC json
+{
+  "file_name": "/path/to/recording.wav",
+  "mode": "audio"
+}
+#+END_SRC
+
+The tool queues the recording as media for the next model turn.  It does not
+return binary audio as text.
 
 Programmatic calls can pass audio directly:
 

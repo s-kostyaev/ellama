@@ -234,6 +234,19 @@ Return list with result and prompt."
       (when (file-exists-p file-name)
         (delete-file file-name)))))
 
+(defun ellama-test--with-temp-tool-audio-file (body)
+  "Call BODY with a tiny temporary WAV file."
+  (let ((file-name (make-temp-file "ellama-tool-audio-" nil ".wav")))
+    (unwind-protect
+        (progn
+          (with-temp-buffer
+            (set-buffer-multibyte nil)
+            (insert "RIFF\0\0\0\0WAVE")
+            (write-region nil nil file-name nil 'silent))
+          (funcall body file-name))
+      (when (file-exists-p file-name)
+        (delete-file file-name)))))
+
 (ert-deftest test-ellama-read-file-tool-text-mode ()
   (let ((file-name (make-temp-file "ellama-read-file-" nil ".txt")))
     (unwind-protect
@@ -259,6 +272,44 @@ Return list with result and prompt."
          (let ((result (json-read-from-string
                         (ellama-tools-read-file-tool file-name "image"))))
            (should (string-match-p "Image file queued" result))
+           (should (ellama--session-extra-get
+                    session :pending-tool-media))))))))
+
+(ert-deftest test-ellama-read-file-tool-audio-mode-queues-media ()
+  (ellama-test--with-temp-tool-audio-file
+   (lambda (file-name)
+     (let* ((provider (make-llm-fake))
+            (session (make-ellama-session :id "tool-audio"
+                                          :provider provider))
+            (ellama-tools--current-session session)
+            (ellama--current-session nil))
+       (cl-letf (((symbol-function 'llm-capabilities)
+                  (lambda (_provider) '(audio-input))))
+         (let* ((result
+                 (json-read-from-string
+                  (ellama-tools-read-file-tool file-name "audio")))
+                (pending
+                 (ellama--session-extra-get session :pending-tool-media)))
+           (should (string-match-p "Audio file queued" result))
+           (should (equal (plist-get (car pending) :file)
+                          (expand-file-name file-name)))
+           (should (equal (plist-get (car pending) :mime-type)
+                          "audio/wav"))))))))
+
+(ert-deftest test-ellama-read-file-tool-auto-detects-audio ()
+  (ellama-test--with-temp-tool-audio-file
+   (lambda (file-name)
+     (let* ((provider (make-llm-fake))
+            (session (make-ellama-session :id "tool-audio-auto"
+                                          :provider provider))
+            (ellama-tools--current-session session)
+            (ellama--current-session nil))
+       (cl-letf (((symbol-function 'llm-capabilities)
+                  (lambda (_provider) '(audio-input))))
+         (let ((result
+                (json-read-from-string
+                 (ellama-tools-read-file-tool file-name "auto"))))
+           (should (string-match-p "Audio file queued" result))
            (should (ellama--session-extra-get
                     session :pending-tool-media))))))))
 
