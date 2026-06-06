@@ -1500,6 +1500,22 @@ DURATION nil means record until the process is interrupted."
                t t))
             command)))
 
+(defun ellama--audio-recording-error (command exit-code output)
+  "Signal an audio recording error for COMMAND, EXIT-CODE, and OUTPUT."
+  (let* ((program (file-name-nondirectory (car command)))
+         (details (string-trim output))
+         (permission-hint
+          (when (and (eq system-type 'darwin)
+                     (equal program "ffmpeg"))
+            (concat " Check System Settings > Privacy & Security > Microphone "
+                    "and allow microphone access for Emacs."))))
+    (error "Audio recorder %s exited with %s%s%s"
+           program exit-code
+           (if (string-empty-p details)
+               ""
+             (format ": %s" details))
+           (or permission-hint ""))))
+
 ;;;###autoload
 (defun ellama-record-audio (&optional duration file-name)
   "Record audio from the microphone and return the recorded FILE-NAME.
@@ -1510,18 +1526,27 @@ DURATION defaults to `ellama-audio-recording-duration'."
                                     ellama-audio-recording-duration)))
          (file-name (or file-name
                         (ellama--audio-recording-file-name)))
-         (command (ellama--audio-recording-command file-name duration)))
+         (command (ellama--audio-recording-command file-name duration))
+         (output-buffer (generate-new-buffer " *ellama-audio-recording*")))
     (condition-case err
-        (let ((exit-code (apply #'call-process
-                                (car command) nil nil nil (cdr command))))
-          (unless (and (integerp exit-code) (zerop exit-code))
-            (error "Audio recording command exited with %s" exit-code))
-          (unless (ellama-audio-file-p file-name)
-            (error "Audio recording did not create a supported file: %s"
-                   file-name))
-          (when (called-interactively-p 'interactive)
-            (message "Recorded audio: %s" file-name))
-          file-name)
+        (unwind-protect
+            (let ((exit-code
+                   (apply #'call-process
+                          (car command) nil
+                          (list output-buffer t) nil
+                          (cdr command))))
+              (unless (and (integerp exit-code) (zerop exit-code))
+                (ellama--audio-recording-error
+                 command exit-code
+                 (with-current-buffer output-buffer
+                   (buffer-string))))
+              (unless (ellama-audio-file-p file-name)
+                (error "Audio recording did not create a supported file: %s"
+                       file-name))
+              (when (called-interactively-p 'interactive)
+                (message "Recorded audio: %s" file-name))
+              file-name)
+          (kill-buffer output-buffer))
       (error
        (error "Failed to record audio: %s" (error-message-string err))))))
 

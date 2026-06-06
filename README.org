@@ -776,7 +776,9 @@ Use ~:media~ when a request mixes images and audio:
 Ellama selects an installed microphone recorder automatically.  On macOS it
 tries FFmpeg and then SoX.  On GNU/Linux it tries ~arecord~, FFmpeg, and then
 SoX.  Set ~ellama-audio-recording-command~ if you need another program, input
-device, or extra arguments.
+device, or extra arguments.  On macOS, allow microphone access for Emacs in
+System Settings under Privacy & Security > Microphone.  If Emacs runs in a
+terminal, allow access for that terminal instead.
 
 For short messages, use ~M-x ellama-ask-audio-recording~ or ~M-x
 ellama-context-add-audio-recording~.  Ellama records for

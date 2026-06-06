@@ -1441,6 +1441,33 @@ detailed comparison to help you decide:
         (ellama--default-audio-recording-command "/tmp/a.wav" 7)
         '("rec" "%f" "trim" "0" "%d"))))))
 
+(ert-deftest test-ellama-record-audio-includes-recorder-output-in-error ()
+  (let ((ellama-audio-recording-command '("recorder" "%f")))
+    (cl-letf (((symbol-function 'call-process)
+               (lambda (_program _infile destination _display &rest _args)
+                 (with-current-buffer (car destination)
+                   (insert "microphone unavailable\n"))
+                 1)))
+      (let ((message
+             (condition-case err
+                 (progn
+                   (ellama-record-audio 1 "/tmp/a.wav")
+                   nil)
+               (error (error-message-string err)))))
+        (should message)
+        (should (string-match-p "microphone unavailable" message))))))
+
+(ert-deftest test-ellama-audio-recording-error-suggests-macos-permission ()
+  (let ((system-type 'darwin))
+    (condition-case err
+        (ellama--audio-recording-error
+         '("ffmpeg" "-f" "avfoundation") "Abort trap: 6" "")
+      (error
+       (should
+        (string-match-p
+         "Privacy & Security > Microphone"
+         (error-message-string err)))))))
+
 (ert-deftest test-ellama-audio-recording-shows-recording-lighter ()
   (ellama-test--with-temp-audio-file
    (lambda (file-name)
