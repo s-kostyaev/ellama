@@ -4171,6 +4171,12 @@ TEMPLATE-BASE, ROLE and ARGUMENTS are used for template rendering and hints."
       (error "No active plan-and-act session"))
     (unless steps
       (error "Plan must contain at least one checklist or numbered item"))
+    ;; Append "Check yourself" at the end without reversing user steps.
+    (nconc steps
+           (list (list :id (1+ (cl-loop for s in steps
+                                        maximize (plist-get s :id)))
+                       :title "Check yourself"
+                       :status nil)))
     (setq state (ellama-tools--agent-state-put state :plan steps))
     (setq state (ellama-tools--agent-state-put state :phase 'acting))
     (ellama-tools--agent-put-state session state)
