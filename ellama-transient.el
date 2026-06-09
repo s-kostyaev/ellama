@@ -50,6 +50,7 @@
 (defvar ellama-transient-port 11434)
 (defvar ellama-transient-url nil)
 (defvar ellama-transient-provider nil)
+(defvar ellama-transient-provider-type-selected-p nil)
 (defvar ellama--current-session-uid)
 (defvar ellama-max-tokens)
 (defvar ellama-audio-recording-duration)
@@ -161,6 +162,29 @@ Otherwise, prompt the user to enter a system message."
                                ellama-naming-provider)
   "List of providers.")
 
+(defcustom ellama-transient-provider-types
+  '((llm-ollama "Ollama" llm-ollama make-llm-ollama)
+    (llm-openai-compatible "OpenAI-compatible"
+                           llm-openai make-llm-openai-compatible)
+    (llm-openai "OpenAI" llm-openai make-llm-openai)
+    (llm-claude "Claude" llm-claude make-llm-claude)
+    (llm-gemini "Gemini" llm-gemini make-llm-gemini)
+    (llm-deepseek "DeepSeek" llm-deepseek make-llm-deepseek)
+    (llm-openrouter "OpenRouter" llm-openai make-llm-openrouter)
+    (llm-azure "Azure OpenAI" llm-azure make-llm-azure)
+    (llm-github "GitHub Models" llm-github make-llm-github)
+    (llm-vertex "Vertex AI" llm-vertex make-llm-vertex)
+    (llm-gpt4all "GPT4All" llm-gpt4all make-llm-gpt4all)
+    (llm-llamacpp "Llama.cpp" llm-llamacpp make-llm-llamacpp))
+  "Provider types available in the model transient.
+Each entry has the form (TYPE LABEL LIBRARY CONSTRUCTOR)."
+  :type '(repeat
+          (list (symbol :tag "Provider type")
+                (string :tag "Label")
+                (symbol :tag "Library")
+                (symbol :tag "Constructor")))
+  :group 'ellama)
+
 (defun ellama-transient--provider-symbol (provider)
   "Return provider variable symbol from PROVIDER."
   (cond
@@ -195,6 +219,86 @@ strings, because they may contain API keys."
     (or (cdr (assoc choice candidates))
         (error "Unknown provider: %s" choice))))
 
+(defun ellama-transient--provider-type-entry (type)
+  "Return provider type registry entry for TYPE."
+  (assq type ellama-transient-provider-types))
+
+(defun ellama-transient--provider-type-available-p (entry)
+  "Return non-nil when provider type ENTRY is available."
+  (let ((library (nth 2 entry)))
+    (or (featurep library)
+        (locate-library (symbol-name library)))))
+
+(defun ellama-transient--provider-type-candidates ()
+  "Return available provider type completion candidates."
+  (mapcan
+   (lambda (entry)
+     (when (ellama-transient--provider-type-available-p entry)
+       (list (cons (nth 1 entry) (car entry)))))
+   ellama-transient-provider-types))
+
+(defun ellama-transient--read-provider-type ()
+  "Read and return an available provider type."
+  (let* ((candidates (ellama-transient--provider-type-candidates))
+         (choice (completing-read "Select provider type: "
+                                  candidates nil t)))
+    (or (cdr (assoc choice candidates))
+        (error "Unknown provider type: %s" choice))))
+
+(defun ellama-transient--provider-type-name (&optional provider)
+  "Return display name for PROVIDER type."
+  (when-let* ((provider (or provider ellama-transient-provider))
+              (type (type-of provider)))
+    (if-let ((entry (ellama-transient--provider-type-entry type)))
+        (nth 1 entry)
+      (symbol-name type))))
+
+(defun ellama-transient-provider-type-description ()
+  "Return transient provider type description."
+  (format "Provider Type (%s)"
+          (or (ellama-transient--provider-type-name) "none")))
+
+(defun ellama-transient--configured-providers ()
+  "Return configured provider objects."
+  (append
+   (when ellama-transient-provider
+     (list ellama-transient-provider))
+   (mapcan
+    (lambda (provider)
+      (when-let ((symbol (ellama-transient--provider-symbol provider)))
+        (when (and (boundp symbol) (symbol-value symbol))
+          (list (symbol-value symbol)))))
+    ellama-provider-list)
+   (mapcar #'cdr ellama-providers)))
+
+(defun ellama-transient--make-provider-of-type (type)
+  "Return a configured or new provider of TYPE."
+  (or (seq-find (lambda (provider)
+                  (eq (type-of provider) type))
+                (ellama-transient--configured-providers))
+      (let* ((entry (or (ellama-transient--provider-type-entry type)
+                        (error "Unknown provider type: %s" type)))
+             (library (nth 2 entry))
+             (constructor (nth 3 entry)))
+        (condition-case err
+            (progn
+              (require library)
+              (unless (fboundp constructor)
+                (error "Provider constructor is unavailable: %s" constructor))
+              (funcall constructor))
+          (error
+           (error "Could not create %s provider: %s"
+                  (nth 1 entry) (error-message-string err)))))))
+
+(transient-define-suffix ellama-transient-set-provider-type ()
+  "Select provider type for the transient model."
+  (interactive)
+  (let ((provider
+         (ellama-transient--make-provider-of-type
+          (ellama-transient--read-provider-type))))
+    (ellama-fill-transient-model provider)
+    (setq ellama-transient-provider-type-selected-p t)))
+
 (transient-define-suffix ellama-transient-model-get-from-provider ()
   "Fill transient model from provider."
   (interactive)
@@ -212,10 +316,15 @@ strings, because they may contain API keys."
   "Set transient model to provider."
   (interactive)
   (let* ((provider (ellama-transient--read-provider-symbol))
-         (base-provider (symbol-value provider)))
-    (set provider
-         (let ((ellama-transient-provider base-provider))
-           (ellama-construct-provider-from-transient)))
+         (base-provider
+          (if ellama-transient-provider-type-selected-p
+              ellama-transient-provider
+            (symbol-value provider)))
+         (new-provider
+          (let ((ellama-transient-provider base-provider))
+            (ellama-construct-provider-from-transient))))
+    (set provider new-provider)
+    (setq ellama-transient-provider new-provider)
     ;; if you change `ellama-provider' you probably want new chat session
     (when (equal provider 'ellama-provider)
       (setq ellama--current-session-id nil
@@ -249,6 +358,9 @@ strings, because they may contain API keys."
      :description ellama-transient-max-tokens-description)
     ("r" "Reset model fields" ellama-transient-reset-model-fields
      :transient t)
+    ("P" "Set Provider Type" ellama-transient-set-provider-type
+     :transient t
+     :description ellama-transient-provider-type-description)
     ("S" "Set provider" ellama-transient-set-provider
      :transient t)
     ("s" "Set provider and quit" ellama-transient-set-provider)]
@@ -440,7 +552,8 @@ FORMAT is used for non-default VALUE."
 
 (defun ellama-fill-transient-model (provider)
   "Set transient model fields from PROVIDER."
-  (setq ellama-transient-provider provider)
+  (setq ellama-transient-provider provider
+        ellama-transient-provider-type-selected-p nil)
   (when-let ((model (ellama-transient--provider-model provider)))
     (setq ellama-transient-model-name model))
   (setq ellama-transient-temperature

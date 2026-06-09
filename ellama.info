@@ -358,13 +358,16 @@ File: ellama.info,  Node: Commands,  Next: Keymap,  Prev: Installation,  Up: Top
      using Ellama.
    • ‘ellama-provider-select’: Select ellama provider.
    • ‘ellama-select-model’: Change the current provider model
-     interactively.  The model transient supports Ollama,
-     OpenAI-compatible providers, and providers with a ‘chat-model’
-     slot.  URL editing is available when the provider has a ‘url’ slot.
-     It can also set the maximum number of output tokens.  Use "Reset
-     model fields" to clear model, temperature, context-length, and
-     max-token overrides and let the provider use its defaults; reset
-     values are shown as ‘default’ in the transient.
+     interactively.  The model transient can switch the provider type as
+     well as the model.  Built-in choices include Ollama,
+     OpenAI-compatible, OpenAI, Claude, Gemini, DeepSeek, OpenRouter,
+     Azure OpenAI, GitHub Models, Vertex AI, GPT4All, and Llama.cpp.  It
+     also supports providers with a ‘chat-model’ slot.  URL editing is
+     available when the provider has a ‘url’ slot.  It can also set the
+     maximum number of output tokens.  Use "Reset model fields" to clear
+     model, temperature, context-length, and max-token overrides and let
+     the provider use its defaults; reset values are shown as ‘default’
+     in the transient.
    • ‘ellama-code-complete’: Complete selected code or code in the
      current buffer according to a provided change using Ellama.
    • ‘ellama-code-add’: Generate and insert new code based on
@@ -683,6 +686,9 @@ argument generated text string.
      shell command execution.
    • ‘ellama-transient-system-show-limit’: Maximum number of system
      elements to show in transient.
+   • ‘ellama-transient-provider-types’: Provider types available for
+     interactive switching in the model transient.  Each entry specifies
+     the provider record type, display label, library, and constructor.
    • ‘ellama-session-remove-reasoning’: Remove internal reasoning from
      the session after ellama provide an answer.  This can improve
      long-term communication with reasoning models.  Enabled by default.
@@ -2726,45 +2732,45 @@ Tag Table:
 Node: Top2548
 Node: Installation6129
 Node: Commands11143
-Node: Keymap22077
-Node: Configuration25636
-Node: Session Provider Keys42231
-Node: Session Compaction44092
-Node: Image Input46386
-Node: Audio Input48701
-Node: macOS microphone permission51520
-Node: Task Tool Subagents53681
-Node: Plan-and-Act Agent Loop56855
-Node: Edit Tool Shell Hooks59436
-Node: DLP for Tool Input/Output61729
-Node: SRT Filesystem Policy for Tools77728
-Node: Context Management83397
-Node: Transient Menus for Context Management84465
-Node: Managing the Context86539
-Node: Considerations87314
-Node: Minor modes87641
-Node: ellama-context-header-line-mode88153
-Node: ellama-context-header-line-global-mode88771
-Node: ellama-context-mode-line-mode89175
-Node: ellama-context-mode-line-global-mode89754
-Node: ellama-session-header-line-mode90148
-Node: ellama-session-mode-line-mode90652
-Node: Using Blueprints91079
-Node: Key Components91475
-Node: Creating and Managing91834
-Node: Blueprint Files92472
-Node: Variables92891
-Node: Keymap and Mode93227
-Node: Transient Menus93751
-Node: Running Blueprints Programmatically94265
-Node: MCP Integration94819
-Node: Agent Skills95997
-Node: Directory Structure96396
-Node: Creating a Skill97376
-Node: How It Works97766
-Node: Acknowledgments98172
-Node: Contributions98858
-Node: GNU Free Documentation License99383
+Node: Keymap22275
+Node: Configuration25834
+Node: Session Provider Keys42649
+Node: Session Compaction44510
+Node: Image Input46804
+Node: Audio Input49119
+Node: macOS microphone permission51938
+Node: Task Tool Subagents54099
+Node: Plan-and-Act Agent Loop57273
+Node: Edit Tool Shell Hooks59854
+Node: DLP for Tool Input/Output62147
+Node: SRT Filesystem Policy for Tools78146
+Node: Context Management83815
+Node: Transient Menus for Context Management84883
+Node: Managing the Context86957
+Node: Considerations87732
+Node: Minor modes88059
+Node: ellama-context-header-line-mode88571
+Node: ellama-context-header-line-global-mode89189
+Node: ellama-context-mode-line-mode89593
+Node: ellama-context-mode-line-global-mode90172
+Node: ellama-session-header-line-mode90566
+Node: ellama-session-mode-line-mode91070
+Node: Using Blueprints91497
+Node: Key Components91893
+Node: Creating and Managing92252
+Node: Blueprint Files92890
+Node: Variables93309
+Node: Keymap and Mode93645
+Node: Transient Menus94169
+Node: Running Blueprints Programmatically94683
+Node: MCP Integration95237
+Node: Agent Skills96415
+Node: Directory Structure96814
+Node: Creating a Skill97794
+Node: How It Works98184
+Node: Acknowledgments98590
+Node: Contributions99276
+Node: GNU Free Documentation License99801
 
 End Tag Table
 

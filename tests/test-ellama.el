@@ -474,20 +474,47 @@ STYLE controls partial message shape.  Default value is `word-leading'."
      (ellama-make-format "as list"))))
 
 (ert-deftest test-ellama-change-restores-buffer-on-stream-error ()
-  (let ((ellama-spinner-enabled nil)
+  (let ((ellama-provider (make-llm-fake))
+        (ellama-spinner-enabled nil)
         (ellama-response-process-method 'streaming)
-        (original "Hello world.\n"))
+        (ellama-undo-on-error t)
+        (original "Hello world.\n")
+        streaming-called)
     (with-temp-buffer
       (insert original)
       (cl-letf (((symbol-function 'llm-chat-streaming)
-                 (lambda (_provider _prompt _partial-callback _response-callback
+                 (lambda (_provider _prompt partial-callback _response-callback
                                     error-callback _multi-output)
+                   (setq streaming-called t)
+                   (funcall partial-callback '(:text "Partial response"))
                    (funcall error-callback 'error "network failed")
                    'request)))
         (should-error
          (ellama-change "fix grammar")
          :type 'error))
+      (should streaming-called)
       (should (equal (buffer-string) original)))))
+
+(ert-deftest test-ellama-change-keeps-partial-response-on-stream-error ()
+  (let ((ellama-provider (make-llm-fake))
+        (ellama-spinner-enabled nil)
+        (ellama-response-process-method 'streaming)
+        (ellama-undo-on-error nil)
+        streaming-called)
+    (with-temp-buffer
+      (insert "Hello world.\n")
+      (cl-letf (((symbol-function 'llm-chat-streaming)
+                 (lambda (_provider _prompt partial-callback _response-callback
+                                    error-callback _multi-output)
+                   (setq streaming-called t)
+                   (funcall partial-callback '(:text "Partial response"))
+                   (funcall error-callback 'error "network failed")
+                   'request)))
+        (should-error
+         (ellama-change "fix grammar")
+         :type 'error))
+      (should streaming-called)
+      (should (equal (buffer-string) "Partial response")))))
 
 (ert-deftest test-ellama--code-filter ()
   (should (equal "" (ellama--code-filter "")))

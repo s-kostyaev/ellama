@@ -215,12 +215,14 @@ More sophisticated configuration example:
   Ellama.
 - ~ellama-provider-select~: Select ellama provider.
 - ~ellama-select-model~: Change the current provider model interactively.  The
-  model transient supports Ollama, OpenAI-compatible providers, and providers
-  with a ~chat-model~ slot.  URL editing is available when the provider has a
-  ~url~ slot.  It can also set the maximum number of output tokens.  Use "Reset
-  model fields" to clear model, temperature, context-length, and max-token
-  overrides and let the provider use its defaults; reset values are shown as
-  ~default~ in the transient.
+  model transient can switch the provider type as well as the model.  Built-in
+  choices include Ollama, OpenAI-compatible, OpenAI, Claude, Gemini, DeepSeek,
+  OpenRouter, Azure OpenAI, GitHub Models, Vertex AI, GPT4All, and Llama.cpp.
+  It also supports providers with a ~chat-model~ slot.  URL editing is available
+  when the provider has a ~url~ slot.  It can also set the maximum number of
+  output tokens.  Use "Reset model fields" to clear model, temperature,
+  context-length, and max-token overrides and let the provider use its defaults;
+  reset values are shown as ~default~ in the transient.
 - ~ellama-code-complete~: Complete selected code or code in the current buffer
   according to a provided change using Ellama.
 - ~ellama-code-add~: Generate and insert new code based on description. This
@@ -503,6 +505,9 @@ generated text string.
   command execution.
 - ~ellama-transient-system-show-limit~: Maximum number of system elements to
   show in transient.
+- ~ellama-transient-provider-types~: Provider types available for interactive
+  switching in the model transient. Each entry specifies the provider record
+  type, display label, library, and constructor.
 - ~ellama-session-remove-reasoning~: Remove internal reasoning from the session
   after ellama provide an answer. This can improve long-term communication with
   reasoning models. Enabled by default.

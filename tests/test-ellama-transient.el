@@ -295,9 +295,72 @@
       (should-not (string-match-p (regexp-quote secret)
                                   (prin1-to-string captured))))))
 
+(ert-deftest test-ellama-transient-set-provider-type ()
+  (let ((ellama-transient-provider
+         (make-llm-openai-compatible
+          :url "http://127.0.0.1:8000/v1"
+          :chat-model "old-model"))
+        (ellama-transient-provider-types
+         '((llm-claude "Claude" llm-claude make-llm-claude)))
+        (ellama-transient-provider-type-selected-p nil))
+    (cl-letf (((symbol-function 'completing-read)
+               (lambda (&rest _args)
+                 "Claude")))
+      (ellama-transient-set-provider-type)
+      (should (eq (type-of ellama-transient-provider) 'llm-claude))
+      (should ellama-transient-provider-type-selected-p)
+      (should (equal (ellama-transient-provider-type-description)
+                     "Provider Type (Claude)")))))
+
+(ert-deftest test-ellama-transient-set-provider-applies-selected-type ()
+  (require 'llm-claude)
+  (let ((ellama-provider
+         (make-llm-openai-compatible
+          :url "http://127.0.0.1:8000/v1"
+          :chat-model "old-model"
+          :key "openai-compatible-secret"))
+        (ellama-coding-provider
+         (make-llm-openai-compatible
+          :url "http://127.0.0.1:9000/v1"
+          :chat-model "old-coding-model"))
+        (ellama-provider-list '(ellama-provider ellama-coding-provider))
+        (ellama-transient-provider
+         (make-llm-claude
+          :key "claude-secret"
+          :chat-model "claude-sonnet-4-6"))
+        (ellama-transient-provider-type-selected-p t)
+        (ellama-transient-model-name "claude-custom-model")
+        (ellama-transient-temperature 0.3)
+        (providers (list
+                    (ellama-transient--provider-label 'ellama-provider)
+                    (ellama-transient--provider-label
+                     'ellama-coding-provider))))
+    (cl-letf (((symbol-function 'completing-read)
+               (lambda (&rest _args)
+                 (prog1 (car providers)
+                   (setq providers (cdr providers))))))
+      (ellama-transient-set-provider)
+      (should (eq (type-of ellama-provider) 'llm-claude))
+      (should (equal (ellama--provider-slot-value
+                      ellama-provider 'chat-model)
+                     "claude-custom-model"))
+      (should (= (llm-standard-chat-provider-default-chat-temperature
+                  ellama-provider)
+                 0.3))
+      (should (equal
+               (funcall (ellama--provider-slot-value ellama-provider 'key))
+               "claude-secret"))
+      (should ellama-transient-provider-type-selected-p)
+      (ellama-transient-set-provider)
+      (should (eq (type-of ellama-coding-provider) 'llm-claude))
+      (should (equal (ellama--provider-slot-value
+                      ellama-coding-provider 'chat-model)
+                     "claude-custom-model")))))
+
 (ert-deftest test-ellama-transient-set-provider-does-not-pass-provider-arg ()
   (let ((ellama-provider :old-default)
-        (received-args :unset))
+        (received-args :unset)
+        (ellama-transient-provider-type-selected-p nil))
     (cl-letf (((symbol-function 'completing-read)
                (lambda (&rest _args)
                  (ellama-transient--provider-label 'ellama-provider)))
@@ -311,7 +374,8 @@
 
 (ert-deftest test-ellama-transient-set-provider-updates-selected-symbol ()
   (let ((ellama-provider :old-default)
-        (ellama-coding-provider :old-coding))
+        (ellama-coding-provider :old-coding)
+        (ellama-transient-provider-type-selected-p nil))
     (cl-letf (((symbol-function 'completing-read)
                (lambda (&rest _args)
                  (ellama-transient--provider-label 'ellama-coding-provider)))
@@ -328,6 +392,7 @@
         (ellama-coding-provider :coding-provider)
         (ellama--current-session-id "session-1")
         (ellama--current-session-uid "uid-1")
+        (ellama-transient-provider-type-selected-p nil)
         (providers (list (ellama-transient--provider-label 'ellama-provider)
                          (ellama-transient--provider-label
                           'ellama-coding-provider)))
