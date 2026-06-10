@@ -3211,7 +3211,10 @@ TIMEOUT is the optional command timeout in seconds."
             (inhibit-read-only t))
         (erase-buffer)
         (insert content)
-        (save-buffer)))))
+        (save-buffer)
+        ;; Revert the buffer silently to avoid user prompts when
+        ;; Emacs detects that the visited file has changed on disk.
+        (revert-buffer t t t)))))
 
 (defun ellama-tools-edit-file-tool (callback file-name oldcontent newcontent)
   "Edit FILE-NAME and call CALLBACK with the result.
