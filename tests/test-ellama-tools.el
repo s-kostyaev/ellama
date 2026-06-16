@@ -331,6 +331,50 @@ Return list with result and prompt."
     (ellama-test--wait-shell-command-result "printf 'ok\\n'")
     "ok")))
 
+(ert-deftest test-ellama-shell-command-tool-reverts-workdir-file-buffers ()
+  (ellama-test--ensure-local-ellama-tools)
+  (require 'autorevert)
+  (let* ((dir (make-temp-file "ellama-shell-buffer-revert-" t))
+         (file (expand-file-name "note.txt" dir))
+         (outside-file (make-temp-file "ellama-shell-outside-buffer-"))
+         (default-directory (file-name-as-directory dir))
+         buffer outside-buffer)
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "old"))
+          (with-temp-file outside-file
+            (insert "outside-old"))
+          (setq buffer (find-file-noselect file))
+          (setq outside-buffer (find-file-noselect outside-file))
+          (with-current-buffer buffer
+            (auto-revert-mode 1)
+            (should auto-revert-mode)
+            (should (equal (buffer-string) "old")))
+          (with-current-buffer outside-buffer
+            (should (equal (buffer-string) "outside-old")))
+          (write-region "outside-new" nil outside-file nil 'silent)
+          (should
+           (equal
+            (ellama-test--wait-shell-command-result
+             "printf shell-new > note.txt")
+            "Command completed successfully with no output."))
+          (with-current-buffer buffer
+            (should (equal (buffer-string) "shell-new"))
+            (should auto-revert-mode))
+          (with-current-buffer outside-buffer
+            (should (equal (buffer-string) "outside-old"))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (when (buffer-live-p outside-buffer)
+        (kill-buffer outside-buffer))
+      (when (file-exists-p file)
+        (delete-file file))
+      (when (file-exists-p outside-file)
+        (delete-file outside-file))
+      (when (file-directory-p dir)
+        (delete-directory dir)))))
+
 (ert-deftest test-ellama-shell-command-tool-default-timeout ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((ellama-tools-shell-command-default-timeout 5))

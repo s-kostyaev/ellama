@@ -58,6 +58,7 @@
 (declare-function ellama--session-add-pending-tool-media
                   "ellama" (session file-name))
 (declare-function ellama-stream "ellama" (prompt &rest args))
+(declare-function auto-revert-mode "autorevert" (&optional arg))
 
 (defvar ellama-provider)
 (defvar ellama-coding-provider)
@@ -65,6 +66,7 @@
 (defvar ellama-user-nick)
 (defvar ellama--current-session)
 (defvar ellama--current-session-id)
+(defvar auto-revert-mode)
 
 (defvar ellama-tools-available nil
   "Alist containing all registered tools.")
@@ -1983,6 +1985,43 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
           (string-prefix-p "GIT_PAGER=" entry)))
     (copy-sequence (or env process-environment)))))
 
+(defun ellama-tools--file-buffer-in-directory-p (buffer directory)
+  "Return non-nil when BUFFER visits a file under DIRECTORY."
+  (when-let* ((file-name (buffer-file-name buffer)))
+    (condition-case nil
+        (file-in-directory-p
+         (expand-file-name file-name)
+         (file-name-as-directory (expand-file-name directory)))
+      (error nil))))
+
+(defun ellama-tools--prepare-shell-command-file-buffers (directory)
+  "Prepare file-visiting buffers under DIRECTORY for shell command execution.
+Return a list describing buffers to restore after command completion."
+  (let (buffers)
+    (dolist (buffer (buffer-list) (nreverse buffers))
+      (when (ellama-tools--file-buffer-in-directory-p buffer directory)
+        (with-current-buffer buffer
+          (let ((auto-revert-enabled (bound-and-true-p auto-revert-mode)))
+            (when auto-revert-enabled
+              (auto-revert-mode -1))
+            (push (list :buffer buffer
+                        :auto-revert-mode auto-revert-enabled)
+                  buffers)))))))
+
+(defun ellama-tools--restore-shell-command-file-buffers (buffers)
+  "Silently revert BUFFERS and restore their previous auto-revert state."
+  (dolist (state buffers)
+    (let ((buffer (plist-get state :buffer))
+          (auto-revert-enabled (plist-get state :auto-revert-mode)))
+      (when (buffer-live-p buffer)
+        (with-current-buffer buffer
+          (unwind-protect
+              (condition-case nil
+                  (revert-buffer t t t)
+                (error nil))
+            (when auto-revert-enabled
+              (auto-revert-mode 1))))))))
+
 (defun ellama-tools--call-command-to-string (program &rest args)
   "Run PROGRAM with ARGS and return stdout as a string."
   (cdr (apply #'ellama-tools--call-command program args)))
@@ -3294,7 +3333,10 @@ TIMEOUT is the optional command timeout in seconds."
                shell-file-name shell-command-switch cmd))
         (timeout (ellama-tools--shell-command-timeout timeout))
         (process-environment
-         (ellama-tools--process-environment-with-cat-pager)))
+         (ellama-tools--process-environment-with-cat-pager))
+        (file-buffers
+         (ellama-tools--prepare-shell-command-file-buffers
+          default-directory)))
     (condition-case err
         (let ((buf (get-buffer-create
                     (concat (make-temp-name " *ellama shell command") "*")))
@@ -3320,7 +3362,10 @@ TIMEOUT is the optional command timeout in seconds."
                    (when timer
                      (cancel-timer timer))
                    (unwind-protect
-                       (funcall callback result)
+                       (progn
+                         (ellama-tools--restore-shell-command-file-buffers
+                          file-buffers)
+                         (funcall callback result))
                      (when (buffer-live-p buf)
                        (kill-buffer buf)))))
                (finish-process (proc)
@@ -3361,6 +3406,7 @@ TIMEOUT is the optional command timeout in seconds."
                          (delete-process process)
                          (finish result))))))))
       (error
+       (ellama-tools--restore-shell-command-file-buffers file-buffers)
        (funcall callback
                 (format "Failed to start shell command: %s"
                         (error-message-string err))))))
