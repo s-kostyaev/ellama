@@ -1985,6 +1985,16 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
           (string-prefix-p "GIT_PAGER=" entry)))
     (copy-sequence (or env process-environment)))))
 
+(defun ellama-tools--shell-command-process-environment (&optional env)
+  "Return ENV configured for non-interactive shell command execution."
+  (append
+   '("TERM=dumb" "NO_COLOR=true")
+   (seq-remove
+    (lambda (entry)
+      (or (string-prefix-p "TERM=" entry)
+          (string-prefix-p "NO_COLOR=" entry)))
+    (ellama-tools--process-environment-with-cat-pager env))))
+
 (defun ellama-tools--file-buffer-in-directory-p (buffer directory)
   "Return non-nil when BUFFER visits a file under DIRECTORY."
   (when-let* ((file-name (buffer-file-name buffer)))
@@ -3333,7 +3343,7 @@ TIMEOUT is the optional command timeout in seconds."
                shell-file-name shell-command-switch cmd))
         (timeout (ellama-tools--shell-command-timeout timeout))
         (process-environment
-         (ellama-tools--process-environment-with-cat-pager))
+         (ellama-tools--shell-command-process-environment))
         (file-buffers
          (ellama-tools--prepare-shell-command-file-buffers
           default-directory)))

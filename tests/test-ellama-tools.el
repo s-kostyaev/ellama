@@ -396,6 +396,16 @@ Return list with result and prompt."
        "printf '%s|%s' \"$PAGER\" \"$GIT_PAGER\"")
       "cat|cat"))))
 
+(ert-deftest test-ellama-shell-command-tool-uses-non-interactive-environment ()
+  (let ((process-environment (copy-sequence process-environment)))
+    (setenv "TERM" "xterm-256color")
+    (setenv "NO_COLOR" "false")
+    (should
+     (string=
+      (ellama-test--wait-shell-command-result
+       "printf '%s|%s' \"$TERM\" \"$NO_COLOR\"")
+      "dumb|true"))))
+
 (ert-deftest test-ellama-enabled-shell-command-tool-async-contract ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((ellama-tools-dlp-enabled t)
