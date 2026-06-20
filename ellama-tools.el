@@ -3665,26 +3665,38 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
          (with-current-buffer (find-file-noselect file-name)
            (save-excursion
              (let ((line-count (count-lines (point-min) (point-max))))
-               (if (> to line-count)
+               (if (> from line-count)
                    (format
-                    "Invalid line range for %s: to (%s) exceeds line count (%s)."
+                    "Invalid line range for %s: from (%s) exceeds line count (%s)."
                     file-name
-                    to
+                    from
                     line-count)
-                 (let ((start (progn
-                                (goto-char (point-min))
-                                (forward-line (1- from))
-                                (beginning-of-line)
-                                (point)))
-                       (end (progn
-                              (goto-char (point-min))
-                              (forward-line (1- to))
-                              (end-of-line)
-                              (point))))
+                 (let* ((actual-to (min to line-count))
+                        (start (progn
+                                 (goto-char (point-min))
+                                 (forward-line (1- from))
+                                 (beginning-of-line)
+                                 (point)))
+                        (end (progn
+                               (goto-char (point-min))
+                               (forward-line (1- actual-to))
+                               (end-of-line)
+                               (point)))
+                        (warning
+                         (when (> to line-count)
+                           (format
+                            (concat
+                             "Warning: file %s contains only %s lines; "
+                             "requested range ends at line %s.\n\n")
+                            file-name
+                            line-count
+                            to))))
                    (prog1
-                       (ellama-tools--sanitize-tool-text-output
-                        (buffer-substring-no-properties start end)
-                        (format "File %s" file-name))
+                       (concat
+                        warning
+                        (ellama-tools--sanitize-tool-text-output
+                         (buffer-substring-no-properties start end)
+                         (format "File %s" file-name)))
                      (ellama-tools--mark-file-read file-name))))))))))))
 
 (ellama-tools-define-tool

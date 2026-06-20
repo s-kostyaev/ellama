@@ -3142,9 +3142,17 @@ Return list with result and prompt."
              file)))
           (should
            (equal
-            (json-parse-string (ellama-tools-lines-range-tool file 1 3))
+            (json-parse-string (ellama-tools-lines-range-tool file 2 3))
             (format
-             "Invalid line range for %s: to (3) exceeds line count (2)."
+             (concat
+              "Warning: file %s contains only 2 lines; "
+              "requested range ends at line 3.\n\nbeta")
+             file)))
+          (should
+           (equal
+            (json-parse-string (ellama-tools-lines-range-tool file 3 4))
+            (format
+             "Invalid line range for %s: from (3) exceeds line count (2)."
              file))))
       (when (file-exists-p file)
         (delete-file file)))))
