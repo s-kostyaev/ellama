@@ -716,7 +716,11 @@ TOOL-METADATA may include `:tool-origin', `:server-id' and
   "Return line-budget truncation plist for TEXT.
 MAX-LINES limits how many lines are kept.
 MAX-LINE-LENGTH limits one line width in characters."
-  (let* ((lines (split-string text "\n" nil))
+  (let* ((lines (unless (string-empty-p text)
+                  (split-string text "\n" nil)))
+         (lines (if (and lines (string-suffix-p "\n" text))
+                    (butlast lines)
+                  lines))
          (total-lines (length lines))
          (kept 0)
          (long-lines 0)
@@ -782,6 +786,16 @@ MAX-LINE-LENGTH limits one line width in characters."
      (plist-get range :from)
      (plist-get range :to))))
 
+(defun ellama-tools--file-line-count (path)
+  "Return number of lines in file at PATH, or nil when unavailable."
+  (when (stringp path)
+    (condition-case nil
+        (when (file-regular-p path)
+          (with-temp-buffer
+            (insert-file-contents-literally path)
+            (count-lines (point-min) (point-max))))
+      (file-error nil))))
+
 (defun ellama-tools--output-truncation-notice
     (tool-name truncation source-info saved-path)
   "Return tool output truncation notice string.
@@ -794,12 +808,14 @@ SAVED-PATH is optional path to full saved output."
          (long-lines (plist-get truncation :long-lines))
          (snippet (plist-get truncation :text))
          (source-kind (plist-get source-info :kind))
-         (source-path (plist-get source-info :path)))
+         (source-path (plist-get source-info :path))
+         (source-lines (and (eq source-kind 'file)
+                            (ellama-tools--file-line-count source-path))))
     (concat
      "[ELLAMA OUTPUT TRUNCATED]\n"
      (format "Tool `%s` output exceeded line budget and was truncated.\n"
              tool-name)
-     (format "Original lines: %d.  Kept up to %d lines.\n"
+     (format "Full output lines: %d.  Kept up to %d lines.\n"
              total-lines
              (max 0 ellama-tools-output-line-budget-max-lines))
      (when (> dropped-lines 0)
@@ -809,38 +825,44 @@ SAVED-PATH is optional path to full saved output."
         (concat "Truncated long lines: %d (max %d chars per line).\n")
         long-lines
         (max 1 ellama-tools-output-line-budget-max-line-length)))
+     (when source-path
+       (format "Source %s: %s\n"
+               (if (eq source-kind 'directory) "directory" "file")
+               source-path))
+     (when source-lines
+       (format "Source file contains %d lines.\n" source-lines))
      (cond
-      ((and source-path (eq source-kind 'file))
-       (format
-        (concat
-         "Source file: %s\n"
-         "%s"
-         "Use `grep_in_file` with file=%S and a specific search_string "
-         "to locate relevant lines.\n")
-        source-path
-        (or (ellama-tools--output-truncation-range-hint
-             source-path truncation)
-            "")
-        source-path))
-      ((and source-path (eq source-kind 'directory))
-       (format
-        (concat
-         "Source directory: %s\n"
-         "Next suggested tool call: `grep` with dir=%S and a specific "
-         "search_string, then `read_file` or `lines_range` on the target file.\n")
-        source-path source-path))
       (saved-path
        (format
         (concat
          "Full output saved to: %s\n"
+         "Saved output file contains %d lines.\n"
          "%s"
          "Use `grep_in_file` with file=%S and a specific search_string "
          "to search the saved output.\n")
         saved-path
+        total-lines
         (or (ellama-tools--output-truncation-range-hint
              saved-path truncation)
             "")
         saved-path))
+      ((and source-path (eq source-kind 'file))
+       (format
+        (concat
+         "Use `lines_range` with file_name=%S and a range of at most %d lines%s, "
+         "or `grep_in_file` with file=%S and a specific search_string.\n")
+        source-path
+        (max 0 ellama-tools-output-line-budget-max-lines)
+        (if source-lines
+            (format " within 1..%d" source-lines)
+          "")
+        source-path))
+      ((and source-path (eq source-kind 'directory))
+       (format
+        (concat
+         "Next suggested tool call: `grep` with dir=%S and a specific "
+         "search_string, then `read_file` or `lines_range` on the target file.\n")
+        source-path))
       (t
        (concat
         "Full output file was not saved.\n"

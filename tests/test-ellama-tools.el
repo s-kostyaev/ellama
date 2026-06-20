@@ -2218,6 +2218,7 @@ Return list with result and prompt."
            (result (funcall wrapped-func "ok"))
            saved-path)
       (should (string-match-p "\\[ELLAMA OUTPUT TRUNCATED\\]" result))
+      (should (string-match-p "Full output lines: 4" result))
       (should (string-match "Full output saved to: \\([^\n]+\\)" result))
       (setq saved-path (match-string 1 result))
       (unwind-protect
@@ -2250,29 +2251,35 @@ Return list with result and prompt."
         (ellama-tools-allowed nil))
     (let ((source-path (make-temp-file "ellama-line-budget-source-")))
       (unwind-protect
-          (let* ((tool-plist `(:function ,(lambda (_file-name)
-                                            "line-1\nline-2\nline-3")
-                                         :name "read_file"
-                                         :args ((:name "file_name" :type string))))
-                 (wrapped (ellama-tools-wrap-with-confirm tool-plist))
-                 (wrapped-func (plist-get wrapped :function))
-                 (result (funcall wrapped-func source-path)))
-            (should (string-match-p "\\[ELLAMA OUTPUT TRUNCATED\\]" result))
-            (should
-             (string-match-p
-              (regexp-quote (format "Source file: %s" source-path))
-              result))
-            (should-not (string-match-p "Full output saved to:" result))
-            (should
-             (string-match-p
-              (regexp-quote
-               (format
-                "Next suggested tool call: `lines_range` with file_name=%S, from=3, to=3."
-                source-path))
-              result))
-            (should (string-match-p "grep_in_file" result)))
+          (progn
+            (with-temp-file source-path
+              (insert "line-1\nline-2\nline-3\n"))
+            (let* ((tool-plist `(:function ,(lambda (_file-name)
+                                              "line-1\nline-2\nline-3")
+                                           :name "read_file"
+                                           :args ((:name "file_name" :type string))))
+                   (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+                   (wrapped-func (plist-get wrapped :function))
+                   (result (funcall wrapped-func source-path)))
+              (should (string-match-p "\\[ELLAMA OUTPUT TRUNCATED\\]" result))
+              (should
+               (string-match-p
+                (regexp-quote (format "Source file: %s" source-path))
+                result))
+              (should (string-match-p "Source file contains 3 lines" result))
+              (should-not (string-match-p "Full output saved to:" result))
+              (should (string-match-p "lines_range" result))
+              (should (string-match-p "at most 2 lines" result))
+              (should (string-match-p "within 1\\.\\.3" result))
+              (should (string-match-p "grep_in_file" result))))
         (when (file-exists-p source-path)
           (delete-file source-path))))))
+
+(ert-deftest test-ellama-tools-line-budget-counts-file-lines ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((truncation (ellama-tools--line-budget-truncate "one\ntwo\n" 1 200)))
+    (should (= (plist-get truncation :total-lines) 2))
+    (should (= (plist-get truncation :dropped-lines) 1))))
 
 (ert-deftest
     test-ellama-tools-wrap-with-confirm-output-line-budget-truncates-long-line ()
