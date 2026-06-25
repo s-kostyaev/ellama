@@ -1,3 +1,45 @@
+* Version 1.28.0
+
+- Audio input support: audio files can now be attached alongside images in
+  prompts, with provider capability validation. Includes transient entries, key
+  bindings, a recording lighter in the mode line, and microphone recording
+  commands. ~ellama-read-file~ can queue audio files for the next model turn,
+  exposing audio mode in customization and tool metadata.
+- Audio recording backends: on startup, auto-selects the available recorder by
+  platform — FFmpeg or SoX on macOS, arecord/FFmpeg/SoX on GNU/Linux. Fallback
+  failures include the recorder's output and a macOS microphone-permission hint.
+- Recording normalization: default FFmpeg recordings are processed through a
+  configurable dynamic audio normalization filter so quiet speech reaches audio
+  models at a usable level.
+- Provider transport validation: detects broken OpenAI-compatible audio
+  serialization before sending requests, adding regression coverage for
+  multipart audio context and documenting the ~llm input_audio~ requirement.
+- Provider type selection: ~ellama-transient~ now supports selecting LLM
+  provider types (Ollama, Claude, Gemini, etc.) via
+  ~ellama-transient-provider-types~ and ~ellama-transient-set-provider-type~,
+  with improved error handling during streamed responses.
+- Self-check step in plan-and-act: the workflow now appends an unstepped "Check
+  yourself" entry to the checklist, allowing manual review before the acting
+  phase.
+- Silent buffer revert after editing file: calls ~revert-buffer~ after
+  ~save-buffer~ to stop Emacs from asking whether to revert a file that was just
+  written.
+- File buffer refresh after shell commands: file-visiting buffers under the
+  shell command working directory are refreshed silently after command
+  completion, without prompting.
+- Non-interactive shell environment: ~shell_command~ sets ~TERM=dumb~ and
+  ~NO_COLOR=true~ for subprocesses, preserving pager normalization.
+- Improved truncated output hints: line-range reporting now shows accurate
+  output and source line counts, includes the configured line budget in
+  guidance, and keeps saved-output hints scoped to results without known
+  sources.
+- Line range edge cases: when the requested end exceeds the file length,
+  ~lines_range~ returns available lines with a warning instead of
+  failing. Ranges that start past EOF still error.
+- Documentation: README sections rewritten for clarity and brevity; audio input
+  commands and workflows documented in a dedicated section; ~ellama.info~
+  regenerated from the updated Org source.
+- Updated ~llm~ dependency from 0.30.2 to 0.31.1.
 * Version 1.27.2
 
 - Fixed ~make~ recipes when a sandboxed caller inherits a stale ~TMPDIR~.
