@@ -758,11 +758,9 @@ WebM.  Audio is sent as multipart media, the same transport used for image
 input.  Set ~ellama-audio-file-extensions~ if your provider accepts another
 format.
 
-Provider capability alone is not enough: the installed ~llm~ package must also
-serialize audio for that provider.  Gemini and Vertex use their native inline
-media format.  OpenAI-compatible Chat Completions requires ~input_audio~ support
-in ~llm~.  Ellama checks this before sending a request and rejects older ~llm~
-versions that would incorrectly encode audio as an image.
+Audio transport depends on the installed ~llm~ package.  Ellama requires ~llm~
+0.31.1 or newer, which includes audio serialization for OpenAI-compatible and
+Ollama providers.  Gemini and Vertex use their native inline media format.
 
 Use ~M-x ellama-ask-audio~ for one audio file, or ~M-x ellama-chat-with-audio~
 inside a chat workflow.  For several files, use ~M-x ellama-chat-with-audios~.

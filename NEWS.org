@@ -11,9 +11,6 @@
 - Recording normalization: default FFmpeg recordings are processed through a
   configurable dynamic audio normalization filter so quiet speech reaches audio
   models at a usable level.
-- Provider transport validation: detects broken OpenAI-compatible audio
-  serialization before sending requests, adding regression coverage for
-  multipart audio context and documenting the ~llm input_audio~ requirement.
 - Provider type selection: ~ellama-transient~ now supports selecting LLM
   provider types (Ollama, Claude, Gemini, etc.) via
   ~ellama-transient-provider-types~ and ~ellama-transient-set-provider-type~,

@@ -982,12 +982,10 @@ FLAC, OGG, Opus and WebM.  Audio is sent as multipart media, the same
 transport used for image input.  Set ‘ellama-audio-file-extensions’ if
 your provider accepts another format.
 
-Provider capability alone is not enough: the installed ‘llm’ package
-must also serialize audio for that provider.  Gemini and Vertex use
-their native inline media format.  OpenAI-compatible Chat Completions
-requires ‘input_audio’ support in ‘llm’.  Ellama checks this before
-sending a request and rejects older ‘llm’ versions that would
-incorrectly encode audio as an image.
+Audio transport depends on the installed ‘llm’ package.  Ellama requires
+‘llm’ 0.31.1 or newer, which includes audio serialization for
+OpenAI-compatible and Ollama providers.  Gemini and Vertex use their
+native inline media format.
 
 Use ‘M-x ellama-ask-audio’ for one audio file, or ‘M-x
 ellama-chat-with-audio’ inside a chat workflow.  For several files, use
@@ -2738,39 +2736,39 @@ Node: Session Provider Keys42649
 Node: Session Compaction44510
 Node: Image Input46804
 Node: Audio Input49119
-Node: macOS microphone permission51938
-Node: Task Tool Subagents54099
-Node: Plan-and-Act Agent Loop57273
-Node: Edit Tool Shell Hooks59854
-Node: DLP for Tool Input/Output62147
-Node: SRT Filesystem Policy for Tools78146
-Node: Context Management83815
-Node: Transient Menus for Context Management84883
-Node: Managing the Context86957
-Node: Considerations87732
-Node: Minor modes88059
-Node: ellama-context-header-line-mode88571
-Node: ellama-context-header-line-global-mode89189
-Node: ellama-context-mode-line-mode89593
-Node: ellama-context-mode-line-global-mode90172
-Node: ellama-session-header-line-mode90566
-Node: ellama-session-mode-line-mode91070
-Node: Using Blueprints91497
-Node: Key Components91893
-Node: Creating and Managing92252
-Node: Blueprint Files92890
-Node: Variables93309
-Node: Keymap and Mode93645
-Node: Transient Menus94169
-Node: Running Blueprints Programmatically94683
-Node: MCP Integration95237
-Node: Agent Skills96415
-Node: Directory Structure96814
-Node: Creating a Skill97794
-Node: How It Works98184
-Node: Acknowledgments98590
-Node: Contributions99276
-Node: GNU Free Documentation License99801
+Node: macOS microphone permission51787
+Node: Task Tool Subagents53948
+Node: Plan-and-Act Agent Loop57122
+Node: Edit Tool Shell Hooks59703
+Node: DLP for Tool Input/Output61996
+Node: SRT Filesystem Policy for Tools77995
+Node: Context Management83664
+Node: Transient Menus for Context Management84732
+Node: Managing the Context86806
+Node: Considerations87581
+Node: Minor modes87908
+Node: ellama-context-header-line-mode88420
+Node: ellama-context-header-line-global-mode89038
+Node: ellama-context-mode-line-mode89442
+Node: ellama-context-mode-line-global-mode90021
+Node: ellama-session-header-line-mode90415
+Node: ellama-session-mode-line-mode90919
+Node: Using Blueprints91346
+Node: Key Components91742
+Node: Creating and Managing92101
+Node: Blueprint Files92739
+Node: Variables93158
+Node: Keymap and Mode93494
+Node: Transient Menus94018
+Node: Running Blueprints Programmatically94532
+Node: MCP Integration95086
+Node: Agent Skills96264
+Node: Directory Structure96663
+Node: Creating a Skill97643
+Node: How It Works98033
+Node: Acknowledgments98439
+Node: Contributions99125
+Node: GNU Free Documentation License99650
 
 End Tag Table
 
