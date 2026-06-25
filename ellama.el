@@ -48,6 +48,23 @@
 (require 'ellama-skills)
 
 (defvar ellama-tools--current-session)
+(defvar ellama-tools-agent-default-max-steps)
+(defvar ellama-tools-allow-all)
+(defvar ellama-tools-dlp-enabled)
+(defvar ellama-tools-dlp-input-default-action)
+(defvar ellama-tools-dlp-input-fail-open)
+(defvar ellama-tools-dlp-log-targets)
+(defvar ellama-tools-dlp-mode)
+(defvar ellama-tools-dlp-output-default-action)
+(defvar ellama-tools-dlp-output-fail-open)
+(defvar ellama-tools-dlp-output-warn-behavior)
+(defvar ellama-tools-dlp-scan-env-exact-secrets)
+(defvar ellama-tools-irreversible-default-action)
+(defvar ellama-tools-irreversible-enabled)
+(defvar ellama-tools-irreversible-require-typed-confirm)
+(defvar ellama-tools-srt-args)
+(defvar ellama-tools-subagent-default-max-steps)
+(defvar ellama-tools-use-srt)
 
 (defgroup ellama nil
   "Tool for interacting with LLMs."
@@ -634,6 +651,64 @@ use Pandoc when available and the builtin converter otherwise."
 This applies to any `ellama-stream' call associated with a session, including
 sub-agent sessions started by tools."
   :type 'boolean)
+
+;;;###autoload
+(defun ellama-setup-agentic-coding (&optional srt-settings-file secure)
+  "Apply recommended settings for low-friction coding agents.
+This profile keeps provider, model, language and hardware-specific options
+unchanged.  It enables all available tools, DLP enforcement, fail-closed DLP
+behavior, automatic session visibility, and longer agent loops.
+
+When SRT-SETTINGS-FILE is a string, enable `ellama-tools-use-srt', configure
+`ellama-tools-srt-args' to use that file, and enable low-prompt tool use.  If
+SRT is already enabled, also enable low-prompt tool use.  Without SRT, this
+function does not enable global tool auto-approval.
+
+Irreversible findings are blocked by default.  When SECURE is non-nil, also
+block ordinary DLP input/output findings instead of asking for confirmation."
+  (interactive
+   (list (when current-prefix-arg
+           (read-file-name "SRT settings file: " nil nil t))
+         (and current-prefix-arg
+              (y-or-n-p "Block ordinary DLP findings too? "))))
+  (when srt-settings-file
+    (setq ellama-tools-use-srt t
+          ellama-tools-srt-args
+          (list "--settings" (expand-file-name srt-settings-file))))
+  (let ((srt-enabled ellama-tools-use-srt))
+    (setq ellama-auto-scroll t
+          ellama-display-session-buffer-on-generation t
+          ellama-session-auto-compact-enabled t
+          ellama-session-auto-compact-threshold-percent 75
+          ellama-session-auto-compact-keep-last-turns 2
+          ellama-session-auto-compact-allow-fewer-kept-turns t
+          ellama-tools-dlp-enabled t
+          ellama-tools-dlp-mode 'enforce
+          ellama-tools-dlp-input-fail-open nil
+          ellama-tools-dlp-output-fail-open nil
+          ellama-tools-dlp-scan-env-exact-secrets t
+          ellama-tools-dlp-input-default-action
+          (cond
+           (secure 'block)
+           (srt-enabled 'allow)
+           (t 'warn))
+          ellama-tools-dlp-output-default-action
+          (cond
+           (secure 'block)
+           (srt-enabled 'redact)
+           (t 'warn))
+          ellama-tools-dlp-output-warn-behavior (if secure 'block 'confirm)
+          ellama-tools-irreversible-enabled t
+          ellama-tools-irreversible-default-action 'block
+          ellama-tools-irreversible-require-typed-confirm t
+          ellama-tools-dlp-log-targets '(memory)
+          ellama-tools-agent-default-max-steps 100
+          ellama-tools-subagent-default-max-steps 60)
+    (ellama-tools-enable-all)
+    (if srt-enabled
+        (setq ellama-tools-allow-all t)
+      (message
+       "ellama agentic coding profile: SRT is not enabled; leaving tool confirmations active."))))
 
 (defcustom ellama-show-reasoning t
   "Show reasoning in separate buffer if enabled."
