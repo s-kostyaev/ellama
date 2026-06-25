@@ -60,6 +60,19 @@
     (should (equal "[[file:/tmp/image.png][image.png]]"
                    (ellama-context-element-format element 'org-mode)))))
 
+(ert-deftest test-ellama-context-element-format-audio-markdown ()
+  (let ((element (ellama-context-element-audio-file
+                  :name "/tmp/audio.wav")))
+    (should (equal "[audio.wav](</tmp/audio.wav>)"
+                   (ellama-context-element-format
+                    element 'markdown-mode)))))
+
+(ert-deftest test-ellama-context-element-format-audio-org-mode ()
+  (let ((element (ellama-context-element-audio-file
+                  :name "/tmp/audio.wav")))
+    (should (equal "[[file:/tmp/audio.wav][audio.wav]]"
+                   (ellama-context-element-format element 'org-mode)))))
+
 (ert-deftest test-ellama-context-element-format-info-node-markdown ()
   (let ((element (ellama-context-element-info-node :name "(dir)Top")))
     (should (equal "```emacs-lisp\n(info \"(dir)Top\")\n```\n"
@@ -203,6 +216,11 @@
                   :name "/tmp/image.png")))
     (should (equal "image.png" (ellama-context-element-display element)))))
 
+(ert-deftest test-ellama-context-element-display-audio ()
+  (let ((element (ellama-context-element-audio-file
+                  :name "/tmp/audio.wav")))
+    (should (equal "audio.wav" (ellama-context-element-display element)))))
+
 (ert-deftest test-ellama-context-element-display-info-node ()
   (let ((element (ellama-context-element-info-node :name "(dir)Top")))
     (should (equal "(info \"(dir)Top\")" (ellama-context-element-display element)))))
@@ -255,6 +273,27 @@
                 :name "/tmp/ephemeral.png"))))
     (should (equal (ellama-context-media)
                    '("/tmp/global.png" "/tmp/ephemeral.png")))))
+
+(ert-deftest test-ellama-context-media-collects-audio-files ()
+  (let ((ellama-context-global
+         (list (ellama-context-element-audio-file
+                :name "/tmp/global.wav")))
+        (ellama-context-ephemeral
+         (list (ellama-context-element-audio-file
+                :name "/tmp/ephemeral.wav"))))
+    (should (equal (ellama-context-media)
+                   '("/tmp/global.wav" "/tmp/ephemeral.wav")))))
+
+(ert-deftest test-ellama-context-stop-audio-recording-adds-file ()
+  (let ((ellama-audio-context-default-scope 'ephemeral)
+        added)
+    (cl-letf (((symbol-function 'ellama-stop-audio-recording)
+               (lambda () "/tmp/audio.wav"))
+              ((symbol-function 'ellama-context-add-audio-file)
+               (lambda (file-name &optional ephemeral)
+                 (setq added (list file-name ephemeral)))))
+      (ellama-context-stop-audio-recording))
+    (should (equal added '("/tmp/audio.wav" t)))))
 
 (provide 'test-ellama-context)
 

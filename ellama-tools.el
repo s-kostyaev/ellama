@@ -50,11 +50,15 @@
 (declare-function ellama--scroll "ellama" (&optional buffer point))
 (declare-function ellama-image-file-p "ellama" (file-name))
 (declare-function ellama--image-mime-type "ellama" (file-name))
+(declare-function ellama-audio-file-p "ellama" (file-name))
+(declare-function ellama--audio-mime-type "ellama" (file-name))
 (declare-function ellama--file-size "ellama" (file-name))
 (declare-function ellama--provider-supports-image-input-p "ellama" (provider))
+(declare-function ellama--provider-supports-audio-input-p "ellama" (provider))
 (declare-function ellama--session-add-pending-tool-media
                   "ellama" (session file-name))
 (declare-function ellama-stream "ellama" (prompt &rest args))
+(declare-function auto-revert-mode "autorevert" (&optional arg))
 
 (defvar ellama-provider)
 (defvar ellama-coding-provider)
@@ -62,6 +66,7 @@
 (defvar ellama-user-nick)
 (defvar ellama--current-session)
 (defvar ellama--current-session-id)
+(defvar auto-revert-mode)
 
 (defvar ellama-tools-available nil
   "Alist containing all registered tools.")
@@ -193,12 +198,14 @@ Tools from this list will work without user confirmation."
 
 (defcustom ellama-tools-read-file-default-mode 'auto
   "Default mode for the `read_file' tool.
-Use `auto' to read text files as text and supported image files as media.
+Use `auto' to read text files as text and supported media files as media.
 Use `text' to force text reading.
-Use `image' to force image handling."
+Use `image' to force image handling.
+Use `audio' to force audio handling."
   :type '(choice (const auto)
                  (const text)
-                 (const image))
+                 (const image)
+                 (const audio))
   :group 'ellama)
 
 (defcustom ellama-tools-dlp-safe-read-file-regexps
@@ -709,7 +716,11 @@ TOOL-METADATA may include `:tool-origin', `:server-id' and
   "Return line-budget truncation plist for TEXT.
 MAX-LINES limits how many lines are kept.
 MAX-LINE-LENGTH limits one line width in characters."
-  (let* ((lines (split-string text "\n" nil))
+  (let* ((lines (unless (string-empty-p text)
+                  (split-string text "\n" nil)))
+         (lines (if (and lines (string-suffix-p "\n" text))
+                    (butlast lines)
+                  lines))
          (total-lines (length lines))
          (kept 0)
          (long-lines 0)
@@ -775,6 +786,16 @@ MAX-LINE-LENGTH limits one line width in characters."
      (plist-get range :from)
      (plist-get range :to))))
 
+(defun ellama-tools--file-line-count (path)
+  "Return number of lines in file at PATH, or nil when unavailable."
+  (when (stringp path)
+    (condition-case nil
+        (when (file-regular-p path)
+          (with-temp-buffer
+            (insert-file-contents-literally path)
+            (count-lines (point-min) (point-max))))
+      (file-error nil))))
+
 (defun ellama-tools--output-truncation-notice
     (tool-name truncation source-info saved-path)
   "Return tool output truncation notice string.
@@ -787,12 +808,14 @@ SAVED-PATH is optional path to full saved output."
          (long-lines (plist-get truncation :long-lines))
          (snippet (plist-get truncation :text))
          (source-kind (plist-get source-info :kind))
-         (source-path (plist-get source-info :path)))
+         (source-path (plist-get source-info :path))
+         (source-lines (and (eq source-kind 'file)
+                            (ellama-tools--file-line-count source-path))))
     (concat
      "[ELLAMA OUTPUT TRUNCATED]\n"
      (format "Tool `%s` output exceeded line budget and was truncated.\n"
              tool-name)
-     (format "Original lines: %d.  Kept up to %d lines.\n"
+     (format "Full output lines: %d.  Kept up to %d lines.\n"
              total-lines
              (max 0 ellama-tools-output-line-budget-max-lines))
      (when (> dropped-lines 0)
@@ -802,38 +825,44 @@ SAVED-PATH is optional path to full saved output."
         (concat "Truncated long lines: %d (max %d chars per line).\n")
         long-lines
         (max 1 ellama-tools-output-line-budget-max-line-length)))
+     (when source-path
+       (format "Source %s: %s\n"
+               (if (eq source-kind 'directory) "directory" "file")
+               source-path))
+     (when source-lines
+       (format "Source file contains %d lines.\n" source-lines))
      (cond
-      ((and source-path (eq source-kind 'file))
-       (format
-        (concat
-         "Source file: %s\n"
-         "%s"
-         "Use `grep_in_file` with file=%S and a specific search_string "
-         "to locate relevant lines.\n")
-        source-path
-        (or (ellama-tools--output-truncation-range-hint
-             source-path truncation)
-            "")
-        source-path))
-      ((and source-path (eq source-kind 'directory))
-       (format
-        (concat
-         "Source directory: %s\n"
-         "Next suggested tool call: `grep` with dir=%S and a specific "
-         "search_string, then `read_file` or `lines_range` on the target file.\n")
-        source-path source-path))
       (saved-path
        (format
         (concat
          "Full output saved to: %s\n"
+         "Saved output file contains %d lines.\n"
          "%s"
          "Use `grep_in_file` with file=%S and a specific search_string "
          "to search the saved output.\n")
         saved-path
+        total-lines
         (or (ellama-tools--output-truncation-range-hint
              saved-path truncation)
             "")
         saved-path))
+      ((and source-path (eq source-kind 'file))
+       (format
+        (concat
+         "Use `lines_range` with file_name=%S and a range of at most %d lines%s, "
+         "or `grep_in_file` with file=%S and a specific search_string.\n")
+        source-path
+        (max 0 ellama-tools-output-line-budget-max-lines)
+        (if source-lines
+            (format " within 1..%d" source-lines)
+          "")
+        source-path))
+      ((and source-path (eq source-kind 'directory))
+       (format
+        (concat
+         "Next suggested tool call: `grep` with dir=%S and a specific "
+         "search_string, then `read_file` or `lines_range` on the target file.\n")
+        source-path))
       (t
        (concat
         "Full output file was not saved.\n"
@@ -1978,6 +2007,53 @@ Wrap command with `srt' when `ellama-tools-use-srt' is non-nil."
           (string-prefix-p "GIT_PAGER=" entry)))
     (copy-sequence (or env process-environment)))))
 
+(defun ellama-tools--shell-command-process-environment (&optional env)
+  "Return ENV configured for non-interactive shell command execution."
+  (append
+   '("TERM=dumb" "NO_COLOR=true")
+   (seq-remove
+    (lambda (entry)
+      (or (string-prefix-p "TERM=" entry)
+          (string-prefix-p "NO_COLOR=" entry)))
+    (ellama-tools--process-environment-with-cat-pager env))))
+
+(defun ellama-tools--file-buffer-in-directory-p (buffer directory)
+  "Return non-nil when BUFFER visits a file under DIRECTORY."
+  (when-let* ((file-name (buffer-file-name buffer)))
+    (condition-case nil
+        (file-in-directory-p
+         (expand-file-name file-name)
+         (file-name-as-directory (expand-file-name directory)))
+      (error nil))))
+
+(defun ellama-tools--prepare-shell-command-file-buffers (directory)
+  "Prepare file-visiting buffers under DIRECTORY for shell command execution.
+Return a list describing buffers to restore after command completion."
+  (let (buffers)
+    (dolist (buffer (buffer-list) (nreverse buffers))
+      (when (ellama-tools--file-buffer-in-directory-p buffer directory)
+        (with-current-buffer buffer
+          (let ((auto-revert-enabled (bound-and-true-p auto-revert-mode)))
+            (when auto-revert-enabled
+              (auto-revert-mode -1))
+            (push (list :buffer buffer
+                        :auto-revert-mode auto-revert-enabled)
+                  buffers)))))))
+
+(defun ellama-tools--restore-shell-command-file-buffers (buffers)
+  "Silently revert BUFFERS and restore their previous auto-revert state."
+  (dolist (state buffers)
+    (let ((buffer (plist-get state :buffer))
+          (auto-revert-enabled (plist-get state :auto-revert-mode)))
+      (when (buffer-live-p buffer)
+        (with-current-buffer buffer
+          (unwind-protect
+              (condition-case nil
+                  (revert-buffer t t t)
+                (error nil))
+            (when auto-revert-enabled
+              (auto-revert-mode 1))))))))
+
 (defun ellama-tools--call-command-to-string (program &rest args)
   "Run PROGRAM with ARGS and return stdout as a string."
   (cdr (apply #'ellama-tools--call-command program args)))
@@ -2112,9 +2188,37 @@ TIMEOUT is the timeout in seconds used when RESULT reports a timeout."
               (ellama--image-mime-type file-name)
               (ellama--file-size file-name))))))
 
+(defun ellama-tools--read-audio-file-tool (file-name)
+  "Queue audio FILE-NAME for model input and return textual tool output."
+  (cond
+   ((not (ellama-audio-file-p file-name))
+    (format "File %s is not a supported audio file." file-name))
+   ((not (ellama-session-p
+          (or ellama--current-session ellama-tools--current-session)))
+    "Cannot attach audio file: no active Ellama session.")
+   ((not (ellama--provider-supports-audio-input-p
+          (ellama-session-provider
+           (or ellama--current-session ellama-tools--current-session))))
+    (format "Provider %s does not support audio input."
+            (llm-name
+             (ellama-session-provider
+              (or ellama--current-session ellama-tools--current-session)))))
+   (t
+    (ellama--session-add-pending-tool-media
+     (or ellama--current-session ellama-tools--current-session)
+     file-name)
+    (let* ((expanded (expand-file-name file-name))
+           (link (if (provided-mode-derived-p major-mode 'org-mode)
+                     (format "[[file:%s][%s]]" expanded file-name)
+                   (format "[%s](file://%s)" file-name expanded))))
+      (format "Audio file queued for model input: %s (%s, %d bytes)."
+              link
+              (ellama--audio-mime-type file-name)
+              (ellama--file-size file-name))))))
+
 (defun ellama-tools-read-file-tool (file-name &optional mode)
   "Read the file FILE-NAME.
-MODE can be `auto', `text' or `image'."
+MODE can be `auto', `text', `image' or `audio'."
   (or (ellama-tools--tool-check-file-access file-name 'read)
       (let ((result
              (cond
@@ -2126,9 +2230,13 @@ MODE can be `auto', `text' or `image'."
                (pcase (ellama-tools--read-file-mode mode)
                  ('auto
                   (prog1
-                      (if (ellama-image-file-p file-name)
-                          (ellama-tools--read-image-file-tool file-name)
-                        (ellama-tools--read-file-as-text file-name))
+                      (cond
+                       ((ellama-image-file-p file-name)
+                        (ellama-tools--read-image-file-tool file-name))
+                       ((ellama-audio-file-p file-name)
+                        (ellama-tools--read-audio-file-tool file-name))
+                       (t
+                        (ellama-tools--read-file-as-text file-name)))
                     (ellama-tools--mark-file-read file-name)))
                  ('text
                   (prog1
@@ -2138,9 +2246,15 @@ MODE can be `auto', `text' or `image'."
                   (prog1
                       (ellama-tools--read-image-file-tool file-name)
                     (ellama-tools--mark-file-read file-name)))
+                 ('audio
+                  (prog1
+                      (ellama-tools--read-audio-file-tool file-name)
+                    (ellama-tools--mark-file-read file-name)))
                  (_
                   (format
-                   "Unsupported read_file mode %S. Use auto, text or image."
+                   (concat
+                    "Unsupported read_file mode %S. "
+                    "Use auto, text, image or audio.")
                    mode)))))))
         (json-encode result))))
 
@@ -2163,9 +2277,9 @@ MODE can be `auto', `text' or `image'."
      :optional
      t
      :enum
-     ["auto" "text" "image"]
+     ["auto" "text" "image" "audio"]
      :description
-     "Read mode: auto, text, or image."))
+     "Read mode: auto, text, image, or audio."))
    :description
    "Read the file FILE_NAME."))
 
@@ -3168,7 +3282,10 @@ TIMEOUT is the optional command timeout in seconds."
             (inhibit-read-only t))
         (erase-buffer)
         (insert content)
-        (save-buffer)))))
+        (save-buffer)
+        ;; Revert the buffer silently to avoid user prompts when
+        ;; Emacs detects that the visited file has changed on disk.
+        (revert-buffer t t t)))))
 
 (defun ellama-tools-edit-file-tool (callback file-name oldcontent newcontent)
   "Edit FILE-NAME and call CALLBACK with the result.
@@ -3248,7 +3365,10 @@ TIMEOUT is the optional command timeout in seconds."
                shell-file-name shell-command-switch cmd))
         (timeout (ellama-tools--shell-command-timeout timeout))
         (process-environment
-         (ellama-tools--process-environment-with-cat-pager)))
+         (ellama-tools--shell-command-process-environment))
+        (file-buffers
+         (ellama-tools--prepare-shell-command-file-buffers
+          default-directory)))
     (condition-case err
         (let ((buf (get-buffer-create
                     (concat (make-temp-name " *ellama shell command") "*")))
@@ -3274,7 +3394,10 @@ TIMEOUT is the optional command timeout in seconds."
                    (when timer
                      (cancel-timer timer))
                    (unwind-protect
-                       (funcall callback result)
+                       (progn
+                         (ellama-tools--restore-shell-command-file-buffers
+                          file-buffers)
+                         (funcall callback result))
                      (when (buffer-live-p buf)
                        (kill-buffer buf)))))
                (finish-process (proc)
@@ -3315,6 +3438,7 @@ TIMEOUT is the optional command timeout in seconds."
                          (delete-process process)
                          (finish result))))))))
       (error
+       (ellama-tools--restore-shell-command-file-buffers file-buffers)
        (funcall callback
                 (format "Failed to start shell command: %s"
                         (error-message-string err))))))
@@ -3563,26 +3687,38 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
          (with-current-buffer (find-file-noselect file-name)
            (save-excursion
              (let ((line-count (count-lines (point-min) (point-max))))
-               (if (> to line-count)
+               (if (> from line-count)
                    (format
-                    "Invalid line range for %s: to (%s) exceeds line count (%s)."
+                    "Invalid line range for %s: from (%s) exceeds line count (%s)."
                     file-name
-                    to
+                    from
                     line-count)
-                 (let ((start (progn
-                                (goto-char (point-min))
-                                (forward-line (1- from))
-                                (beginning-of-line)
-                                (point)))
-                       (end (progn
-                              (goto-char (point-min))
-                              (forward-line (1- to))
-                              (end-of-line)
-                              (point))))
+                 (let* ((actual-to (min to line-count))
+                        (start (progn
+                                 (goto-char (point-min))
+                                 (forward-line (1- from))
+                                 (beginning-of-line)
+                                 (point)))
+                        (end (progn
+                               (goto-char (point-min))
+                               (forward-line (1- actual-to))
+                               (end-of-line)
+                               (point)))
+                        (warning
+                         (when (> to line-count)
+                           (format
+                            (concat
+                             "Warning: file %s contains only %s lines; "
+                             "requested range ends at line %s.\n\n")
+                            file-name
+                            line-count
+                            to))))
                    (prog1
-                       (ellama-tools--sanitize-tool-text-output
-                        (buffer-substring-no-properties start end)
-                        (format "File %s" file-name))
+                       (concat
+                        warning
+                        (ellama-tools--sanitize-tool-text-output
+                         (buffer-substring-no-properties start end)
+                         (format "File %s" file-name)))
                      (ellama-tools--mark-file-read file-name))))))))))))
 
 (ellama-tools-define-tool
@@ -4128,6 +4264,12 @@ TEMPLATE-BASE, ROLE and ARGUMENTS are used for template rendering and hints."
       (error "No active plan-and-act session"))
     (unless steps
       (error "Plan must contain at least one checklist or numbered item"))
+    ;; Append "Check yourself" at the end without reversing user steps.
+    (nconc steps
+           (list (list :id (1+ (cl-loop for s in steps
+                                        maximize (plist-get s :id)))
+                       :title "Check yourself"
+                       :status nil)))
     (setq state (ellama-tools--agent-state-put state :plan steps))
     (setq state (ellama-tools--agent-state-put state :phase 'acting))
     (ellama-tools--agent-put-state session state)

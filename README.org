@@ -17,15 +17,15 @@ Ellama is not tied to one backend.  It uses the
 local model, and the same Ellama commands can be configured for
 OpenAI-compatible APIs, OpenAI, Claude, Gemini, Vertex, GPT4All, LlamaCpp, and
 other llm providers.  When a provider supports extra capabilities, Ellama uses
-them: streaming responses, model lists, image input, tool calls, token limits,
-and interactive model switching.
+them: streaming responses, model lists, image and audio input, tool calls, token
+limits, and interactive model switching.
 
 Context is first-class.  A request can include buffers, files, directories, Info
-nodes, selections, and images.  Chat sessions can be saved, resumed, renamed,
-compacted manually, or compacted automatically before they run past the model
-context window.  The everyday commands cover translation, summarization,
-proofreading, code review and editing, extraction, formatting, commit-message
-generation, and provider selection.
+nodes, selections, images, and audio files.  Chat sessions can be saved,
+resumed, renamed, compacted manually, or compacted automatically before they run
+past the model context window.  The everyday commands cover translation,
+summarization, proofreading, code review and editing, extraction, formatting,
+commit-message generation, and provider selection.
 
 For tool-using agents, Ellama reads project instructions from ~AGENTS.md~, can
 load reusable skills and blueprint prompts, and runs plan-and-act loops or
@@ -164,6 +164,25 @@ More sophisticated configuration example:
 - ~ellama-chat-with-images~: Ask Ellama about multiple image files. If called
   with universal argument (~C-u~) will start new session with llm model
   interactive selection.
+- ~ellama-ask-audio~: Ask Ellama about one audio file by adding it as ephemeral
+  context for the request. If called with universal argument (~C-u~) will start
+  new session with llm model interactive selection.
+- ~ellama-chat-with-audio~: Ask Ellama about one audio file. If called with
+  universal argument (~C-u~) will start new session with llm model interactive
+  selection.
+- ~ellama-chat-with-audios~: Ask Ellama about multiple audio files. If called
+  with universal argument (~C-u~) will start new session with llm model
+  interactive selection.
+- ~ellama-ask-audio-recording~: Record a short audio message from the microphone
+  and ask Ellama about it.
+- ~ellama-chat-with-audio-recording~: Record a short audio message from the
+  microphone and send it to chat.
+- ~ellama-record-audio~: Record a short audio message from the microphone and
+  return the recorded file.
+- ~ellama-start-audio-recording~: Start microphone recording without a fixed
+  duration.
+- ~ellama-stop-audio-recording~: Stop microphone recording and return the
+  recorded file.
 - ~ellama-write~: This command allows you to generate text using an LLM. When
   called interactively, it prompts for an instruction that is then used to
   generate text based on the context. If a region is active, the selected text
@@ -196,12 +215,14 @@ More sophisticated configuration example:
   Ellama.
 - ~ellama-provider-select~: Select ellama provider.
 - ~ellama-select-model~: Change the current provider model interactively.  The
-  model transient supports Ollama, OpenAI-compatible providers, and providers
-  with a ~chat-model~ slot.  URL editing is available when the provider has a
-  ~url~ slot.  It can also set the maximum number of output tokens.  Use "Reset
-  model fields" to clear model, temperature, context-length, and max-token
-  overrides and let the provider use its defaults; reset values are shown as
-  ~default~ in the transient.
+  model transient can switch the provider type as well as the model.  Built-in
+  choices include Ollama, OpenAI-compatible, OpenAI, Claude, Gemini, DeepSeek,
+  OpenRouter, Azure OpenAI, GitHub Models, Vertex AI, GPT4All, and Llama.cpp.
+  It also supports providers with a ~chat-model~ slot.  URL editing is available
+  when the provider has a ~url~ slot.  It can also set the maximum number of
+  output tokens.  Use "Reset model fields" to clear model, temperature,
+  context-length, and max-token overrides and let the provider use its defaults;
+  reset values are shown as ~default~ in the transient.
 - ~ellama-code-complete~: Complete selected code or code in the current buffer
   according to a provided change using Ellama.
 - ~ellama-code-add~: Generate and insert new code based on description. This
@@ -231,6 +252,13 @@ More sophisticated configuration example:
 - ~ellama-session-compact~: Select and compact an active Ellama session context.
 - ~ellama-context-add-file~: Add file to context.
 - ~ellama-context-add-image~: Add image file to context.
+- ~ellama-context-add-audio~: Add audio file to context.
+- ~ellama-context-add-audio-recording~: Record a short audio message and add it
+  to context.
+- ~ellama-context-start-audio-recording~: Start microphone recording without a
+  fixed duration.
+- ~ellama-context-stop-audio-recording~: Stop microphone recording and add the
+  recorded file to context.
 - ~ellama-context-add-directory~: Add all files in directory to the context.
 - ~ellama-context-add-buffer~: Add buffer to context.
 - ~ellama-context-add-selection~: Add selected region to context.
@@ -290,47 +318,54 @@ will cancel current stream.
 Here is a table of keybindings and their associated functions in Ellama, using
 the ~ellama-keymap-prefix~ prefix (not set by default):
 
-| Keymap | Function                        | Description                  |
-|--------+---------------------------------+------------------------------|
-| "w"    | ellama-write                    | Write                        |
-| "c c"  | ellama-code-complete            | Code complete                |
-| "c a"  | ellama-code-add                 | Code add                     |
-| "c e"  | ellama-code-edit                | Code edit                    |
-| "c i"  | ellama-code-improve             | Code improve                 |
-| "c r"  | ellama-code-review              | Code review                  |
-| "c m"  | ellama-generate-commit-message  | Generate commit message      |
-| "s s"  | ellama-summarize                | Summarize                    |
-| "s w"  | ellama-summarize-webpage        | Summarize webpage            |
-| "s c"  | ellama-summarize-killring       | Summarize killring           |
-| "s l"  | ellama-load-session             | Session Load                 |
-| "s r"  | ellama-session-rename           | Session rename               |
-| "s d"  | ellama-session-delete           | Session delete               |
-| "s a"  | ellama-session-switch           | Session activate             |
-| "P"    | ellama-proofread                | Proofread                    |
-| "i w"  | ellama-improve-wording          | Improve wording              |
-| "i g"  | ellama-improve-grammar          | Improve grammar and spelling |
-| "i c"  | ellama-improve-conciseness      | Improve conciseness          |
-| "m l"  | ellama-make-list                | Make list                    |
-| "m t"  | ellama-make-table               | Make table                   |
-| "m f"  | ellama-make-format              | Make format                  |
-| "a a"  | ellama-ask-about                | Ask about                    |
-| "a i"  | ellama-chat                     | Chat (ask interactively)     |
-| "a I"  | ellama-ask-image                | Ask image                    |
-| "a l"  | ellama-ask-line                 | Ask current line             |
-| "a s"  | ellama-ask-selection            | Ask selection                |
-| "t t"  | ellama-translate                | Text translate               |
-| "t b"  | ellama-translate-buffer         | Translate buffer             |
-| "t e"  | ellama-chat-translation-enable  | Translation enable           |
-| "t d"  | ellama-chat-translation-disable | Translation disable          |
-| "t c"  | ellama-complete                 | Text complete                |
-| "d w"  | ellama-define-word              | Define word                  |
-| "x b"  | ellama-context-add-buffer       | Context add buffer           |
-| "x f"  | ellama-context-add-file         | Context add file             |
-| "x d"  | ellama-context-add-directory    | Context add directory        |
-| "x s"  | ellama-context-add-selection    | Context add selection        |
-| "x i"  | ellama-context-add-info-node    | Context add info node        |
-| "x r"  | ellama-context-reset            | Context reset                |
-| "p s"  | ellama-provider-select          | Provider select              |
+| Keymap | Function                             | Description                  |
+|--------+--------------------------------------+------------------------------|
+| "w"    | ellama-write                         | Write                        |
+| "c c"  | ellama-code-complete                 | Code complete                |
+| "c a"  | ellama-code-add                      | Code add                     |
+| "c e"  | ellama-code-edit                     | Code edit                    |
+| "c i"  | ellama-code-improve                  | Code improve                 |
+| "c r"  | ellama-code-review                   | Code review                  |
+| "c m"  | ellama-generate-commit-message       | Generate commit message      |
+| "s s"  | ellama-summarize                     | Summarize                    |
+| "s w"  | ellama-summarize-webpage             | Summarize webpage            |
+| "s c"  | ellama-summarize-killring            | Summarize killring           |
+| "s l"  | ellama-load-session                  | Session Load                 |
+| "s r"  | ellama-session-rename                | Session rename               |
+| "s d"  | ellama-session-delete                | Session delete               |
+| "s a"  | ellama-session-switch                | Session activate             |
+| "P"    | ellama-proofread                     | Proofread                    |
+| "i w"  | ellama-improve-wording               | Improve wording              |
+| "i g"  | ellama-improve-grammar               | Improve grammar and spelling |
+| "i c"  | ellama-improve-conciseness           | Improve conciseness          |
+| "m l"  | ellama-make-list                     | Make list                    |
+| "m t"  | ellama-make-table                    | Make table                   |
+| "m f"  | ellama-make-format                   | Make format                  |
+| "a a"  | ellama-ask-about                     | Ask about                    |
+| "a i"  | ellama-chat                          | Chat (ask interactively)     |
+| "a I"  | ellama-ask-image                     | Ask image                    |
+| "a A"  | ellama-ask-audio                     | Ask audio                    |
+| "a R"  | ellama-ask-audio-recording           | Record audio and ask         |
+| "a l"  | ellama-ask-line                      | Ask current line             |
+| "a s"  | ellama-ask-selection                 | Ask selection                |
+| "t t"  | ellama-translate                     | Text translate               |
+| "t b"  | ellama-translate-buffer              | Translate buffer             |
+| "t e"  | ellama-chat-translation-enable       | Translation enable           |
+| "t d"  | ellama-chat-translation-disable      | Translation disable          |
+| "t c"  | ellama-complete                      | Text complete                |
+| "d w"  | ellama-define-word                   | Define word                  |
+| "x b"  | ellama-context-add-buffer            | Context add buffer           |
+| "x f"  | ellama-context-add-file              | Context add file             |
+| "x d"  | ellama-context-add-directory         | Context add directory        |
+| "x I"  | ellama-context-add-image             | Context add image            |
+| "x A"  | ellama-context-add-audio             | Context add audio            |
+| "x R"  | ellama-context-add-audio-recording   | Context record audio         |
+| "x S"  | ellama-context-start-audio-recording | Start audio recording        |
+| "x E"  | ellama-context-stop-audio-recording  | Stop audio recording         |
+| "x s"  | ellama-context-add-selection         | Context add selection        |
+| "x i"  | ellama-context-add-info-node         | Context add info node        |
+| "x r"  | ellama-context-reset                 | Context reset                |
+| "p s"  | ellama-provider-select               | Provider select              |
 
 * Configuration
 
@@ -470,6 +505,9 @@ generated text string.
   command execution.
 - ~ellama-transient-system-show-limit~: Maximum number of system elements to
   show in transient.
+- ~ellama-transient-provider-types~: Provider types available for interactive
+  switching in the model transient. Each entry specifies the provider record
+  type, display label, library, and constructor.
 - ~ellama-session-remove-reasoning~: Remove internal reasoning from the session
   after ellama provide an answer. This can improve long-term communication with
   reasoning models. Enabled by default.
@@ -515,8 +553,8 @@ generated text string.
 - ~ellama-tools-argument-max-length~: Max length of function argument in the
   confirmation prompt. Default value 50.
 - ~ellama-tools-read-file-default-mode~: Default mode for the ~read_file~
-  tool. Use ~auto~ to read text files as text and supported image files as
-  media, ~text~ to force text reading, or ~image~ to force image handling.
+  tool. Use ~auto~ to read text files as text and supported image or audio files
+  as media. Use ~text~, ~image~, or ~audio~ to force a specific mode.
 - ~ellama-tools-dlp-safe-read-file-regexps~: Canonical file-name regexps whose
   ~read_file~-style outputs skip output DLP scans. Defaults to Ellama source
   files in the loaded Ellama directory. Input DLP, other tool outputs, access
@@ -692,13 +730,16 @@ until it is removed or the context is reset. The context transient menu also
 provides "Add Image"; combine it with ~--ephemeral~ to force one-request image
 context.
 
-The built-in ~read_file~ tool supports image files through a configurable read
-mode:
+The built-in ~read_file~ tool supports image and audio files through a
+configurable read mode:
 
-- ~auto~: read text files as text and queue supported image files as image input
+- ~auto~: read text files as text and queue supported media files for model
+  input
 - ~text~: force text reading, even for files with image-like extensions
 - ~image~: force image handling and return a clear text error for unsupported
   image types, missing sessions, or providers without ~image-input~
+- ~audio~: force audio handling and return a clear text error for unsupported
+  audio types, missing sessions, or providers without ~audio-input~
 
 Tool calls can request image handling explicitly:
 
@@ -708,6 +749,121 @@ Tool calls can request image handling explicitly:
   "mode": "image"
 }
 #+END_SRC
+
+** Audio Input
+
+Ellama can also send audio files to providers with the ~audio-input~ capability.
+The default supported extensions are WAV, MP3, M4A, AAC, FLAC, OGG, Opus and
+WebM.  Audio is sent as multipart media, the same transport used for image
+input.  Set ~ellama-audio-file-extensions~ if your provider accepts another
+format.
+
+Audio transport depends on the installed ~llm~ package.  Ellama requires ~llm~
+0.31.1 or newer, which includes audio serialization for OpenAI-compatible and
+Ollama providers.  Gemini and Vertex use their native inline media format.
+
+Use ~M-x ellama-ask-audio~ for one audio file, or ~M-x ellama-chat-with-audio~
+inside a chat workflow.  For several files, use ~M-x ellama-chat-with-audios~.
+These commands add audio as ephemeral context for the next request, so the file
+is not kept around unless you add it as persistent context yourself.
+
+The ~read_file~ tool also accepts audio.  In ~auto~ mode it recognizes supported
+audio extensions; use ~audio~ to request audio handling explicitly:
+
+#+BEGIN_SRC json
+{
+  "file_name": "/path/to/recording.wav",
+  "mode": "audio"
+}
+#+END_SRC
+
+The tool queues the recording as media for the next model turn.  It does not
+return binary audio as text.
+
+Programmatic calls can pass audio directly:
+
+#+BEGIN_SRC emacs-lisp
+  (ellama-chat "Transcribe this note." nil
+               :audios '("/path/to/note.wav"))
+
+  (ellama-stream "Summarize the meeting."
+                 :audio "/path/to/meeting.mp3")
+#+END_SRC
+
+Use ~:media~ when a request mixes images and audio:
+
+#+BEGIN_SRC emacs-lisp
+  (ellama-chat "Compare the screenshot with the spoken notes." nil
+               :media '("/path/to/screenshot.png"
+                        "/path/to/notes.wav"))
+#+END_SRC
+
+Ellama selects an installed microphone recorder automatically.  On macOS it
+tries FFmpeg and then SoX.  On GNU/Linux it tries ~arecord~, FFmpeg, and then
+SoX.  Set ~ellama-audio-recording-command~ if you need another program, input
+device, or extra arguments.  On macOS, allow microphone access for Emacs in
+System Settings under Privacy & Security > Microphone.  If Emacs runs in a
+terminal, allow access for that terminal instead.
+
+FFmpeg recordings use dynamic speech normalization by default.  This helps when
+the microphone input is quiet and reduces the chance that an audio model will
+invent speech from a weak signal.  Set ~ellama-audio-recording-ffmpeg-filter~ to
+nil to keep the original input level, or replace it with another FFmpeg audio
+filter.
+
+*** macOS microphone permission
+
+Emacs may be missing from the Microphone list when its application bundle has no
+~NSMicrophoneUsageDescription~ entry.  This can happen with some ~emacs-plus~
+builds.  In that case macOS cannot display the permission prompt, and FFmpeg may
+exit with ~Abort trap: 6~ or report that no audio device was found.
+
+Quit Emacs, set ~APP~ to the installed application bundle, and check the entry:
+
+#+BEGIN_SRC shell
+  APP=/Applications/Emacs.app
+  plutil -extract NSMicrophoneUsageDescription raw \
+    "$APP/Contents/Info.plist"
+#+END_SRC
+
+If ~plutil~ reports that the key is missing, add it, re-sign the application,
+and reset the microphone permission:
+
+#+BEGIN_SRC shell
+  /usr/libexec/PlistBuddy \
+    -c 'Add :NSMicrophoneUsageDescription string Ellama records audio from the microphone.' \
+    "$APP/Contents/Info.plist"
+
+  codesign --force --deep --sign - "$APP"
+
+  BUNDLE_ID=$(plutil -extract CFBundleIdentifier raw \
+    "$APP/Contents/Info.plist")
+  tccutil reset Microphone "$BUNDLE_ID"
+  open "$APP"
+#+END_SRC
+
+Start a recording after Emacs opens.  macOS should now ask for microphone
+access, and Emacs should appear in System Settings under Privacy & Security >
+Microphone.  A package upgrade may replace the application bundle, so repeat
+these steps if the entry disappears after upgrading Emacs.
+
+For short messages, use ~M-x ellama-ask-audio-recording~ or ~M-x
+ellama-context-add-audio-recording~.  Ellama records for
+~ellama-audio-recording-duration~ seconds and writes a temporary WAV file by
+default.  Set ~ellama-audio-recording-file-extension~ if your recorder writes
+another format.
+
+For longer messages, start and stop recording yourself:
+
+#+BEGIN_SRC text
+M-x ellama-context-start-audio-recording
+...speak for as long as needed...
+M-x ellama-context-stop-audio-recording
+#+END_SRC
+
+While recording is active, the mode line shows ~ellama:recording~.  Stopping the
+recording adds the file to context, using ~ellama-audio-context-default-scope~
+to decide whether it is ephemeral or persistent.
 
 ** Task Tool Subagents
 
@@ -1405,6 +1561,8 @@ Context Commands:
     - “d” "Add Directory" ~ellama-transient-add-directory~
     - “f” "Add File" ~ellama-transient-add-file~
     - “I” "Add Image" ~ellama-transient-add-image~
+    - “A” "Add Audio" ~ellama-transient-add-audio~
+    - “R” "Record Audio" ~ellama-transient-add-audio-recording~
     - “s” "Add Selection" ~ellama-transient-add-selection~
     - “i” "Add Info Node" ~ellama-transient-add-info-node~
 - Manage: Provides options for managing the global context.
@@ -1414,6 +1572,9 @@ Context Commands:
       element by name.
     - “r” "Context reset" ~ellama-context-reset~ - Clears the entire global
       context.
+- Recording: Provides start and stop commands for long microphone recordings.
+    - “S” "Start Recording" ~ellama-transient-start-audio-recording~
+    - “E” "Stop Recording" ~ellama-transient-stop-audio-recording~
 - Quit: (“q” "Quit" ~transient-quit-one~) - Closes the context commands
   transient menu.
 
@@ -1431,233 +1592,127 @@ where you can view, modify, and organize the global context. Within this buffer:
 
 ** Considerations
 
-Large Language Models possess limited context window sizes, restricting the
-total amount of text they can process. Be mindful of the size of your context to
-avoid truncation or performance degradation. Irrelevant context can dilute the
-information and hinder the LLM’s focus. Ensure context remains up-to-date for
-accurate information. Experimentation with different approaches to context
-management can optimize performance for specific use cases.
+Keep context size in check. LLMs have finite context windows, and irrelevant
+information wastes tokens and can distract the model. Remove or refresh stale
+context before switching tasks.
 
 * Minor modes
 
-The Ellama package for Emacs offers a suite of minor modes designed to enhance
-the user experience by providing context-specific information directly within
-the editor's interface. These minor modes focus on updating both the header line
-and mode line with relevant details, making it easier to manage and navigate
-multiple sessions and buffers.
-
-Key features include:
-
-- Context Header Line Modes: ~ellama-context-header-line-mode~ and its global
-  counterpart, ~ellama-context-header-line-global-mode~, update the header line
-  to display what elements are added to the global Ellama context. This is
-  particularly useful for keeping track of what information is currently in
-  context.
-- Context Mode Line Modes: Similarly, ~ellama-context-mode-line-mode~ and
-  ~ellama-context-mode-line-global-mode~ provide information about the current
-  global context directly within the mode line, ensuring that users always have
-  relevant information at a glance.
-- Session Header Line Mode: ~ellama-session-header-line-mode~ and its global
-  version display the current Ellama session ID in the header line, helping
-  users manage multiple sessions efficiently.
-- Session Mode Line Mode: ~ellama-session-mode-line-mode~ and its global
-  counterpart offer an additional way to track session IDs by displaying them in
-  the mode line.
-
-These minor modes are easily toggled on or off using specific commands,
-providing flexibility for users who may want to enable these features globally
-across all buffers or selectively within individual buffers.
+These minor modes show the current context or session ID in the header line or
+mode line. Each has a buffer-local command and a global variant.
 
 ** ellama-context-header-line-mode
 
-Description: Toggle the Ellama Context header line mode. This minor mode updates
-the header line to display context-specific information.
+Shows the Ellama context in the header line. By default, the line appears only
+when the global or ephemeral context is not empty. Set
+~ellama-context-line-always-visible~ to keep it visible.
 
-Usage: To enable or disable ~ellama-context-header-line-mode~, use the command:
+~M-x ellama-context-header-line-mode~ toggles this mode.
 
-    M-x ellama-context-header-line-mode
-
-When enabled, this mode adds a hook to ~window-state-change-hook~ to update the
-header line whenever the window state changes. It also calls
-~ellama-context-update-header-line~ to initialize the header line with
-context-specific information.
-
-When disabled, it removes the evaluation of ~(:eval (ellama-context-line))~ from
-~header-line-format~.
+The mode updates the display on ~window-state-change-hook~. When disabled, it
+removes ~(:eval (ellama-context-line))~ from ~header-line-format~.
 
 ** ellama-context-header-line-global-mode
 
-Description: Globalized version of ~ellama-context-header-line-mode~. This mode
-ensures that ~ellama-context-header-line-mode~ is enabled in all buffers.
+Enables ~ellama-context-header-line-mode~ in all buffers automatically.
 
-Usage: To enable or disable ~ellama-context-header-line-global-mode~, use the
-command:
-
-    M-x ellama-context-header-line-global-mode
-
-This globalized minor mode provides a convenient way to ensure that
-context-specific header line information is always available, regardless of the
-buffer being edited.
+~M-x ellama-context-header-line-global-mode~ toggles this global mode.
 
 ** ellama-context-mode-line-mode
 
-Description: Toggle the Ellama Context mode line mode. This minor mode updates
-the mode line to display context-specific information.
+Shows the Ellama context in the mode line. It follows the same visibility rules
+as ~ellama-context-header-line-mode~.
 
-Usage: To enable or disable ~ellama-context-mode-line-mode~, use the command:
+~M-x ellama-context-mode-line-mode~ toggles this mode.
 
-    M-x ellama-context-mode-line-mode
-
-When enabled, this mode adds a hook to ~window-state-change-hook~ to update the
-mode line whenever the window state changes. It also calls
-~ellama-context-update-mode-line~ to initialize the mode line with
-context-specific information.
-
-When disabled, it removes the evaluation of ~(:eval (ellama-context-line))~ from
-~mode-line-format~.
+The mode updates the display on ~window-state-change-hook~. When disabled, it
+removes ~(:eval (ellama-context-line))~ from ~mode-line-format~.
 
 ** ellama-context-mode-line-global-mode
 
-Description: Globalized version of ~ellama-context-mode-line-mode~. This mode
-ensures that ~ellama-context-mode-line-mode~ is enabled in all buffers.
+Enables ~ellama-context-mode-line-mode~ in all buffers automatically.
 
-Usage: To enable or disable ~ellama-context-mode-line-global-mode~, use the
-command:
+~M-x ellama-context-mode-line-global-mode~ toggles this global mode.
 
-    M-x ellama-context-mode-line-global-mode
+** ellama-session-header-line-mode
 
-This globalized minor mode provides a convenient way to ensure that
-context-specific mode line information is always available, regardless of the
-buffer being edited.
+Displays the current Ellama session ID in the header line.
 
-** Ellama Session Header Line Mode
+~M-x ellama-session-header-line-mode~ toggles it in the current buffer; ~M-x
+ellama-session-header-line-global-mode~ toggles it globally.
 
-The ~ellama-session-header-line-mode~ is a minor mode that allows you to display
-the current Ellama session ID in the header line of your Emacs buffers. This
-feature helps keep track of which session you are working with, especially
-useful when managing multiple sessions.
+The session ID uses the customizable ~ellama-face~ face.
 
-*** Enabling and Disabling
+** ellama-session-mode-line-mode
 
-To enable this mode, use the following command:
-#+BEGIN_SRC emacs-lisp
-M-x ellama-session-header-line-mode
-#+END_SRC
+Displays the current Ellama session ID in the mode line.
 
-This will toggle the display of the session ID in the header line. You can also
-enable or disable it globally across all buffers using:
-#+BEGIN_SRC emacs-lisp
-M-x ellama-session-header-line-global-mode
-#+END_SRC
+~M-x ellama-session-mode-line-mode~ toggles it in the current buffer; ~M-x
+ellama-session-mode-line-global-mode~ toggles it globally. This mode also uses
+~ellama-face~.
 
-*** Customization
-
-The session ID is displayed with a customizable face called ~ellama-face~. You
-can customize this face to change its appearance.
-
-** Ellama Session Mode Line Mode
-
-The ~ellama-session-mode-line-mode~ is a minor mode that allows you to display
-the current Ellama session ID in the mode line of your Emacs buffers. This
-feature provides an additional way to keep track of which session you are
-working with, especially useful when managing multiple sessions.
-
-*** Enabling and Disabling
-
-To enable this mode, use the following command:
-#+BEGIN_SRC emacs-lisp
-M-x ellama-session-mode-line-mode
-#+END_SRC
-
-This will toggle the display of the session ID in the mode line. You can also
-enable or disable it globally across all buffers using:
-#+BEGIN_SRC emacs-lisp
-M-x ellama-session-mode-line-global-mode
-#+END_SRC
-
-*** Customization
-
-The session ID is displayed with a customizable face called ~ellama-face~. You
-can customize this face to change its appearance.
 
 * Using Blueprints
 
-Blueprints in Ellama refer to predefined templates or structures that facilitate
-the creation and management of chat sessions. These blueprints are designed to
-streamline the process of generating consistent and high-quality outputs by
-providing a structured framework for interactions.
+Blueprints are predefined templates for starting chat sessions with a reusable
+prompt.
 
-** Key Components of Ellama Blueprints
+** Key Components
 
-1. Act: This is the primary identifier for a blueprint, representing the
-action or purpose of the blueprint.
-2. Prompt: The content that will be used to initiate the chat session. This
-can include instructions, context, or any other relevant information needed to
-guide the conversation.
-3. For Developers: A flag indicating whether the blueprint is intended for
-developers.
+1.  Act: The blueprint's primary identifier (its name).
+2.  Prompt: Text that initializes the chat session, including instructions and
+   context.
+3.  For Developers: A flag marking the blueprint as developer-facing.
 
-** Creating and Managing Blueprints
+** Creating and Managing
 
-Ellama provides several functions to create, select, and manage blueprints:
+- ~ellama-blueprint-create~: Create a blueprint from the current buffer.
+  Prompts for a name and developer flag, then saves the buffer content as the
+  prompt.
+- ~ellama-blueprint-new~: Create a new buffer for a blueprint, optionally
+  inserting the current region if active.
+- ~ellama-blueprint-select~: Select a prompt and optionally filter by developer
+  status or source (user, community, files, or all sources).
 
-- ~ellama-blueprint-create~: This function allows users to create a new
-  blueprint from the current buffer. It prompts for a name and whether the
-  blueprint is for developers, then saves the content of the current buffer as
-  the prompt.
+** Blueprint Files
 
-- ~ellama-blueprint-new~: This function creates a new buffer for a blueprint,
-  optionally inserting the content of the current region if active.
+Store blueprints as plain text files. Place them in:
 
-- ~ellama-blueprint-select~: This function allows users to select a prompt from
-  the collection of blueprints. It filters prompts based on whether they are for
-  developers and their source (user-defined, community, or all).
+- Global: ~ellama-blueprint-global-dir~
+- Project-local: ~ellama-blueprint-local-dir~, relative to the project root
 
-** Blueprints files
+Files use extensions from ~ellama-blueprint-file-extensions~.
 
-You can also store blueprints as plain text files. You can store it globally
-inside ~ellama-blueprint-global-dir~ or locally in the project local directory
-~ellama-blueprint-local-dir~ with ~ellama-blueprint-file-extensions~.
+** Variables
 
-** Variable Management
+Blueprints can include variables that must be filled before the session runs.
 
-Blueprints can include variables that need to be filled before running the chat
-session. Ellama provides command to fill these variables:
-
-- ~ellama-blueprint-fill-variables~: Prompts the user to enter values for
-  variables found in the current buffer and fills them.
+- ~ellama-blueprint-fill-variables~: Prompts for values for all variables found
+  in the current buffer.
 
 ** Keymap and Mode
 
-Ellama provides a local keymap ~ellama-blueprint-mode-map~ for managing
-blueprints within buffers. The mode includes key bindings for sending the buffer
-to a new chat session, killing the current buffer, creating a new blueprint, and
-filling variables.
+~ellama-blueprint-mode~ is a text-mode derivative that highlights variables in
+curly braces and sets up local keybindings:
 
-The ~ellama-blueprint-mode~ is a derived mode from ~text-mode~, providing syntax
-highlighting for variables in curly braces and setting up the local keymap.
-
-When in ~ellama-blueprint-mode~, the following keybindings are available:
-
-- ~C-c C-c~: Send current buffer to a new chat session and kill the current
-  buffer.
+- ~C-c C-c~: Open ~ellama-transient-blueprint-mode-menu~. From there you can
+  send the buffer to a chat, set it as the system message, create a blueprint,
+  or fill variables.
 - ~C-c C-k~: Kill the current buffer.
-- ~C-c c~: Create a blueprint from the current buffer.
-- ~C-c v~: Fill variables in the current blueprint.
 
 ** Transient Menus
 
-Ellama includes transient menus for easy access to blueprint commands. The
-~ellama-transient-blueprint-menu~ provides options for chatting with a selected
-blueprint, creating a new blueprint, and quitting the menu.
+- ~ellama-transient-blueprint-menu~: Chat with a selected blueprint, create a
+  new blueprint, or manage saved blueprints.
+- ~ellama-transient-blueprint-mode-menu~: Act on the blueprint in the current
+  buffer.
+- ~ellama-transient-main-menu~: Integrates the blueprint menu into the main
+  interface.
 
-The ~ellama-transient-main-menu~ integrates the blueprint menu into the main
-menu, providing a comprehensive interface for all Ellama commands.
+** Running Blueprints Programmatically
 
-** Running Blueprints programmatically
-
-The ~ellama-blueprint-run~ function initiates a chat session using a specified
-blueprint. It pre-fills variables based on the provided arguments.
+~ellama-blueprint-run~ starts a chat session with a blueprint, pre-filling
+variables from the provided arguments.
 
 #+BEGIN_SRC emacs-lisp
   (defun my-chat-with-morpheus ()
@@ -1670,10 +1725,10 @@ blueprint. It pre-fills variables based on the provided arguments.
 
 * MCP Integration
 
-You can also use MCP (Model Context Protocol) tools with ~ellama~. You need
-Emacs 30 or higher version. Install ~mcp.el~ -
-https://github.com/lizqwerscott/mcp.el. For example to add web search capability
-to ~ellama~ you can add duckduckgo mcp server
+Use MCP (Model Context Protocol) tools with ~ellama~. Requires Emacs 30+ and the
+~mcp.el~ package: https://github.com/lizqwerscott/mcp.el
+
+Example: adding DuckDuckGo search via the duckduckgo-mcp-server
 (https://github.com/nickclyde/duckduckgo-mcp-server):
 
 #+begin_src emacs-lisp
@@ -1696,28 +1751,28 @@ to ~ellama~ you can add duckduckgo mcp server
 	       tools)))))
 #+end_src
 
-When ~:categoryp t~ is used, ellama derives stable MCP tool identity as
-~<category>/<tool-name>~ (for example ~mcp-ddg/search~).  Irreversible policy,
-audit, and overrides are keyed by this identity.
+When ~:categoryp t~ is used, Ellama derives a stable MCP tool identity as
+~<category>/<tool-name>~ (e.g., ~mcp-ddg/search~). Irreversible policy, audit,
+and overrides are keyed by this identity.
 
 * Agent Skills
 
-Ellama supports *Agent Skills*, a lightweight format for extending AI
-capabilities. Skills are loaded into context only when needed (Progressive
-Disclosure).
+Agent Skills provide instructions and supporting files for specific tasks.
+Ellama adds only skill metadata to the initial context; the model reads the full
+instructions when it chooses a skill.
 
 ** Directory Structure
 
-Ellama looks for skills in two locations:
-1.  *Global*: =~/.emacs.d/ellama/skills/= (Customizable via
-~ellama-skills-global-path~)
-2.  *Project-Local*: ~skills/~ inside your project root (Customizable via
-~ellama-skills-local-path~)
+Ellama searches for skills in two locations:
 
-A skill is a directory containing a ~SKILL.md~ file. This file includes metadata
-(~name~ and ~description~, at minimum) and instructions that tell an agent how
-to perform a specific task. Skills can also bundle scripts, templates, and
-reference materials.
+1.  *Global*: =~/.emacs.d/ellama/skills/= by default, customizable via
+   ~ellama-skills-global-path~.
+2.  *Project-local*: ~skills/~ inside the project root, customizable via
+   ~ellama-skills-local-path~.
+
+A skill is a directory containing a ~SKILL.md~ file with metadata (~name~,
+~description~) and instructions for the agent. Skills can also include scripts,
+templates, and reference materials.
 
 #+begin_src
 my-project/
@@ -1731,7 +1786,7 @@ my-project/
 
 ** Creating a Skill
 
-SKILL.md must contain YAML frontmatter:
+The ~SKILL.md~ file must include YAML frontmatter:
 
 #+begin_src markdown
 ---
@@ -1743,40 +1798,37 @@ description: Extract text from PDFs and summarize them.
 To extract text from a PDF...
 #+end_src
 
-** How it works
+** How It Works
 
-*Auto-Discovery*: Ellama scans skill directories automatically whenever a chat
- starts.  *Context*: Skill metadata (name, description, location) is injected
- into the system prompt.  *Activation*: The LLM uses the read_file tool to load
- the SKILL.md content when needed.
+- *Auto-Discovery*: Ellama scans skill directories when each chat starts.
+- *Context*: Skill metadata (name, description, location) is injected into the
+  system prompt.
+- *Activation*: The LLM loads ~SKILL.md~ content via ~read_file~ when needed.
 
 * Acknowledgments
 
-Thanks [[https://github.com/jmorganca][Jeffrey Morgan]] for excellent project
-[[https://github.com/jmorganca/ollama][ollama]]. This project cannot exist
-without it.
+Thanks to [[https://github.com/jmorganca][Jeffrey Morgan]] for
+[[https://github.com/jmorganca/ollama][ollama]], which made this project
+possible.
 
-Thanks [[https://github.com/zweifisch][zweifisch]] - I got some ideas from
-[[https://github.com/zweifisch/ollama][ollama.el]] what ollama client in Emacs
-can do.
+Thanks [[https://github.com/zweifisch][zweifisch]] for ideas from
+[[https://github.com/zweifisch/ollama][ollama.el]] about what an Emacs ollama
+client can do.
 
-Thanks [[https://github.com/David-Kunz][Dr. David A. Kunz]] - I got more ideas
-from [[https://github.com/David-Kunz/gen.nvim][gen.nvim]].
+Thanks [[https://github.com/David-Kunz][Dr. David A. Kunz]] for ideas from
+[[https://github.com/David-Kunz/gen.nvim][gen.nvim]].
 
-Thanks [[https://github.com/ahyatt][Andrew Hyatt]] for ~llm~ library. Without it
-only ~ollama~ would be supported.
+Thanks [[https://github.com/ahyatt][Andrew Hyatt]] for the ~llm~ library,
+without which only ~ollama~ would be supported.
 
 * Contributions
 
-To contribute, submit a pull request or report a bug. This library is part of
-GNU ELPA; major contributions must be from someone with FSF
-papers. Alternatively, you can write a module and share it on a different
-archive like MELPA.
+Submit a pull request or report a bug. This library is part of GNU ELPA; major
+contributions require FSF papers. Alternatively, write a module for MELPA.
 
-For local validation, run ~make check-elisp~ before pushing Elisp changes. It
-formats Elisp files, byte-compiles, runs the ERT suite, native-compiles, and
-runs checkdoc. Byte and native compilation warnings are treated as failures, so
-warnings block the same way test failures do.
+Run ~make check-elisp~ before pushing Elisp changes. It formats Elisp files,
+byte-compiles, runs the ERT suite, native-compiles, and runs checkdoc. Byte and
+native compilation warnings are treated as failures.
 
 * GNU Free Documentation License
 :PROPERTIES:

@@ -5,8 +5,8 @@
 ;; Author: Sergey Kostyaev <sskostyaev@gmail.com>
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
-;; Package-Requires: ((emacs "28.1") (llm "0.30.2") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.27.2
+;; Package-Requires: ((emacs "28.1") (llm "0.31.1") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
+;; Version: 1.28.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -37,6 +37,7 @@
 
 (require 'eieio)
 (require 'cl-lib)
+(require 'seq)
 (require 'llm)
 (require 'llm-provider-utils)
 (require 'json)
@@ -172,6 +173,44 @@ and restore provider keys from auth-source while loading."
 SVG is intentionally out of scope for the initial image input support."
   :type '(repeat string))
 
+(defcustom ellama-audio-file-extensions
+  '("wav" "mp3" "m4a" "aac" "flac" "ogg" "oga" "opus" "webm")
+  "File extensions supported for audio input."
+  :type '(repeat string))
+
+(defcustom ellama-audio-recording-duration 30
+  "Default microphone recording duration in seconds."
+  :type 'integer)
+
+(defcustom ellama-audio-recording-file-extension "wav"
+  "File extension for microphone recordings."
+  :type 'string)
+
+(defcustom ellama-audio-recording-ffmpeg-filter
+  "dynaudnorm=f=150:g=7:p=0.9:m=20:r=0.1:b=1"
+  "FFmpeg audio filter used for microphone recordings.
+The default dynamically raises quiet speech while limiting peaks.
+Set this to nil to record without filtering."
+  :type '(choice (const nil) string))
+
+(defcustom ellama-audio-recording-command
+  #'ellama--default-audio-recording-command
+  "Command used to record audio from the microphone.
+The default function selects an installed recorder for the current
+platform.  On macOS it tries FFmpeg and SoX.  On GNU/Linux it tries
+`arecord', FFmpeg, and SoX.  A nil value keeps this automatic
+selection for backward compatibility.
+
+When a list of strings, `%f' is replaced with the output file name
+and `%d' with the duration in seconds.  The first element is the
+program name.
+
+When a function, it is called with output file name and duration,
+and must return a command list in the same format."
+  :type '(choice (const nil)
+                 (repeat string)
+                 function))
+
 (defcustom ellama-completion-provider nil
   "LLM provider for completions."
   :type '(sexp :validate llm-standard-provider-p))
@@ -227,6 +266,8 @@ SVG is intentionally out of scope for the initial image input support."
     (define-key map (kbd "a a") 'ellama-ask-about)
     (define-key map (kbd "a i") 'ellama-chat)
     (define-key map (kbd "a I") 'ellama-ask-image)
+    (define-key map (kbd "a A") 'ellama-ask-audio)
+    (define-key map (kbd "a R") 'ellama-ask-audio-recording)
     (define-key map (kbd "a l") 'ellama-ask-line)
     (define-key map (kbd "a s") 'ellama-ask-selection)
     ;; text
@@ -243,6 +284,10 @@ SVG is intentionally out of scope for the initial image input support."
     (define-key map (kbd "x d") 'ellama-context-add-directory)
     (define-key map (kbd "x f") 'ellama-context-add-file)
     (define-key map (kbd "x I") 'ellama-context-add-image)
+    (define-key map (kbd "x A") 'ellama-context-add-audio)
+    (define-key map (kbd "x R") 'ellama-context-add-audio-recording)
+    (define-key map (kbd "x S") 'ellama-context-start-audio-recording)
+    (define-key map (kbd "x E") 'ellama-context-stop-audio-recording)
     (define-key map (kbd "x s") 'ellama-context-add-selection)
     (define-key map (kbd "x i") 'ellama-context-add-info-node)
     (define-key map (kbd "x m") 'ellama-context-manage)
@@ -675,6 +720,13 @@ into the buffer if the LLM call raises an error."
   "Minor mode for `ellama' buffers with active session compaction."
   :interactive nil
   :lighter " ellama:compacting")
+
+;;;###autoload
+(define-minor-mode ellama-audio-recording-mode
+  "Global minor mode enabled while Ellama records audio."
+  :global t
+  :interactive nil
+  :lighter " ellama:recording")
 
 (defvar-local ellama--change-group nil)
 
@@ -1191,15 +1243,58 @@ CONTEXT will be ignored.  Use global context instead.
     ("gif" "image/gif")
     (_ nil)))
 
+(defun ellama-audio-file-p (file-name)
+  "Return non-nil when FILE-NAME is a supported audio file."
+  (and (stringp file-name)
+       (file-exists-p file-name)
+       (let ((ext (file-name-extension file-name)))
+         (and ext
+              (member (downcase ext) ellama-audio-file-extensions)))))
+
+(defun ellama--audio-mime-type (file-name)
+  "Return audio MIME type for FILE-NAME, or nil when unsupported."
+  (pcase (downcase (or (file-name-extension file-name) ""))
+    ("wav" "audio/wav")
+    ("mp3" "audio/mpeg")
+    ("m4a" "audio/mp4")
+    ("aac" "audio/aac")
+    ("flac" "audio/flac")
+    ((or "ogg" "oga") "audio/ogg")
+    ("opus" "audio/opus")
+    ("webm" "audio/webm")
+    (_ nil)))
+
+(defun ellama-media-file-p (file-name)
+  "Return non-nil when FILE-NAME is a supported media file."
+  (or (ellama-image-file-p file-name)
+      (ellama-audio-file-p file-name)))
+
+(defun ellama--media-mime-type (file-name)
+  "Return media MIME type for FILE-NAME, or nil when unsupported."
+  (or (ellama--image-mime-type file-name)
+      (ellama--audio-mime-type file-name)))
+
+(defun ellama--media-kind (file-name)
+  "Return media kind symbol for FILE-NAME, or nil when unsupported."
+  (cond
+   ((ellama-image-file-p file-name) 'image)
+   ((ellama-audio-file-p file-name) 'audio)))
+
+(defun ellama--media-capability (file-name)
+  "Return provider capability needed for FILE-NAME."
+  (pcase (ellama--media-kind file-name)
+    ('image 'image-input)
+    ('audio 'audio-input)))
+
 (defun ellama--file-size (file-name)
   "Return FILE-NAME size in bytes."
   (file-attribute-size (file-attributes file-name)))
 
 (defun ellama--file-to-llm-media (file-name)
-  "Return `llm-media' for image FILE-NAME."
-  (let ((mime-type (ellama--image-mime-type file-name)))
-    (unless (and mime-type (ellama-image-file-p file-name))
-      (error "Unsupported image file: %s" file-name))
+  "Return `llm-media' for media FILE-NAME."
+  (let ((mime-type (ellama--media-mime-type file-name)))
+    (unless (and mime-type (ellama-media-file-p file-name))
+      (error "Unsupported media file: %s" file-name))
     (make-llm-media
      :mime-type mime-type
      :data (with-temp-buffer
@@ -1207,73 +1302,122 @@ CONTEXT will be ignored.  Use global context instead.
              (insert-file-contents-literally file-name)
              (buffer-string)))))
 
+(defun ellama--provider-supports-capability-p (provider capability)
+  "Return non-nil when PROVIDER supports CAPABILITY."
+  (condition-case nil
+      (memq capability (llm-capabilities provider))
+    (error nil)))
+
 (defun ellama--provider-supports-image-input-p (provider)
   "Return non-nil when PROVIDER supports image input."
-  (condition-case nil
-      (memq 'image-input (llm-capabilities provider))
-    (error nil)))
+  (ellama--provider-supports-capability-p provider 'image-input))
+
+(defun ellama--provider-supports-audio-input-p (provider)
+  "Return non-nil when PROVIDER supports audio input."
+  (ellama--provider-supports-capability-p provider 'audio-input))
+
+(defun ellama--normalize-media-files (files media-kind)
+  "Normalize FILES argument to a list of file names for MEDIA-KIND."
+  (cond
+   ((null files) nil)
+   ((stringp files) (list files))
+   ((listp files) files)
+   (t (error "%s must be a file name or list of file names" media-kind))))
 
 (defun ellama--normalize-image-files (images)
   "Normalize IMAGES argument to a list of file names."
-  (cond
-   ((null images) nil)
-   ((stringp images) (list images))
-   ((listp images) images)
-   (t (error "Images must be a file name or list of file names"))))
+  (ellama--normalize-media-files images "Images"))
+
+(defun ellama--normalize-audio-files (audios)
+  "Normalize AUDIOS argument to a list of file names."
+  (ellama--normalize-media-files audios "Audios"))
+
+(defun ellama--validate-media-file (file-name)
+  "Validate FILE-NAME as supported media input."
+  (unless (ellama-media-file-p file-name)
+    (pcase (downcase (or (file-name-extension file-name) ""))
+      ("svg" (error "SVG image input is not supported yet: %s" file-name))
+      (_ (error "Unsupported media file: %s" file-name)))))
+
+(defun ellama--validate-media-input (provider media-files)
+  "Validate MEDIA-FILES for PROVIDER."
+  (dolist (file-name media-files)
+    (ellama--validate-media-file file-name)
+    (let ((capability (ellama--media-capability file-name)))
+      (unless (ellama--provider-supports-capability-p provider capability)
+        (error "Provider %s does not support %s"
+               (if provider (llm-name provider) "unknown")
+               (pcase capability
+                 ('image-input "image input")
+                 ('audio-input "audio input")
+                 (_ (symbol-name capability))))))))
 
 (defun ellama--validate-image-input (provider image-files)
   "Validate IMAGE-FILES for PROVIDER."
-  (when image-files
-    (unless (ellama--provider-supports-image-input-p provider)
-      (error "Provider %s does not support image input"
-             (if provider (llm-name provider) "unknown")))
-    (dolist (file-name image-files)
-      (unless (ellama-image-file-p file-name)
-        (if (string= (downcase (or (file-name-extension file-name) "")) "svg")
-            (error "SVG image input is not supported yet: %s" file-name)
-          (error "Unsupported image file: %s" file-name))))))
+  (ellama--validate-media-input provider image-files))
 
-(defun ellama--prompt-content-with-images (prompt image-files)
-  "Return PROMPT content with IMAGE-FILES attached as media."
-  (if (not image-files)
+(defun ellama--validate-audio-input (provider audio-files)
+  "Validate AUDIO-FILES for PROVIDER."
+  (ellama--validate-media-input provider audio-files))
+
+(defun ellama--prompt-content-with-media (prompt media-files)
+  "Return PROMPT content with MEDIA-FILES attached as media."
+  (if (not media-files)
       prompt
     (apply #'llm-make-multipart
            prompt
-           (mapcar #'ellama--file-to-llm-media image-files))))
+           (mapcar #'ellama--file-to-llm-media media-files))))
 
-(defun ellama--image-link-for-mode (file-name mode)
-  "Return display link for image FILE-NAME in MODE."
+(defun ellama--prompt-content-with-images (prompt image-files)
+  "Return PROMPT content with IMAGE-FILES attached as media."
+  (ellama--prompt-content-with-media prompt image-files))
+
+(defun ellama--media-link-for-mode (file-name mode)
+  "Return display link for media FILE-NAME in MODE."
   (let ((label (file-name-nondirectory file-name)))
     (if (eq mode 'org-mode)
         (format "[[file:%s][%s]]" file-name label)
       (format "[%s](<%s>)" label file-name))))
 
-(defun ellama--prompt-display-with-images (prompt image-files mode)
-  "Return display PROMPT with IMAGE-FILES formatted for MODE."
-  (if (not image-files)
+(defun ellama--image-link-for-mode (file-name mode)
+  "Return display link for image FILE-NAME in MODE."
+  (ellama--media-link-for-mode file-name mode))
+
+(defun ellama--prompt-display-with-media (prompt media-files mode)
+  "Return display PROMPT with MEDIA-FILES formatted for MODE."
+  (if (not media-files)
       prompt
     (concat prompt
-            "\n\nImages:\n"
+            "\n\nMedia:\n"
             (string-join
              (mapcar (lambda (file-name)
-                       (ellama--image-link-for-mode file-name mode))
-                     image-files)
+                       (ellama--media-link-for-mode file-name mode))
+                     media-files)
              "\n"))))
+
+(defun ellama--prompt-display-with-images (prompt image-files mode)
+  "Return display PROMPT with IMAGE-FILES formatted for MODE."
+  (ellama--prompt-display-with-media prompt image-files mode))
 
 (defun ellama--media-placeholder (media &optional file-name)
   "Return text placeholder for MEDIA and optional FILE-NAME."
-  (format "[image: %s, %d bytes%s]"
-          (llm-media-mime-type media)
-          (length (llm-media-data media))
-          (if file-name
-              (format ", %s" file-name)
-            "")))
+  (let* ((mime-type (llm-media-mime-type media))
+         (kind (if (string-match-p "\\`\\([^/]+\\)/" mime-type)
+                   (match-string 1 mime-type)
+                 "media")))
+    (format "[%s: %s, %d bytes%s]"
+            kind
+            mime-type
+            (length (llm-media-data media))
+            (if file-name
+                (format ", %s" file-name)
+              ""))))
 
 (defun ellama--session-add-pending-tool-media (session file-name)
   "Add FILE-NAME to SESSION pending tool media."
   (let* ((path (expand-file-name file-name))
          (item (list :file path
-                     :mime-type (ellama--image-mime-type path)
+                     :mime-type (ellama--media-mime-type path)
                      :size (ellama--file-size path)))
          (pending (copy-sequence
                    (or (ellama--session-extra-get session :pending-tool-media)
@@ -1287,18 +1431,191 @@ CONTEXT will be ignored.  Use global context instead.
   (when-let* (((ellama-session-p session))
               (pending (ellama--session-extra-get
                         session :pending-tool-media)))
-    (ellama--validate-image-input
+    (ellama--validate-media-input
      provider
      (mapcar (lambda (item) (plist-get item :file)) pending))
     (llm-chat-prompt-append-response
      prompt
      (apply #'llm-make-multipart
-            "Images read by tools are attached for visual analysis."
+            "Media read by tools is attached for analysis."
             (mapcar (lambda (item)
                       (ellama--file-to-llm-media
                        (plist-get item :file)))
                     pending)))
     (ellama--session-extra-put session :pending-tool-media nil)))
+
+(defvar ellama--audio-recording-process nil
+  "Current audio recording process.")
+
+(defvar ellama--audio-recording-file nil
+  "Current audio recording output file.")
+
+(defun ellama--audio-recording-file-name ()
+  "Return a new audio recording file name."
+  (make-temp-file
+   "ellama-audio-" nil
+   (concat "." ellama-audio-recording-file-extension)))
+
+(defun ellama--default-audio-recording-command (_file-name &optional duration)
+  "Return default microphone recording command for current platform.
+DURATION nil means record until the process is interrupted."
+  (let ((duration-args (when duration '("-t" "%d"))))
+    (cond
+     ((and (eq system-type 'darwin)
+           (executable-find "ffmpeg"))
+      (append '("ffmpeg" "-nostdin" "-hide_banner" "-loglevel" "error"
+                "-f" "avfoundation" "-i" "none:default")
+              (when ellama-audio-recording-ffmpeg-filter
+                (list "-af" ellama-audio-recording-ffmpeg-filter))
+              duration-args
+              '("-y" "%f")))
+     ((and (eq system-type 'gnu/linux)
+           (executable-find "arecord"))
+      (append '("arecord" "-q" "-f" "cd")
+              (when duration '("-d" "%d"))
+              '("%f")))
+     ((and (eq system-type 'gnu/linux)
+           (executable-find "ffmpeg"))
+      (append '("ffmpeg" "-nostdin" "-hide_banner" "-loglevel" "error"
+                "-f" "pulse" "-i" "default")
+              (when ellama-audio-recording-ffmpeg-filter
+                (list "-af" ellama-audio-recording-ffmpeg-filter))
+              duration-args
+              '("-y" "%f")))
+     ((and (memq system-type '(darwin gnu/linux))
+           (executable-find "rec"))
+      (append '("rec" "%f")
+              (when duration '("trim" "0" "%d")))))))
+
+(defun ellama--audio-recording-command (file-name &optional duration)
+  "Return command list to record FILE-NAME for DURATION seconds."
+  (let ((command (cond
+                  ((functionp ellama-audio-recording-command)
+                   (funcall ellama-audio-recording-command file-name duration))
+                  ((and ellama-audio-recording-command
+                        (listp ellama-audio-recording-command))
+                   ellama-audio-recording-command)
+                  (t (ellama--default-audio-recording-command
+                      file-name duration)))))
+    (unless command
+      (error "No audio recording command available; customize ellama-audio-recording-command"))
+    (when (and (not duration)
+               (seq-some (lambda (part)
+                           (string-match-p "%d" part))
+                         command))
+      (error "Audio recording command requires duration and cannot be used for start/stop recording"))
+    (mapcar (lambda (part)
+              (replace-regexp-in-string
+               "%d" (if duration (number-to-string duration) "")
+               (replace-regexp-in-string "%f" file-name part t t)
+               t t))
+            command)))
+
+(defun ellama--audio-recording-error (command exit-code output)
+  "Signal an audio recording error for COMMAND, EXIT-CODE, and OUTPUT."
+  (let* ((program (file-name-nondirectory (car command)))
+         (details (string-trim output))
+         (permission-hint
+          (when (and (eq system-type 'darwin)
+                     (equal program "ffmpeg"))
+            (concat " Check System Settings > Privacy & Security > Microphone "
+                    "and allow microphone access for Emacs."))))
+    (error "Audio recorder %s exited with %s%s%s"
+           program exit-code
+           (if (string-empty-p details)
+               ""
+             (format ": %s" details))
+           (or permission-hint ""))))
+
+;;;###autoload
+(defun ellama-record-audio (&optional duration file-name)
+  "Record audio from the microphone and return the recorded FILE-NAME.
+DURATION defaults to `ellama-audio-recording-duration'."
+  (interactive)
+  (let* ((duration (or duration
+                       (read-number "Record seconds: "
+                                    ellama-audio-recording-duration)))
+         (file-name (or file-name
+                        (ellama--audio-recording-file-name)))
+         (command (ellama--audio-recording-command file-name duration))
+         (output-buffer (generate-new-buffer " *ellama-audio-recording*")))
+    (condition-case err
+        (unwind-protect
+            (let ((exit-code
+                   (apply #'call-process
+                          (car command) nil
+                          (list output-buffer t) nil
+                          (cdr command))))
+              (unless (and (integerp exit-code) (zerop exit-code))
+                (ellama--audio-recording-error
+                 command exit-code
+                 (with-current-buffer output-buffer
+                   (buffer-string))))
+              (unless (ellama-audio-file-p file-name)
+                (error "Audio recording did not create a supported file: %s"
+                       file-name))
+              (when (called-interactively-p 'interactive)
+                (message "Recorded audio: %s" file-name))
+              file-name)
+          (kill-buffer output-buffer))
+      (error
+       (error "Failed to record audio: %s" (error-message-string err))))))
+
+;;;###autoload
+(defun ellama-start-audio-recording (&optional file-name)
+  "Start recording audio from the microphone.
+Return the output FILE-NAME.  Finish the recording with
+`ellama-stop-audio-recording'."
+  (interactive)
+  (when (and ellama--audio-recording-process
+             (process-live-p ellama--audio-recording-process))
+    (user-error "Audio recording is already running: %s"
+                ellama--audio-recording-file))
+  (let* ((file-name (or file-name (ellama--audio-recording-file-name)))
+         (command (ellama--audio-recording-command file-name))
+         (process (apply #'start-process
+                         "ellama-audio-recording"
+                         nil
+                         (car command)
+                         (cdr command))))
+    (set-process-query-on-exit-flag process nil)
+    (setq ellama--audio-recording-process process
+          ellama--audio-recording-file file-name)
+    (ellama-audio-recording-mode +1)
+    (force-mode-line-update t)
+    (when (called-interactively-p 'interactive)
+      (message "Recording audio; run ellama-stop-audio-recording to finish"))
+    file-name))
+
+;;;###autoload
+(defun ellama-stop-audio-recording ()
+  "Stop current microphone recording and return the recorded file name."
+  (interactive)
+  (unless ellama--audio-recording-process
+    (user-error "Audio recording is not running"))
+  (let ((process ellama--audio-recording-process)
+        (file-name ellama--audio-recording-file))
+    (when (process-live-p process)
+      (interrupt-process process)
+      (let ((limit (+ (float-time) 5)))
+        (while (and (process-live-p process)
+                    (< (float-time) limit))
+          (accept-process-output process 0.1)))
+      (when (process-live-p process)
+        (kill-process process)
+        (accept-process-output process 1)))
+    (unwind-protect
+        (progn
+          (unless (ellama-audio-file-p file-name)
+            (error "Audio recording did not create a supported file: %s"
+                   file-name))
+          (when (called-interactively-p 'interactive)
+            (message "Recorded audio: %s" file-name))
+          file-name)
+      (setq ellama--audio-recording-process nil
+            ellama--audio-recording-file nil)
+      (ellama-audio-recording-mode -1)
+      (force-mode-line-update t))))
 
 (defun ellama--session-compaction-buffer (session buffer)
   "Return live BUFFER for SESSION compaction status."
@@ -3471,6 +3788,10 @@ file by default.
 
 :images FILES -- attach image FILES to the prompt when provider supports it.
 
+:audios FILES -- attach audio FILES to the prompt when provider supports it.
+
+:media FILES -- attach media FILES to the prompt when provider supports it.
+
 :max-tokens INTEGER -- maximum number of tokens to generate.
 
 :on-error ON-ERROR -- ON-ERROR a function that's called with an error message on
@@ -3515,14 +3836,23 @@ failure (with BUFFER current).
           (ellama--normalize-image-files
            (or (plist-get args :images)
                (plist-get args :image))))
-         (context-images
+         (explicit-audios
+          (ellama--normalize-audio-files
+           (or (plist-get args :audios)
+               (plist-get args :audio))))
+         (explicit-media
+          (ellama--normalize-media-files
+           (plist-get args :media) "Media"))
+         (context-media
           (when (fboundp 'ellama-context-media)
             (ellama-context-media)))
-         (image-files (delete-dups (append explicit-images context-images)))
-         (_ (ellama--validate-image-input provider image-files))
+         (media-files
+          (delete-dups
+           (append explicit-media explicit-images explicit-audios context-media)))
+         (_ (ellama--validate-media-input provider media-files))
          (prompt-with-ctx (ellama-context-prompt-with-context prompt))
          (prompt-content
-          (ellama--prompt-content-with-images prompt-with-ctx image-files))
+          (ellama--prompt-content-with-media prompt-with-ctx media-files))
          (system (ellama-get-system-message (plist-get args :system)))
          (session-tools (and session
                              (ellama-session-extra session)
@@ -3859,9 +4189,9 @@ Will call `ellama-chat-done-callback' and ON-DONE on TEXT."
                                  #'ellama--translate-markdown-to-org-filter))))))
 
 (defun ellama--call-llm-with-translated-prompt
-    (buffer session translation-buffer &optional images)
+    (buffer session translation-buffer &optional media-files)
   "Call LLM with translated text in BUFFER with SESSION from TRANSLATION-BUFFER.
-IMAGES are attached to the translated prompt."
+MEDIA-FILES are attached to the translated prompt."
   (declare-function ellama-context-format "ellama-context")
   (lambda (result)
     (ellama-chat-done result)
@@ -3879,15 +4209,15 @@ IMAGES are attached to the translated prompt."
                 (ellama-get-nick-prefix-for-mode) " " ellama-assistant-nick ":\n")
         (ellama-stream result
                        :session session
-                       :images images
+                       :media media-files
                        :on-done (ellama--translate-generated-text-on-done translation-buffer)
                        :filter (when (derived-mode-p 'org-mode)
                                  #'ellama--translate-markdown-to-org-filter))))))
 
 (defun ellama--translate-interaction
-    (prompt translation-buffer buffer session &optional images)
+    (prompt translation-buffer buffer session &optional media-files)
   "Translate chat PROMPT in TRANSLATION-BUFFER for BUFFER with SESSION.
-IMAGES are attached to the final translated request."
+MEDIA-FILES are attached to the final translated request."
   (display-buffer translation-buffer (when ellama-chat-display-action-function
                                        `((ignore . (,ellama-chat-display-action-function)))))
   (with-current-buffer translation-buffer
@@ -3907,7 +4237,7 @@ IMAGES are attached to the final translated request."
                                #'ellama--translate-markdown-to-org-filter)
                      :on-done
                      (ellama--call-llm-with-translated-prompt
-                      buffer session translation-buffer images)))))
+                      buffer session translation-buffer media-files)))))
 
 ;;;###autoload
 (defun ellama-ask-image (image prompt &optional create-session &rest args)
@@ -3956,6 +4286,80 @@ If CREATE-SESSION set, create a new session."
    :ephemeral (plist-get args :ephemeral)))
 
 ;;;###autoload
+(defun ellama-ask-audio (audio prompt &optional create-session &rest args)
+  "Ask ellama PROMPT about AUDIO using ephemeral context.
+If CREATE-SESSION set, create a new session."
+  (interactive
+   (list (read-file-name "Audio: " nil nil t)
+         (read-string "Ask ellama: ")
+         current-prefix-arg))
+  (declare-function ellama-context-add-audio-file "ellama-context")
+  (require 'ellama-context)
+  (ellama-context-add-audio-file audio t)
+  (ellama-chat
+   prompt
+   create-session
+   :ephemeral (plist-get args :ephemeral)))
+
+;;;###autoload
+(defun ellama-chat-with-audio (audio prompt &optional create-session &rest args)
+  "Send PROMPT with AUDIO to ellama chat.
+If CREATE-SESSION set, create a new session."
+  (interactive
+   (list (read-file-name "Audio: " nil nil t)
+         (read-string "Ask ellama: ")
+         current-prefix-arg))
+  (apply #'ellama-ask-audio audio prompt create-session args))
+
+;;;###autoload
+(defun ellama-chat-with-audios (audios prompt &optional create-session &rest args)
+  "Send PROMPT with AUDIOS to ellama chat.
+If CREATE-SESSION set, create a new session."
+  (interactive
+   (let ((files (list (read-file-name "Audio: " nil nil t))))
+     (while (y-or-n-p "Add another audio file? ")
+       (push (read-file-name "Audio: " nil nil t) files))
+     (list (nreverse files)
+           (read-string "Ask ellama: ")
+           current-prefix-arg)))
+  (declare-function ellama-context-add-audio-file "ellama-context")
+  (require 'ellama-context)
+  (dolist (audio audios)
+    (ellama-context-add-audio-file audio t))
+  (ellama-chat
+   prompt
+   create-session
+   :ephemeral (plist-get args :ephemeral)))
+
+;;;###autoload
+(defun ellama-ask-audio-recording (duration prompt &optional create-session
+                                            &rest args)
+  "Record audio for DURATION seconds and ask ellama PROMPT about it.
+If CREATE-SESSION set, create a new session.
+ARGS contains options forwarded to `ellama-ask-audio'."
+  (interactive
+   (list (read-number "Record seconds: " ellama-audio-recording-duration)
+         (read-string "Ask ellama: ")
+         current-prefix-arg))
+  (apply #'ellama-ask-audio
+         (ellama-record-audio duration)
+         prompt
+         create-session
+         args))
+
+;;;###autoload
+(defun ellama-chat-with-audio-recording (duration prompt &optional create-session
+                                                  &rest args)
+  "Record audio for DURATION seconds and send PROMPT to ellama chat.
+If CREATE-SESSION set, create a new session.
+ARGS contains options forwarded to `ellama-ask-audio-recording'."
+  (interactive
+   (list (read-number "Record seconds: " ellama-audio-recording-duration)
+         (read-string "Ask ellama: ")
+         current-prefix-arg))
+  (apply #'ellama-ask-audio-recording duration prompt create-session args))
+
+;;;###autoload
 (defun ellama-chat (prompt &optional create-session &rest args)
   "Send PROMPT to ellama chat with conversation history.
 
@@ -3971,6 +4375,10 @@ ARGS contains keys for fine control.
 :system STR -- send STR to model as system message.
 
 :images FILES -- attach image FILES to the prompt when provider supports it.
+
+:audios FILES -- attach audio FILES to the prompt when provider supports it.
+
+:media FILES -- attach media FILES to the prompt when provider supports it.
 
 :max-tokens INTEGER -- maximum number of tokens to generate.
 
@@ -3990,6 +4398,14 @@ the full response text when the request completes (with BUFFER current)."
          (images (ellama--normalize-image-files
                   (or (plist-get args :images)
                       (plist-get args :image))))
+         (audios (ellama--normalize-audio-files
+                  (or (plist-get args :audios)
+                      (plist-get args :audio))))
+         (explicit-media
+          (ellama--normalize-media-files
+           (plist-get args :media) "Media"))
+         (display-media (delete-dups
+                         (append explicit-media images audios)))
          (provider (if current-prefix-arg
                        (eval (alist-get
                               (completing-read "Select model: " variants)
@@ -3997,11 +4413,11 @@ the full response text when the request completes (with BUFFER current)."
                      (or (plist-get args :provider)
                          ellama-provider
                          (ellama-get-first-ollama-chat-model))))
-         (context-images
+         (context-media
           (when (fboundp 'ellama-context-media)
             (ellama-context-media)))
-         (_ (ellama--validate-image-input
-             provider (delete-dups (append images context-images))))
+         (_ (ellama--validate-media-input
+             provider (delete-dups (append display-media context-media))))
          (ephemeral (plist-get args :ephemeral))
          (explicit-session-arg (plist-get args :session))
          (explicit-session-id (plist-get args :session-id))
@@ -4056,7 +4472,7 @@ the full response text when the request completes (with BUFFER current)."
         (add-hook 'org-ctrl-c-ctrl-c-hook #'ellama-chat-send-last-message 10 t)))
     (if ellama-chat-translation-enabled
         (ellama--translate-interaction
-         prompt translation-buffer buffer session images)
+         prompt translation-buffer buffer session display-media)
       (display-buffer
        buffer
        (when ellama-chat-display-action-function
@@ -4065,8 +4481,8 @@ the full response text when the request completes (with BUFFER current)."
         (save-excursion
           (goto-char (point-max))
           (let ((display-prompt
-                 (ellama--prompt-display-with-images
-                  prompt images
+                 (ellama--prompt-display-with-media
+                  prompt display-media
                   (if (derived-mode-p 'org-mode)
                       'org-mode
                     'markdown-mode))))
@@ -4087,7 +4503,7 @@ the full response text when the request completes (with BUFFER current)."
            prompt
            :session session
            :system system
-           :images images
+           :media display-media
            :max-tokens max-tokens
            :on-done (if donecb
                         (list 'ellama-chat-done donecb)

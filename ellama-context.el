@@ -32,6 +32,11 @@
 (require 'ellama)
 
 (declare-function ellama-image-file-p "ellama" (file-name))
+(declare-function ellama-audio-file-p "ellama" (file-name))
+(declare-function ellama-record-audio "ellama" (&optional duration file-name))
+(declare-function ellama-start-audio-recording "ellama" (&optional file-name))
+(declare-function ellama-stop-audio-recording "ellama" ())
+(defvar ellama-audio-recording-duration)
 
 (defcustom ellama-context-line-always-visible nil
   "Make context header or mode line always visible, even with empty context."
@@ -57,6 +62,14 @@
   "Default scope for image context added interactively.
 Use `ephemeral' to attach images to the next request only.
 Use `persistent' to keep image context until it is removed or reset."
+  :group 'ellama
+  :type '(choice (const ephemeral)
+                 (const persistent)))
+
+(defcustom ellama-audio-context-default-scope 'ephemeral
+  "Default scope for audio context added interactively.
+Use `ephemeral' to attach audio to the next request only.
+Use `persistent' to keep audio context until it is removed or reset."
   :group 'ellama
   :type '(choice (const ephemeral)
                  (const persistent)))
@@ -532,6 +545,44 @@ the context."
   (with-slots (name) element
     (list name)))
 
+;; Audio file context element
+
+(defclass ellama-context-element-audio-file (ellama-context-element)
+  ((name :initarg :name :type string))
+  "A structure for holding audio file context.")
+
+(cl-defmethod ellama-context-element-extract
+  ((element ellama-context-element-audio-file))
+  "Extract a text placeholder for audio context ELEMENT."
+  (with-slots (name) element
+    (format "Audio attached: %s" name)))
+
+(cl-defmethod ellama-context-element-display
+  ((element ellama-context-element-audio-file))
+  "Display the audio context ELEMENT."
+  (with-slots (name) element
+    (file-name-nondirectory name)))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-audio-file) (mode (eql 'markdown-mode)))
+  "Format the audio context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name) element
+    (format "[%s](<%s>)" (file-name-nondirectory name) name)))
+
+(cl-defmethod ellama-context-element-format
+  ((element ellama-context-element-audio-file) (mode (eql 'org-mode)))
+  "Format the audio context ELEMENT for the major MODE."
+  (ignore mode)
+  (with-slots (name) element
+    (format "[[file:%s][%s]]" name (file-name-nondirectory name))))
+
+(cl-defmethod ellama-context-element-media
+  ((element ellama-context-element-audio-file))
+  "Return audio file media from context ELEMENT."
+  (with-slots (name) element
+    (list name)))
+
 ;; Info node context element
 
 (defclass ellama-context-element-info-node (ellama-context-element)
@@ -839,6 +890,66 @@ or `persistent' to keep the image context."
        (ellama-context-add-image-file file-name))
       (_
        (ellama-context-add-image-file file-name t)))))
+
+;;;###autoload
+(defun ellama-context-add-audio-file (file-name &optional ephemeral)
+  "Add audio FILE-NAME to context.
+For one request only if EPHEMERAL."
+  (unless (ellama-audio-file-p file-name)
+    (user-error "Unsupported audio file: %s" file-name))
+  (let ((element (ellama-context-element-audio-file :name file-name)))
+    (if ephemeral
+        (ellama-context-ephemeral-element-add element)
+      (ellama-context-element-add element))))
+
+;;;###autoload
+(defun ellama-context-add-audio (&optional scope)
+  "Add audio file to context.
+SCOPE controls lifetime and defaults to
+`ellama-audio-context-default-scope'.  Use `ephemeral' for one request only,
+or `persistent' to keep the audio context."
+  (interactive)
+  (let* ((scope (or scope ellama-audio-context-default-scope))
+         (file-name (read-file-name "Select audio: " nil nil t)))
+    (pcase scope
+      ('persistent
+       (ellama-context-add-audio-file file-name))
+      (_
+       (ellama-context-add-audio-file file-name t)))))
+
+;;;###autoload
+(defun ellama-context-add-audio-recording (&optional scope duration)
+  "Record audio from the microphone and add it to context.
+SCOPE controls lifetime and defaults to
+`ellama-audio-context-default-scope'.  Use `ephemeral' for one request only,
+or `persistent' to keep the audio context.  DURATION is the recording
+duration in seconds."
+  (interactive)
+  (let* ((scope (or scope ellama-audio-context-default-scope))
+         (duration (or duration
+                       (read-number "Record seconds: "
+                                    ellama-audio-recording-duration))))
+    (ellama-context-add-audio-file
+     (ellama-record-audio duration)
+     (not (eq scope 'persistent)))))
+
+;;;###autoload
+(defun ellama-context-start-audio-recording ()
+  "Start microphone recording for later context attachment."
+  (interactive)
+  (ellama-start-audio-recording))
+
+;;;###autoload
+(defun ellama-context-stop-audio-recording (&optional scope)
+  "Stop microphone recording and add the resulting audio file to context.
+SCOPE controls lifetime and defaults to
+`ellama-audio-context-default-scope'.  Use `ephemeral' for one request only,
+or `persistent' to keep the audio context."
+  (interactive)
+  (let ((scope (or scope ellama-audio-context-default-scope)))
+    (ellama-context-add-audio-file
+     (ellama-stop-audio-recording)
+     (not (eq scope 'persistent)))))
 
 ;;;###autoload
 (defun ellama-context-add-file-quote (&optional ephemeral)

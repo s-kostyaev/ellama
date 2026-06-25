@@ -234,6 +234,19 @@ Return list with result and prompt."
       (when (file-exists-p file-name)
         (delete-file file-name)))))
 
+(defun ellama-test--with-temp-tool-audio-file (body)
+  "Call BODY with a tiny temporary WAV file."
+  (let ((file-name (make-temp-file "ellama-tool-audio-" nil ".wav")))
+    (unwind-protect
+        (progn
+          (with-temp-buffer
+            (set-buffer-multibyte nil)
+            (insert "RIFF\0\0\0\0WAVE")
+            (write-region nil nil file-name nil 'silent))
+          (funcall body file-name))
+      (when (file-exists-p file-name)
+        (delete-file file-name)))))
+
 (ert-deftest test-ellama-read-file-tool-text-mode ()
   (let ((file-name (make-temp-file "ellama-read-file-" nil ".txt")))
     (unwind-protect
@@ -262,6 +275,44 @@ Return list with result and prompt."
            (should (ellama--session-extra-get
                     session :pending-tool-media))))))))
 
+(ert-deftest test-ellama-read-file-tool-audio-mode-queues-media ()
+  (ellama-test--with-temp-tool-audio-file
+   (lambda (file-name)
+     (let* ((provider (make-llm-fake))
+            (session (make-ellama-session :id "tool-audio"
+                                          :provider provider))
+            (ellama-tools--current-session session)
+            (ellama--current-session nil))
+       (cl-letf (((symbol-function 'llm-capabilities)
+                  (lambda (_provider) '(audio-input))))
+         (let* ((result
+                 (json-read-from-string
+                  (ellama-tools-read-file-tool file-name "audio")))
+                (pending
+                 (ellama--session-extra-get session :pending-tool-media)))
+           (should (string-match-p "Audio file queued" result))
+           (should (equal (plist-get (car pending) :file)
+                          (expand-file-name file-name)))
+           (should (equal (plist-get (car pending) :mime-type)
+                          "audio/wav"))))))))
+
+(ert-deftest test-ellama-read-file-tool-auto-detects-audio ()
+  (ellama-test--with-temp-tool-audio-file
+   (lambda (file-name)
+     (let* ((provider (make-llm-fake))
+            (session (make-ellama-session :id "tool-audio-auto"
+                                          :provider provider))
+            (ellama-tools--current-session session)
+            (ellama--current-session nil))
+       (cl-letf (((symbol-function 'llm-capabilities)
+                  (lambda (_provider) '(audio-input))))
+         (let ((result
+                (json-read-from-string
+                 (ellama-tools-read-file-tool file-name "auto"))))
+           (should (string-match-p "Audio file queued" result))
+           (should (ellama--session-extra-get
+                    session :pending-tool-media))))))))
+
 (ert-deftest test-ellama-shell-command-tool-empty-success-output ()
   (should
    (string=
@@ -279,6 +330,50 @@ Return list with result and prompt."
    (string=
     (ellama-test--wait-shell-command-result "printf 'ok\\n'")
     "ok")))
+
+(ert-deftest test-ellama-shell-command-tool-reverts-workdir-file-buffers ()
+  (ellama-test--ensure-local-ellama-tools)
+  (require 'autorevert)
+  (let* ((dir (make-temp-file "ellama-shell-buffer-revert-" t))
+         (file (expand-file-name "note.txt" dir))
+         (outside-file (make-temp-file "ellama-shell-outside-buffer-"))
+         (default-directory (file-name-as-directory dir))
+         buffer outside-buffer)
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "old"))
+          (with-temp-file outside-file
+            (insert "outside-old"))
+          (setq buffer (find-file-noselect file))
+          (setq outside-buffer (find-file-noselect outside-file))
+          (with-current-buffer buffer
+            (auto-revert-mode 1)
+            (should auto-revert-mode)
+            (should (equal (buffer-string) "old")))
+          (with-current-buffer outside-buffer
+            (should (equal (buffer-string) "outside-old")))
+          (write-region "outside-new" nil outside-file nil 'silent)
+          (should
+           (equal
+            (ellama-test--wait-shell-command-result
+             "printf shell-new > note.txt")
+            "Command completed successfully with no output."))
+          (with-current-buffer buffer
+            (should (equal (buffer-string) "shell-new"))
+            (should auto-revert-mode))
+          (with-current-buffer outside-buffer
+            (should (equal (buffer-string) "outside-old"))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (when (buffer-live-p outside-buffer)
+        (kill-buffer outside-buffer))
+      (when (file-exists-p file)
+        (delete-file file))
+      (when (file-exists-p outside-file)
+        (delete-file outside-file))
+      (when (file-directory-p dir)
+        (delete-directory dir)))))
 
 (ert-deftest test-ellama-shell-command-tool-default-timeout ()
   (ellama-test--ensure-local-ellama-tools)
@@ -300,6 +395,16 @@ Return list with result and prompt."
       (ellama-test--wait-shell-command-result
        "printf '%s|%s' \"$PAGER\" \"$GIT_PAGER\"")
       "cat|cat"))))
+
+(ert-deftest test-ellama-shell-command-tool-uses-non-interactive-environment ()
+  (let ((process-environment (copy-sequence process-environment)))
+    (setenv "TERM" "xterm-256color")
+    (setenv "NO_COLOR" "false")
+    (should
+     (string=
+      (ellama-test--wait-shell-command-result
+       "printf '%s|%s' \"$TERM\" \"$NO_COLOR\"")
+      "dumb|true"))))
 
 (ert-deftest test-ellama-enabled-shell-command-tool-async-contract ()
   (ellama-test--ensure-local-ellama-tools)
@@ -2113,6 +2218,7 @@ Return list with result and prompt."
            (result (funcall wrapped-func "ok"))
            saved-path)
       (should (string-match-p "\\[ELLAMA OUTPUT TRUNCATED\\]" result))
+      (should (string-match-p "Full output lines: 4" result))
       (should (string-match "Full output saved to: \\([^\n]+\\)" result))
       (setq saved-path (match-string 1 result))
       (unwind-protect
@@ -2145,29 +2251,35 @@ Return list with result and prompt."
         (ellama-tools-allowed nil))
     (let ((source-path (make-temp-file "ellama-line-budget-source-")))
       (unwind-protect
-          (let* ((tool-plist `(:function ,(lambda (_file-name)
-                                            "line-1\nline-2\nline-3")
-                                         :name "read_file"
-                                         :args ((:name "file_name" :type string))))
-                 (wrapped (ellama-tools-wrap-with-confirm tool-plist))
-                 (wrapped-func (plist-get wrapped :function))
-                 (result (funcall wrapped-func source-path)))
-            (should (string-match-p "\\[ELLAMA OUTPUT TRUNCATED\\]" result))
-            (should
-             (string-match-p
-              (regexp-quote (format "Source file: %s" source-path))
-              result))
-            (should-not (string-match-p "Full output saved to:" result))
-            (should
-             (string-match-p
-              (regexp-quote
-               (format
-                "Next suggested tool call: `lines_range` with file_name=%S, from=3, to=3."
-                source-path))
-              result))
-            (should (string-match-p "grep_in_file" result)))
+          (progn
+            (with-temp-file source-path
+              (insert "line-1\nline-2\nline-3\n"))
+            (let* ((tool-plist `(:function ,(lambda (_file-name)
+                                              "line-1\nline-2\nline-3")
+                                           :name "read_file"
+                                           :args ((:name "file_name" :type string))))
+                   (wrapped (ellama-tools-wrap-with-confirm tool-plist))
+                   (wrapped-func (plist-get wrapped :function))
+                   (result (funcall wrapped-func source-path)))
+              (should (string-match-p "\\[ELLAMA OUTPUT TRUNCATED\\]" result))
+              (should
+               (string-match-p
+                (regexp-quote (format "Source file: %s" source-path))
+                result))
+              (should (string-match-p "Source file contains 3 lines" result))
+              (should-not (string-match-p "Full output saved to:" result))
+              (should (string-match-p "lines_range" result))
+              (should (string-match-p "at most 2 lines" result))
+              (should (string-match-p "within 1\\.\\.3" result))
+              (should (string-match-p "grep_in_file" result))))
         (when (file-exists-p source-path)
           (delete-file source-path))))))
+
+(ert-deftest test-ellama-tools-line-budget-counts-file-lines ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((truncation (ellama-tools--line-budget-truncate "one\ntwo\n" 1 200)))
+    (should (= (plist-get truncation :total-lines) 2))
+    (should (= (plist-get truncation :dropped-lines) 1))))
 
 (ert-deftest
     test-ellama-tools-wrap-with-confirm-output-line-budget-truncates-long-line ()
@@ -3037,9 +3149,17 @@ Return list with result and prompt."
              file)))
           (should
            (equal
-            (json-parse-string (ellama-tools-lines-range-tool file 1 3))
+            (json-parse-string (ellama-tools-lines-range-tool file 2 3))
             (format
-             "Invalid line range for %s: to (3) exceeds line count (2)."
+             (concat
+              "Warning: file %s contains only 2 lines; "
+              "requested range ends at line 3.\n\nbeta")
+             file)))
+          (should
+           (equal
+            (json-parse-string (ellama-tools-lines-range-tool file 3 4))
+            (format
+             "Invalid line range for %s: from (3) exceeds line count (2)."
              file))))
       (when (file-exists-p file)
         (delete-file file)))))
