@@ -1104,8 +1104,6 @@ ARGS used for transient arguments."
    [("S" "Session Commands" ellama-transient-session-menu)
     ("x" "Context Commands" ellama-transient-context-menu)]]
   [["Problem solving"
-    ("R" "Solve reasoning problem" ellama-solve-reasoning-problem)
-    ("D" "Solve domain specific problem" ellama-solve-domain-specific-problem)
     ("A" "Agent" ellama-transient-plan-and-act)]]
   [["Quit" ("q" "Quit" transient-quit-one)]]
   (interactive)
