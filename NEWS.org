@@ -1,3 +1,21 @@
+* Version 1.29.0
+
+- Added ~ellama-setup-agentic-coding~ to configure long-running coding-agent
+  defaults. This profile enables DLP enforcement, fail-closed DLP behavior,
+  session compaction, visible sub-agent sessions, and longer agent loop
+  limits. In non-SRT mode, ordinary DLP findings ask first while normal
+  confirmations stay active; in SRT mode, ordinary input findings are allowed
+  and ordinary output findings are redacted, with irreversible findings still
+  blocked. Tests cover non-SRT, SRT, and secure modes.
+- Removed obsolete problem solver commands ~ellama-solve-reasoning-problem~ and
+  ~ellama-solve-domain-specific-problem~ from the codebase and the main
+  transient menu, along with the ~ellama-chain~ function they relied upon.
+- Updated the README onboarding section to refresh Installation references
+  around GNU ELPA, Ollama, and added an explicit ~qwen3.6:35b~ agentic setup
+  example.
+- Documented the new ~ellama-setup-agentic-coding~ profile and split Commands
+  and Configuration sections into smaller groups for easier
+  navigation. Regenerated ~ellama.info~.
 * Version 1.28.0
 
 - Audio input support: audio files can now be attached alongside images in

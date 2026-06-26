@@ -9,6 +9,11 @@ Never push directly to `main`; always use a feature branch and a pull request.
 
 For release work, use the project-local `changelog` skill.
 
+For documentation changes intended for users, use the `humanize-writing` skill
+before finalizing the text.  This applies to README, NEWS, manuals, guides, and
+user-facing docs.  Preserve technical names, command names, option names, and
+document structure.
+
 ## Code Style Guidelines
 
 - Keep `require`s grouped at the file top.

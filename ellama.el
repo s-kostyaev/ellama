@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.31.1") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.28.0
+;; Version: 1.29.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -48,6 +48,23 @@
 (require 'ellama-skills)
 
 (defvar ellama-tools--current-session)
+(defvar ellama-tools-agent-default-max-steps)
+(defvar ellama-tools-allow-all)
+(defvar ellama-tools-dlp-enabled)
+(defvar ellama-tools-dlp-input-default-action)
+(defvar ellama-tools-dlp-input-fail-open)
+(defvar ellama-tools-dlp-log-targets)
+(defvar ellama-tools-dlp-mode)
+(defvar ellama-tools-dlp-output-default-action)
+(defvar ellama-tools-dlp-output-fail-open)
+(defvar ellama-tools-dlp-output-warn-behavior)
+(defvar ellama-tools-dlp-scan-env-exact-secrets)
+(defvar ellama-tools-irreversible-default-action)
+(defvar ellama-tools-irreversible-enabled)
+(defvar ellama-tools-irreversible-require-typed-confirm)
+(defvar ellama-tools-srt-args)
+(defvar ellama-tools-subagent-default-max-steps)
+(defvar ellama-tools-use-srt)
 
 (defgroup ellama nil
   "Tool for interacting with LLMs."
@@ -634,6 +651,64 @@ use Pandoc when available and the builtin converter otherwise."
 This applies to any `ellama-stream' call associated with a session, including
 sub-agent sessions started by tools."
   :type 'boolean)
+
+;;;###autoload
+(defun ellama-setup-agentic-coding (&optional srt-settings-file secure)
+  "Apply recommended settings for low-friction coding agents.
+This profile keeps provider, model, language and hardware-specific options
+unchanged.  It enables all available tools, DLP enforcement, fail-closed DLP
+behavior, automatic session visibility, and longer agent loops.
+
+When SRT-SETTINGS-FILE is a string, enable `ellama-tools-use-srt', configure
+`ellama-tools-srt-args' to use that file, and enable low-prompt tool use.  If
+SRT is already enabled, also enable low-prompt tool use.  Without SRT, this
+function does not enable global tool auto-approval.
+
+Irreversible findings are blocked by default.  When SECURE is non-nil, also
+block ordinary DLP input/output findings instead of asking for confirmation."
+  (interactive
+   (list (when current-prefix-arg
+           (read-file-name "SRT settings file: " nil nil t))
+         (and current-prefix-arg
+              (y-or-n-p "Block ordinary DLP findings too? "))))
+  (when srt-settings-file
+    (setq ellama-tools-use-srt t
+          ellama-tools-srt-args
+          (list "--settings" (expand-file-name srt-settings-file))))
+  (let ((srt-enabled ellama-tools-use-srt))
+    (setq ellama-auto-scroll t
+          ellama-display-session-buffer-on-generation t
+          ellama-session-auto-compact-enabled t
+          ellama-session-auto-compact-threshold-percent 75
+          ellama-session-auto-compact-keep-last-turns 2
+          ellama-session-auto-compact-allow-fewer-kept-turns t
+          ellama-tools-dlp-enabled t
+          ellama-tools-dlp-mode 'enforce
+          ellama-tools-dlp-input-fail-open nil
+          ellama-tools-dlp-output-fail-open nil
+          ellama-tools-dlp-scan-env-exact-secrets t
+          ellama-tools-dlp-input-default-action
+          (cond
+           (secure 'block)
+           (srt-enabled 'allow)
+           (t 'warn))
+          ellama-tools-dlp-output-default-action
+          (cond
+           (secure 'block)
+           (srt-enabled 'redact)
+           (t 'warn))
+          ellama-tools-dlp-output-warn-behavior (if secure 'block 'confirm)
+          ellama-tools-irreversible-enabled t
+          ellama-tools-irreversible-default-action 'block
+          ellama-tools-irreversible-require-typed-confirm t
+          ellama-tools-dlp-log-targets '(memory)
+          ellama-tools-agent-default-max-steps 100
+          ellama-tools-subagent-default-max-steps 60)
+    (ellama-tools-enable-all)
+    (if srt-enabled
+        (setq ellama-tools-allow-all t)
+      (message
+       "ellama agentic coding profile: SRT is not enabled; leaving tool confirmations active."))))
 
 (defcustom ellama-show-reasoning t
   "Show reasoning in separate buffer if enabled."
@@ -3991,126 +4066,6 @@ failure (with BUFFER current).
                  (with-current-buffer buffer
                    (start-request))))
             (start-request)))))))
-
-(defun ellama-chain (initial-prompt forms &optional acc)
-  "Call chain of FORMS on INITIAL-PROMPT.
-ACC will collect responses in reverse order (previous answer will be on top).
-Each form is a plist that can contain different options:
-
-:provider PROVIDER - use PROVIDER instead of `ellama-provider'.
-
-:transform FUNCTION - use FUNCTION to transform result of previous step to new
-prompt.  FUCTION will be called with two arguments INITIAL-PROMPT and ACC.
-
-:session SESSION - use SESSION in current step.
-
-:session-id ID -- ID is a ellama session unique identifier.
-
-:chat BOOL - if BOOL use chat buffer, otherwise use temp buffer.  Make sense for
-last step only.
-
-:show BOOL - if BOOL show buffer for this step."
-  (let* ((hd (car forms))
-         (tl (cdr forms))
-         (provider (or (plist-get hd :provider)
-                       ellama-provider
-                       (ellama-get-first-ollama-chat-model)))
-         (transform (plist-get hd :transform))
-         (prompt (if transform
-                     (apply transform (list initial-prompt acc))
-                   initial-prompt))
-         (session-id (plist-get hd :session-id))
-         (session (ellama--resolve-session
-                   (plist-get hd :session)
-                   session-id))
-         (chat (plist-get hd :chat))
-         (show (or (plist-get hd :show) ellama-always-show-chain-steps))
-         (buf (if (or (and (not chat)) (not session))
-                  (get-buffer-create (make-temp-name
-                                      (ellama-generate-name provider real-this-command prompt)))
-                (ellama-get-session-buffer
-                 (or ellama--current-session-uid
-                     ellama--current-session-id)))))
-    (when show
-      (display-buffer buf (if chat (when ellama-chat-display-action-function
-                                     `((ignore . (,ellama-chat-display-action-function))))
-                            (when ellama-instant-display-action-function
-                              `((ignore . (,ellama-instant-display-action-function)))))))
-    (with-current-buffer buf
-      (funcall ellama-major-mode))
-    (if chat
-        (ellama-chat
-         prompt
-         nil
-         :provider provider
-         :on-done (lambda (res)
-                    (when tl
-                      (ellama-chain res tl (cons res acc)))))
-      (ellama-stream
-       prompt
-       :provider provider
-       :buffer buf
-       :session session
-       :filter (when (derived-mode-p 'org-mode)
-                 #'ellama--translate-markdown-to-org-filter)
-       :on-done (lambda (res)
-                  (when tl
-                    (ellama-chain res tl (cons res acc))))))))
-
-;;;###autoload
-(defun ellama-solve-reasoning-problem (problem)
-  "Solve reasoning PROBLEM with absctraction of thought.
-Problem will be solved with the chain of questions to LLM."
-  (interactive "sProblem: ")
-  (ellama-chain
-   problem
-   '((:chat t
-            :transform (lambda (problem _)
-                         (format "Problem:
-%s
-
-Let's think logically and provide abstract higher order plan how to solve this kind
-of problems. Don't dive into small details only provide high-level plan." problem)))
-     (:chat t
-            :transform (lambda (_ _)
-                         "Provide more detailed plan. On what details should we pay attention?"))
-     (:chat t
-            :transform (lambda (_ _)
-                         "Now revise the plan and provide the final solution."))
-     (:chat t
-            :transform (lambda (_ _)
-                         "Provide short final answer based on final solution.")))))
-
-;;;###autoload
-(defun ellama-solve-domain-specific-problem (problem)
-  "Solve domain-specific PROBLEM with `ellama-chain'."
-  (interactive "sProblem: ")
-  (ellama-chain
-   problem
-   `((:transform (lambda (problem _)
-                   (format "Problem:
-%s
-
-Which specialist suits better for solving this kind of problems?"
-                           problem)))
-     (:transform (lambda (res _)
-                   (format "Message:
-%s
-
-Extract profession from this message. Be short and concise."
-                           res)))
-     (:chat t
-            :transform (lambda (profession _)
-                         (format
-                          "You are professional %s. Do your best and create detailed plan how to solve this problem:
-%s"
-                          (string-trim profession) ,problem)))
-     (:chat t
-            :transform (lambda (_ _)
-                         "Now revise the plan and provide the final solution."))
-     (:chat t
-            :transform (lambda (_ _)
-                         "Provide short final answer based on final solution.")))))
 
 (declare-function org-export-to-buffer "ox")
 (defvar org-export-show-temporary-export-buffer)
