@@ -1,3 +1,15 @@
+* Version 1.32.1
+
+- Preserve file buffer positions during tool updates. File contents are now
+  updated with marker-preserving replacement, and only stale unmodified buffers
+  are refreshed after shell commands and edit hooks. The system warns instead of
+  discarding unsaved changes, and regression coverage for mutating, read-only,
+  validation, and hook paths has been added.
+
+- Keep visiting buffers attached after file moves. The ~move_file~ tool now
+  retargets an existing source buffer to the destination while preserving point
+  and unsaved changes. Destinations already visited by another buffer are
+  rejected. Regression tests cover both paths.
 * Version 1.32.0
 
 - Preserve Markdown tables during streaming conversion. Paragraph filling no

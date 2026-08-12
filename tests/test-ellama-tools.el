@@ -375,6 +375,107 @@ Return list with result and prompt."
       (when (file-directory-p dir)
         (delete-directory dir)))))
 
+(ert-deftest test-ellama-shell-command-tool-leaves-unchanged-buffer-alone ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-shell-buffer-unchanged-" t))
+         (file (expand-file-name "note.txt" dir))
+         (default-directory (file-name-as-directory dir))
+         buffer expected-point expected-content)
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "one\ntwo\nthree\n"))
+          (setq buffer (find-file-noselect file))
+          (with-current-buffer buffer
+            (goto-char (point-min))
+            (insert "unsaved\n")
+            (search-forward "two")
+            (setq expected-point (point)
+                  expected-content (buffer-string)))
+          (should
+           (equal
+            (ellama-test--wait-shell-command-result "true")
+            "Command completed successfully with no output."))
+          (with-current-buffer buffer
+            (should (buffer-modified-p))
+            (should (= (point) expected-point))
+            (should (equal (buffer-string) expected-content))))
+      (when (buffer-live-p buffer)
+        (with-current-buffer buffer
+          (set-buffer-modified-p nil))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file))
+      (when (file-directory-p dir)
+        (delete-directory dir)))))
+
+(ert-deftest test-ellama-shell-command-tool-protects-modified-stale-buffer ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-shell-buffer-modified-" t))
+         (file (expand-file-name "note.txt" dir))
+         (default-directory (file-name-as-directory dir))
+         buffer expected-point expected-content)
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "one\ntwo\nthree\n"))
+          (setq buffer (find-file-noselect file))
+          (with-current-buffer buffer
+            (goto-char (point-min))
+            (insert "unsaved\n")
+            (search-forward "two")
+            (setq expected-point (point)
+                  expected-content (buffer-string)))
+          (let ((result
+                 (ellama-test--wait-shell-command-result
+                  "printf disk-new > note.txt")))
+            (should (string-match-p "Buffer refresh warnings" result))
+            (should (string-match-p "unsaved changes" result)))
+          (with-current-buffer buffer
+            (should (buffer-modified-p))
+            (should (= (point) expected-point))
+            (should (equal (buffer-string) expected-content)))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (equal (buffer-string) "disk-new"))))
+      (when (buffer-live-p buffer)
+        (with-current-buffer buffer
+          (set-buffer-modified-p nil))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file))
+      (when (file-directory-p dir)
+        (delete-directory dir)))))
+
+(ert-deftest test-ellama-shell-command-tool-preserves-logical-point-on-refresh ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-shell-buffer-point-" t))
+         (file (expand-file-name "note.txt" dir))
+         (default-directory (file-name-as-directory dir))
+         buffer)
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "one\ntwo\nthree\n"))
+          (setq buffer (find-file-noselect file))
+          (with-current-buffer buffer
+            (goto-char (point-min))
+            (search-forward "three")
+            (goto-char (match-beginning 0)))
+          (should
+           (equal
+            (ellama-test--wait-shell-command-result
+             "printf 'prefix\\none\\ntwo\\nthree\\n' > note.txt")
+            "Command completed successfully with no output."))
+          (with-current-buffer buffer
+            (should (looking-at-p "three"))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file))
+      (when (file-directory-p dir)
+        (delete-directory dir)))))
+
 (ert-deftest test-ellama-shell-command-tool-default-timeout ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((ellama-tools-shell-command-default-timeout 5))
@@ -2524,6 +2625,124 @@ Return list with result and prompt."
       (when (file-exists-p file)
         (delete-file file)))))
 
+(ert-deftest test-ellama-tools-mutating-file-tools-preserve-logical-point ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-edit-before-shell-commands nil)
+        (ellama-tools-edit-after-shell-commands nil)
+        (ellama-tools-read-before-write-enabled nil)
+        (original "one\ntwo\nthree\n"))
+    (dolist (operation '(write append prepend edit))
+      (let ((file (make-temp-file "ellama-file-tool-point-" nil ".txt"))
+            buffer)
+        (unwind-protect
+            (ert-info ((format "Operation: %s" operation))
+                      (with-temp-file file
+                        (insert original))
+                      (setq buffer (find-file-noselect file))
+                      (with-current-buffer buffer
+                        (goto-char (point-min))
+                        (search-forward "three")
+                        (goto-char (match-beginning 0)))
+                      (pcase operation
+                        ('write
+                         (ellama-test--wait-tool-result
+                          #'ellama-tools-write-file-tool
+                          file
+                          (concat "prefix\n" original)))
+                        ('append
+                         (ellama-test--wait-tool-result
+                          #'ellama-tools-append-file-tool file "tail\n"))
+                        ('prepend
+                         (ellama-test--wait-tool-result
+                          #'ellama-tools-prepend-file-tool file "prefix\n"))
+                        ('edit
+                         (ellama-test--wait-tool-result
+                          #'ellama-tools-edit-file-tool
+                          file "two" "a longer second line")))
+                      (with-current-buffer buffer
+                        (should (looking-at-p "three"))
+                        (should-not (eobp))))
+          (when (buffer-live-p buffer)
+            (kill-buffer buffer))
+          (when (file-exists-p file)
+            (delete-file file)))))))
+
+(ert-deftest test-ellama-tools-edit-after-hook-preserves-logical-point ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((file (make-temp-file "ellama-after-hook-point-" nil ".txt"))
+         (original "one\ntwo\nthree\n")
+         (ellama-tools-edit-before-shell-commands nil)
+         (ellama-tools-edit-after-shell-commands
+          '((:command
+             "printf 'prefix\\none\\ntwo\\nthree\\n' > \"$ELLAMA_FILE_NAME\"")))
+         (ellama-tools-read-before-write-enabled nil)
+         buffer)
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert original))
+          (setq buffer (find-file-noselect file))
+          (with-current-buffer buffer
+            (goto-char (point-min))
+            (search-forward "three")
+            (goto-char (match-beginning 0)))
+          (ellama-test--wait-tool-result
+           #'ellama-tools-write-file-tool file original)
+          (with-current-buffer buffer
+            (should (looking-at-p "three"))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-tools-edit-after-hook-protects-user-changes ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((file (make-temp-file "ellama-after-hook-modified-" nil ".txt"))
+         (original "one\ntwo\nthree\n")
+         (ellama-tools-edit-before-shell-commands nil)
+         (ellama-tools-edit-after-shell-commands
+          '((:command
+             "sleep 0.1; printf hook-new > \"$ELLAMA_FILE_NAME\"")))
+         (ellama-tools-read-before-write-enabled nil)
+         (result :pending)
+         buffer expected-point expected-content)
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert original))
+          (setq buffer (find-file-noselect file))
+          (should-not
+           (ellama-tools-write-file-tool
+            (lambda (output)
+              (setq result output))
+            file original))
+          (with-current-buffer buffer
+            (goto-char (point-min))
+            (insert "unsaved\n")
+            (search-forward "two")
+            (setq expected-point (point)
+                  expected-content (buffer-string)))
+          (let ((deadline (+ (float-time) 3.0)))
+            (while (and (eq result :pending)
+                        (< (float-time) deadline))
+              (accept-process-output nil 0.01)))
+          (when (eq result :pending)
+            (ert-fail "Timeout waiting for edit hook result"))
+          (should (string-match-p "unsaved changes" result))
+          (with-current-buffer buffer
+            (should (buffer-modified-p))
+            (should (= (point) expected-point))
+            (should (equal (buffer-string) expected-content)))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (equal (buffer-string) "hook-new"))))
+      (when (buffer-live-p buffer)
+        (with-current-buffer buffer
+          (set-buffer-modified-p nil))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
 (ert-deftest test-ellama-tools-edit-after-hook-shows-enabled-output ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((file (make-temp-file "ellama-after-hook-show-"))
@@ -2851,6 +3070,38 @@ Return list with result and prompt."
       (when (file-exists-p file)
         (delete-file file)))))
 
+(ert-deftest test-ellama-tools-rejected-edit-preserves-point ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((file (make-temp-file "ellama-edit-rejected-point-" nil ".el"))
+         (original
+          (concat
+           "(defun first ()\n  (message \"first\"))\n\n"
+           "(defun second ()\n  (message \"second\"))\n"))
+         buffer expected-point)
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert original))
+          (setq buffer (find-file-noselect file))
+          (with-current-buffer buffer
+            (goto-char (point-min))
+            (search-forward "second")
+            (setq expected-point (point)))
+          (let ((result
+                 (ellama-test--wait-tool-result
+                  #'ellama-tools-edit-file-tool
+                  file
+                  "(defun first ()\n  (message \"first\"))"
+                  "(defun first ()\n  (message \"first\")")))
+            (should (string-match-p "Edit rejected" result)))
+          (with-current-buffer buffer
+            (should (= (point) expected-point))
+            (should (equal (buffer-string) original))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
 (ert-deftest test-ellama-tools-write-file-rejects-invalid-elisp ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((file (make-temp-file "ellama-write-invalid-" nil ".el")))
@@ -3107,6 +3358,79 @@ Return list with result and prompt."
       (when (file-exists-p dst)
         (delete-file dst)))))
 
+(ert-deftest test-ellama-tools-move-file-updates-visiting-buffer ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((src (make-temp-file "ellama-move-buffer-src-"))
+         (dst (concat src "-dst"))
+         (ellama-tools-read-before-write-enabled nil)
+         buffer expected-point expected-content)
+    (unwind-protect
+        (progn
+          (with-temp-file src
+            (insert "one\ntwo\nthree\n"))
+          (setq buffer (find-file-noselect src))
+          (with-current-buffer buffer
+            (goto-char (point-min))
+            (insert "unsaved\n")
+            (search-forward "two")
+            (setq expected-point (point)
+                  expected-content (buffer-string)))
+          (should
+           (equal (ellama-tools-move-file-tool src dst)
+                  (format "Moved %s to %s." src dst)))
+          (should-not (file-exists-p src))
+          (should (file-exists-p dst))
+          (should-not (get-file-buffer src))
+          (should (eq (get-file-buffer dst) buffer))
+          (with-current-buffer buffer
+            (should (equal buffer-file-name (expand-file-name dst)))
+            (should (buffer-modified-p))
+            (should (= (point) expected-point))
+            (should (equal (buffer-string) expected-content))
+            (save-buffer))
+          (with-temp-buffer
+            (insert-file-contents dst)
+            (should (equal (buffer-string) expected-content))))
+      (when (buffer-live-p buffer)
+        (with-current-buffer buffer
+          (set-buffer-modified-p nil))
+        (kill-buffer buffer))
+      (when (file-exists-p src)
+        (delete-file src))
+      (when (file-exists-p dst)
+        (delete-file dst)))))
+
+(ert-deftest test-ellama-tools-move-file-rejects-visiting-destination ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((src (make-temp-file "ellama-move-buffer-conflict-src-"))
+         (dst (concat src "-dst"))
+         (ellama-tools-read-before-write-enabled nil)
+         destination-buffer)
+    (unwind-protect
+        (progn
+          (with-temp-file src
+            (insert "source"))
+          (setq destination-buffer (find-file-noselect dst))
+          (should
+           (equal
+            (ellama-tools-move-file-tool src dst)
+            (format
+             (concat
+              "Cannot move file: destination is visited by another buffer: "
+              "%s.")
+             dst)))
+          (should (file-exists-p src))
+          (should-not (file-exists-p dst))
+          (should (eq (get-file-buffer dst) destination-buffer)))
+      (when (buffer-live-p destination-buffer)
+        (with-current-buffer destination-buffer
+          (set-buffer-modified-p nil))
+        (kill-buffer destination-buffer))
+      (when (file-exists-p src)
+        (delete-file src))
+      (when (file-exists-p dst)
+        (delete-file dst)))))
+
 (ert-deftest test-ellama-tools-lines-range-boundary ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((file (make-temp-file "ellama-lines-range-")))
@@ -3133,6 +3457,37 @@ Return list with result and prompt."
       (delete-file file))
     (should (equal (ellama-tools-count-lines-tool file)
                    (format "File %s does not exist." file)))))
+
+(ert-deftest test-ellama-tools-read-only-file-tools-preserve-point ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((dir (make-temp-file "ellama-read-only-point-" t))
+         (file (expand-file-name "note.txt" dir))
+         buffer expected-point)
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "alpha\nbeta\ngamma\n"))
+          (setq buffer (find-file-noselect file))
+          (with-current-buffer buffer
+            (goto-char (point-min))
+            (search-forward "beta")
+            (setq expected-point (point)))
+          (dolist (reader
+                   (list
+                    (lambda () (ellama-tools-read-file-tool file "text"))
+                    (lambda () (ellama-tools-grep-in-file-tool "beta" file))
+                    (lambda () (ellama-tools-grep-tool dir "beta"))
+                    (lambda () (ellama-tools-count-lines-tool file))
+                    (lambda () (ellama-tools-lines-range-tool file 1 2))))
+            (funcall reader)
+            (with-current-buffer buffer
+              (should (= (point) expected-point)))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file))
+      (when (file-directory-p dir)
+        (delete-directory dir)))))
 
 (ert-deftest test-ellama-tools-lines-range-explains-invalid-input ()
   (ellama-test--ensure-local-ellama-tools)
