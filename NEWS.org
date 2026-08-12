@@ -1,3 +1,12 @@
+* Version 1.32.0
+
+- Preserve Markdown tables during streaming conversion. Paragraph filling no
+  longer wraps table rows, and streaming fill skips while point is inside a
+  table, avoiding phantom rows and broken cells.
+- Align converted Markdown tables in Org output. Separator rows are normalized
+  and tables are aligned for both builtin and Pandoc converters, with better
+  handling of wider cells during streaming updates.
+
 * Version 1.31.0
 
 - Show irreversible action confirmation details. Named tool arguments are now

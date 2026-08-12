@@ -2732,6 +2732,93 @@ Sure! ```emacs-lisp
                              "Sure! \n```emacs-lisp\n"
                              "(message \"ok\")\n```")))))
 
+(ert-deftest test-ellama-md-to-org-table-builtin ()
+  (let ((ellama-markdown-to-org-converter 'builtin))
+    (should
+     (string=
+      (ellama--translate-markdown-to-org-filter
+       "| Name | Link |
+| :--- | ---: |
+| 猫 | [OpenAI](https://openai.com) |")
+      "| Name | Link   |
+|------+--------|
+| 猫   | [[https://openai.com][OpenAI]] |"))))
+
+(ert-deftest test-ellama-md-to-org-table-pandoc ()
+  (let ((ellama-markdown-to-org-converter 'pandoc))
+    (cl-letf (((symbol-function 'ellama--translate-markdown-to-org-with-pandoc)
+               (lambda (_text)
+                 "| Name | Description |
+|---+---|
+| a | much longer |")))
+      (should
+       (string=
+        (ellama--translate-markdown-to-org-filter "ignored")
+        "| Name | Description |
+|------+-------------|
+| a    | much longer |")))))
+
+(ert-deftest test-ellama-md-to-org-table-does-not-fill-long-rows ()
+  (let ((ellama-markdown-to-org-converter 'builtin)
+        (ellama-fill-paragraphs t)
+        (fill-column 30))
+    (should
+     (string=
+      (ellama--translate-markdown-to-org-filter
+       "| Name | Description |
+| --- | --- |
+| item | This description is longer than the fill column |")
+      "| Name | Description                                     |
+|------+-------------------------------------------------|
+| item | This description is longer than the fill column |"))))
+
+(ert-deftest test-ellama-md-to-org-table-skip-src-block ()
+  (let ((ellama-markdown-to-org-converter 'builtin))
+    (should
+     (string=
+      (ellama--translate-markdown-to-org-filter
+       "```text
+|a|long|
+|b|c|
+```
+
+| A | Longer |
+| --- | --- |
+| x | y |")
+      "#+BEGIN_SRC text
+|a|long|
+|b|c|
+#+END_SRC
+
+| A | Longer |
+|---+--------|
+| x | y      |"))))
+
+(ert-deftest test-ellama-md-to-org-table-streaming-width-growth ()
+  (with-temp-buffer
+    (org-mode)
+    (let* ((response
+            (concat "| Name | Rating |\n"
+                    "| --- | --- |\n"
+                    "| short | ⭐ |\n"
+                    "| longest name | ⭐⭐⭐⭐⭐ (Very easy) |"))
+           (ellama-markdown-to-org-converter 'builtin)
+           (ellama-auto-scroll nil)
+           (insert-text
+            (ellama--insert
+             (current-buffer) (point)
+             #'ellama--translate-markdown-to-org-filter)))
+      (dolist (partial
+               (ellama-test--fake-stream-partials response 'word-leading))
+        (funcall insert-text (string-trim partial)))
+      (should
+       (string=
+        (buffer-string)
+        "| Name         | Rating                 |
+|--------------+------------------------|
+| short        | ⭐                     |
+| longest name | ⭐⭐⭐⭐⭐ (Very easy) |")))))
+
 (ert-deftest test-ellama-md-to-org-code-hard ()
   (let ((result (ellama--translate-markdown-to-org-filter "Here is your TikZ code for a blue rectangle:
 ```

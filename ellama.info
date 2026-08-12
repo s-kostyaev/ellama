@@ -1024,13 +1024,6 @@ If a saved provider key cannot be restored, the session still loads.
 Requests using that provider can fail later with the provider's normal
 authentication error until the provider is configured again.
 
-The upstream ‘llm’ provider-key redaction change is merged, but released
-versions such as ‘llm’ 0.30.3 may not include it yet.  Until a released
-‘llm’ version containing that change is installed, provider keys can
-still appear in debugger output produced by ‘llm’ itself.  Ellama avoids
-adding new plaintext keys to saved session files, but it cannot redact
-every ‘llm’ backtrace from older released ‘llm’ versions.
-
 Set ‘ellama-session-persist-provider-keys’ to ‘auth-source’ to save an
 auth-source lookup reference in the session file.  The secret itself
 stays in auth-source and is resolved when the session is loaded.  Ellama
@@ -2945,42 +2938,42 @@ Node: Tool Access and Sandboxing40648
 Node: Task Templates Blueprints and Skills43720
 Node: Agent and Subagent Loops45099
 Node: Session Provider Keys46395
-Node: Session Compaction48281
-Node: Image Input50575
-Node: Audio Input52890
-Node: macOS microphone permission55558
-Node: Task Tool Subagents57719
-Node: Plan-and-Act Agent Loop61625
-Node: Edit Tool Shell Hooks64206
-Node: DLP for Tool Input/Output66499
-Node: SRT Filesystem Policy for Tools82068
-Node: Context Management87739
-Node: Transient Menus for Context Management88807
-Node: Managing the Context90881
-Node: Considerations91656
-Node: Minor modes91983
-Node: ellama-context-header-line-mode92495
-Node: ellama-context-header-line-global-mode93113
-Node: ellama-context-mode-line-mode93517
-Node: ellama-context-mode-line-global-mode94096
-Node: ellama-session-header-line-mode94490
-Node: ellama-session-mode-line-mode94994
-Node: Using Blueprints95421
-Node: Key Components95817
-Node: Creating and Managing96176
-Node: Blueprint Files96814
-Node: Variables97233
-Node: Keymap and Mode97569
-Node: Transient Menus98093
-Node: Running Blueprints Programmatically98607
-Node: MCP Integration99161
-Node: Agent Skills100339
-Node: Directory Structure100738
-Node: Creating a Skill101718
-Node: How It Works102108
-Node: Acknowledgments102514
-Node: Contributions103200
-Node: GNU Free Documentation License103725
+Node: Session Compaction47840
+Node: Image Input50134
+Node: Audio Input52449
+Node: macOS microphone permission55117
+Node: Task Tool Subagents57278
+Node: Plan-and-Act Agent Loop61184
+Node: Edit Tool Shell Hooks63765
+Node: DLP for Tool Input/Output66058
+Node: SRT Filesystem Policy for Tools81627
+Node: Context Management87298
+Node: Transient Menus for Context Management88366
+Node: Managing the Context90440
+Node: Considerations91215
+Node: Minor modes91542
+Node: ellama-context-header-line-mode92054
+Node: ellama-context-header-line-global-mode92672
+Node: ellama-context-mode-line-mode93076
+Node: ellama-context-mode-line-global-mode93655
+Node: ellama-session-header-line-mode94049
+Node: ellama-session-mode-line-mode94553
+Node: Using Blueprints94980
+Node: Key Components95376
+Node: Creating and Managing95735
+Node: Blueprint Files96373
+Node: Variables96792
+Node: Keymap and Mode97128
+Node: Transient Menus97652
+Node: Running Blueprints Programmatically98166
+Node: MCP Integration98720
+Node: Agent Skills99898
+Node: Directory Structure100297
+Node: Creating a Skill101277
+Node: How It Works101667
+Node: Acknowledgments102073
+Node: Contributions102759
+Node: GNU Free Documentation License103284
 
 End Tag Table
 

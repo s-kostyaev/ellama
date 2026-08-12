@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.31.1") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.31.0
+;; Version: 1.32.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -46,6 +46,12 @@
 (eval-when-compile (require 'rx))
 (require 'ellama-tools)
 (require 'ellama-skills)
+
+(declare-function org-table-align "org-table")
+(declare-function org-at-table-p "org-table")
+(declare-function org-table-begin "org-table")
+(declare-function org-table-end "org-table")
+(declare-function org-table-map-tables "org-table")
 
 (defvar ellama-tools--current-session)
 (defvar ellama-tools-agent-default-max-steps)
@@ -906,6 +912,12 @@ into the buffer if the LLM call raises an error."
           (re-search-forward from end t))
     (replace-match to)))
 
+(defun ellama--markdown-table-line-p ()
+  "Return non-nil when point is on a Markdown table line."
+  (save-excursion
+    (beginning-of-line)
+    (looking-at-p "[ \t]*|")))
+
 (defun ellama--apply-transformations (beg end)
   "Apply md to org transformations for region BEG END."
   (let ((beg-pos (make-marker))
@@ -947,7 +959,9 @@ into the buffer if the LLM call raises an error."
     (goto-char beg-pos)
     (set-hard-newline-properties beg-pos end-pos)
     (when ellama-fill-paragraphs
-      (let* ((use-hard-newlines t))
+      (let ((fill-nobreak-predicate
+             (cons #'ellama--markdown-table-line-p fill-nobreak-predicate))
+            (use-hard-newlines t))
         (fill-region beg end-pos nil t t)))))
 
 (defun ellama--replace-outside-of-code-blocks (text)
@@ -1000,6 +1014,14 @@ Skip code blocks and math environments."
 (defconst ellama--pandoc-think-end "ELLAMA_THINK_END")
 (defconst ellama--org-verbatim-blocks '("SRC" "EXAMPLE" "EXPORT")
   "Org block names whose contents should stay untouched.")
+
+(defconst ellama--markdown-table-separator-regexp
+  (rx line-start
+      (group (* blank)) "|" (* blank)
+      (? ":") (>= 3 "-") (? ":") (* blank)
+      (* "|" (* blank) (? ":") (>= 3 "-") (? ":") (* blank))
+      (? "|") (* blank) line-end)
+  "Regexp matching a Markdown table separator row.")
 
 (defun ellama--org-keyword-line-start-p ()
   "Return non-nil when point has only blanks before it on its line."
@@ -1064,6 +1086,40 @@ Skip code blocks and math environments."
               (insert prefix "\n```\n" suffix))))))
       (forward-line 1))
     (buffer-substring-no-properties (point-min) (point-max))))
+
+(defun ellama--normalize-and-align-org-table ()
+  "Normalize and align the Org table at point."
+  (let ((table-beg (org-table-begin))
+        (table-end (copy-marker (org-table-end) t)))
+    (save-excursion
+      (goto-char table-beg)
+      (while (re-search-forward ellama--markdown-table-separator-regexp
+                                table-end t)
+        (replace-match (concat (match-string 1) "|-") t t)))
+    (goto-char table-beg)
+    (org-table-align)
+    (set-marker table-end nil)))
+
+(defun ellama--align-org-tables (text)
+  "Normalize and align Org tables in TEXT."
+  (if (not (string-match-p "^[ \t]*|" text))
+      text
+    (condition-case err
+        (progn
+          (let ((trailing-newline-p (string-suffix-p "\n" text)))
+            (with-temp-buffer
+              (delay-mode-hooks (org-mode))
+              (insert text)
+              (org-table-map-tables #'ellama--normalize-and-align-org-table t)
+              (let ((result
+                     (buffer-substring-no-properties (point-min) (point-max))))
+                (if trailing-newline-p
+                    result
+                  (string-remove-suffix "\n" result))))))
+      (error
+       (when ellama-debug
+         (message "Cannot align Org tables: %s" (error-message-string err)))
+       text))))
 
 (defun ellama--prepare-markdown-for-pandoc (text)
   "Prepare TEXT for Pandoc Markdown to Org conversion."
@@ -1130,13 +1186,14 @@ This filter contains only subset of markdown syntax to be good enough."
 
 (defun ellama--translate-markdown-to-org-filter (text)
   "Filter to translate Markdown syntax to Org syntax in TEXT."
-  (if (or (eq ellama-markdown-to-org-converter 'pandoc)
-          (and (eq ellama-markdown-to-org-converter 'auto)
-               (ellama--pandoc-available-p)))
-      (condition-case nil
-          (ellama--translate-markdown-to-org-with-pandoc text)
-        (error (ellama--translate-markdown-to-org-builtin text)))
-    (ellama--translate-markdown-to-org-builtin text)))
+  (ellama--align-org-tables
+   (if (or (eq ellama-markdown-to-org-converter 'pandoc)
+           (and (eq ellama-markdown-to-org-converter 'auto)
+                (ellama--pandoc-available-p)))
+       (condition-case nil
+           (ellama--translate-markdown-to-org-with-pandoc text)
+         (error (ellama--translate-markdown-to-org-builtin text)))
+     (ellama--translate-markdown-to-org-builtin text))))
 
 (defcustom ellama-enable-keymap t
   "Enable or disable Ellama keymap."
@@ -3418,9 +3475,10 @@ EVENT is an argument for mweel scroll."
          ((cl-type list) (and (apply #'derived-mode-p
                                      ellama-fill-paragraphs))))
        (not (and (derived-mode-p 'org-mode)
-                 (string-match-p
-                  "#\\+\\(?:BEGIN\\|END\\)_[[:alnum:]_-]+"
-                  delta)))))
+                 (or (org-at-table-p)
+                     (string-match-p
+                      "#\\+\\(?:BEGIN\\|END\\)_[[:alnum:]_-]+"
+                      delta))))))
 
 (defun ellama--insert (buffer point filter)
   "Insert text during streaming.
@@ -3449,14 +3507,21 @@ FILTER is a function for text transformation."
               (let* ((filtered-text
                       (funcall filter text))
                      (use-hard-newlines t)
+                     (valid-safe-common-prefix
+                      (if (and
+                           (string-prefix-p safe-common-prefix filtered-text)
+                           (string-prefix-p safe-common-prefix
+                                            previous-filtered-text))
+                          safe-common-prefix
+                        ""))
                      (common-prefix (concat
-                                     safe-common-prefix
+                                     valid-safe-common-prefix
                                      (ellama-max-common-prefix
                                       (string-remove-prefix
-                                       safe-common-prefix
+                                       valid-safe-common-prefix
                                        filtered-text)
                                       (string-remove-prefix
-                                       safe-common-prefix
+                                       valid-safe-common-prefix
                                        previous-filtered-text))))
                      (wrong-chars-cnt (- (length previous-filtered-text)
                                          (length common-prefix)))
