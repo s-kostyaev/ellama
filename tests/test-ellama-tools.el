@@ -2636,32 +2636,32 @@ Return list with result and prompt."
             buffer)
         (unwind-protect
             (ert-info ((format "Operation: %s" operation))
-              (with-temp-file file
-                (insert original))
-              (setq buffer (find-file-noselect file))
-              (with-current-buffer buffer
-                (goto-char (point-min))
-                (search-forward "three")
-                (goto-char (match-beginning 0)))
-              (pcase operation
-                ('write
-                 (ellama-test--wait-tool-result
-                  #'ellama-tools-write-file-tool
-                  file
-                  (concat "prefix\n" original)))
-                ('append
-                 (ellama-test--wait-tool-result
-                  #'ellama-tools-append-file-tool file "tail\n"))
-                ('prepend
-                 (ellama-test--wait-tool-result
-                  #'ellama-tools-prepend-file-tool file "prefix\n"))
-                ('edit
-                 (ellama-test--wait-tool-result
-                  #'ellama-tools-edit-file-tool
-                  file "two" "a longer second line")))
-              (with-current-buffer buffer
-                (should (looking-at-p "three"))
-                (should-not (eobp))))
+                      (with-temp-file file
+                        (insert original))
+                      (setq buffer (find-file-noselect file))
+                      (with-current-buffer buffer
+                        (goto-char (point-min))
+                        (search-forward "three")
+                        (goto-char (match-beginning 0)))
+                      (pcase operation
+                        ('write
+                         (ellama-test--wait-tool-result
+                          #'ellama-tools-write-file-tool
+                          file
+                          (concat "prefix\n" original)))
+                        ('append
+                         (ellama-test--wait-tool-result
+                          #'ellama-tools-append-file-tool file "tail\n"))
+                        ('prepend
+                         (ellama-test--wait-tool-result
+                          #'ellama-tools-prepend-file-tool file "prefix\n"))
+                        ('edit
+                         (ellama-test--wait-tool-result
+                          #'ellama-tools-edit-file-tool
+                          file "two" "a longer second line")))
+                      (with-current-buffer buffer
+                        (should (looking-at-p "three"))
+                        (should-not (eobp))))
           (when (buffer-live-p buffer)
             (kill-buffer buffer))
           (when (file-exists-p file)
