@@ -48,6 +48,7 @@
 (require 'ellama-skills)
 
 (declare-function org-table-align "org-table")
+(declare-function org-at-table-p "org-table")
 (declare-function org-table-begin "org-table")
 (declare-function org-table-end "org-table")
 (declare-function org-table-map-tables "org-table")
@@ -911,6 +912,12 @@ into the buffer if the LLM call raises an error."
           (re-search-forward from end t))
     (replace-match to)))
 
+(defun ellama--markdown-table-line-p ()
+  "Return non-nil when point is on a Markdown table line."
+  (save-excursion
+    (beginning-of-line)
+    (looking-at-p "[ \t]*|")))
+
 (defun ellama--apply-transformations (beg end)
   "Apply md to org transformations for region BEG END."
   (let ((beg-pos (make-marker))
@@ -952,7 +959,9 @@ into the buffer if the LLM call raises an error."
     (goto-char beg-pos)
     (set-hard-newline-properties beg-pos end-pos)
     (when ellama-fill-paragraphs
-      (let* ((use-hard-newlines t))
+      (let ((fill-nobreak-predicate
+             (cons #'ellama--markdown-table-line-p fill-nobreak-predicate))
+            (use-hard-newlines t))
         (fill-region beg end-pos nil t t)))))
 
 (defun ellama--replace-outside-of-code-blocks (text)
@@ -3466,9 +3475,10 @@ EVENT is an argument for mweel scroll."
          ((cl-type list) (and (apply #'derived-mode-p
                                      ellama-fill-paragraphs))))
        (not (and (derived-mode-p 'org-mode)
-                 (string-match-p
-                  "#\\+\\(?:BEGIN\\|END\\)_[[:alnum:]_-]+"
-                  delta)))))
+                 (or (org-at-table-p)
+                     (string-match-p
+                      "#\\+\\(?:BEGIN\\|END\\)_[[:alnum:]_-]+"
+                      delta))))))
 
 (defun ellama--insert (buffer point filter)
   "Insert text during streaming.
