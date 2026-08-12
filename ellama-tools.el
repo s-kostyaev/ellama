@@ -3401,27 +3401,49 @@ TIMEOUT is the optional command timeout in seconds."
 
 (defun ellama-tools-move-file-tool (file-name new-file-name)
   "Move the file from the specified FILE-NAME to the NEW-FILE-NAME."
-  (or (ellama-tools--tool-check-file-access file-name 'read)
-      (ellama-tools--tool-check-file-access file-name 'write)
-      (ellama-tools--tool-check-file-access new-file-name 'write)
-      (ellama-tools--read-before-write-check "Move" file-name)
-      (cond
-       ((not (file-exists-p file-name))
-        (format "Cannot move file: source file does not exist: %s."
-                file-name))
-       ((file-exists-p new-file-name)
-        (format "Cannot move file: destination already exists: %s."
-                new-file-name))
-       (t
-        (condition-case err
-            (progn
-              (rename-file file-name new-file-name)
-              (format "Moved %s to %s." file-name new-file-name))
-          (file-error
-           (format "Cannot move %s to %s: %s"
-                   file-name
-                   new-file-name
-                   (error-message-string err))))))))
+  (let* ((expanded-file-name (expand-file-name file-name))
+         (expanded-new-file-name (expand-file-name new-file-name))
+         (source-buffer (get-file-buffer expanded-file-name))
+         (destination-buffer (get-file-buffer expanded-new-file-name)))
+    (or (ellama-tools--tool-check-file-access file-name 'read)
+        (ellama-tools--tool-check-file-access file-name 'write)
+        (ellama-tools--tool-check-file-access new-file-name 'write)
+        (ellama-tools--read-before-write-check "Move" file-name)
+        (cond
+         ((not (file-exists-p file-name))
+          (format "Cannot move file: source file does not exist: %s."
+                  file-name))
+         ((file-exists-p new-file-name)
+          (format "Cannot move file: destination already exists: %s."
+                  new-file-name))
+         ((and destination-buffer
+               (not (eq destination-buffer source-buffer)))
+          (format
+           "Cannot move file: destination is visited by another buffer: %s."
+           new-file-name))
+         (t
+          (condition-case err
+              (progn
+                (rename-file file-name new-file-name)
+                (if (not (buffer-live-p source-buffer))
+                    (format "Moved %s to %s." file-name new-file-name)
+                  (condition-case buffer-err
+                      (with-current-buffer source-buffer
+                        (set-visited-file-name expanded-new-file-name t t)
+                        (format "Moved %s to %s." file-name new-file-name))
+                    (error
+                     (format
+                      (concat
+                       "Moved %s to %s, but could not update its visiting "
+                       "buffer: %s")
+                      file-name
+                      new-file-name
+                      (error-message-string buffer-err))))))
+            (file-error
+             (format "Cannot move %s to %s: %s"
+                     file-name
+                     new-file-name
+                     (error-message-string err)))))))))
 
 (ellama-tools-define-tool
  '(:function

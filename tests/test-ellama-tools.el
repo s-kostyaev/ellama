@@ -3358,6 +3358,79 @@ Return list with result and prompt."
       (when (file-exists-p dst)
         (delete-file dst)))))
 
+(ert-deftest test-ellama-tools-move-file-updates-visiting-buffer ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((src (make-temp-file "ellama-move-buffer-src-"))
+         (dst (concat src "-dst"))
+         (ellama-tools-read-before-write-enabled nil)
+         buffer expected-point expected-content)
+    (unwind-protect
+        (progn
+          (with-temp-file src
+            (insert "one\ntwo\nthree\n"))
+          (setq buffer (find-file-noselect src))
+          (with-current-buffer buffer
+            (goto-char (point-min))
+            (insert "unsaved\n")
+            (search-forward "two")
+            (setq expected-point (point)
+                  expected-content (buffer-string)))
+          (should
+           (equal (ellama-tools-move-file-tool src dst)
+                  (format "Moved %s to %s." src dst)))
+          (should-not (file-exists-p src))
+          (should (file-exists-p dst))
+          (should-not (get-file-buffer src))
+          (should (eq (get-file-buffer dst) buffer))
+          (with-current-buffer buffer
+            (should (equal buffer-file-name (expand-file-name dst)))
+            (should (buffer-modified-p))
+            (should (= (point) expected-point))
+            (should (equal (buffer-string) expected-content))
+            (save-buffer))
+          (with-temp-buffer
+            (insert-file-contents dst)
+            (should (equal (buffer-string) expected-content))))
+      (when (buffer-live-p buffer)
+        (with-current-buffer buffer
+          (set-buffer-modified-p nil))
+        (kill-buffer buffer))
+      (when (file-exists-p src)
+        (delete-file src))
+      (when (file-exists-p dst)
+        (delete-file dst)))))
+
+(ert-deftest test-ellama-tools-move-file-rejects-visiting-destination ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((src (make-temp-file "ellama-move-buffer-conflict-src-"))
+         (dst (concat src "-dst"))
+         (ellama-tools-read-before-write-enabled nil)
+         destination-buffer)
+    (unwind-protect
+        (progn
+          (with-temp-file src
+            (insert "source"))
+          (setq destination-buffer (find-file-noselect dst))
+          (should
+           (equal
+            (ellama-tools-move-file-tool src dst)
+            (format
+             (concat
+              "Cannot move file: destination is visited by another buffer: "
+              "%s.")
+             dst)))
+          (should (file-exists-p src))
+          (should-not (file-exists-p dst))
+          (should (eq (get-file-buffer dst) destination-buffer)))
+      (when (buffer-live-p destination-buffer)
+        (with-current-buffer destination-buffer
+          (set-buffer-modified-p nil))
+        (kill-buffer destination-buffer))
+      (when (file-exists-p src)
+        (delete-file src))
+      (when (file-exists-p dst)
+        (delete-file dst)))))
+
 (ert-deftest test-ellama-tools-lines-range-boundary ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((file (make-temp-file "ellama-lines-range-")))
