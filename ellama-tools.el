@@ -2170,19 +2170,61 @@ Return a list describing buffers to restore after command completion."
                         :auto-revert-mode auto-revert-enabled)
                   buffers)))))))
 
+(defun ellama-tools--refresh-file-buffer-if-stale (buffer)
+  "Refresh BUFFER when its visited file changed and it is safe to do so.
+Return a warning string when BUFFER cannot be refreshed safely, or nil."
+  (when (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (condition-case err
+          (when-let* ((file-name (buffer-file-name buffer))
+                      ((not (verify-visited-file-modtime buffer))))
+            (cond
+             ((buffer-modified-p)
+              (format
+               (concat
+                "File changed on disk, but its buffer has unsaved changes "
+                "and was not refreshed: %s")
+               file-name))
+             ((not (file-exists-p file-name))
+              (format
+               "File no longer exists; its buffer was not refreshed: %s"
+               file-name))
+             (t
+              (revert-buffer t t t)
+              nil)))
+        (error
+         (format "Could not refresh buffer for %s: %s"
+                 (or (buffer-file-name buffer) (buffer-name buffer))
+                 (error-message-string err)))))))
+
 (defun ellama-tools--restore-shell-command-file-buffers (buffers)
-  "Silently revert BUFFERS and restore their previous auto-revert state."
-  (dolist (state buffers)
-    (let ((buffer (plist-get state :buffer))
-          (auto-revert-enabled (plist-get state :auto-revert-mode)))
-      (when (buffer-live-p buffer)
-        (with-current-buffer buffer
-          (unwind-protect
-              (condition-case nil
-                  (revert-buffer t t t)
-                (error nil))
-            (when auto-revert-enabled
-              (auto-revert-mode 1))))))))
+  "Refresh stale BUFFERS and restore their previous auto-revert state.
+Return warnings for buffers that could not be refreshed safely."
+  (let (warnings)
+    (dolist (state buffers (nreverse warnings))
+      (let ((buffer (plist-get state :buffer))
+            (auto-revert-enabled (plist-get state :auto-revert-mode)))
+        (when (buffer-live-p buffer)
+          (with-current-buffer buffer
+            (unwind-protect
+                (when-let* ((warning
+                             (ellama-tools--refresh-file-buffer-if-stale
+                              buffer)))
+                  (push warning warnings))
+              (when auto-revert-enabled
+                (auto-revert-mode 1)))))))))
+
+(defun ellama-tools--shell-command-result-with-buffer-warnings
+    (result warnings)
+  "Append buffer refresh WARNINGS to shell command RESULT."
+  (if (not warnings)
+      result
+    (concat result
+            "\n\nBuffer refresh warnings:\n"
+            (mapconcat (lambda (warning)
+                         (concat "- " warning))
+                       warnings
+                       "\n"))))
 
 (defun ellama-tools--call-command-to-string (program &rest args)
   "Run PROGRAM with ARGS and return stdout as a string."
@@ -3005,13 +3047,11 @@ stop on the first failure.  After hooks run all commands."
       (run hooks nil nil))))
 
 (defun ellama-tools--refresh-file-buffer-after-hooks (file-name)
-  "Refresh unmodified visiting buffer for FILE-NAME after shell hooks."
+  "Refresh visiting buffer for FILE-NAME after shell hooks.
+Return a warning string when it cannot be refreshed safely, or nil."
   (let ((expanded (expand-file-name file-name)))
     (when-let* ((buffer (get-file-buffer expanded)))
-      (with-current-buffer buffer
-        (when (and (not (buffer-modified-p))
-                   (file-exists-p expanded))
-          (revert-buffer t t t))))))
+      (ellama-tools--refresh-file-buffer-if-stale buffer))))
 
 (defun ellama-tools--edit-output
     (main-message before-sections after-sections)
@@ -3043,8 +3083,18 @@ edit.  CALLBACK receives the final tool output after all relevant hooks finish."
          (ellama-tools--run-edit-shell-hooks
           'after file-name operation tool-name
           (lambda (after)
-            (let ((after-sections (plist-get after :sections)))
-              (ellama-tools--refresh-file-buffer-after-hooks file-name)
+            (let* ((after-sections (plist-get after :sections))
+                   (refresh-warning
+                    (ellama-tools--refresh-file-buffer-after-hooks file-name))
+                   (after-sections
+                    (if refresh-warning
+                        (append
+                         after-sections
+                         (list (ellama-tools--make-output-section
+                                'buffer-refresh-warning
+                                refresh-warning
+                                nil)))
+                      after-sections)))
               (funcall
                callback
                (ellama-tools--edit-output
@@ -3406,16 +3456,20 @@ TIMEOUT is the optional command timeout in seconds."
 (defun ellama-tools--write-file-buffer-content (file-name content)
   "Write CONTENT to FILE-NAME and update any visiting buffer."
   (let ((buffer (find-file-noselect file-name)))
-    (with-current-buffer buffer
-      (let ((coding-system-for-write 'raw-text)
-            (buffer-undo-list t)
-            (inhibit-read-only t))
-        (erase-buffer)
-        (insert content)
-        (save-buffer)
-        ;; Revert the buffer silently to avoid user prompts when
-        ;; Emacs detects that the visited file has changed on disk.
-        (revert-buffer t t t)))))
+    (with-temp-buffer
+      (insert content)
+      (let ((source (current-buffer)))
+        (with-current-buffer buffer
+          (let ((coding-system-for-write 'raw-text)
+                (buffer-undo-list t)
+                (inhibit-read-only t))
+            (save-restriction
+              (widen)
+              (replace-buffer-contents source))
+            (save-buffer)
+            ;; Revert the buffer silently to avoid user prompts when
+            ;; Emacs detects that the visited file has changed on disk.
+            (revert-buffer t t t)))))))
 
 (defun ellama-tools-edit-file-tool (callback file-name oldcontent newcontent)
   "Edit FILE-NAME and call CALLBACK with the result.
@@ -3524,10 +3578,13 @@ TIMEOUT is the optional command timeout in seconds."
                    (when timer
                      (cancel-timer timer))
                    (unwind-protect
-                       (progn
-                         (ellama-tools--restore-shell-command-file-buffers
-                          file-buffers)
-                         (funcall callback result))
+                       (let ((warnings
+                              (ellama-tools--restore-shell-command-file-buffers
+                               file-buffers)))
+                         (funcall
+                          callback
+                          (ellama-tools--shell-command-result-with-buffer-warnings
+                           result warnings)))
                      (when (buffer-live-p buf)
                        (kill-buffer buf)))))
                (finish-process (proc)
@@ -3568,10 +3625,14 @@ TIMEOUT is the optional command timeout in seconds."
                          (delete-process process)
                          (finish result))))))))
       (error
-       (ellama-tools--restore-shell-command-file-buffers file-buffers)
-       (funcall callback
-                (format "Failed to start shell command: %s"
-                        (error-message-string err))))))
+       (let ((warnings
+              (ellama-tools--restore-shell-command-file-buffers file-buffers)))
+         (funcall
+          callback
+          (ellama-tools--shell-command-result-with-buffer-warnings
+           (format "Failed to start shell command: %s"
+                   (error-message-string err))
+           warnings))))))
   ;; async tool should always return nil
   ;; to work properly with the llm library
   nil)
@@ -3778,7 +3839,8 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
         (if (file-directory-p file-name)
             (format "%s is a directory, not a file." file-name)
           (with-current-buffer (find-file-noselect file-name)
-            (count-lines (point-min) (point-max)))))))
+            (save-excursion
+              (count-lines (point-min) (point-max))))))))
 
 (ellama-tools-define-tool
  '(:function
