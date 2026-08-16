@@ -2255,7 +2255,8 @@ detailed comparison to help you decide:
           "user 5" "assistant 5"))))))
 
 (ert-deftest test-ellama-session-compact-renders-tool-results-readably ()
-  (let* ((prompt (llm-make-chat-prompt "user"))
+  (let* ((ellama-session-auto-compact-include-tool-results t)
+         (prompt (llm-make-chat-prompt "user"))
          (interaction
           (make-llm-chat-prompt-interaction
            :role 'assistant
@@ -2268,6 +2269,35 @@ detailed comparison to help you decide:
       (should (string-match-p "Tool results:" rendered))
       (should (string-match-p "grep_in_file\n  90:first line" rendered))
       (should-not (string-match-p "((grep_in_file" rendered)))))
+
+(ert-deftest test-ellama-session-compact-omits-tool-results-by-default ()
+  (let* ((tool-use
+          (make-llm-provider-utils-tool-use
+           :id "call-1"
+           :name "read_file"
+           :args '((file_name . "ellama.el"))))
+         (tool-call
+          (make-llm-chat-prompt-interaction
+           :role 'assistant
+           :content (list tool-use)))
+         (tool-result
+          (make-llm-chat-prompt-interaction
+           :role 'tool-results
+           :tool-results
+           (list
+            (make-llm-chat-prompt-tool-result
+             :call-id "call-1"
+             :tool-name "read_file"
+             :result "tool result sentinel"))))
+         (rendered
+          (ellama--session-compact-render-interactions
+           (list tool-call tool-result))))
+    (should-not ellama-session-auto-compact-include-tool-results)
+    (should (string-match-p "read_file" rendered))
+    (should (string-match-p "ellama.el" rendered))
+    (should-not (string-match-p "tool result sentinel" rendered))
+    (should-not (string-match-p "Tool results:" rendered))
+    (should-not (string-match-p "Tool-results:" rendered))))
 
 (ert-deftest test-ellama-session-compact-uses-stored-token-count ()
   (let* ((provider (make-llm-fake))

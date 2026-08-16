@@ -447,6 +447,9 @@ generated text string.
   session provider.
 - ~ellama-session-auto-compact-show-message~: Show compaction notices in chat
   buffers. Enabled by default.
+- ~ellama-session-auto-compact-include-tool-results~: Include tool results in
+  the history sent to the compaction provider. Disabled by default. Tool calls
+  are still included so the summary can record actions taken during the session.
 - ~ellama-session-auto-compact-prompt-template~: Prompt template for automatic
   session context compaction.
 - ~ellama-naming-scheme~: How to name new sessions.
@@ -726,6 +729,11 @@ The system message is not summarized by the compaction LLM.  Ellama restores the
 original system message in the compacted session prompt context, including when
 an LLM provider moved the system message into a system interaction before the
 request.
+
+Tool calls are included in the history sent to the compaction provider, but tool
+results are omitted by default.  Set
+~ellama-session-auto-compact-include-tool-results~ to a non-nil value when the
+summary needs the full tool output.
 
 Example configuration:
 
