@@ -1,3 +1,4 @@
+;; -*- lexical-binding: t; -*-
 (defun ellama-eval-provider-for-role (role)
   (alist-get role ellama-eval-role-providers nil nil #'string=))
 
