@@ -1,3 +1,4 @@
+;; -*- lexical-binding: t; -*-
 (defun ellama-eval-next-state (state event)
   (let ((kind (plist-get event :kind)))
     (cond

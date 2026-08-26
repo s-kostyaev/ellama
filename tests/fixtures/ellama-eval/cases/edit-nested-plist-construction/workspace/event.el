@@ -1,3 +1,4 @@
+;; -*- lexical-binding: t; -*-
 (defconst ellama-eval-event-payload-example
   '(:kind job :name "Build" :meta (:enabled t))
   "Example enabled event payload used by eval fixtures.")

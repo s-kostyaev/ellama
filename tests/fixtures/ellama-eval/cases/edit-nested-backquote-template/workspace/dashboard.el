@@ -1,3 +1,4 @@
+;; -*- lexical-binding: t; -*-
 (defconst ellama-eval-dashboard-default-status 'unknown
   "Default dashboard row status symbol.")
 

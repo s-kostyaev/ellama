@@ -1,3 +1,4 @@
+;; -*- lexical-binding: t; -*-
 (defun ellama-eval-route-status (status)
   (cond
    ((eq status 'ready) 'run)
