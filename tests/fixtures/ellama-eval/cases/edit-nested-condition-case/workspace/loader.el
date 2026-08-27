@@ -1,3 +1,4 @@
+;; -*- lexical-binding: t; -*-
 (defun ellama-eval-load-record (reader path)
   (condition-case err
       (let ((record (funcall reader path)))

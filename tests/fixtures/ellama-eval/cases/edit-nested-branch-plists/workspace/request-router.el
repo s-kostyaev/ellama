@@ -1,3 +1,4 @@
+;; -*- lexical-binding: t; -*-
 (defun ellama-eval-route-request (request)
   (let* ((headers (plist-get request :headers))
          (auth (alist-get "authorization" headers nil nil #'string=)))

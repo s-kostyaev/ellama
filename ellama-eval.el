@@ -105,7 +105,7 @@ Only one evaluation run is supported at a time.")
   "Tool names included in every hypothesis profile.")
 
 (defconst ellama-eval-hypothesis-profiles
-  '(baseline balanced-edit)
+  '(baseline balanced-edit balanced-edit-hooks)
   "Profiles used by hypothesis suites.")
 
 (defconst ellama-eval--coder-system
@@ -437,19 +437,59 @@ in one short sentence."
     (error "Unknown evaluation profile %S" profile))
   (append ellama-eval--base-tool-names '("edit_file")))
 
+(defun ellama-eval--emacs-executable ()
+  "Return the Emacs executable used to run the current process."
+  (or (and invocation-directory
+           invocation-name
+           (expand-file-name invocation-name invocation-directory))
+      (and invocation-name (executable-find invocation-name))
+      invocation-name
+      "emacs"))
+
+(defun ellama-eval--byte-compile-hook-command ()
+  "Return shell command for the eval byte-compilation edit hook."
+  (mapconcat
+   #'identity
+   (list (shell-quote-argument (ellama-eval--emacs-executable))
+         "-Q"
+         "--batch"
+         "--load"
+         (shell-quote-argument
+          (expand-file-name "byte-compile-hook.el"
+                            ellama-eval--fixtures-directory)))
+   " "))
+
+(defun ellama-eval-hooked-edit-file-tool
+    (callback file-name oldcontent newcontent)
+  "Edit FILE-NAME and validate it through balanced edit and a shell hook.
+OLDCONTENT is replaced with NEWCONTENT.  CALLBACK receives the complete edit
+result, including byte-compilation hook failures that the agent can act on."
+  (let ((ellama-tools-balanced-edit-enabled t)
+        (ellama-tools-edit-before-shell-commands nil)
+        (ellama-tools-edit-after-shell-commands
+         `((:name "byte-compile"
+                  :command ,(ellama-eval--byte-compile-hook-command)))))
+    (ellama-tools-edit-file-tool callback file-name oldcontent newcontent)))
+
 
 
 (defun ellama-eval--replace-profile-edit-specs (spec profile)
   "Return SPEC adjusted for edit validation in PROFILE."
   (pcase (plist-get spec :name)
     ("edit_file"
-     (plist-put
-      (copy-sequence spec)
-      :function
-      (lambda (file-name oldcontent newcontent)
-        (ellama-eval-monitored-edit-file-tool
-         file-name oldcontent newcontent
-         (eq profile 'balanced-edit)))))
+     (if (eq profile 'balanced-edit-hooks)
+         (let ((hooked (copy-sequence spec)))
+           (setq hooked
+                 (plist-put hooked :function
+                            #'ellama-eval-hooked-edit-file-tool))
+           (plist-put hooked :async t))
+       (plist-put
+        (copy-sequence spec)
+        :function
+        (lambda (file-name oldcontent newcontent)
+          (ellama-eval-monitored-edit-file-tool
+           file-name oldcontent newcontent
+           (eq profile 'balanced-edit))))))
     (_
      spec)))
 
@@ -556,19 +596,37 @@ for the agent."
 (defun ellama-eval--instrument-tool-spec (spec)
   "Return SPEC with tool function wrapped for eval tracing."
   (let ((name (plist-get spec :name))
-        (function (plist-get spec :function)))
+        (function (plist-get spec :function))
+        (async (plist-get spec :async)))
     (plist-put
      (copy-sequence spec)
      :function
      (lambda (&rest args)
-       (condition-case err
-           (let ((result (apply function args)))
-             (or (ellama-eval--trace-tool-call name args 'ok result)
-                 result))
-         (error
-          (ellama-eval--trace-tool-call
-           name args 'error (error-message-string err))
-          (signal (car err) (cdr err))))))))
+       (if (and async args (functionp (car args)))
+           (let ((callback (car args))
+                 (call-args (cdr args)))
+             (condition-case err
+                 (apply
+                  function
+                  (lambda (result)
+                    (funcall
+                     callback
+                     (or (ellama-eval--trace-tool-call
+                          name call-args 'ok result)
+                         result)))
+                  call-args)
+               (error
+                (ellama-eval--trace-tool-call
+                 name call-args 'error (error-message-string err))
+                (signal (car err) (cdr err)))))
+         (condition-case err
+             (let ((result (apply function args)))
+               (or (ellama-eval--trace-tool-call name args 'ok result)
+                   result))
+           (error
+            (ellama-eval--trace-tool-call
+             name args 'error (error-message-string err))
+            (signal (car err) (cdr err)))))))))
 
 (defun ellama-eval--make-profile-tools (profile)
   "Return instrumented `llm' tools for PROFILE."
@@ -1190,6 +1248,48 @@ ELISP-CHECKS and ANSWER-CHECKS contain oracle results."
             (setq pending (remove file pending)))))))
     count))
 
+(defun ellama-eval--tool-trace-result (entry)
+  "Return the original tool result text from trace ENTRY."
+  (or (plist-get entry :raw-result)
+      (plist-get entry :result)))
+
+(defun ellama-eval--edit-hook-failure-p (entry)
+  "Return non-nil when tool trace ENTRY reports an edit hook failure."
+  (let ((result (ellama-eval--tool-trace-result entry)))
+    (and (equal (plist-get entry :name) "edit_file")
+         (stringp result)
+         (string-match-p
+          "\\(?:Before\\|After\\) edit hook.* failed with exit status"
+          result))))
+
+(defun ellama-eval--successful-edit-p (entry)
+  "Return non-nil when tool trace ENTRY reports an applied successful edit."
+  (let ((result (ellama-eval--tool-trace-result entry)))
+    (and (equal (plist-get entry :name) "edit_file")
+         (stringp result)
+         (string-match-p "\\`Edited " result)
+         (not (ellama-eval--edit-hook-failure-p entry)))))
+
+(defun ellama-eval--edit-hook-failure-count (trace)
+  "Return number of edit hook failures recorded in TRACE."
+  (cl-count-if #'ellama-eval--edit-hook-failure-p trace))
+
+(defun ellama-eval--edit-hook-recovery-count (trace)
+  "Return number of edit hook failures recovered later in TRACE."
+  (let ((count 0)
+        pending)
+    (dolist (entry trace)
+      (let ((file (car (plist-get entry :args))))
+        (cond
+         ((and file (ellama-eval--edit-hook-failure-p entry))
+          (cl-pushnew file pending :test #'equal))
+         ((and file
+               (member file pending)
+               (ellama-eval--successful-edit-p entry))
+          (setq count (1+ count)
+                pending (remove file pending))))))
+    count))
+
 (defun ellama-eval--final-syntax-check-paths (expected-files syntax-files)
   "Return relative paths from EXPECTED-FILES and SYNTAX-FILES."
   (delete-dups
@@ -1345,6 +1445,10 @@ EXPECTED-FILES and SYNTAX-FILES define the relative file paths to check."
                   validation-trace)
      :edit-recovery-count
      (ellama-eval--edit-recovery-count validation-trace)
+     :edit-hook-failure-count
+     (ellama-eval--edit-hook-failure-count trace)
+     :edit-hook-recovery-count
+     (ellama-eval--edit-hook-recovery-count trace)
      :syntax-valid-final-files
      (ellama-eval--syntax-check-count final-syntax-checks t)
      :syntax-invalid-final-files
