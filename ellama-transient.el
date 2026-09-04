@@ -162,8 +162,16 @@ Otherwise, prompt the user to enter a system message."
                                ellama-naming-provider)
   "List of providers.")
 
+(defun ellama-transient-make-llmman-provider ()
+  "Return an `llm-ollama' provider for a local llmman server.
+llmman (https://github.com/llmmanorg/llmman) serves the Ollama API on 17434."
+  (declare-function make-llm-ollama "ext:llm-ollama")
+  (require 'llm-ollama)
+  (make-llm-ollama :port 17434))
+
 (defcustom ellama-transient-provider-types
   '((llm-ollama "Ollama" llm-ollama make-llm-ollama)
+    (ellama-llmman "llmman" llm-ollama ellama-transient-make-llmman-provider)
     (llm-openai-compatible "OpenAI-compatible"
                            llm-openai make-llm-openai-compatible)
     (llm-openai "OpenAI" llm-openai make-llm-openai)
@@ -177,7 +185,8 @@ Otherwise, prompt the user to enter a system message."
     (llm-gpt4all "GPT4All" llm-gpt4all make-llm-gpt4all)
     (llm-llamacpp "Llama.cpp" llm-llamacpp make-llm-llamacpp))
   "Provider types available in the model transient.
-Each entry has the form (TYPE LABEL LIBRARY CONSTRUCTOR)."
+Each entry has the form (TYPE LABEL LIBRARY CONSTRUCTOR).  TYPE is the
+provider record type, or a unique symbol for a preset of another type."
   :type '(repeat
           (list (symbol :tag "Provider type")
                 (string :tag "Label")

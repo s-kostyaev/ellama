@@ -55,6 +55,17 @@ If you want to use that default, install Ollama and pull a model from the
 The examples below use ~qwen3.6:35b~ for agentic coding.  Replace it with a
 model that is available in your Ollama installation if needed.
 
+Ellama also works with [[https://github.com/llmmanorg/llmman][llmman]], a local
+model runner that serves the Ollama API on port 17434.  Pull a model with
+~llmman pull gemma4~, then point the Ollama provider at that port.  The model
+transient (~ellama-select-model~) also offers ~llmman~ as a provider type.
+
+#+BEGIN_SRC emacs-lisp
+  (require 'llm-ollama)
+  (setopt ellama-provider
+          (make-llm-ollama :port 17434 :chat-model "gemma4"))
+#+END_SRC
+
 You can also use another LLM provider.  The smallest useful Emacs setup is:
 
 #+BEGIN_SRC emacs-lisp
@@ -236,8 +247,9 @@ Optional provider-specific settings:
 - ~ellama-provider-select~: Select ellama provider.
 - ~ellama-select-model~: Change the current provider model interactively.  The
   model transient can switch the provider type as well as the model.  Built-in
-  choices include Ollama, OpenAI-compatible, OpenAI, Claude, Gemini, DeepSeek,
-  OpenRouter, Azure OpenAI, GitHub Models, Vertex AI, GPT4All, and Llama.cpp.
+  choices include Ollama, llmman, OpenAI-compatible, OpenAI, Claude, Gemini,
+  DeepSeek, OpenRouter, Azure OpenAI, GitHub Models, Vertex AI, GPT4All, and
+  Llama.cpp.
   It also supports providers with a ~chat-model~ slot.  URL editing is available
   when the provider has a ~url~ slot.  It can also set the maximum number of
   output tokens.  Use "Reset model fields" to clear model, temperature,
