@@ -312,6 +312,18 @@
       (should (equal (ellama-transient-provider-type-description)
                      "Provider Type (Claude)")))))
 
+(ert-deftest test-ellama-transient-set-provider-type-llmman ()
+  (let ((ellama-transient-provider nil)
+        (ellama-transient-provider-type-selected-p nil))
+    (cl-letf (((symbol-function 'completing-read)
+               (lambda (&rest _args)
+                 "llmman")))
+      (ellama-transient-set-provider-type)
+      (should (eq (type-of ellama-transient-provider) 'llm-ollama))
+      (should (equal (llm-ollama-port ellama-transient-provider) 17434))
+      (should (equal ellama-transient-port 17434))
+      (should ellama-transient-provider-type-selected-p))))
+
 (ert-deftest test-ellama-transient-set-provider-applies-selected-type ()
   (require 'llm-claude)
   (let ((ellama-provider
