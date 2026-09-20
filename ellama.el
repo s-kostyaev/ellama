@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.31.1") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.32.1
+;; Version: 1.32.2
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -1341,7 +1341,7 @@ CONTEXT will be ignored.  Use global context instead.
 
 (defun ellama--buffer-request-active-p (buffer)
   "Return non-nil when BUFFER has an active LLM request."
-  (when-let ((buffer (and buffer (get-buffer buffer))))
+  (when-let* ((buffer (and buffer (get-buffer buffer))))
     (with-current-buffer buffer
       ellama--current-request)))
 
@@ -1349,8 +1349,8 @@ CONTEXT will be ignored.  Use global context instead.
   "Return non-nil when SESSION or BUFFER has an active request."
   (or (ellama--session-compacting-p session)
       (ellama--buffer-request-active-p buffer)
-      (when-let ((session-buffer
-                  (ellama--session-registered-buffer session)))
+      (when-let* ((session-buffer
+                   (ellama--session-registered-buffer session)))
         (ellama--buffer-request-active-p session-buffer))))
 
 (defun ellama--ensure-session-request-idle (session &optional buffer)
@@ -1752,7 +1752,7 @@ Return the output FILE-NAME.  Finish the recording with
 (defun ellama--session-compaction-buffer (session buffer)
   "Return live BUFFER for SESSION compaction status."
   (or (and (buffer-live-p buffer) buffer)
-      (when-let ((uid (ellama--session-uid session)))
+      (when-let* ((uid (ellama--session-uid session)))
         (let ((session-buffer (ellama-get-session-buffer uid)))
           (and (buffer-live-p session-buffer) session-buffer)))))
 
@@ -1768,8 +1768,8 @@ Return the output FILE-NAME.  Finish the recording with
 
 (defun ellama--session-set-compaction-mode (session buffer enabled)
   "Set compaction lighter for SESSION BUFFER to ENABLED."
-  (when-let ((target-buffer
-              (ellama--session-compaction-buffer session buffer)))
+  (when-let* ((target-buffer
+               (ellama--session-compaction-buffer session buffer)))
     (with-current-buffer target-buffer
       (ellama-compaction-mode (if enabled +1 -1))
       (force-mode-line-update t))))
@@ -1796,8 +1796,8 @@ Return the output FILE-NAME.  Finish the recording with
 (defun ellama--session-store-response-token-count
     (session provider response text)
   "Persist latest known token count for SESSION from PROVIDER RESPONSE and TEXT."
-  (when-let ((token-count
-              (ellama--session-response-token-use provider response text)))
+  (when-let* ((token-count
+               (ellama--session-response-token-use provider response text)))
     (ellama--session-set-token-count session token-count)
     token-count))
 
@@ -2336,9 +2336,9 @@ If AUTOMATIC is non-nil, fail quietly and return nil."
 PROVIDER is the session provider.  BUFFER is the chat buffer.
 ON-DONE is called after asynchronous compaction succeeds or fails.
 REQUEST-CONTEXT is the active request context."
-  (when-let ((token-count
-              (ellama--session-auto-compact-needed-p
-               session provider response text)))
+  (when-let* ((token-count
+               (ellama--session-auto-compact-needed-p
+                session provider response text)))
     (ellama--session-compact
      session
      :provider provider
@@ -2517,16 +2517,16 @@ If ACTIVATE is non-nil, set global active session selection."
 (defun ellama-get-session-buffer (id)
   "Return ellama session buffer by provided ID or UID."
   (or (gethash id ellama--active-sessions)
-      (when-let ((session (ellama--active-session-by-id id)))
+      (when-let* ((session (ellama--active-session-by-id id)))
         (gethash (ellama--session-uid session) ellama--active-sessions))))
 
 (defun ellama--display-session-buffer-on-generation (session buffer)
   "Display SESSION buffer for generation started in BUFFER when enabled."
   (when (and ellama-display-session-buffer-on-generation
              (ellama-session-p session))
-    (when-let ((session-buffer (or (ellama-get-session-buffer
-                                    (ellama--session-uid session))
-                                   (get-buffer buffer))))
+    (when-let* ((session-buffer (or (ellama-get-session-buffer
+                                     (ellama--session-uid session))
+                                    (get-buffer buffer))))
       (display-buffer
        session-buffer
        (when ellama-chat-display-action-function
@@ -2839,9 +2839,9 @@ When APPEND-USER-HEADER is non-nil, append a user header in chat buffers."
 (defun ellama--session-deactivate ()
   "Deactivate current session."
   (ellama--cancel-current-request)
-  (when-let ((uid (or (when (ellama-session-p ellama--current-session)
-                        (ellama--session-uid ellama--current-session))
-                      (ellama--session-uid-by-buffer (current-buffer)))))
+  (when-let* ((uid (or (when (ellama-session-p ellama--current-session)
+                         (ellama--session-uid ellama--current-session))
+                       (ellama--session-uid-by-buffer (current-buffer)))))
     (remhash uid ellama--active-sessions)
     (remhash uid ellama--active-session-states)
     (when (equal ellama--current-session-uid uid)
@@ -2915,12 +2915,12 @@ When APPEND-USER-HEADER is non-nil, append a user header in chat buffers."
 
 (defun ellama--provider-slot-value (provider slot)
   "Return PROVIDER struct SLOT value, or nil."
-  (when-let ((offset (ellama--provider-slot-offset provider slot)))
+  (when-let* ((offset (ellama--provider-slot-offset provider slot)))
     (aref provider offset)))
 
 (defun ellama--provider-with-slot-value (provider slot value)
   "Return copy of PROVIDER with SLOT set to VALUE."
-  (if-let ((offset (ellama--provider-slot-offset provider slot)))
+  (if-let* ((offset (ellama--provider-slot-offset provider slot)))
       (let ((provider-copy (copy-sequence provider)))
         (aset provider-copy offset value)
         provider-copy)
@@ -2969,10 +2969,10 @@ When APPEND-USER-HEADER is non-nil, append a user header in chat buffers."
 
 (defun ellama--provider-from-session-extra (extra)
   "Return configured provider described by EXTRA."
-  (or (when-let ((symbol (plist-get extra :provider-symbol)))
+  (or (when-let* ((symbol (plist-get extra :provider-symbol)))
         (when (and (symbolp symbol) (boundp symbol))
           (symbol-value symbol)))
-      (when-let ((name (plist-get extra :provider-name)))
+      (when-let* ((name (plist-get extra :provider-name)))
         (cdr (assoc name ellama-providers)))))
 
 (defun ellama--restore-session-provider-key (provider extra)
@@ -3207,7 +3207,7 @@ When APPEND-USER-HEADER is non-nil, append a user header in chat buffers."
 
 (defun ellama-activate-session (id)
   "Change current active session to session with ID."
-  (if-let ((session (ellama--resolve-session nil id)))
+  (if-let* ((session (ellama--resolve-session nil id)))
       (setq ellama--current-session-id (ellama-session-id session)
             ellama--current-session-uid (ellama--ensure-session-uid session))
     (ellama--clear-current-session-selection)))
@@ -3356,7 +3356,7 @@ If buffer contains ellama session return its id.
 Otherwire return id of current active session."
   (if ellama--current-session
       (ellama-session-id ellama--current-session)
-    (if-let ((session (ellama--resolve-session)))
+    (if-let* ((session (ellama--resolve-session)))
         (ellama-session-id session)
       ellama--current-session-id)))
 
@@ -3414,7 +3414,7 @@ Returns the full path to AGENTS.md if found, or nil if not found."
 
 (defun ellama-get-agents-md ()
   "Return current project or subproject AGENTS.md content."
-  (or (when-let ((path (ellama-get-agents-md-path)))
+  (or (when-let* ((path (ellama-get-agents-md-path)))
         (concat
          "\n"
          (with-temp-buffer
@@ -3853,7 +3853,7 @@ inserted into the BUFFER."
           (let* ((session ellama--current-session)
                  (finish-response
                   (lambda ()
-                    (when-let
+                    (when-let*
                         ((target-buffer
                           (or
                            (and
@@ -4164,9 +4164,9 @@ failure (with BUFFER current).
   "Scroll within BUFFER.
 Go to POINT before start scrolling if provided.  A function for
 programmatically scrolling the buffer during text generation."
-  (when-let ((ellama-auto-scroll)
-             (buf (or buffer (current-buffer)))
-             (window (get-buffer-window buf)))
+  (when-let* ((ellama-auto-scroll)
+              (buf (or buffer (current-buffer)))
+              (window (get-buffer-window buf)))
     (with-selected-window window
       (when (ellama-chat-buffer-p buf)
         (goto-char (point-max)))
@@ -4466,7 +4466,7 @@ the full response text when the request completes (with BUFFER current)."
               (error "Unable to resolve ellama session")))
          (buffer (or (ellama-get-session-buffer
                       (ellama--session-uid session))
-                     (if-let ((session-file (ellama-session-file session)))
+                     (if-let* ((session-file (ellama-session-file session)))
                          (find-file-noselect session-file)
                        (get-buffer-create (ellama-session-id session)))))
          (_ (ellama--ensure-session-request-idle session buffer))
@@ -4587,7 +4587,7 @@ after compaction."
               (error "Unable to resolve ellama session")))
          (buffer (or (ellama-get-session-buffer
                       (ellama--session-uid session))
-                     (if-let ((session-file (ellama-session-file session)))
+                     (if-let* ((session-file (ellama-session-file session)))
                          (find-file-noselect session-file)
                        (get-buffer-create (ellama-session-id session)))))
          (_ (ellama--ensure-session-request-idle session buffer))
@@ -4854,7 +4854,7 @@ If there is no staged or unstaged diff (e.g. in a `git-commit-mode'
 reword buffer), falls back to using the current commit patch."
   (interactive)
   (save-window-excursion
-    (when-let ((diff (ellama--extract-diff)))
+    (when-let* ((diff (ellama--extract-diff)))
       (ellama-stream
        (format ellama-generate-commit-message-template diff)
        :provider ellama-coding-provider))))
@@ -5212,8 +5212,8 @@ Summarize the URL at point if `thing-at-point' is present, or using
 otherwise prompt user for URL to summarize."
   (interactive
    (list
-    (if-let ((url (or (and (fboundp 'thing-at-point) (thing-at-point 'url))
-                      (and (fboundp 'shr-url-at-point) (shr-url-at-point nil)))))
+    (if-let* ((url (or (and (fboundp 'thing-at-point) (thing-at-point 'url))
+                       (and (fboundp 'shr-url-at-point) (shr-url-at-point nil)))))
         url
       (read-string "Enter URL you want to summarize: "))))
   (let ((buffer-name (url-retrieve-synchronously url t)))
@@ -5327,7 +5327,7 @@ Call CALLBACK on result list of strings.  ARGS contains keys for fine control.
 
 (defun ellama-embedding-model-p (name)
   "Check if NAME is an embedding model."
-  (when-let ((model (llm-models-match name)))
+  (when-let* ((model (llm-models-match name)))
     (not (not (member 'embedding (llm-model-capabilities model))))))
 
 (defun ellama-get-ollama-chat-model-names ()

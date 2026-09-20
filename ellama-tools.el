@@ -3487,7 +3487,9 @@ TIMEOUT is the optional command timeout in seconds."
                 (inhibit-read-only t))
             (save-restriction
               (widen)
-              (replace-buffer-contents source))
+              (if (>= emacs-major-version 31)
+                  (replace-region-contents (point-min) (point-max) source)
+                (funcall (symbol-function 'replace-buffer-contents) source)))
             (save-buffer)
             ;; Revert the buffer silently to avoid user prompts when
             ;; Emacs detects that the visited file has changed on disk.
@@ -4312,13 +4314,13 @@ TEMPLATE-BASE, ROLE and ARGUMENTS are used for template rendering and hints."
 (defun ellama-tools--agent-merge-state-update (state update)
   "Return STATE merged with parsed UPDATE."
   (let ((state (copy-sequence state)))
-    (when-let ((phase (plist-get update :phase)))
+    (when-let* ((phase (plist-get update :phase)))
       (setq state (plist-put state :phase phase)))
-    (when-let ((plan (plist-get update :plan)))
+    (when-let* ((plan (plist-get update :plan)))
       (setq state (plist-put state :plan plan)))
-    (when-let ((result (plist-get update :result)))
+    (when-let* ((result (plist-get update :result)))
       (setq state (plist-put state :result result)))
-    (when-let ((blocked (plist-get update :blocked)))
+    (when-let* ((blocked (plist-get update :blocked)))
       (setq state (plist-put state :blocked blocked)
             state (plist-put state :phase 'blocked)))
     (when (eq (plist-get state :phase) 'done)

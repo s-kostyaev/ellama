@@ -1,3 +1,17 @@
+* Version 1.32.2
+- Add Emacs 31.1 to the MELPA and ERT CI matrices so new compiler warnings are
+  caught in GitHub Actions.
+- Fix Emacs 31 compilation warnings by replacing deprecated conditional binding
+  macros, providing a compatibility fallback for ~replace-region-contents~ on
+  older Emacs versions, loading Info for the transient command, and capitalizing
+  two warning messages to satisfy checkdoc.
+- Run native compilation in the Emacs 31.1 CI job and reformat Elisp code so the
+  pre-push check passes.
+- Select buffer replacement by Emacs major version: older variants of
+  ~replace-region-contents~ do not accept a buffer source argument.
+
+Retain Emacs 31.1 byte-compilation coverage without a native step, since the
+action build does not support it yet.
 * Version 1.32.1
 
 - Preserve file buffer positions during tool updates. File contents are now

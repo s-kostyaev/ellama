@@ -181,7 +181,7 @@ Use CWD and SETTINGS-FILE as the policy context."
     (ert-info ((format "path=%s op=%S local=%S real=%S reason=%S exit=%S stderr=%s"
                        path op local real reason (plist-get res :exit)
                        (string-trim (or (plist-get res :stderr) ""))))
-              (should (eq local real)))))
+      (should (eq local real)))))
 
 (defun ellama-test-srt-integration--should-match-write-with-mkdir
     (cwd settings-file path)
@@ -206,7 +206,7 @@ avoid non-policy failures for non-existing destination parents."
     (ert-info ((format "path=%s op=write+mkdir local=%S real=%S reason=%S exit=%S stderr=%s"
                        path local real reason (plist-get res :exit)
                        (string-trim (or (plist-get res :stderr) ""))))
-              (should (eq local real)))))
+      (should (eq local real)))))
 
 (defun ellama-test-srt-integration--should-match-move
     (cwd settings-file src dst &optional allow-darwin-write-gap)
@@ -235,15 +235,15 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
                 "mv %s -> %s local=%S real=%S local-reasons=%S exit=%S stderr=%s"
                 src dst local real local-reasons (plist-get res :exit)
                 (string-trim (or (plist-get res :stderr) ""))))
-              (should
-               (or (eq local real)
-                   (and allow-darwin-write-gap
-                        (eq system-type 'darwin)
-                        (not local)
-                        real
-                        (cl-every (lambda (reason)
-                                    (memq reason '(src-write dst-write)))
-                                  local-reasons)))))))
+      (should
+       (or (eq local real)
+           (and allow-darwin-write-gap
+                (eq system-type 'darwin)
+                (not local)
+                real
+                (cl-every (lambda (reason)
+                            (memq reason '(src-write dst-write)))
+                          local-reasons)))))))
 
 (ert-deftest test-ellama-tools-srt-integration-denyread-literal-parity ()
   (ellama-test-srt-integration--ensure-local-tools)
