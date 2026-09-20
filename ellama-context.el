@@ -323,14 +323,14 @@ the context."
 (defun ellama-context-preview-element-at-point ()
   "Preview ellama context element at point."
   (interactive)
-  (when-let ((elt (get-text-property (point) 'context-element)))
+  (when-let* ((elt (get-text-property (point) 'context-element)))
     (ellama-context-preview-element elt)))
 
 ;;;###autoload
 (defun ellama-context-remove-element-at-point ()
   "Remove ellama context element at point from global context."
   (interactive)
-  (when-let ((elt (get-text-property (point) 'context-element)))
+  (when-let* ((elt (get-text-property (point) 'context-element)))
     (ellama-context-remove-element elt)
     (ellama-context-manage)
     (ellama-context-update-show)))
@@ -965,7 +965,7 @@ For one request only if EPHEMERAL."
                     (point-min)
                     (point-max)))))
     (if (not path)
-        (warn "should be called from buffer associated with file")
+        (warn "Should be called from buffer associated with file")
       (ellama-context-add-file-quote-noninteractive path content ephemeral))))
 
 ;;;###autoload
@@ -1057,7 +1057,7 @@ For one request only if EPHEMERAL."
                     (point-min)
                     (point-max)))))
     (if (not name)
-        (warn "should be called from `info' buffer")
+        (warn "Should be called from `info' buffer")
       (ellama-context-add-info-node-quote-noninteractive name content ephemeral))))
 
 (defun ellama-context-add-webpage-quote-noninteractive (name url content &optional ephemeral)

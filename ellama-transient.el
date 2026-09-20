@@ -32,6 +32,7 @@
 (require 'ellama)
 (require 'transient)
 (require 'ellama-context)
+(require 'info)
 (eval-when-compile
   (require 'llm-ollama)
   (require 'llm-openai))
@@ -208,7 +209,7 @@ Each entry has the form (TYPE LABEL LIBRARY CONSTRUCTOR)."
 Provider values are intentionally not included in the display
 strings, because they may contain API keys."
   (mapcan (lambda (provider)
-            (when-let ((symbol (ellama-transient--provider-symbol provider)))
+            (when-let* ((symbol (ellama-transient--provider-symbol provider)))
               (list (cons (ellama-transient--provider-label symbol) symbol))))
           ellama-provider-list))
 
@@ -249,7 +250,7 @@ strings, because they may contain API keys."
   "Return display name for PROVIDER type."
   (when-let* ((provider (or provider ellama-transient-provider))
               (type (type-of provider)))
-    (if-let ((entry (ellama-transient--provider-type-entry type)))
+    (if-let* ((entry (ellama-transient--provider-type-entry type)))
         (nth 1 entry)
       (symbol-name type))))
 
@@ -265,7 +266,7 @@ strings, because they may contain API keys."
      (list ellama-transient-provider))
    (mapcan
     (lambda (provider)
-      (when-let ((symbol (ellama-transient--provider-symbol provider)))
+      (when-let* ((symbol (ellama-transient--provider-symbol provider)))
         (when (and (boundp symbol) (symbol-value symbol))
           (list (symbol-value symbol)))))
     ellama-provider-list)
@@ -308,7 +309,7 @@ strings, because they may contain API keys."
 (transient-define-suffix ellama-transient-model-get-from-current-session ()
   "Fill transient model from current session."
   (interactive)
-  (when-let ((session (ellama-get-current-session)))
+  (when-let* ((session (ellama-get-current-session)))
     (ellama-fill-transient-model
      (ellama-session-provider session))))
 
@@ -484,7 +485,7 @@ FORMAT is used for non-default VALUE."
   (declare-function llm-ollama-default-chat-non-standard-params
                     "ext:llm-ollama")
   (when (ellama-transient--ollama-provider-p provider)
-    (when-let ((params (llm-ollama-default-chat-non-standard-params provider)))
+    (when-let* ((params (llm-ollama-default-chat-non-standard-params provider)))
       (alist-get "num_ctx" (ellama-transient--alist params)
                  nil nil #'string=))))
 
@@ -554,7 +555,7 @@ FORMAT is used for non-default VALUE."
   "Set transient model fields from PROVIDER."
   (setq ellama-transient-provider provider
         ellama-transient-provider-type-selected-p nil)
-  (when-let ((model (ellama-transient--provider-model provider)))
+  (when-let* ((model (ellama-transient--provider-model provider)))
     (setq ellama-transient-model-name model))
   (setq ellama-transient-temperature
         (ellama-transient--standard-temperature provider))
@@ -567,7 +568,7 @@ FORMAT is used for non-default VALUE."
 (defun ellama-transient--replace-param (params key value)
   "Return PARAMS with KEY set to VALUE."
   (let ((params (copy-tree (ellama-transient--alist params))))
-    (if-let ((cell (assoc key params)))
+    (if-let* ((cell (assoc key params)))
         (setcdr cell value)
       (push (cons key value) params))
     params))
@@ -579,7 +580,7 @@ FORMAT is used for non-default VALUE."
 
 (defun ellama-transient--provider-default-model (provider)
   "Return default chat model for PROVIDER type."
-  (when-let ((constructor (intern-soft (format "make-%s" (type-of provider)))))
+  (when-let* ((constructor (intern-soft (format "make-%s" (type-of provider)))))
     (when (fboundp constructor)
       (condition-case nil
           (ellama-transient--provider-model (funcall constructor))

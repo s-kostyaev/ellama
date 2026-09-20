@@ -78,7 +78,7 @@ directory in the current project root."
         (local-files (ellama-blueprint-find-files (ellama-blueprint-get-local-dir)))
         blueprints)
     (dolist (file (append global-files local-files))
-      (when-let ((content (ellama-blueprint-read-file file))
+      (when-let* ((content (ellama-blueprint-read-file file))
                  (name (file-name-sans-extension (file-name-nondirectory file)))
                  (prompt (string-trim content)))
         (push `(:act ,name :prompt ,prompt :file ,file) blueprints)))
