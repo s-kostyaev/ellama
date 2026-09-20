@@ -1,3 +1,4 @@
+;; -*- lexical-binding: t; -*-
 (defconst ellama-eval-inactive-item-flags '(disabled archived)
   "Item flags that remove an item from active listings.")
 

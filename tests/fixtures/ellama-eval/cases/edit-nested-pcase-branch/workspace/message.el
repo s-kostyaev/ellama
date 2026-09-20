@@ -1,3 +1,4 @@
+;; -*- lexical-binding: t; -*-
 (defconst ellama-eval-message-default-source 'internal
   "Default event message source symbol.")
 
