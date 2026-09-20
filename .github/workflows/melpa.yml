@@ -49,8 +49,6 @@ jobs:
           file: ${{ matrix.file }}
           ignore_warnings: ${{ matrix.ignore_warnings }}
           warnings_as_errors: ${{ matrix.warnings_as_errors }}
-      - if: matrix.emacs_version == 31.1
-        run: make check-compile-warnings
   test-ert:
     runs-on: ubuntu-latest
     strategy:

@@ -3487,7 +3487,7 @@ TIMEOUT is the optional command timeout in seconds."
                 (inhibit-read-only t))
             (save-restriction
               (widen)
-              (if (fboundp 'replace-region-contents)
+              (if (>= emacs-major-version 31)
                   (replace-region-contents (point-min) (point-max) source)
                 (funcall (symbol-function 'replace-buffer-contents) source)))
             (save-buffer)
