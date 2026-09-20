@@ -132,9 +132,9 @@
                                  incidents)))
                  (ert-info ((format "case=%s action=%s incidents=%S"
                                     name action incidents))
-                           (progn
-                             (should decision)
-                             (should (plist-get decision :llm-ran))))
+                   (progn
+                     (should decision)
+                     (should (plist-get decision :llm-ran))))
                  action))
              cases))
            (blocked (cl-count 'block actions))

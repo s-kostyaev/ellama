@@ -1350,7 +1350,7 @@ CONTEXT will be ignored.  Use global context instead.
   (or (ellama--session-compacting-p session)
       (ellama--buffer-request-active-p buffer)
       (when-let* ((session-buffer
-                  (ellama--session-registered-buffer session)))
+                   (ellama--session-registered-buffer session)))
         (ellama--buffer-request-active-p session-buffer))))
 
 (defun ellama--ensure-session-request-idle (session &optional buffer)
@@ -1769,7 +1769,7 @@ Return the output FILE-NAME.  Finish the recording with
 (defun ellama--session-set-compaction-mode (session buffer enabled)
   "Set compaction lighter for SESSION BUFFER to ENABLED."
   (when-let* ((target-buffer
-              (ellama--session-compaction-buffer session buffer)))
+               (ellama--session-compaction-buffer session buffer)))
     (with-current-buffer target-buffer
       (ellama-compaction-mode (if enabled +1 -1))
       (force-mode-line-update t))))
@@ -1797,7 +1797,7 @@ Return the output FILE-NAME.  Finish the recording with
     (session provider response text)
   "Persist latest known token count for SESSION from PROVIDER RESPONSE and TEXT."
   (when-let* ((token-count
-              (ellama--session-response-token-use provider response text)))
+               (ellama--session-response-token-use provider response text)))
     (ellama--session-set-token-count session token-count)
     token-count))
 
@@ -2337,8 +2337,8 @@ PROVIDER is the session provider.  BUFFER is the chat buffer.
 ON-DONE is called after asynchronous compaction succeeds or fails.
 REQUEST-CONTEXT is the active request context."
   (when-let* ((token-count
-              (ellama--session-auto-compact-needed-p
-               session provider response text)))
+               (ellama--session-auto-compact-needed-p
+                session provider response text)))
     (ellama--session-compact
      session
      :provider provider
@@ -2525,8 +2525,8 @@ If ACTIVATE is non-nil, set global active session selection."
   (when (and ellama-display-session-buffer-on-generation
              (ellama-session-p session))
     (when-let* ((session-buffer (or (ellama-get-session-buffer
-                                    (ellama--session-uid session))
-                                   (get-buffer buffer))))
+                                     (ellama--session-uid session))
+                                    (get-buffer buffer))))
       (display-buffer
        session-buffer
        (when ellama-chat-display-action-function
@@ -2840,8 +2840,8 @@ When APPEND-USER-HEADER is non-nil, append a user header in chat buffers."
   "Deactivate current session."
   (ellama--cancel-current-request)
   (when-let* ((uid (or (when (ellama-session-p ellama--current-session)
-                        (ellama--session-uid ellama--current-session))
-                      (ellama--session-uid-by-buffer (current-buffer)))))
+                         (ellama--session-uid ellama--current-session))
+                       (ellama--session-uid-by-buffer (current-buffer)))))
     (remhash uid ellama--active-sessions)
     (remhash uid ellama--active-session-states)
     (when (equal ellama--current-session-uid uid)
@@ -4165,8 +4165,8 @@ failure (with BUFFER current).
 Go to POINT before start scrolling if provided.  A function for
 programmatically scrolling the buffer during text generation."
   (when-let* ((ellama-auto-scroll)
-             (buf (or buffer (current-buffer)))
-             (window (get-buffer-window buf)))
+              (buf (or buffer (current-buffer)))
+              (window (get-buffer-window buf)))
     (with-selected-window window
       (when (ellama-chat-buffer-p buf)
         (goto-char (point-max)))
@@ -5213,7 +5213,7 @@ otherwise prompt user for URL to summarize."
   (interactive
    (list
     (if-let* ((url (or (and (fboundp 'thing-at-point) (thing-at-point 'url))
-                      (and (fboundp 'shr-url-at-point) (shr-url-at-point nil)))))
+                       (and (fboundp 'shr-url-at-point) (shr-url-at-point nil)))))
         url
       (read-string "Enter URL you want to summarize: "))))
   (let ((buffer-name (url-retrieve-synchronously url t)))
