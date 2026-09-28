@@ -2246,7 +2246,7 @@ Terminate the process and return `timeout' as status after TIMEOUT seconds."
         (process-environment
          (ellama-tools--process-environment-with-cat-pager)))
     (with-temp-buffer
-      (let* ((process (apply #'start-process
+      (let* ((process (apply #'start-file-process
                              "*ellama-command*" (current-buffer)
                              (car argv) (cdr argv)))
              (deadline (+ (float-time) timeout))
@@ -3631,7 +3631,7 @@ TIMEOUT is the optional command timeout in seconds."
                                      exit-code output)))))
                      (finish result)))))
             (setq process
-                  (apply #'start-process
+                  (apply #'start-file-process
                          "*ellama-shell-command*" buf
                          (car argv) (cdr argv)))
             (set-process-sentinel
