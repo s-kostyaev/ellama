@@ -1,3 +1,7 @@
+* Version 1.32.3
+- Use ~start-file-process~ for tool subprocesses so commands can run in remote
+  TRAMP directories.
+
 * Version 1.32.2
 - Add Emacs 31.1 to the MELPA and ERT CI matrices so new compiler warnings are
   caught in GitHub Actions.
