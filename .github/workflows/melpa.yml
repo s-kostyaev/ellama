@@ -49,6 +49,25 @@ jobs:
           file: ${{ matrix.file }}
           ignore_warnings: ${{ matrix.ignore_warnings }}
           warnings_as_errors: ${{ matrix.warnings_as_errors }}
+  check-manual:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: purcell/setup-emacs@master
+        with:
+          version: 31.1
+      - name: Install Texinfo
+        run: sudo apt-get update && sudo apt-get install -y texinfo
+      - name: Generate manual
+        run: make manual
+      - name: Upload generated manual
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-manual
+          path: ellama.info
+      - name: Check generated manual is committed
+        run: git diff --exit-code -- ellama.info
+
   test-ert:
     runs-on: ubuntu-latest
     strategy:
