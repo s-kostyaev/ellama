@@ -28,6 +28,21 @@
 (require 'ellama-eval)
 (require 'ert)
 
+(defun ellama-test-eval--wait-tool-result (function &rest args)
+  "Call asynchronous eval tool FUNCTION with ARGS and wait for its result."
+  (let ((result :pending)
+        (deadline (+ (float-time) 5.0)))
+    (apply function
+           (lambda (output)
+             (setq result output))
+           args)
+    (while (and (eq result :pending)
+                (< (float-time) deadline))
+      (accept-process-output nil 0.01))
+    (when (eq result :pending)
+      (ert-fail "Timeout waiting for asynchronous eval tool result"))
+    result))
+
 (ert-deftest test-ellama-eval-balanced-edit-file-tool-rejects-broken-elisp ()
   (let ((file (make-temp-file "ellama-eval-balanced-edit-" nil ".el")))
     (unwind-protect
@@ -144,16 +159,103 @@
         (delete-file file)))))
 
 (ert-deftest test-ellama-eval-profile-tools-switch-read-and-edit-shapes ()
-  "Verify both baseline and balanced-edit use edit_file."
+  "Verify every profile uses the expected read and edit tool shape."
   (let ((ellama-tools-allow-all t)
         (ellama-tools-allowed nil)
         (ellama-tools-confirm-allowed (make-hash-table))
         (baseline (ellama-eval--make-profile-tools 'baseline))
-        (balanced (ellama-eval--make-profile-tools 'balanced-edit)))
+        (balanced (ellama-eval--make-profile-tools 'balanced-edit))
+        (hooked (ellama-eval--make-profile-tools 'balanced-edit-hooks)))
     (should (member "edit_file" (mapcar #'llm-tool-name baseline)))
     (should (member "edit_file" (mapcar #'llm-tool-name balanced)))
+    (should (member "edit_file" (mapcar #'llm-tool-name hooked)))
     (should (member "read_file" (mapcar #'llm-tool-name baseline)))
-    (should (member "read_file" (mapcar #'llm-tool-name balanced)))))
+    (should (member "read_file" (mapcar #'llm-tool-name balanced)))
+    (should (member "read_file" (mapcar #'llm-tool-name hooked)))
+    (should-not
+     (llm-tool-async
+      (seq-find (lambda (tool)
+                  (string= (llm-tool-name tool) "edit_file"))
+                baseline)))
+    (should
+     (llm-tool-async
+      (seq-find (lambda (tool)
+                  (string= (llm-tool-name tool) "edit_file"))
+                hooked)))))
+
+(ert-deftest test-ellama-eval-hooked-edit-returns-byte-compile-feedback ()
+  (let* ((file (make-temp-file "ellama-eval-hooked-edit-" nil ".el"))
+         (old ";; -*- lexical-binding: t; -*-\n(defun sample () nil)\n")
+         (new ";; -*- lexical-binding: t; -*-\n(defun sample () (list? nil))\n")
+         (ellama-tools-allow-all t)
+         (ellama-tools-allowed nil)
+         (ellama-tools-confirm-allowed (make-hash-table))
+         (ellama-tools-read-before-write-enabled nil)
+         (state (make-ellama-eval--run-state :trace nil))
+         (ellama-eval--active-run state)
+         (tools (ellama-eval--make-profile-tools 'balanced-edit-hooks))
+         (edit-tool
+          (seq-find (lambda (tool)
+                      (string= (llm-tool-name tool) "edit_file"))
+                    tools)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert old))
+          (let ((result
+                 (ellama-test-eval--wait-tool-result
+                  (llm-tool-function edit-tool) file old new)))
+            (should (string-match-p
+                     "After edit hook `byte-compile` failed" result))
+            (should (string-match-p "list\\?" result))
+            (should (string-match-p "Hook validation failed" result))
+            (should (= (length (ellama-eval--run-state-trace state)) 1))
+            (should
+             (equal (plist-get
+                     (car (ellama-eval--run-state-trace state)) :result)
+                    result)))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (equal (buffer-string) new))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-eval-hooked-edit-accepts-byte-compilable-code ()
+  (let* ((file (make-temp-file "ellama-eval-hooked-edit-" nil ".el"))
+         (old ";; -*- lexical-binding: t; -*-\n(defun sample () nil)\n")
+         (new ";; -*- lexical-binding: t; -*-\n(defun sample () t)\n")
+         (ellama-tools-read-before-write-enabled nil))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert old))
+          (let ((result
+                 (ellama-test-eval--wait-tool-result
+                  #'ellama-eval-hooked-edit-file-tool file old new)))
+            (should (string-match-p
+                     "Edited .* after syntax validation" result))
+            (should-not (string-match-p "edit hook" result)))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (equal (buffer-string) new))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (when (file-exists-p file)
+        (delete-file file)))))
+
+(ert-deftest test-ellama-eval-edit-hook-summary-counts-recovery ()
+  (let ((trace
+         '((:name "edit_file" :args ("one.el" "old" "bad")
+                  :result "Edited one.el.\n\nAfter edit hook failed with exit status 1")
+           (:name "read_file" :args ("one.el") :result "bad")
+           (:name "edit_file" :args ("one.el" "bad" "good")
+                  :result "Edited one.el after syntax validation.")
+           (:name "edit_file" :args ("two.el" "old" "bad")
+                  :result "Edited two.el.\n\nBefore edit hook failed with exit status 2"))))
+    (should (= (ellama-eval--edit-hook-failure-count trace) 2))
+    (should (= (ellama-eval--edit-hook-recovery-count trace) 1))))
 
 (ert-deftest test-ellama-eval-run-case-scores-files-and-answer ()
   (let ((case
