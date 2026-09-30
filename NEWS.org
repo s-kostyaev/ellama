@@ -1,4 +1,7 @@
 * Version 1.32.3
+- Omit old tool results from session compaction by default while retaining tool
+  calls and arguments.  When ~session_file~ is enabled, omitted results remain
+  recoverable from the live session transcript.
 - Add the ~session_file~ tool to materialize the full live session transcript for
   file-tool access, and advertise it after context compaction when enabled.
 - Use ~start-file-process~ for tool subprocesses so commands can run in remote
