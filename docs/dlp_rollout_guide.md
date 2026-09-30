@@ -173,6 +173,12 @@ Use an `srt` policy that allows writes only inside the current project and a
 scratch area.  Add explicit read/write denials for secrets, credentials, audit
 logs, and system paths:
 
+When session compaction omits old tool results, `session_file` can materialize
+the live transcript for targeted recovery.  The tool only returns a file path;
+follow-up `read_file`, `grep_in_file`, and `lines_range` calls still use the
+normal DLP and SRT read policy.  If transcript recovery is required, ensure
+`filesystem.denyRead` does not match the temporary transcript snapshot.
+
 ```json
 {
   "network": {

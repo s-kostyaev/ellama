@@ -159,7 +159,9 @@ When nil, use `ellama-summarization-provider', then the session provider."
 
 (defcustom ellama-session-auto-compact-include-tool-results nil
   "Include tool results in the history sent for session compaction.
-Tool calls remain in the compaction input when this option is nil."
+Tool calls remain in the compaction input when this option is nil.
+Enable this when old results must remain in model context and transcript
+recovery through `session_file' is unavailable."
   :type 'boolean)
 
 (defcustom ellama-session-persist-provider-keys nil
@@ -1971,7 +1973,10 @@ when needed so the old part is non-empty."
                interactions (1- turn-count)))))))))))
 
 (defconst ellama--session-file-compaction-hint
-  "The full session transcript is available through the session_file tool. Use grep_in_file or lines_range on that file to recover details omitted by compaction."
+  (concat
+   "Earlier session details, including tool results omitted from this summary, "
+   "are available through the session_file tool. Use grep_in_file or "
+   "lines_range on that file to recover them.")
   "Hint for compacted summaries when the session transcript tool is enabled.")
 
 (defun ellama--session-summary-interaction-content (summary)

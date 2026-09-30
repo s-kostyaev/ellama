@@ -2083,6 +2083,104 @@ detailed comparison to help you decide:
       (when (and path (file-exists-p path))
         (delete-file path)))))
 
+(ert-deftest test-ellama-session-compact-recovers-omitted-tool-result ()
+  (let* ((provider (make-llm-fake))
+         (sentinel "TOOL_RESULT_SENTINEL_439")
+         (prompt (llm-make-chat-prompt "user 1" :context "System context"))
+         (tool-use
+          (make-llm-provider-utils-tool-use
+           :id "call-439"
+           :name "read_file"
+           :args '((file_name . "ellama.el"))))
+         (tool-call
+          (make-llm-chat-prompt-interaction
+           :role 'assistant
+           :content (list tool-use)))
+         (tool-result
+          (make-llm-chat-prompt-interaction
+           :role 'tool-results
+           :tool-results
+           (list
+            (make-llm-chat-prompt-tool-result
+             :call-id "call-439"
+             :tool-name "read_file"
+             :result sentinel))))
+         (session-file-tool
+          (seq-find (lambda (tool)
+                      (string= (llm-tool-name tool) "session_file"))
+                    ellama-tools-available))
+         (ellama--active-sessions (make-hash-table :test #'equal))
+         (ellama--active-session-states (make-hash-table :test #'equal))
+         (ellama--current-session-id nil)
+         (ellama--current-session-uid nil)
+         (ellama-session-auto-compact-provider (make-llm-fake))
+         (ellama-session-auto-compact-keep-last-turns 1)
+         (ellama-session-auto-compact-include-tool-results nil)
+         (ellama-session-auto-compact-show-message nil)
+         (buffer (generate-new-buffer " *ellama-tool-result-recovery*"))
+         summary-prompt-text
+         session
+         path)
+    (should session-file-tool)
+    (setf (llm-chat-prompt-interactions prompt)
+          (append (llm-chat-prompt-interactions prompt)
+                  (list tool-call tool-result)))
+    (llm-chat-prompt-append-response prompt "assistant after tool" 'assistant)
+    (llm-chat-prompt-append-response prompt "user 2")
+    (llm-chat-prompt-append-response prompt "assistant 2" 'assistant)
+    (setf (llm-chat-prompt-tools prompt) (list session-file-tool))
+    (setq session
+          (make-ellama-session
+           :id "tool-result-recovery"
+           :provider provider
+           :prompt prompt
+           :extra '(:uid "tool-result-recovery-uid")))
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer
+            (insert
+             (format "<think>\n%s\n</think>\n"
+                     (ellama--format-tool-results
+                      `((read_file . ,sentinel))))))
+          (ellama--register-session session buffer t)
+          (cl-letf (((symbol-function 'llm-chat-async)
+                     (lambda (_provider summary-prompt response-callback
+                                        _error-callback &optional _multi-output)
+                       (setq summary-prompt-text
+                             (llm-chat-prompt-to-text summary-prompt))
+                       (funcall response-callback
+                                '(:text "Summary without tool output."))
+                       'request)))
+            (should
+             (ellama--session-compact
+              session
+              :provider provider
+              :buffer buffer
+              :token-count 500)))
+          (should (string-match-p "read_file" summary-prompt-text))
+          (should (string-match-p "ellama\\.el" summary-prompt-text))
+          (should-not (string-match-p sentinel summary-prompt-text))
+          (should-not (string-match-p "Tool results:" summary-prompt-text))
+          (let ((summary-content
+                 (llm-chat-prompt-interaction-content
+                  (car (llm-chat-prompt-interactions prompt)))))
+            (should (string-match-p "session_file" summary-content))
+            (should (string-match-p "tool results omitted" summary-content)))
+          (let ((ellama-tools--current-session session))
+            (setq path
+                  (json-read-from-string
+                   (ellama-tools-session-file-tool))))
+          (should
+           (string-match-p
+            sentinel
+            (with-temp-buffer
+              (insert-file-contents path)
+              (buffer-string)))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (when (and path (file-exists-p path))
+        (delete-file path)))))
+
 (ert-deftest test-ellama-session-compact-reduces-kept-turns ()
   (let* ((provider (make-llm-fake))
          (session (ellama-test--short-compact-session provider))
