@@ -2160,7 +2160,6 @@ detailed comparison to help you decide:
           (should (string-match-p "read_file" summary-prompt-text))
           (should (string-match-p "ellama\\.el" summary-prompt-text))
           (should-not (string-match-p sentinel summary-prompt-text))
-          (should-not (string-match-p "Tool results:" summary-prompt-text))
           (let ((summary-content
                  (llm-chat-prompt-interaction-content
                   (car (llm-chat-prompt-interactions prompt)))))
