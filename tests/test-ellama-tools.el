@@ -898,6 +898,41 @@ Return list with result and prompt."
       (when (and path (file-exists-p path))
         (delete-file path)))))
 
+(ert-deftest test-ellama-tools-session-file-obeys-srt-read-policy ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((ellama--active-sessions (make-hash-table :test #'equal))
+         (ellama--active-session-states (make-hash-table :test #'equal))
+         (ellama--current-session-id nil)
+         (ellama--current-session-uid nil)
+         (session (make-ellama-session
+                   :id "session-file-srt-test"
+                   :provider (make-llm-fake)
+                   :extra '(:uid "session-file-srt-test-uid")))
+         (buffer (generate-new-buffer " *ellama-session-file-srt-test*"))
+         path)
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer
+            (insert "private transcript fact\n"))
+          (ellama--register-session session buffer t)
+          (let ((ellama-tools--current-session session))
+            (setq path
+                  (json-read-from-string
+                   (ellama-tools-session-file-tool))))
+          (ellama-test--with-temp-srt-settings
+           (format "{\"filesystem\":{\"denyRead\":[%S]}}" path)
+           (let ((ellama-tools-use-srt t)
+                 (ellama-tools-srt-args (list "--settings" settings-file)))
+             (let ((msg (ellama-tools-read-file-tool path)))
+               (should (stringp msg))
+               (should (string-match-p "srt policy denied read access" msg))
+               (should (string-match-p (regexp-quote path) msg))
+               (should (string-match-p "filesystem\\.denyRead" msg))))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (when (and path (file-exists-p path))
+        (delete-file path)))))
+
 (ert-deftest test-ellama-tools-read-file-tool-denied-by-srt-policy ()
   (ellama-test--ensure-local-ellama-tools)
   (let* ((dir (make-temp-file "ellama-srt-read-tool-" t))

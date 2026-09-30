@@ -447,6 +447,9 @@ generated text string.
   session provider.
 - ~ellama-session-auto-compact-show-message~: Show compaction notices in chat
   buffers. Enabled by default.
+- ~ellama-session-auto-compact-include-tool-results~: Include tool results in
+  the history sent to the compaction provider. Disabled by default. Tool calls
+  are still included so the summary can record actions taken during the session.
 - ~ellama-session-auto-compact-prompt-template~: Prompt template for automatic
   session context compaction.
 - ~ellama-naming-scheme~: How to name new sessions.
@@ -738,6 +741,13 @@ When ~session_file~ is enabled for the session, the synthetic compaction summary
 also tells the model that the full live transcript is available through that
 tool.  The model can then recover older details on demand with ~grep_in_file~ or
 ~lines_range~ instead of keeping the whole transcript in the provider context.
+
+Tool calls and their arguments are included in the history sent to the
+compaction provider, but old tool results are omitted by default.  Omitted
+results remain available in the live transcript when ~session_file~ is enabled.
+Set ~ellama-session-auto-compact-include-tool-results~ to a non-nil value when
+exact old tool output must stay directly in the compacted model context or
+transcript recovery is unavailable.
 
 Example configuration:
 

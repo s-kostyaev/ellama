@@ -733,6 +733,10 @@ argument generated text string.
      ‘ellama-summarization-provider’, then the session provider.
    • ‘ellama-session-auto-compact-show-message’: Show compaction notices
      in chat buffers.  Enabled by default.
+   • ‘ellama-session-auto-compact-include-tool-results’: Include tool
+     results in the history sent to the compaction provider.  Disabled
+     by default.  Tool calls are still included so the summary can
+     record actions taken during the session.
    • ‘ellama-session-auto-compact-prompt-template’: Prompt template for
      automatic session context compaction.
    • ‘ellama-naming-scheme’: How to name new sessions.
@@ -1096,6 +1100,14 @@ summary also tells the model that the full live transcript is available
 through that tool.  The model can then recover older details on demand
 with ‘grep_in_file’ or ‘lines_range’ instead of keeping the whole
 transcript in the provider context.
+
+Tool calls and their arguments are included in the history sent to the
+compaction provider, but old tool results are omitted by default.
+Omitted results remain available in the live transcript when
+‘session_file’ is enabled.  Set
+‘ellama-session-auto-compact-include-tool-results’ to a non-nil value
+when exact old tool output must stay directly in the compacted model
+context or transcript recovery is unavailable.
 
 Example configuration:
 
@@ -2942,52 +2954,52 @@ Node: Configuration26322
 Node: Option Reference26917
 Node: Core Behavior and Providers27446
 Node: Sessions and Naming29056
-Node: Task Providers and Media31939
-Node: Display Context and Reasoning32872
-Node: Blueprints Prompts and Conversion35975
-Node: Tool Prompts and Edit Behavior37276
-Node: DLP and Irreversible Actions38103
-Node: Transient Menus Community Prompts and Diagnostics39218
-Node: Tool Access and Sandboxing40648
-Node: Task Templates Blueprints and Skills44115
-Node: Agent and Subagent Loops45494
-Node: Session Provider Keys46953
-Node: Session Compaction48398
-Node: Image Input51023
-Node: Audio Input53338
-Node: macOS microphone permission56006
-Node: Task Tool Subagents58167
-Node: Plan-and-Act Agent Loop62073
-Node: Edit Tool Shell Hooks64654
-Node: DLP for Tool Input/Output66947
-Node: SRT Filesystem Policy for Tools82516
-Node: Context Management88187
-Node: Transient Menus for Context Management89255
-Node: Managing the Context91329
-Node: Considerations92104
-Node: Minor modes92431
-Node: ellama-context-header-line-mode92943
-Node: ellama-context-header-line-global-mode93561
-Node: ellama-context-mode-line-mode93965
-Node: ellama-context-mode-line-global-mode94544
-Node: ellama-session-header-line-mode94938
-Node: ellama-session-mode-line-mode95442
-Node: Using Blueprints95869
-Node: Key Components96265
-Node: Creating and Managing96624
-Node: Blueprint Files97262
-Node: Variables97681
-Node: Keymap and Mode98017
-Node: Transient Menus98541
-Node: Running Blueprints Programmatically99055
-Node: MCP Integration99609
-Node: Agent Skills100787
-Node: Directory Structure101186
-Node: Creating a Skill102166
-Node: How It Works102556
-Node: Acknowledgments102962
-Node: Contributions103648
-Node: GNU Free Documentation License104173
+Node: Task Providers and Media32199
+Node: Display Context and Reasoning33132
+Node: Blueprints Prompts and Conversion36235
+Node: Tool Prompts and Edit Behavior37536
+Node: DLP and Irreversible Actions38363
+Node: Transient Menus Community Prompts and Diagnostics39478
+Node: Tool Access and Sandboxing40908
+Node: Task Templates Blueprints and Skills44375
+Node: Agent and Subagent Loops45754
+Node: Session Provider Keys47213
+Node: Session Compaction48658
+Node: Image Input51708
+Node: Audio Input54023
+Node: macOS microphone permission56691
+Node: Task Tool Subagents58852
+Node: Plan-and-Act Agent Loop62758
+Node: Edit Tool Shell Hooks65339
+Node: DLP for Tool Input/Output67632
+Node: SRT Filesystem Policy for Tools83201
+Node: Context Management88872
+Node: Transient Menus for Context Management89940
+Node: Managing the Context92014
+Node: Considerations92789
+Node: Minor modes93116
+Node: ellama-context-header-line-mode93628
+Node: ellama-context-header-line-global-mode94246
+Node: ellama-context-mode-line-mode94650
+Node: ellama-context-mode-line-global-mode95229
+Node: ellama-session-header-line-mode95623
+Node: ellama-session-mode-line-mode96127
+Node: Using Blueprints96554
+Node: Key Components96950
+Node: Creating and Managing97309
+Node: Blueprint Files97947
+Node: Variables98366
+Node: Keymap and Mode98702
+Node: Transient Menus99226
+Node: Running Blueprints Programmatically99740
+Node: MCP Integration100294
+Node: Agent Skills101472
+Node: Directory Structure101871
+Node: Creating a Skill102851
+Node: How It Works103241
+Node: Acknowledgments103647
+Node: Contributions104333
+Node: GNU Free Documentation License104858
 
 End Tag Table
 

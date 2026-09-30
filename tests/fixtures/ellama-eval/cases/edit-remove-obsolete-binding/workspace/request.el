@@ -1,3 +1,4 @@
+;; -*- lexical-binding: t; -*-
 (defun ellama-eval-build-request (payload kind)
   (let ((legacy-mode nil)
         (request-id (format "%s-%s" kind payload)))

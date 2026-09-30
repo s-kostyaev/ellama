@@ -1,3 +1,4 @@
+;; -*- lexical-binding: t; -*-
 (defun ellama-eval-guarded-join (items)
   (if (null items)
       ""

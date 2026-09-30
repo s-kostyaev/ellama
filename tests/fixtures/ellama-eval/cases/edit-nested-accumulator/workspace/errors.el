@@ -1,3 +1,4 @@
+;; -*- lexical-binding: t; -*-
 (defconst ellama-eval-warning-level 'warning
   "Level symbol used for non-fatal warning entries.")
 
