@@ -1963,7 +1963,7 @@ when needed so the old part is non-empty."
 
 (defconst ellama--session-file-compaction-hint
   "The full session transcript is available through the session_file tool. Use grep_in_file or lines_range on that file to recover details omitted by compaction."
-  "Hint appended to compacted summaries when the session transcript tool is enabled.")
+  "Hint for compacted summaries when the session transcript tool is enabled.")
 
 (defun ellama--session-summary-interaction-content (summary)
   "Return synthetic interaction content for SUMMARY."
