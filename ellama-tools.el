@@ -408,14 +408,14 @@ BEGIN_ELLAMA_AGENT_STATE block. When all items are complete, call
 
     ("explorer"
      :system "Explore, inspect, and report findings. Do not modify files."
-     :tools ("read_file" "directory_tree" "grep" "grep_in_file"
+     :tools ("session_file" "read_file" "directory_tree" "grep" "grep_in_file"
              "count_lines" "lines_range" "project_root" "shell_command"))
 
     ("coder"
      :system "You are an expert software developer. Make precise changes."
-     :tools ("read_file" "write_file" "edit_file" "append_file" "prepend_file"
-             "move_file" "grep" "grep_in_file" "project_root" "directory_tree"
-             "count_lines" "lines_range" "shell_command")
+     :tools ("session_file" "read_file" "write_file" "edit_file" "append_file"
+             "prepend_file" "move_file" "grep" "grep_in_file" "project_root"
+             "directory_tree" "count_lines" "lines_range" "shell_command")
      :provider 'ellama-coding-provider)
 
     ("bash"
