@@ -59,7 +59,7 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
       - uses: purcell/setup-emacs@master
         with:
-          version: 31.1
+          version: 30.1
       - name: Install Texinfo
         run: sudo apt-get update && sudo apt-get install -y texinfo
       - name: Generate manual
