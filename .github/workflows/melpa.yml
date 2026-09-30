@@ -51,8 +51,12 @@ jobs:
           warnings_as_errors: ${{ matrix.warnings_as_errors }}
   check-manual:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
       - uses: purcell/setup-emacs@master
         with:
           version: 31.1
@@ -65,7 +69,18 @@ jobs:
         with:
           name: generated-manual
           path: ellama.info
-      - name: Check generated manual is committed
+      - name: Commit generated manual for same-repository PRs
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          if ! git diff --quiet -- ellama.info; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add ellama.info
+            git commit -m "Regenerate manual"
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          fi
+      - name: Check generated manual for read-only runs
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
         run: git diff --exit-code -- ellama.info
 
   test-ert:
