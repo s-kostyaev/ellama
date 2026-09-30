@@ -3631,6 +3631,14 @@ Return list with result and prompt."
     (should (eq (ellama-tools--provider-for-role "all")
                 'default-provider))))
 
+(ert-deftest test-ellama-tools-history-aware-roles-include-session-file ()
+  (ellama-test--ensure-local-ellama-tools)
+  (dolist (role '("explorer" "coder"))
+    (should
+     (member "session_file"
+             (mapcar #'llm-tool-name
+                     (ellama-tools--for-role role))))))
+
 (ert-deftest test-ellama-agent-start-plan-and-act-combines-tools-and-renders ()
   (ellama-test--ensure-local-ellama-tools)
   (let* ((buffer (generate-new-buffer " *ellama-agent-start-test*"))
