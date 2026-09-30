@@ -39,6 +39,7 @@ test-detailed:
 		--eval "(require 'cl-lib)" \
 		--eval "(setq load-prefer-newer t)" \
 		--eval "(setq load-path (cl-remove-if (lambda (dir) (string-match-p \"/elpa/org-[^/]+/?$$\" dir)) load-path))" \
+		-L . \
 		-l ellama.el \
 		-l tests/test-ellama.el \
 		-l tests/test-ellama-eval.el \
@@ -61,6 +62,7 @@ test-integration:
 		--eval "(require 'cl-lib)" \
 		--eval "(setq load-prefer-newer t)" \
 		--eval "(setq load-path (cl-remove-if (lambda (dir) (string-match-p \"/elpa/org-[^/]+/?$$\" dir)) load-path))" \
+		-L . \
 		-l ellama.el \
 		-l tests/integration-test-ellama.el \
 		--eval "(ert t)"
