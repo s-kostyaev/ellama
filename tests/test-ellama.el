@@ -1990,6 +1990,11 @@ detailed comparison to help you decide:
                   (llm-chat-prompt-interactions prompt))
           '("Previous conversation summary:\n\nSummary of earlier durable facts."
             "user 3" "assistant 3" "user 4" "assistant 4")))
+        (should-not
+         (string-match-p
+          "session_file"
+          (llm-chat-prompt-interaction-content
+           (car (llm-chat-prompt-interactions prompt)))))
         (should
          (string-match-p
           "Ellama compacted conversation context"
@@ -1998,6 +2003,85 @@ detailed comparison to help you decide:
          (cl-some (lambda (line)
                     (> (length line) fill-column))
                   (split-string (buffer-string) "\n")))))))
+
+(ert-deftest test-ellama-session-file-recovers-history-after-compaction ()
+  (let* ((provider (make-llm-fake))
+         (marker "MAGIC_OLD_FACT_7842")
+         (prompt (llm-make-chat-prompt marker :context "System context"))
+         (session-file-tool
+          (seq-find (lambda (tool)
+                      (string= (llm-tool-name tool) "session_file"))
+                    ellama-tools-available))
+         (ellama--active-sessions (make-hash-table :test #'equal))
+         (ellama--active-session-states (make-hash-table :test #'equal))
+         (ellama--current-session-id nil)
+         (ellama--current-session-uid nil)
+         (ellama-session-auto-compact-provider (make-llm-fake))
+         (ellama-session-auto-compact-keep-last-turns 2)
+         (ellama-session-auto-compact-show-message nil)
+         (buffer (generate-new-buffer " *ellama-session-file-compact*"))
+         session
+         path)
+    (should session-file-tool)
+    (llm-chat-prompt-append-response prompt "assistant 1" 'assistant)
+    (llm-chat-prompt-append-response prompt "user 2")
+    (llm-chat-prompt-append-response prompt "assistant 2" 'assistant)
+    (llm-chat-prompt-append-response prompt "user 3")
+    (llm-chat-prompt-append-response prompt "assistant 3" 'assistant)
+    (llm-chat-prompt-append-response prompt "user 4")
+    (llm-chat-prompt-append-response prompt "assistant 4" 'assistant)
+    (setf (llm-chat-prompt-tools prompt) (list session-file-tool))
+    (setq session
+          (make-ellama-session
+           :id "session-file-compact"
+           :provider provider
+           :prompt prompt
+           :extra '(:uid "session-file-compact-uid")))
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer
+            (insert "User: " marker "\nAssistant: acknowledged\n"))
+          (ellama--register-session session buffer t)
+          (cl-letf (((symbol-function 'llm-chat-async)
+                     (lambda (_provider _summary-prompt response-callback
+                                        _error-callback &optional _multi-output)
+                       (funcall response-callback
+                                '(:text "Summary without the old marker."))
+                       'request)))
+            (should
+             (ellama--session-compact
+              session
+              :provider provider
+              :buffer buffer
+              :token-count 150)))
+          (let ((summary-content
+                 (llm-chat-prompt-interaction-content
+                  (car (llm-chat-prompt-interactions prompt)))))
+            (should (string-match-p "session_file" summary-content))
+            (should (string-match-p "grep_in_file" summary-content)))
+          (should-not
+           (cl-some
+            (lambda (interaction)
+              (string-match-p
+               marker
+               (format "%s"
+                       (llm-chat-prompt-interaction-content interaction))))
+            (llm-chat-prompt-interactions prompt)))
+          (let ((ellama-tools--current-session session))
+            (setq path
+                  (json-read-from-string
+                   (ellama-tools-session-file-tool))))
+          (should (file-exists-p path))
+          (should
+           (string-match-p
+            marker
+            (with-temp-buffer
+              (insert-file-contents path)
+              (buffer-string)))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (when (and path (file-exists-p path))
+        (delete-file path)))))
 
 (ert-deftest test-ellama-session-compact-reduces-kept-turns ()
   (let* ((provider (make-llm-fake))

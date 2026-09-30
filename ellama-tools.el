@@ -43,6 +43,7 @@
 (declare-function ellama-session-p "ellama" (session))
 (declare-function ellama-session-extra "ellama" (session))
 (declare-function ellama-session-id "ellama" (session))
+(declare-function ellama--session-uid "ellama" (session))
 (declare-function ellama-session-provider "ellama" (session))
 (declare-function ellama-get-session-buffer "ellama" (id))
 (declare-function ellama-get-nick-prefix-for-mode "ellama" ())
@@ -83,6 +84,16 @@ next attempt is allowed so deliberate overwrites remain possible."
 
 (defvar ellama-tools--current-session nil
   "Current Ellama session used while executing tools.")
+
+(defvar-local ellama-tools--session-file-snapshot nil
+  "Temporary file containing the materialized current session transcript.")
+
+(defun ellama-tools--delete-session-file-snapshot ()
+  "Delete the current buffer's materialized session transcript, if any."
+  (when (and ellama-tools--session-file-snapshot
+             (file-exists-p ellama-tools--session-file-snapshot))
+    (delete-file ellama-tools--session-file-snapshot))
+  (setq ellama-tools--session-file-snapshot nil))
 
 (defun ellama-tools--set-session-extra (session extra)
   "Set SESSION EXTRA."
@@ -2387,6 +2398,35 @@ TIMEOUT is the timeout in seconds used when RESULT reports a timeout."
               link
               (ellama--audio-mime-type file-name)
               (ellama--file-size file-name))))))
+
+(defun ellama-tools-session-file-tool ()
+  "Materialize the current Ellama session transcript and return its file name."
+  (if-let* ((session (ellama-tools--active-session))
+            (uid (ellama--session-uid session))
+            (session-buffer (ellama-get-session-buffer uid))
+            ((buffer-live-p session-buffer)))
+      (with-current-buffer session-buffer
+        (unless (and ellama-tools--session-file-snapshot
+                     (file-exists-p ellama-tools--session-file-snapshot))
+          (setq ellama-tools--session-file-snapshot
+                (make-temp-file "ellama-session-transcript-" nil ".txt"))
+          (set-file-modes ellama-tools--session-file-snapshot #o600)
+          (add-hook 'kill-buffer-hook
+                    #'ellama-tools--delete-session-file-snapshot nil t))
+        (write-region (point-min) (point-max)
+                      ellama-tools--session-file-snapshot nil 'silent)
+        (json-encode ellama-tools--session-file-snapshot))
+    (json-encode
+     "Cannot materialize session transcript: no live Ellama session buffer.")))
+
+(ellama-tools-define-tool
+ '(:function
+   ellama-tools-session-file-tool
+   :name
+   "session_file"
+   :args nil
+   :description
+   "Materialize the full current Ellama session transcript and return its file name. Use read_file, grep_in_file, or lines_range to inspect it."))
 
 (defun ellama-tools-read-file-tool (file-name &optional mode)
   "Read the file FILE-NAME.

@@ -114,7 +114,8 @@
                   (file-truename loaded-file))
                  (fboundp 'ellama-tools--sanitize-tool-text-output)
                  (fboundp 'ellama-tools--command-argv)
-                 (fboundp 'ellama-tools--task-description))
+                 (fboundp 'ellama-tools--task-description)
+                 (fboundp 'ellama-tools-session-file-tool))
       (load-file (expand-file-name "ellama-tools.el" ellama-test-root)))))
 
 (defun ellama-test--clear-srt-policy-cache ()
@@ -845,6 +846,57 @@ Return list with result and prompt."
                         (ellama-tools--srt-check-access link 'read)))))))
       (when (file-exists-p dir)
         (delete-directory dir t)))))
+
+(ert-deftest test-ellama-tools-session-file-materializes-refreshes-and-cleans-up ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((ellama--active-sessions (make-hash-table :test #'equal))
+         (ellama--active-session-states (make-hash-table :test #'equal))
+         (ellama--current-session-id nil)
+         (ellama--current-session-uid nil)
+         (session (make-ellama-session
+                   :id "session-file-test"
+                   :provider (make-llm-fake)
+                   :extra '(:uid "session-file-test-uid")))
+         (buffer (generate-new-buffer " *ellama-session-file-test*"))
+         path)
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer
+            (insert "old transcript fact\n")
+            (should-not buffer-file-name))
+          (ellama--register-session session buffer t)
+          (let ((ellama-tools--current-session session))
+            (setq path
+                  (json-read-from-string
+                   (ellama-tools-session-file-tool))))
+          (should (file-exists-p path))
+          (should (= (file-modes path) #o600))
+          (should
+           (equal
+            (with-temp-buffer
+              (insert-file-contents path)
+              (buffer-string))
+            "old transcript fact\n"))
+          (with-current-buffer buffer
+            (goto-char (point-max))
+            (insert "new transcript fact\n"))
+          (let ((ellama-tools--current-session session))
+            (should
+             (equal path
+                    (json-read-from-string
+                     (ellama-tools-session-file-tool)))))
+          (should
+           (string-match-p
+            "new transcript fact"
+            (with-temp-buffer
+              (insert-file-contents path)
+              (buffer-string))))
+          (kill-buffer buffer)
+          (should-not (file-exists-p path)))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (when (and path (file-exists-p path))
+        (delete-file path)))))
 
 (ert-deftest test-ellama-tools-read-file-tool-denied-by-srt-policy ()
   (ellama-test--ensure-local-ellama-tools)
