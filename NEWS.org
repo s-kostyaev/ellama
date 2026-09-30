@@ -1,7 +1,4 @@
 * Version 1.32.3
-- Add the ~session_file~ tool to materialize the full live session transcript
-  for file-tool access, and advertise it after context compaction when enabled.
-  The built-in ~explorer~ and ~coder~ subagent roles include the tool.
 - Use ~start-file-process~ for tool subprocesses so commands can run in remote
   TRAMP directories.
 
