@@ -1,3 +1,35 @@
+* Version 1.33.0
+
+- Add ~session_file~ tool to expose the current session transcript as a file,
+  allowing history-aware subagents to read and recover past session context
+  during execution.
+
+- Omit tool results from session compaction by default.  A new configurable
+  opt-in (controlled by a dedicated custom) allows including tool results while
+  keeping tool calls and arguments in the compaction input, keeping the
+  compaction summary lean by default.
+
+- Integrate compacted tool-result recovery with the session transcript: tool
+  calls and arguments are kept in the compaction summary so subagents can
+  recover from compacted sessions, and transcript reads continue to obey session
+  result truncation (SRT) policy.
+
+- Fix the compacted tool-result recovery assertion to match the new compaction
+  behavior and add corresponding regression tests.
+
+- Fix the compaction hint docstring width so hints display correctly in the UI.
+
+- Extend ~ellama-eval--instrument-tool-spec~ to trace asynchronous tools whose
+  first argument is a callback, and add a ~balanced-edit-hooks~ hypothesis
+  profile that validates edits through a shell byte-compilation hook, surfaces
+  hook failures to the agent, and records edit-hook failure and recovery counts
+  in the evaluation summary.
+
+- Add ~ellama-eval~ configuration for lexical-binding declarations in eval
+  fixture workspaces so all test fixtures run in lexical binding mode.
+
+- Add configuration to pin manual generation to Emacs 30.1 in CI, and let CI
+  regenerate the committed manual on each build.
 * Version 1.32.3
 - Use ~start-file-process~ for tool subprocesses so commands can run in remote
   TRAMP directories.

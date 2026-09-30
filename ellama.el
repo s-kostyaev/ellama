@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.31.1") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.32.3
+;; Version: 1.33.0
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -155,6 +155,13 @@ When nil, use `ellama-summarization-provider', then the session provider."
 
 (defcustom ellama-session-auto-compact-show-message t
   "Show compaction notices in chat buffers."
+  :type 'boolean)
+
+(defcustom ellama-session-auto-compact-include-tool-results nil
+  "Include tool results in the history sent for session compaction.
+Tool calls remain in the compaction input when this option is nil.
+Enable this when old results must remain in model context and transcript
+recovery through `session_file' is unavailable."
   :type 'boolean)
 
 (defcustom ellama-session-persist-provider-keys nil
@@ -1907,26 +1914,30 @@ Return the output FILE-NAME.  Finish the recording with
    "\n\n"))
 
 (defun ellama--session-compact-render-interaction (interaction)
-  "Render INTERACTION for summary generation."
+  "Render INTERACTION for summary generation, or return nil when omitted."
   (let ((role (llm-chat-prompt-interaction-role interaction))
         (content (llm-chat-prompt-interaction-content interaction))
         (tool-results (llm-chat-prompt-interaction-tool-results
                        interaction)))
-    (string-join
-     (delq nil
-           (list
-            (format "%s:\n%s"
-                    (capitalize (symbol-name role))
-                    (ellama--session-compact-content-to-string content))
-            (when tool-results
-              (format "Tool results:\n%s"
-                      (ellama--format-tool-results tool-results)))))
-     "\n")))
+    (unless (and (eq role 'tool-results)
+                 (not ellama-session-auto-compact-include-tool-results))
+      (string-join
+       (delq nil
+             (list
+              (format "%s:\n%s"
+                      (capitalize (symbol-name role))
+                      (ellama--session-compact-content-to-string content))
+              (when (and tool-results
+                         ellama-session-auto-compact-include-tool-results)
+                (format "Tool results:\n%s"
+                        (ellama--format-tool-results tool-results)))))
+       "\n"))))
 
 (defun ellama--session-compact-render-interactions (interactions)
   "Render INTERACTIONS for summary generation."
   (string-join
-   (mapcar #'ellama--session-compact-render-interaction interactions)
+   (delq nil
+         (mapcar #'ellama--session-compact-render-interaction interactions))
    "\n\n"))
 
 (defun ellama--session-compact-split-interactions
@@ -1961,23 +1972,54 @@ when needed so the old part is non-empty."
               (ellama--session-compact-split-interactions
                interactions (1- turn-count)))))))))))
 
+(defconst ellama--session-file-compaction-hint
+  (concat
+   "Earlier session details, including tool results omitted from this summary, "
+   "are available through the session_file tool. Use grep_in_file or "
+   "lines_range on that file to recover them.")
+  "Hint for compacted summaries when the session transcript tool is enabled.")
+
 (defun ellama--session-summary-interaction-content (summary)
   "Return synthetic interaction content for SUMMARY."
   (format "Previous conversation summary:\n\n%s" summary))
 
-(defun ellama--session-summary-interaction (summary)
-  "Return synthetic assistant interaction carrying SUMMARY."
-  (make-llm-chat-prompt-interaction
-   :role 'assistant
-   :content (ellama--session-summary-interaction-content summary)))
+(defun ellama--session-tool-enabled-p (session name)
+  "Return non-nil when SESSION has a tool named NAME enabled."
+  (let* ((prompt (ellama-session-prompt session))
+         (extra (ellama-session-extra session))
+         (tools (or (and (llm-chat-prompt-p prompt)
+                         (llm-chat-prompt-tools prompt))
+                    (and (plistp extra)
+                         (plist-get extra :tools)))))
+    (cl-some (lambda (tool)
+               (string= name (llm-tool-name tool)))
+             tools)))
+
+(defun ellama--session-summary-interaction (summary &optional session)
+  "Return synthetic assistant interaction carrying SUMMARY for SESSION."
+  (let ((content (ellama--session-summary-interaction-content summary)))
+    (make-llm-chat-prompt-interaction
+     :role 'assistant
+     :content
+     (if (and session
+              (ellama--session-tool-enabled-p session "session_file"))
+         (concat content "\n\n" ellama--session-file-compaction-hint)
+       content))))
 
 (defun ellama--session-summary-interaction-p (session interaction)
   "Return non-nil when INTERACTION is stored compaction summary for SESSION."
-  (let ((stored-summary (ellama--session-extra-get session :auto-compact-summary)))
+  (let* ((stored-summary
+          (ellama--session-extra-get session :auto-compact-summary))
+         (base-content
+          (and stored-summary
+               (ellama--session-summary-interaction-content stored-summary)))
+         (content (llm-chat-prompt-interaction-content interaction)))
     (and stored-summary
          (eq (llm-chat-prompt-interaction-role interaction) 'assistant)
-         (equal (llm-chat-prompt-interaction-content interaction)
-                (ellama--session-summary-interaction-content stored-summary)))))
+         (or (equal content base-content)
+             (equal content
+                    (concat base-content "\n\n"
+                            ellama--session-file-compaction-hint))))))
 
 (defun ellama--session-system-interaction-p (interaction)
   "Return non-nil when INTERACTION is a system interaction."
@@ -2149,7 +2191,7 @@ REQUESTED-KEPT-TURNS is the configured recent turn count."
       (setf (llm-chat-prompt-context current-prompt)
             original-context)
       (setf (llm-chat-prompt-interactions current-prompt)
-            (cons (ellama--session-summary-interaction summary)
+            (cons (ellama--session-summary-interaction summary session)
                   kept-interactions))
       (ellama--session-extra-put
        session :auto-compact-original-context original-context)

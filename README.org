@@ -447,6 +447,9 @@ generated text string.
   session provider.
 - ~ellama-session-auto-compact-show-message~: Show compaction notices in chat
   buffers. Enabled by default.
+- ~ellama-session-auto-compact-include-tool-results~: Include tool results in
+  the history sent to the compaction provider. Disabled by default. Tool calls
+  are still included so the summary can record actions taken during the session.
 - ~ellama-session-auto-compact-prompt-template~: Prompt template for automatic
   session context compaction.
 - ~ellama-naming-scheme~: How to name new sessions.
@@ -591,6 +594,11 @@ generated text string.
   will work without user confirmation.
 - ~ellama-tools-argument-max-length~: Max length of function argument in the
   confirmation prompt. Default value 50.
+- ~session_file~: Materialize the full live Ellama session transcript to a
+  private temporary file and return its path. Use ~read_file~, ~grep_in_file~,
+  or ~lines_range~ to inspect it. The snapshot is refreshed on each call and
+  removed with the session buffer. Reading the returned file still goes through
+  the normal DLP and SRT filesystem checks.
 - ~ellama-tools-read-file-default-mode~: Default mode for the ~read_file~
   tool. Use ~auto~ to read text files as text and supported image or audio files
   as media. Use ~text~, ~image~, or ~audio~ to force a specific mode.
@@ -659,7 +667,9 @@ generated text string.
 - ~ellama-tools-subagent-continue-prompt~: Prompt sent to a sub-agent when it
   finishes a turn without calling ~report_result~.
 - ~ellama-tools-subagent-roles~: Subagent roles with provider, system prompt and
-  allowed tools. Configuration of subagents for the ~task~ tool.
+  allowed tools. Configuration of subagents for the ~task~ tool. The built-in
+  ~explorer~ and ~coder~ roles include ~session_file~ so a compacted sub-agent
+  can recover details from its own live transcript.
 
 ** Session Provider Keys
 
@@ -726,6 +736,18 @@ The system message is not summarized by the compaction LLM.  Ellama restores the
 original system message in the compacted session prompt context, including when
 an LLM provider moved the system message into a system interaction before the
 request.
+
+When ~session_file~ is enabled for the session, the synthetic compaction summary
+also tells the model that the full live transcript is available through that
+tool.  The model can then recover older details on demand with ~grep_in_file~ or
+~lines_range~ instead of keeping the whole transcript in the provider context.
+
+Tool calls and their arguments are included in the history sent to the
+compaction provider, but old tool results are omitted by default.  Omitted
+results remain available in the live transcript when ~session_file~ is enabled.
+Set ~ellama-session-auto-compact-include-tool-results~ to a non-nil value when
+exact old tool output must stay directly in the compacted model context or
+transcript recovery is unavailable.
 
 Example configuration:
 

@@ -368,6 +368,7 @@
 
 (defconst ellama-tools-dlp--builtin-risk-profile
   '(("read_file" . read)
+    ("session_file" . read)
     ("lines_range" . read)
     ("count_lines" . read)
     ("directory_tree" . read)
