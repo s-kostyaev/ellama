@@ -54,10 +54,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out writable PR head
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/checkout@v4
         with:
-          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Check out read-only ref
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+        uses: actions/checkout@v4
       - uses: purcell/setup-emacs@master
         with:
           version: 30.1
