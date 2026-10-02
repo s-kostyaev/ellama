@@ -2344,6 +2344,20 @@ Example: adding DuckDuckGo search via the duckduckgo-mcp-server
                                (list tool)))
                     tools)))))
 
+Remote MCP servers work the same way through a ‘:url’ entry, so a hosted
+server needs no local process.  For example, adding You.com's hosted
+search alongside the DuckDuckGo server above:
+
+     (setq mcp-hub-servers
+           `(("ddg" . (:command "uvx"
+                               :args ("duckduckgo-mcp-server")))
+             ("you" . (:url "https://api.you.com/mcp?profile=free"))))
+
+The free profile covers web search without an API key, with a limit of
+100 queries per day; the authenticated endpoint,
+<https://api.you.com/mcp>, follows the same pattern and adds content
+extraction and research tools.
+
 When ‘:categoryp t’ is used, Ellama derives a stable MCP tool identity
 as ‘<category>/<tool-name>’ (e.g., ‘mcp-ddg/search’).  Irreversible
 policy, audit, and overrides are keyed by this identity.
@@ -2993,13 +3007,13 @@ Node: Keymap and Mode98702
 Node: Transient Menus99226
 Node: Running Blueprints Programmatically99740
 Node: MCP Integration100294
-Node: Agent Skills101472
-Node: Directory Structure101871
-Node: Creating a Skill102851
-Node: How It Works103241
-Node: Acknowledgments103647
-Node: Contributions104333
-Node: GNU Free Documentation License104858
+Node: Agent Skills102088
+Node: Directory Structure102487
+Node: Creating a Skill103467
+Node: How It Works103857
+Node: Acknowledgments104263
+Node: Contributions104949
+Node: GNU Free Documentation License105474
 
 End Tag Table
 
