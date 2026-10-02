@@ -2353,9 +2353,10 @@ search alongside the DuckDuckGo server above:
                                :args ("duckduckgo-mcp-server")))
              ("you" . (:url "https://api.you.com/mcp?profile=free"))))
 
-The free profile covers web search without an API key; the authenticated
-endpoint, <https://api.you.com/mcp>, follows the same pattern and adds
-content extraction and research tools.
+The free profile covers web search without an API key, with a limit of
+100 queries per day; the authenticated endpoint,
+<https://api.you.com/mcp>, follows the same pattern and adds content
+extraction and research tools.
 
 When ‘:categoryp t’ is used, Ellama derives a stable MCP tool identity
 as ‘<category>/<tool-name>’ (e.g., ‘mcp-ddg/search’).  Irreversible
@@ -3006,13 +3007,13 @@ Node: Keymap and Mode98702
 Node: Transient Menus99226
 Node: Running Blueprints Programmatically99740
 Node: MCP Integration100294
-Node: Agent Skills102051
-Node: Directory Structure102450
-Node: Creating a Skill103430
-Node: How It Works103820
-Node: Acknowledgments104226
-Node: Contributions104912
-Node: GNU Free Documentation License105437
+Node: Agent Skills102088
+Node: Directory Structure102487
+Node: Creating a Skill103467
+Node: How It Works103857
+Node: Acknowledgments104263
+Node: Contributions104949
+Node: GNU Free Documentation License105474
 
 End Tag Table
 

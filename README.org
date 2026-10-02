@@ -1828,9 +1828,9 @@ alongside the DuckDuckGo server above:
         ("you" . (:url "https://api.you.com/mcp?profile=free"))))
 #+end_src
 
-The free profile covers web search without an API key; the authenticated
-endpoint, https://api.you.com/mcp, follows the same pattern and adds content
-extraction and research tools.
+The free profile covers web search without an API key, with a limit of 100
+queries per day; the authenticated endpoint, https://api.you.com/mcp, follows
+the same pattern and adds content extraction and research tools.
 
 When ~:categoryp t~ is used, Ellama derives a stable MCP tool identity as
 ~<category>/<tool-name>~ (e.g., ~mcp-ddg/search~). Irreversible policy, audit,
