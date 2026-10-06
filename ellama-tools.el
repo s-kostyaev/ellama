@@ -239,6 +239,29 @@ outputs from all other tools still use DLP."
   :type 'number
   :group 'ellama)
 
+(defcustom ellama-tools-trash-command
+  (pcase system-type
+    ('darwin "trash")
+    ('gnu/linux (if (executable-find "gio") '("gio" "trash") 'emacs))
+    ('windows-nt "recycle.exe")
+    (_ 'emacs))
+  "Command used by the `trash_files' tool to move paths to the trash.
+Use `emacs' for built-in `move-file-to-trash', an executable name or path,
+or a list containing the executable followed by fixed arguments, for
+example (\"gio\" \"trash\").
+File names are appended as separate absolute-path arguments.  Shell aliases,
+pipelines and shell expansion are not supported.  Nil disables this tool.
+The default depends on `system-type'.  External commands must be in the
+variable `exec-path'.  Built-in trash cannot run inside SRT; configure an
+external command when sandboxing is enabled.  Built-in trash is also
+disabled on Windows, where Emacs' API cannot guarantee recycling.  Ellama
+never falls back to permanent deletion."
+  :type '(choice (const :tag "Disabled" nil)
+                 (const :tag "Built-in Emacs trash" emacs)
+                 (string :tag "Executable")
+                 (repeat :tag "Executable and fixed arguments" string))
+  :group 'ellama)
+
 (defcustom ellama-tools-balanced-edit-enabled t
   "Validate code syntax before tools write file contents.
 When non-nil, mutating file tools reject edits whose resulting buffer has
@@ -3724,6 +3747,85 @@ TIMEOUT is the optional command timeout in seconds."
      "Command timeout in seconds. Defaults to 5."))
    :description
    "Execute shell command CMD."))
+
+(defun ellama-tools--trash-file-paths (file-names)
+  "Validate FILE-NAMES and return their absolute local paths.
+Check every source write permission before moving any files."
+  (unless (and (or (listp file-names) (vectorp file-names))
+               (> (length file-names) 0))
+    (error "Provide a nonempty array of file names"))
+  (let (paths)
+    (dolist (file-name (seq--into-list file-names))
+      (unless (and (stringp file-name) (not (string-empty-p file-name)))
+        (error "Each file name must be a nonempty string"))
+      (let ((path (expand-file-name file-name)))
+        (when (file-remote-p path)
+          (error "Trash supports local paths only: %s" file-name))
+        (unless (or (file-exists-p path) (file-symlink-p path))
+          (error "Path does not exist: %s" file-name))
+        (when-let* ((denial (ellama-tools--tool-check-file-access path 'write)))
+          (error "%s" denial))
+        (push path paths)))
+    (nreverse paths)))
+
+(defun ellama-tools--trash-command-argv (file-names)
+  "Build the configured external trash command for FILE-NAMES.
+Return an argv list; signal an error for invalid configuration or paths."
+  (let* ((command ellama-tools-trash-command)
+         (argv (if (stringp command) (list command) command)))
+    (unless (and (consp argv) (cl-every #'stringp argv)
+                 (not (string-empty-p (car argv))))
+      (error "Configure `ellama-tools-trash-command' with a trash executable"))
+    (let ((paths (ellama-tools--trash-file-paths file-names))
+          (program (executable-find (car argv))))
+      (unless program
+        (error (concat "Trash executable `%s' was not found. Install it or "
+                       "configure `ellama-tools-trash-command'")
+               (car argv)))
+      (append (list program) (cdr argv) paths))))
+
+(defun ellama-tools-trash-files-tool (callback file-names)
+  "Move FILE-NAMES to the trash and call CALLBACK with the result.
+Use `ellama-tools-trash-command'.  Never fall back to permanent deletion."
+  (let ((moved 0))
+    (condition-case err
+        (if (eq ellama-tools-trash-command 'emacs)
+            (progn
+              (when (eq system-type 'windows-nt)
+                (error (concat "Built-in Windows trash cannot guarantee recycling. "
+                               "Configure an external trash command that "
+                               "refuses permanent deletion")))
+              (when ellama-tools-use-srt
+                (error (concat "Built-in Emacs trash cannot run inside SRT. "
+                               "Configure `ellama-tools-trash-command' with "
+                               "an external trash executable")))
+              (dolist (path (ellama-tools--trash-file-paths file-names))
+                (move-file-to-trash path)
+                (cl-incf moved))
+              (funcall callback (format "Moved %d path(s) to trash using Emacs."
+                                        moved)))
+          (let ((argv (ellama-tools--trash-command-argv file-names)))
+            (ellama-tools-shell-command-tool
+             callback (ellama-tools--shell-quote-command (car argv) (cdr argv)))))
+      (error
+       (funcall callback
+                (format "Cannot move files to trash (%d moved by Emacs): %s"
+                        moved (error-message-string err))))))
+  nil)
+
+(ellama-tools-define-tool
+ '(:function ellama-tools-trash-files-tool
+             :name "trash_files"
+             :async t
+             :args ((:name "file_names"
+                           :type array
+                           :items (:type string)
+                           :description "Local file or directory paths to move to the trash."))
+             :description
+             "Move local files or directories to the operating system trash for recovery.
+Prefer this tool to permanent deletion when removing valuable or uncertain
+files. Uses the user-configured trash command; reports an error if unavailable.
+Paths are literal; glob patterns are not expanded. Never empties the trash."))
 
 (defun ellama-tools--grep-case-args (case-sensitive)
   "Return grep arguments for CASE-SENSITIVE matching."

@@ -314,6 +314,159 @@ Return list with result and prompt."
            (should (ellama--session-extra-get
                     session :pending-tool-media))))))))
 
+(ert-deftest test-ellama-tools-trash-defaults ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((form (car (get 'ellama-tools-trash-command 'standard-value))))
+    (dolist (pair '((darwin . "trash") (windows-nt . "recycle.exe")))
+      (let ((system-type (car pair)))
+        (should (equal (eval form) (cdr pair)))))
+    (let ((system-type 'gnu/linux))
+      (cl-letf (((symbol-function 'executable-find) (lambda (_) "/usr/bin/gio")))
+        (should (equal (eval form) '("gio" "trash"))))
+      (cl-letf (((symbol-function 'executable-find) (lambda (_) nil)))
+        (should (eq (eval form) 'emacs))))))
+
+(ert-deftest test-ellama-tools-trash-built-in-preserves-recovery ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((source (make-temp-file "ellama-trash-source-"))
+        (recovery (make-temp-file "ellama-trash-recovery-" t))
+        (ellama-tools-trash-command 'emacs)
+        (ellama-tools-use-srt nil)
+        (system-type 'gnu/linux)
+        moved)
+    (unwind-protect
+        (progn
+          (with-temp-file source (insert "recoverable contents"))
+          ;; Exercise the real built-in portable backend in a private trash.
+          (cl-letf (((symbol-function 'system-move-file-to-trash) nil))
+            (let ((trash-directory recovery))
+              (should (string-match-p
+                       "Moved 1 path"
+                       (ellama-test--wait-tool-result
+                        #'ellama-tools-trash-files-tool (vector source))))))
+          (setq moved (expand-file-name (file-name-nondirectory source) recovery))
+          (should-not (file-exists-p source))
+          (should (equal (with-temp-buffer
+                           (insert-file-contents moved)
+                           (buffer-string))
+                         "recoverable contents")))
+      (when (file-exists-p source) (delete-file source))
+      (delete-directory recovery t))))
+
+(ert-deftest test-ellama-tools-trash-validates-batch-before-moving ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((source (make-temp-file "ellama-trash-"))
+         (missing (concat source "-missing"))
+         (ellama-tools-trash-command 'emacs)
+         (ellama-tools-use-srt nil)
+         (system-type 'gnu/linux)
+         moved)
+    (unwind-protect
+        (cl-letf (((symbol-function 'move-file-to-trash)
+                   (lambda (_) (setq moved t))))
+          (should (string-match-p
+                   "Path does not exist"
+                   (ellama-test--wait-tool-result
+                    #'ellama-tools-trash-files-tool (list source missing))))
+          (should-not moved)
+          (should (file-exists-p source)))
+      (delete-file source))))
+
+(ert-deftest test-ellama-tools-trash-native-refuses-srt-and-windows ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-trash-command 'emacs)
+        called)
+    (cl-letf (((symbol-function 'move-file-to-trash)
+               (lambda (_) (setq called t))))
+      (let ((ellama-tools-use-srt t) (system-type 'gnu/linux))
+        (should (string-match-p
+                 "cannot run inside SRT"
+                 (ellama-test--wait-tool-result
+                  #'ellama-tools-trash-files-tool '("unused")))))
+      (let ((ellama-tools-use-srt nil) (system-type 'windows-nt))
+        (should (string-match-p
+                 "cannot guarantee recycling"
+                 (ellama-test--wait-tool-result
+                  #'ellama-tools-trash-files-tool '("unused")))))
+      (should-not called))))
+
+(ert-deftest test-ellama-tools-trash-unavailable-does-not-delete ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((source (make-temp-file "ellama-trash-"))
+        (ellama-tools-use-srt nil)
+        called)
+    (unwind-protect
+        (cl-letf (((symbol-function 'executable-find) (lambda (_) nil))
+                  ((symbol-function 'ellama-tools-shell-command-tool)
+                   (lambda (&rest _) (setq called t))))
+          (dolist (command '(nil "nonexistent-trash"))
+            (let ((ellama-tools-trash-command command))
+              (should (string-match-p
+                       "configure\\|Configure\\|not found"
+                       (ellama-test--wait-tool-result
+                        #'ellama-tools-trash-files-tool (list source))))))
+          (should-not called)
+          (should (file-exists-p source)))
+      (delete-file source))))
+
+(ert-deftest test-ellama-tools-trash-external-keeps-literal-arguments ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((directory (make-temp-file "ellama-trash-" t))
+         (source (expand-file-name "--empty ; touch INJECTED" directory))
+         (script (expand-file-name "capture.sh" directory))
+         (default-directory directory)
+         ;; A harmless fake trash utility captures arguments, then fails.
+         (ellama-tools-trash-command (list "/bin/sh" script "trash"))
+         (ellama-tools-use-srt nil))
+    (unwind-protect
+        (progn
+          (with-temp-file source (insert "keep"))
+          (with-temp-file script
+            (insert "printf '%s\\n' \"$@\"\nexit 7\n"))
+          (let ((result (ellama-test--wait-tool-result
+                         #'ellama-tools-trash-files-tool (vector source))))
+            (should (string-match-p "exit code 7" result))
+            (should (string-match-p (regexp-quote source) result))
+            (should (string-match-p "trash" result)))
+          (should (file-exists-p source))
+          (should-not (file-exists-p (expand-file-name "INJECTED" directory))))
+      (delete-directory directory t))))
+
+(ert-deftest test-ellama-tools-trash-denied-path-never-starts-command ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((source (make-temp-file "ellama-trash-"))
+        (ellama-tools-trash-command "trash")
+        called)
+    (unwind-protect
+        (cl-letf (((symbol-function 'ellama-tools--tool-check-file-access)
+                   (lambda (_path operation)
+                     (should (eq operation 'write))
+                     "srt policy denied write access"))
+                  ((symbol-function 'ellama-tools-shell-command-tool)
+                   (lambda (&rest _) (setq called t))))
+          (should (string-match-p
+                   "srt policy denied"
+                   (ellama-test--wait-tool-result
+                    #'ellama-tools-trash-files-tool (list source))))
+          (should-not called)
+          (should (file-exists-p source)))
+      (delete-file source))))
+
+(ert-deftest test-ellama-tools-trash-rejects-invalid-and-remote-paths ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-trash-command 'emacs)
+        (ellama-tools-use-srt nil)
+        (system-type 'gnu/linux)
+        called)
+    (cl-letf (((symbol-function 'move-file-to-trash)
+               (lambda (_) (setq called t))))
+      (dolist (paths '(nil [] ("") (123) ("/ssh:example:/file")))
+        (should (string-match-p
+                 "Cannot move files to trash"
+                 (ellama-test--wait-tool-result
+                  #'ellama-tools-trash-files-tool paths))))
+      (should-not called))))
+
 (ert-deftest test-ellama-shell-command-tool-empty-success-output ()
   (should
    (string=

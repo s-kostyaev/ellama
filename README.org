@@ -592,6 +592,11 @@ generated text string.
   confirmation. Dangerous. Use at your own risk.
 - ~ellama-tools-allowed~: List of allowed ~ellama~ tools. Tools from this list
   will work without user confirmation.
+- ~ellama-tools-trash-command~: Executable used by ~trash_files~. Defaults to
+  ~"trash"~ on macOS, ~("gio" "trash")~ on GNU/Linux when ~gio~ is available,
+  ~"recycle.exe"~ on Windows, and ~emacs~ otherwise. Use ~emacs~ for built-in
+  trash, a string for an executable, a list for fixed arguments, or ~nil~ to
+  disable it. See Moving files to the trash below.
 - ~ellama-tools-argument-max-length~: Max length of function argument in the
   confirmation prompt. Default value 50.
 - ~session_file~: Materialize the full live Ellama session transcript to a
@@ -1299,6 +1304,67 @@ abstention or truncation metadata. Use a server that rejects truncated or
 undecidable requests with an error; a negative model answer is not proof that
 the operation is recoverable.
 
+Moving files to the trash:
+
+The ~trash_files~ tool moves local files and directories to the trash using
+~ellama-tools-trash-command~. Defaults are selected by operating system:
+
+- macOS: ~"trash"~. macOS 15 and later include this command. If it is missing,
+  select ~emacs~ or install
+  [[https://github.com/sindresorhus/macos-trash][macos-trash]] with ~brew
+  install macos-trash~.
+- GNU/Linux: ~("gio" "trash")~ when ~gio~ is available in Emacs' ~exec-path~;
+  otherwise ~emacs~. ~gio~ comes with GLib and is often already installed on
+  desktop systems. Another option is ~"trash-put"~ from
+  [[https://github.com/andreafrancia/trash-cli][trash-cli]], available through
+  distribution package managers, for example ~sudo apt install trash-cli~ on
+  Debian or Ubuntu.
+- Windows: ~"recycle.exe"~ from
+  [[https://www.maddogsw.com/cmdutils/][cmdutils]]. Install it and add its
+  directory to Emacs' ~exec-path~, or configure a full executable path.
+- Other systems: ~emacs~, which calls the built-in ~move-file-to-trash~
+  function.
+
+The ~emacs~ backend uses ~system-move-file-to-trash~ when supported by the Emacs
+build. Otherwise it uses Emacs' ~trash-directory~ or the freedesktop.org home
+trash. Emacs' freedesktop backend does not use per-volume trashcans.  Built-in
+transfers run synchronously. The built-in backend is disabled on Windows: Emacs
+uses an API whose undo flag only preserves recovery information if possible,
+rather than requiring recycling. See the
+[[https://learn.microsoft.com/en-us/windows/win32/api/shellapi/ns-shellapi-shfileopstructw][Windows
+API documentation]]. For Windows, configure a utility that refuses permanent
+deletion when recycling is unavailable.  External commands must be installed
+separately if unavailable; Ellama does not install them. Make sure they are in
+Emacs' ~exec-path~, or configure a full executable path.
+
+You can use another utility that accepts file paths as arguments:
+
+#+BEGIN_SRC emacs-lisp
+  ;; Use built-in Emacs trash on supported systems without an extra utility:
+  (setopt ellama-tools-trash-command 'emacs)
+  ;; Or choose an external command:
+  ;; (setopt ellama-tools-trash-command '("gio" "trash"))
+  ;; Or use an executable's full path:
+  ;; (setopt ellama-tools-trash-command "C:/Tools/cmdutils/recycle.exe")
+  (ellama-tools-enable-by-name "trash_files")
+#+END_SRC
+
+A string names one executable; use a list for fixed arguments. Shell aliases and
+pipelines are not supported. The tool passes literal absolute paths, so file
+names are not expanded as shell expressions. Only configure a command that moves
+paths to the trash; Ellama cannot verify the behavior of a custom executable.
+
+The tool uses the normal confirmation and DLP checks. External commands run
+through the shell sandbox when ~srt~ is enabled; its policy must allow the trash
+utility's required access, including writing to the trash location.  The ~emacs~
+backend refuses to run with ~srt~ enabled because its operations cannot run
+inside that sandbox; configure an external trash command instead. A missing
+command or failed transfer returns an error; Ellama never retries with permanent
+deletion. A failed or timed-out transfer may have moved some files already, so
+check their locations before retrying. Set ~ellama-tools-trash-command~ to ~nil~
+to disable execution.  Existing shell commands and scripts are not automatically
+rewritten to use the trash.
+
 Session bypass helper:
 
 #+BEGIN_SRC emacs-lisp
@@ -1869,9 +1935,9 @@ Example: adding DuckDuckGo search via the duckduckgo-mcp-server
 	       tools)))))
 #+end_src
 
-Remote MCP servers work the same way through a ~:url~ entry, so a hosted
-server needs no local process. For example, adding You.com's hosted search
-alongside the DuckDuckGo server above:
+Remote MCP servers work the same way through a ~:url~ entry, so a hosted server
+needs no local process. For example, adding You.com's hosted search alongside
+the DuckDuckGo server above:
 
 #+begin_src emacs-lisp
 (setq mcp-hub-servers

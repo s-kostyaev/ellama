@@ -922,6 +922,12 @@ File: ellama.info,  Node: Tool Access and Sandboxing,  Next: Task Templates Blue
      without user confirmation.  Dangerous.  Use at your own risk.
    • ‘ellama-tools-allowed’: List of allowed ‘ellama’ tools.  Tools from
      this list will work without user confirmation.
+   • ‘ellama-tools-trash-command’: Executable used by ‘trash_files’.
+     Defaults to ‘"trash"’ on macOS, ‘("gio" "trash")’ on GNU/Linux when
+     ‘gio’ is available, ‘"recycle.exe"’ on Windows, and ‘emacs’
+     otherwise.  Use ‘emacs’ for built-in trash, a string for an
+     executable, a list for fixed arguments, or ‘nil’ to disable it.
+     See Moving files to the trash below.
    • ‘ellama-tools-argument-max-length’: Max length of function argument
      in the confirmation prompt.  Default value 50.
    • ‘session_file’: Materialize the full live Ellama session transcript
@@ -1710,6 +1716,71 @@ results; Ellama does not select one automatically.  The llm 0.33.0 API
 does not expose provider abstention or truncation metadata.  Use a
 server that rejects truncated or undecidable requests with an error; a
 negative model answer is not proof that the operation is recoverable.
+
+Moving files to the trash:
+
+The ‘trash_files’ tool moves local files and directories to the trash
+using ‘ellama-tools-trash-command’.  Defaults are selected by operating
+system:
+
+   • macOS: ‘"trash"’.  macOS 15 and later include this command.  If it
+     is missing, select ‘emacs’ or install macos-trash
+     (https://github.com/sindresorhus/macos-trash) with ‘brew install
+     macos-trash’.
+   • GNU/Linux: ‘("gio" "trash")’ when ‘gio’ is available in Emacs'
+     ‘exec-path’; otherwise ‘emacs’.  ‘gio’ comes with GLib and is often
+     already installed on desktop systems.  Another option is
+     ‘"trash-put"’ from trash-cli
+     (https://github.com/andreafrancia/trash-cli), available through
+     distribution package managers, for example ‘sudo apt install
+     trash-cli’ on Debian or Ubuntu.
+   • Windows: ‘"recycle.exe"’ from cmdutils
+     (https://www.maddogsw.com/cmdutils/).  Install it and add its
+     directory to Emacs' ‘exec-path’, or configure a full executable
+     path.
+   • Other systems: ‘emacs’, which calls the built-in
+     ‘move-file-to-trash’ function.
+
+The ‘emacs’ backend uses ‘system-move-file-to-trash’ when supported by
+the Emacs build.  Otherwise it uses Emacs' ‘trash-directory’ or the
+freedesktop.org home trash.  Emacs' freedesktop backend does not use
+per-volume trashcans.  Built-in transfers run synchronously.  The
+built-in backend is disabled on Windows: Emacs uses an API whose undo
+flag only preserves recovery information if possible, rather than
+requiring recycling.  See the Windows API documentation
+(https://learn.microsoft.com/en-us/windows/win32/api/shellapi/ns-shellapi-shfileopstructw).
+For Windows, configure a utility that refuses permanent deletion when
+recycling is unavailable.  External commands must be installed
+separately if unavailable; Ellama does not install them.  Make sure they
+are in Emacs' ‘exec-path’, or configure a full executable path.
+
+You can use another utility that accepts file paths as arguments:
+
+     ;; Use built-in Emacs trash on supported systems without an extra utility:
+     (setopt ellama-tools-trash-command 'emacs)
+     ;; Or choose an external command:
+     ;; (setopt ellama-tools-trash-command '("gio" "trash"))
+     ;; Or use an executable's full path:
+     ;; (setopt ellama-tools-trash-command "C:/Tools/cmdutils/recycle.exe")
+     (ellama-tools-enable-by-name "trash_files")
+
+A string names one executable; use a list for fixed arguments.  Shell
+aliases and pipelines are not supported.  The tool passes literal
+absolute paths, so file names are not expanded as shell expressions.
+Only configure a command that moves paths to the trash; Ellama cannot
+verify the behavior of a custom executable.
+
+The tool uses the normal confirmation and DLP checks.  External commands
+run through the shell sandbox when ‘srt’ is enabled; its policy must
+allow the trash utility's required access, including writing to the
+trash location.  The ‘emacs’ backend refuses to run with ‘srt’ enabled
+because its operations cannot run inside that sandbox; configure an
+external trash command instead.  A missing command or failed transfer
+returns an error; Ellama never retries with permanent deletion.  A
+failed or timed-out transfer may have moved some files already, so check
+their locations before retrying.  Set ‘ellama-tools-trash-command’ to
+‘nil’ to disable execution.  Existing shell commands and scripts are not
+automatically rewritten to use the trash.
 
 Session bypass helper:
 
@@ -3030,45 +3101,45 @@ Node: Tool Prompts and Edit Behavior37536
 Node: DLP and Irreversible Actions38363
 Node: Transient Menus Community Prompts and Diagnostics39478
 Node: Tool Access and Sandboxing40908
-Node: Task Templates Blueprints and Skills44375
-Node: Agent and Subagent Loops45754
-Node: Session Provider Keys47213
-Node: Session Compaction48658
-Node: Image Input51708
-Node: Audio Input54023
-Node: macOS microphone permission56691
-Node: Task Tool Subagents58852
-Node: Plan-and-Act Agent Loop62758
-Node: Edit Tool Shell Hooks65339
-Node: DLP for Tool Input/Output67632
-Node: SRT Filesystem Policy for Tools86163
-Node: Context Management91834
-Node: Transient Menus for Context Management92902
-Node: Managing the Context94976
-Node: Considerations95751
-Node: Minor modes96078
-Node: ellama-context-header-line-mode96590
-Node: ellama-context-header-line-global-mode97208
-Node: ellama-context-mode-line-mode97612
-Node: ellama-context-mode-line-global-mode98191
-Node: ellama-session-header-line-mode98585
-Node: ellama-session-mode-line-mode99089
-Node: Using Blueprints99516
-Node: Key Components99912
-Node: Creating and Managing100271
-Node: Blueprint Files100909
-Node: Variables101328
-Node: Keymap and Mode101664
-Node: Transient Menus102188
-Node: Running Blueprints Programmatically102702
-Node: MCP Integration103256
-Node: Agent Skills105050
-Node: Directory Structure105449
-Node: Creating a Skill106429
-Node: How It Works106819
-Node: Acknowledgments107225
-Node: Contributions107911
-Node: GNU Free Documentation License108436
+Node: Task Templates Blueprints and Skills44796
+Node: Agent and Subagent Loops46175
+Node: Session Provider Keys47634
+Node: Session Compaction49079
+Node: Image Input52129
+Node: Audio Input54444
+Node: macOS microphone permission57112
+Node: Task Tool Subagents59273
+Node: Plan-and-Act Agent Loop63179
+Node: Edit Tool Shell Hooks65760
+Node: DLP for Tool Input/Output68053
+Node: SRT Filesystem Policy for Tools90135
+Node: Context Management95806
+Node: Transient Menus for Context Management96874
+Node: Managing the Context98948
+Node: Considerations99723
+Node: Minor modes100050
+Node: ellama-context-header-line-mode100562
+Node: ellama-context-header-line-global-mode101180
+Node: ellama-context-mode-line-mode101584
+Node: ellama-context-mode-line-global-mode102163
+Node: ellama-session-header-line-mode102557
+Node: ellama-session-mode-line-mode103061
+Node: Using Blueprints103488
+Node: Key Components103884
+Node: Creating and Managing104243
+Node: Blueprint Files104881
+Node: Variables105300
+Node: Keymap and Mode105636
+Node: Transient Menus106160
+Node: Running Blueprints Programmatically106674
+Node: MCP Integration107228
+Node: Agent Skills109022
+Node: Directory Structure109421
+Node: Creating a Skill110401
+Node: How It Works110791
+Node: Acknowledgments111197
+Node: Contributions111883
+Node: GNU Free Documentation License112408
 
 End Tag Table
 
