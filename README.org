@@ -1174,6 +1174,13 @@ Key settings:
 - ~ellama-tools-irreversible-enabled~: Enable irreversible-action handling.
 - ~ellama-tools-irreversible-default-action~: Default irreversible action
   (~warn~ or ~block~, with monitor downgrade to ~warn-strong~).
+- ~ellama-tools-irreversible-decision-provider~: Optional provider for the
+  decision API in llm 0.33.0 or later. Nil disables decision checks.
+- ~ellama-tools-irreversible-decision-threshold~: Minimum probability for an
+  irreversible finding (default ~0.5~, inclusive).
+- ~ellama-tools-irreversible-decision-max-scan-size~: Maximum input bytes sent
+  to the decision provider (default ~32768~). Larger or truncated inputs require
+  the irreversible policy instead of skipping the check.
 - ~ellama-tools-irreversible-unknown-tool-action~: Default action for unknown
   MCP tools (~warn~ or ~allow~).
 - ~ellama-tools-irreversible-require-typed-confirm~: Require typed phrase for
@@ -1246,6 +1253,51 @@ Irreversible action safety (v1):
   trusted; trust is bound to repo root, remote URL, and policy hash
 - audit sink write failure for irreversible decisions is fail-closed; in
   interactive sessions a separate explicit confirmation can override once
+
+Decision models for irreversible input:
+
+Set ~ellama-tools-irreversible-decision-provider~ to add a decision model to
+regex checks. This detector is disabled by default and is independent of the
+chat-based ~ellama-tools-dlp-llm-check-enabled~ safety check. It requires llm
+0.33.0 or later and a provider that supports ~llm-decide~.
+
+For example, with a model already installed in Ollaya:
+
+#+BEGIN_SRC emacs-lisp
+  (require 'llm-typesafe)
+  (setopt ellama-tools-irreversible-decision-provider
+          (make-llm-typesafe-compatible
+           :url "http://localhost:11435/v1/systemone"
+           :model "your-installed-decision-model"))
+#+END_SRC
+
+The model answers a boolean question about permanent data loss, overwriting
+shared history, external sending or publishing, and moving money. Each request
+contains one input string and its tool identity and argument name. It has no
+conversation history or tools. Structured arguments are checked one string leaf
+at a time, as with the other DLP detectors; the model does not see the complete
+tool call or filesystem recovery state.
+
+A probability at or above the threshold adds an irreversible finding. With
+~ellama-tools-irreversible-default-action~ set to ~warn~, execution requires
+typed confirmation. With ~block~, it blocks in ~enforce~ and requires typed
+confirmation in ~monitor~. Negative answers never clear regex findings or
+approve an unknown MCP tool. Existing scoped bypasses and trusted project policy
+still apply. Inputs already flagged as irreversible, inputs blocked in
+~enforce~, read-only tools, and outputs do not make a decision request.
+
+API errors, malformed probabilities, and inputs above the size limit or
+truncated by Ellama use the same irreversible policy. They do not silently allow
+execution, even when ~ellama-tools-dlp-input-fail-open~ is enabled.  Incident
+records include the decision status, probability, and error type; they omit the
+input text and provider error messages.
+
+The check runs synchronously before execution, so cold model loading can pause
+the tool call. Choose a model using both quality and latency results; Ellama
+does not select one automatically. The llm 0.33.0 API does not expose provider
+abstention or truncation metadata. Use a server that rejects truncated or
+undecidable requests with an error; a negative model answer is not proof that
+the operation is recoverable.
 
 Session bypass helper:
 

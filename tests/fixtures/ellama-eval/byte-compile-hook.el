@@ -1,5 +1,8 @@
 ;;; byte-compile-hook.el --- Eval edit hook -*- lexical-binding: t; -*-
 
+;; Copyright (C) 2026  Free Software Foundation, Inc.
+;; SPDX-License-Identifier: GPL-3.0-or-later
+
 ;;; Commentary:
 ;;
 ;; Byte-compile the file identified by ELLAMA_FILE_NAME and exit unsuccessfully
