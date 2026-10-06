@@ -106,6 +106,32 @@
      (should-not (string-match-p "secret command"
                                  (prin1-to-string ellama-tools-dlp--incident-log))))))
 
+(ert-deftest test-ellama-tools-dlp-decision-unicode-request-round-trip ()
+  (ellama-test-dlp-with-decision
+   (dolist (payload '("Сохрани правки в ellama.el"
+                      "Überarbeite ellama.el"
+                      "trash -- '日本語.el'"))
+     (let ((scan-context
+            (plist-put (copy-tree context) :tool-identity "локальный/shell"))
+           captured-payload)
+       (cl-letf (((symbol-function 'llm-decide)
+                  (lambda (_provider _questions state)
+                    ;; The HTTP client serializes STATE inside another JSON.
+                    (let* ((request (json-parse-string
+                                     (json-serialize (list :state state))
+                                     :object-type 'plist))
+                           (decoded (json-parse-string
+                                     (plist-get request :state)
+                                     :object-type 'plist)))
+                      (setq captured-payload (plist-get decoded :payload))
+                      (should (equal (plist-get decoded :tool_identity)
+                                     "локальный/shell")))
+                    (list (cons 'irreversible
+                                (make-llm-decision-bool :confidence 0.1))))))
+         (let ((scan (ellama-tools-dlp--scan-text payload scan-context)))
+           (should (eq (plist-get (plist-get scan :verdict) :action) 'allow))
+           (should (equal captured-payload payload))))))))
+
 (ert-deftest test-ellama-tools-dlp-decision-invalid-response-needs-confirmation ()
   (ellama-test-dlp-with-decision
    (dolist (answer (list nil '((unrelated . t)) '((irreversible . t))

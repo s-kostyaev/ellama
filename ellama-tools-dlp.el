@@ -2885,11 +2885,13 @@ Errors contain no provider message or payload."
                     "Read-only operation, printed example, dry run, rolled-back "
                     "transaction, recoverable local change or unsent draft.")))
                  (state
-                  (json-serialize
-                   (list :tool (plist-get context :tool-name)
-                         :tool_identity (plist-get context :tool-identity)
-                         :argument (plist-get context :arg-name)
-                         :payload text)))
+                  (decode-coding-string
+                   (json-serialize
+                    (list :tool (plist-get context :tool-name)
+                          :tool_identity (plist-get context :tool-identity)
+                          :argument (plist-get context :arg-name)
+                          :payload text))
+                   'utf-8))
                  ;; Decision calls are isolated from chat and tool execution.
                  (llm-log nil)
                  (answers (llm-decide
