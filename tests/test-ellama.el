@@ -407,6 +407,65 @@ STYLE controls partial message shape.  Default value is `word-leading'."
      '((read_file . "\"one\\ntwo\"")))
     "read_file\n  one\n  two")))
 
+(ert-deftest test-ellama-format-tool-results-preserves-incomplete-json ()
+  (dolist (value '("" "   " "{" "[1," "\"unterminated"))
+    (should
+     (equal (ellama--format-tool-results (list (cons "grep_in_file" value)))
+            (concat "grep_in_file\n  " value)))))
+
+(ert-deftest test-ellama-stream-continues-after-empty-tool-result ()
+  (let* ((ellama-response-process-method 'async)
+         (ellama-spinner-enabled nil)
+         (ellama-fill-paragraphs nil)
+         (provider (make-llm-openai-compatible
+                    :url "http://localhost:8080/v1/"
+                    :chat-model "test-model"))
+         (tool (llm-make-tool
+                :name "grep_in_file"
+                :description "Search a file."
+                :args '((:name "filename" :type string
+                               :description "File to search."))
+                :function (lambda (_filename) "")))
+         requests done-text)
+    (with-temp-buffer
+      (cl-letf (((symbol-function 'llm-request-plz-async)
+                 (lambda (_url &rest args)
+                   (push args requests)
+                   (length requests))))
+        (ellama-stream "Search the file."
+                       :buffer (current-buffer)
+                       :provider provider
+                       :tools (list tool)
+                       :on-error (lambda (msg) (ert-fail msg))
+                       :on-done (lambda (text) (setq done-text text)))
+        (should (= (length requests) 1))
+        (funcall
+         (plist-get (car requests) :on-success)
+         (json-parse-string
+          (json-serialize
+           '(:choices
+             [(:finish_reason "tool_calls"
+                              :message
+                              (:role "assistant" :content "Searching."
+                                     :tool_calls
+                                     [(:id "call-1" :type "function"
+                                           :function (:name "grep_in_file"
+                                                            :arguments "{\"filename\":\"test.go\"}"))]))]))
+          :object-type 'alist))
+        (should (= (length requests) 2))
+        (should (string-match-p "grep_in_file" (buffer-string)))
+        (funcall
+         (plist-get (car requests) :on-success)
+         (json-parse-string
+          (json-serialize
+           '(:choices [(:message (:role "assistant"
+                                        :content "No matches."))]))
+          :object-type 'alist))
+        (should (equal done-text "No matches."))
+        (should (string-match-p "No matches\\." (buffer-string)))
+        (should-not ellama--current-request)
+        (should-not ellama-request-mode)))))
+
 (ert-deftest test-ellama-handle-partial-scrolls-tool-results ()
   (let ((buffer (generate-new-buffer " *ellama-tool-results-test*"))
         (reasoning-buffer (generate-new-buffer " *ellama-tool-reasoning-test*"))
