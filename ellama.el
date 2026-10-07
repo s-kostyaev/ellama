@@ -6,7 +6,7 @@
 ;; URL: http://github.com/s-kostyaev/ellama
 ;; Keywords: help local tools
 ;; Package-Requires: ((emacs "28.1") (llm "0.31.1") (plz "0.8") (transient "0.7") (compat "29.1") (yaml "1.2.3"))
-;; Version: 1.33.0
+;; Version: 1.33.1
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Created: 8th Oct 2023
 
@@ -1871,7 +1871,7 @@ Return the output FILE-NAME.  Finish the recording with
     (condition-case nil
         (let ((decoded (json-parse-string value)))
           (if (stringp decoded) decoded value))
-      (json-parse-error value))))
+      ((json-parse-error json-end-of-file) value))))
 
 (defun ellama--format-tool-result-value (value)
   "Return human-readable representation of tool result VALUE."

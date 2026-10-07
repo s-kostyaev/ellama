@@ -407,6 +407,40 @@ STYLE controls partial message shape.  Default value is `word-leading'."
      '((read_file . "\"one\\ntwo\"")))
     "read_file\n  one\n  two")))
 
+(ert-deftest test-ellama-format-tool-results-preserves-incomplete-json ()
+  (dolist (value '("" "   " "{" "[1," "\"unterminated"))
+    (should
+     (equal (ellama--format-tool-results (list (cons "grep_in_file" value)))
+            (concat "grep_in_file\n  " value)))))
+
+(ert-deftest test-ellama-stream-continues-after-empty-tool-result ()
+  (let* ((ellama-response-process-method 'async)
+         (ellama-spinner-enabled nil)
+         (ellama-fill-paragraphs nil)
+         requests done-text)
+    (with-temp-buffer
+      (cl-letf (((symbol-function 'llm-chat-async)
+                 (lambda (_provider _prompt response-callback _error-callback
+                                    &optional _multi-output)
+                   (push response-callback requests)
+                   (length requests))))
+        (ellama-stream "Search the file."
+                       :buffer (current-buffer)
+                       :provider (make-llm-fake)
+                       :on-error (lambda (msg) (ert-fail msg))
+                       :on-done (lambda (text) (setq done-text text)))
+        (should (= (length requests) 1))
+        (funcall (car requests)
+                 '(:text "Searching."
+                         :tool-results (("grep_in_file" . ""))))
+        (should (= (length requests) 2))
+        (should (string-match-p "grep_in_file" (buffer-string)))
+        (funcall (car requests) '(:text "No matches."))
+        (should (equal done-text "No matches."))
+        (should (string-match-p "No matches\\." (buffer-string)))
+        (should-not ellama--current-request)
+        (should-not ellama-request-mode)))))
+
 (ert-deftest test-ellama-handle-partial-scrolls-tool-results ()
   (let ((buffer (generate-new-buffer " *ellama-tool-results-test*"))
         (reasoning-buffer (generate-new-buffer " *ellama-tool-reasoning-test*"))

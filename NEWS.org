@@ -1,3 +1,7 @@
+* Version 1.33.1
+- Fix ~json-end-of-file~ errors when displaying empty tool results or incomplete
+  JSON text, allowing conversations to continue.
+
 * Version 1.33.0
 
 - Add ~session_file~ tool to expose the current session transcript as a file,
