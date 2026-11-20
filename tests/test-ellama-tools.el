@@ -27,6 +27,7 @@
 (require 'cl-lib)
 (require 'ellama)
 (require 'ert)
+(require 'llm-fake)
 
 (defconst ellama-test-root
   (expand-file-name
@@ -296,6 +297,113 @@ Return list with result and prompt."
                           (expand-file-name file-name)))
            (should (equal (plist-get (car pending) :mime-type)
                           "audio/wav"))))))))
+
+(ert-deftest test-ellama-read-file-tool-screenshot-with-nonbreaking-space ()
+  (let* ((dir (make-temp-file "ellama-screenshot-" t))
+         (file (expand-file-name
+                "Снимок экрана\u00a0— 2026-11-20 в 10.27.41.png" dir))
+         (typed-name (replace-regexp-in-string "\u00a0" " " file))
+         (session (make-ellama-session :id "screenshot"
+                                       :provider (make-llm-fake)))
+         (ellama-tools--current-session session)
+         (ellama--current-session nil))
+    (unwind-protect
+        (ellama-test--with-temp-image-file
+         (lambda (fixture)
+           (copy-file fixture file)
+           (cl-letf (((symbol-function 'llm-capabilities)
+                      (lambda (_provider) '(image-input))))
+             (dolist (path (list file typed-name))
+               (should (string-match-p
+                        "Image file queued"
+                        (json-read-from-string
+                         (ellama-tools-read-file-tool path)))))
+             (let ((pending (ellama--session-extra-get
+                             session :pending-tool-media)))
+               (should (equal (mapcar (lambda (item) (plist-get item :file))
+                                      pending)
+                              (list file file))))
+             (should (equal (llm-media-data (ellama--file-to-llm-media file))
+                            (llm-media-data
+                             (ellama--file-to-llm-media fixture)))))))
+      (delete-directory dir t))))
+
+(ert-deftest test-ellama-file-tools-with-unicode-paths ()
+  (let* ((dir (make-temp-file "ellama-paths-" t))
+         (file (expand-file-name "Заметки — [часть '1']\u202f2.txt" dir))
+         (typed-name (replace-regexp-in-string "\u202f" " " file))
+         (default-directory (file-name-as-directory dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "Первая строка\nВторая строка\n"))
+          (let ((cmd (concat "cat " (shell-quote-argument file))))
+            (should (equal (ellama-test--wait-shell-command-result cmd)
+                           "Первая строка\nВторая строка"))
+            ;; Exercise the outer shell quoting without requiring SRT.
+            (let ((ellama-tools-use-srt t)
+                  (ellama-tools-srt-args nil))
+              (cl-letf (((symbol-function 'executable-find)
+                         (lambda (_program) "/bin/sh")))
+                (should (equal (ellama-test--wait-shell-command-result cmd)
+                               "Первая строка\nВторая строка")))))
+          (should (string-match-p
+                   (regexp-quote (file-name-nondirectory file))
+                   (ellama-tools-directory-tree-tool dir)))
+          (should (string-match-p
+                   "Вторая строка"
+                   (json-read-from-string
+                    (ellama-tools-grep-tool dir "Вторая строка"))))
+          (dolist (path (list file typed-name))
+            (should (equal (json-read-from-string
+                            (ellama-tools-read-file-tool path))
+                           "Первая строка\nВторая строка\n"))
+            (should (equal (json-read-from-string
+                            (ellama-tools-grep-in-file-tool
+                             "Вторая строка" path))
+                           "2:Вторая строка"))
+            (should (equal (json-read-from-string
+                            (ellama-tools-lines-range-tool path 2 2))
+                           "Вторая строка"))
+            (should (= (ellama-tools-count-lines-tool path) 2))))
+      (when-let* ((buffer (get-file-buffer file)))
+        (kill-buffer buffer))
+      (delete-directory dir t))))
+
+(ert-deftest test-ellama-read-file-tool-space-variants-require-unique-match ()
+  (let* ((dir (make-temp-file "ellama-path-variants-" t))
+         (file (expand-file-name "one two.txt" dir))
+         (nbsp-file (expand-file-name "one\u00a0two.txt" dir))
+         (nnbsp-file (expand-file-name "one\u202ftwo.txt" dir)))
+    (unwind-protect
+        (progn
+          (write-region "literal" nil file nil 'silent)
+          (write-region "alternate" nil nbsp-file nil 'silent)
+          (should (equal (json-read-from-string
+                          (ellama-tools-read-file-tool file))
+                         "literal"))
+          (should (equal (json-read-from-string
+                          (ellama-tools-read-file-tool nnbsp-file))
+                         (format "File %s does not exist." nnbsp-file))))
+      (delete-directory dir t))))
+
+(ert-deftest test-ellama-read-file-tool-space-variants-respect-access-policy ()
+  (let* ((dir (make-temp-file "ellama-path-policy-" t))
+         (file (expand-file-name "one\u00a0two.txt" dir))
+         (typed-name (expand-file-name "one two.txt" dir)))
+    (unwind-protect
+        (progn
+          (write-region "protected" nil file nil 'silent)
+          (ellama-test--with-temp-srt-settings
+              (json-encode (list :filesystem (list :denyRead (vector file))))
+            (let ((ellama-tools-use-srt t)
+                  (ellama-tools-srt-args (list "--settings" settings-file)))
+              (should (string-match-p "srt policy denied read access"
+                                      (ellama-tools-read-file-tool file)))
+              (should (equal (json-read-from-string
+                              (ellama-tools-read-file-tool typed-name))
+                             (format "File %s does not exist." typed-name))))))
+      (delete-directory dir t))))
 
 (ert-deftest test-ellama-read-file-tool-auto-detects-audio ()
   (ellama-test--with-temp-tool-audio-file

@@ -1847,12 +1847,14 @@ Signal `user-error' when VALUE has an invalid shape."
     (user-error "Missing srt settings file: %s" config-path))
   (let* ((json (condition-case err
                    (with-temp-buffer
+                     ;; The JSON parser decodes UTF-8 from unibyte buffers.
+                     (set-buffer-multibyte nil)
                      (insert-file-contents-literally config-path)
                      (json-parse-buffer :object-type 'alist
                                         :array-type 'array
                                         :null-object :json-null
                                         :false-object :json-false))
-                 (json-parse-error
+                 ((json-parse-error json-utf8-decode-error)
                   (user-error "Invalid srt JSON config %s: %s"
                               config-path
                               (error-message-string err)))
@@ -2116,6 +2118,34 @@ Return error message on denial when `ellama-tools-use-srt' is non-nil."
                (target (ellama-tools--srt-normalize-target-path path op)))
           (format "srt policy denied %s access to %s (target %s) using %s: %s"
                   op path target config-path reason))))))
+
+(defun ellama-tools--resolve-read-file-name (path)
+  "Return PATH or its unique space variant in the same local directory.
+Try ordinary, nonbreaking, and narrow nonbreaking spaces in the basename
+when the exact path is missing and the sandbox permits the lookup."
+  (let* ((basename (file-name-nondirectory path))
+         (spaces "[ \u00a0\u202f]"))
+    (or (when-let* (((string-match-p spaces basename))
+                    ((not (file-remote-p path)))
+                    ((not (file-exists-p path)))
+                    ((not (ellama-tools--tool-check-file-access path 'read)))
+                    (dir (file-name-directory (expand-file-name path)))
+                    ((not (ellama-tools--tool-check-file-access dir 'list)))
+                    (pattern (concat "\\`"
+                                     (mapconcat #'regexp-quote
+                                                (split-string basename spaces)
+                                                spaces)
+                                     "\\'"))
+                    (matches (condition-case nil
+                                 (let ((case-fold-search nil))
+                                   (directory-files dir t pattern t 2))
+                               (file-error nil)))
+                    ((null (cdr matches)))
+                    (match (car matches))
+                    ((not (ellama-tools--tool-check-file-access match 'read)))
+                    ((file-exists-p match)))
+          match)
+        path)))
 
 (defun ellama-tools--shell-quote-command (program args)
   "Return shell command string for PROGRAM with ARGS."
@@ -2431,6 +2461,7 @@ TIMEOUT is the timeout in seconds used when RESULT reports a timeout."
 (defun ellama-tools-read-file-tool (file-name &optional mode)
   "Read the file FILE-NAME.
 MODE can be `auto', `text', `image' or `audio'."
+  (setq file-name (ellama-tools--resolve-read-file-name file-name))
   (or (ellama-tools--tool-check-file-access file-name 'read)
       (let ((result
              (cond
@@ -3713,7 +3744,7 @@ TIMEOUT is the optional command timeout in seconds."
      :type
      string
      :description
-     "Shell command to execute.")
+     "Shell command to execute. Quote file paths containing spaces and preserve the exact characters in each path.")
     (:name
      "timeout"
      :type
@@ -3804,6 +3835,7 @@ TIMEOUT is the optional command timeout in seconds."
                                                      &optional case-sensitive)
   "Grep SEARCH-STRING in FILE.
 Match case-insensitively unless CASE-SENSITIVE is non-nil."
+  (setq file (ellama-tools--resolve-read-file-name file))
   (or (ellama-tools--tool-check-file-access file 'read)
       (json-encode
        (cond
@@ -3897,6 +3929,7 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
 
 (defun ellama-tools-count-lines-tool (file-name)
   "Count lines in file FILE-NAME."
+  (setq file-name (ellama-tools--resolve-read-file-name file-name))
   (or (ellama-tools--tool-check-file-access file-name 'read)
       (if (not (file-exists-p file-name))
           (format "File %s does not exist." file-name)
@@ -3923,6 +3956,7 @@ ANSWER-VARIANT-LIST is a list of possible answer variants."))
 
 (defun ellama-tools-lines-range-tool (file-name from to)
   "Return content of file FILE-NAME lines in range FROM TO."
+  (setq file-name (ellama-tools--resolve-read-file-name file-name))
   (or (ellama-tools--tool-check-file-access file-name 'read)
       (json-encode
        (cond
