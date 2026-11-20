@@ -1,4 +1,4 @@
-This is ellama.info, produced by makeinfo version 7.1 from ellama.texi.
+This is ellama.info, produced by makeinfo version 7.2 from ellama.texi.
 
 Copyright (C) 2023-2026 Free Software Foundation, Inc.
 
@@ -195,7 +195,6 @@ Agent Skills
 * Directory Structure::
 * Creating a Skill::
 * How It Works::
-
 
 
 File: ellama.info,  Node: Installation,  Next: Commands,  Prev: Top,  Up: Top
@@ -2947,77 +2946,77 @@ recommend releasing these examples in parallel under your choice of free
 software license, such as the GNU General Public License, to permit
 their use in free software.
 
-
 
 Tag Table:
 Node: Top2548
-Node: Installation6785
-Node: Commands9853
-Node: Core Chat and Agent Setup10195
-Node: Ask and Media Input11470
-Node: Text Writing and Transformation13810
-Node: Code16073
-Node: Providers and Models17177
-Node: Sessions18123
-Node: Context18766
-Node: Chat Translation20673
-Node: Blueprints and Community Prompts20977
-Node: Tools and DLP21549
-Node: Keymap22763
-Node: Configuration26322
-Node: Option Reference26917
-Node: Core Behavior and Providers27446
-Node: Sessions and Naming29056
-Node: Task Providers and Media32199
-Node: Display Context and Reasoning33132
-Node: Blueprints Prompts and Conversion36235
-Node: Tool Prompts and Edit Behavior37536
-Node: DLP and Irreversible Actions38363
-Node: Transient Menus Community Prompts and Diagnostics39478
-Node: Tool Access and Sandboxing40908
-Node: Task Templates Blueprints and Skills44375
-Node: Agent and Subagent Loops45754
-Node: Session Provider Keys47213
-Node: Session Compaction48658
-Node: Image Input51708
-Node: Audio Input54023
-Node: macOS microphone permission56691
-Node: Task Tool Subagents58852
-Node: Plan-and-Act Agent Loop62758
-Node: Edit Tool Shell Hooks65339
-Node: DLP for Tool Input/Output67632
-Node: SRT Filesystem Policy for Tools83201
-Node: Context Management88872
-Node: Transient Menus for Context Management89940
-Node: Managing the Context92014
-Node: Considerations92789
-Node: Minor modes93116
-Node: ellama-context-header-line-mode93628
-Node: ellama-context-header-line-global-mode94246
-Node: ellama-context-mode-line-mode94650
-Node: ellama-context-mode-line-global-mode95229
-Node: ellama-session-header-line-mode95623
-Node: ellama-session-mode-line-mode96127
-Node: Using Blueprints96554
-Node: Key Components96950
-Node: Creating and Managing97309
-Node: Blueprint Files97947
-Node: Variables98366
-Node: Keymap and Mode98702
-Node: Transient Menus99226
-Node: Running Blueprints Programmatically99740
-Node: MCP Integration100294
-Node: Agent Skills102088
-Node: Directory Structure102487
-Node: Creating a Skill103467
-Node: How It Works103857
-Node: Acknowledgments104263
-Node: Contributions104949
-Node: GNU Free Documentation License105474
+Node: Installation6784
+Node: Commands9852
+Node: Core Chat and Agent Setup10194
+Node: Ask and Media Input11469
+Node: Text Writing and Transformation13809
+Node: Code16072
+Node: Providers and Models17176
+Node: Sessions18122
+Node: Context18765
+Node: Chat Translation20672
+Node: Blueprints and Community Prompts20976
+Node: Tools and DLP21548
+Node: Keymap22762
+Node: Configuration26321
+Node: Option Reference26916
+Node: Core Behavior and Providers27445
+Node: Sessions and Naming29055
+Node: Task Providers and Media32198
+Node: Display Context and Reasoning33131
+Node: Blueprints Prompts and Conversion36234
+Node: Tool Prompts and Edit Behavior37535
+Node: DLP and Irreversible Actions38362
+Node: Transient Menus Community Prompts and Diagnostics39477
+Node: Tool Access and Sandboxing40907
+Node: Task Templates Blueprints and Skills44374
+Node: Agent and Subagent Loops45753
+Node: Session Provider Keys47212
+Node: Session Compaction48657
+Node: Image Input51707
+Node: Audio Input54022
+Node: macOS microphone permission56690
+Node: Task Tool Subagents58851
+Node: Plan-and-Act Agent Loop62757
+Node: Edit Tool Shell Hooks65338
+Node: DLP for Tool Input/Output67631
+Node: SRT Filesystem Policy for Tools83200
+Node: Context Management88871
+Node: Transient Menus for Context Management89939
+Node: Managing the Context92013
+Node: Considerations92788
+Node: Minor modes93115
+Node: ellama-context-header-line-mode93627
+Node: ellama-context-header-line-global-mode94245
+Node: ellama-context-mode-line-mode94649
+Node: ellama-context-mode-line-global-mode95228
+Node: ellama-session-header-line-mode95622
+Node: ellama-session-mode-line-mode96126
+Node: Using Blueprints96553
+Node: Key Components96949
+Node: Creating and Managing97308
+Node: Blueprint Files97946
+Node: Variables98365
+Node: Keymap and Mode98701
+Node: Transient Menus99225
+Node: Running Blueprints Programmatically99739
+Node: MCP Integration100293
+Node: Agent Skills102087
+Node: Directory Structure102486
+Node: Creating a Skill103466
+Node: How It Works103856
+Node: Acknowledgments104262
+Node: Contributions104948
+Node: GNU Free Documentation License105473
 
 End Tag Table
 
 
 Local Variables:
 coding: utf-8
+Info-documentlanguage: en
 End:

@@ -1,3 +1,10 @@
+* Version 1.33.2
+- Fix file reads when a path uses ordinary spaces in place of nonbreaking
+  spaces, as can happen with macOS screenshot names. If the exact path is
+  missing, ~read_file~, ~grep_in_file~, ~lines_range~, and ~count_lines~ can use
+  a unique match in the same directory.
+- Read ~srt~ settings as UTF-8 so sandbox rules can contain Unicode paths.
+
 * Version 1.33.1
 - Fix ~json-end-of-file~ errors when displaying empty tool results or incomplete
   JSON text, allowing conversations to continue.
