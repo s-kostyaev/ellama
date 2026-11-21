@@ -1260,6 +1260,12 @@ Irreversible action safety (v1):
 - audit sink write failure for irreversible decisions is fail-closed; in
   interactive sessions a separate explicit confirmation can override once
 
+Ellama applies the irreversible policy to direct ~rm~ calls with a file operand
+and recognized options, even without a decision provider. The built-in
+irreversible detectors skip read-only tools and the built-in ~trash_files~
+implementation. User-defined DLP rules and the usual tool permissions still
+apply.
+
 Decision models for irreversible input:
 
 Set ~ellama-tools-irreversible-decision-provider~ to add a decision model to
@@ -1290,9 +1296,9 @@ A probability at or above the threshold adds an irreversible finding. With
 typed confirmation. With ~block~, it blocks in ~enforce~ and requires typed
 confirmation in ~monitor~. Negative answers never clear regex findings or
 approve an unknown MCP tool. Existing scoped bypasses and trusted project policy
-still apply. Ellama skips the decision request for read-only tools, outputs, and
-calls whose local scan found irreversible behavior or set a block or redaction
-policy.
+still apply. Ellama skips the decision request for read-only tools, the built-in
+~trash_files~ implementation, outputs, and calls whose local scan found
+irreversible behavior or set a block or redaction policy.
 
 API errors, malformed probabilities, and inputs above the size limit or
 truncated by Ellama use the same irreversible policy. They do not silently allow

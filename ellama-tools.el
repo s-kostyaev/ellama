@@ -239,12 +239,15 @@ outputs from all other tools still use DLP."
   :type 'number
   :group 'ellama)
 
-(defcustom ellama-tools-trash-command
+(defun ellama-tools--default-trash-command ()
+  "Return the standard trash backend for this operating system."
   (pcase system-type
     ('darwin "trash")
     ('gnu/linux (if (executable-find "gio") '("gio" "trash") 'emacs))
     ('windows-nt "recycle.exe")
-    (_ 'emacs))
+    (_ 'emacs)))
+
+(defcustom ellama-tools-trash-command (ellama-tools--default-trash-command)
   "Command used by the `trash_files' tool to move paths to the trash.
 Use `emacs' for built-in `move-file-to-trash', an executable name or path,
 or a list containing the executable followed by fixed arguments, for
@@ -647,8 +650,8 @@ NAME is fallback label used when FUNC has no symbol name."
 (defun ellama-tools--dlp-make-scan-context
     (direction tool-name &optional arg-name tool-metadata)
   "Build DLP scan context for DIRECTION, TOOL-NAME and ARG-NAME.
-TOOL-METADATA may include `:tool-origin', `:server-id' and
-`:tool-identity' values."
+TOOL-METADATA may include `:tool-origin', `:server-id', `:tool-identity'
+and `:recoverable-input' values."
   (let ((tool-origin (plist-get tool-metadata :tool-origin))
         (server-id (plist-get tool-metadata :server-id))
         (tool-identity (plist-get tool-metadata :tool-identity)))
@@ -660,7 +663,8 @@ TOOL-METADATA may include `:tool-origin', `:server-id' and
      :truncated nil
      :tool-origin tool-origin
      :server-id server-id
-     :tool-identity tool-identity)))
+     :tool-identity tool-identity
+     :recoverable-input (plist-get tool-metadata :recoverable-input))))
 
 (defun ellama-tools--tool-category-name (tool-plist)
   "Return normalized category name from TOOL-PLIST, or nil."
@@ -680,7 +684,13 @@ TOOL-METADATA may include `:tool-origin', `:server-id' and
               :server-id category
               :tool-identity (format "%s/%s" category tool-name))
       (list :tool-origin 'builtin
-            :tool-identity tool-name))))
+            :tool-identity tool-name
+            :recoverable-input
+            (and (eq (plist-get tool-plist :function)
+                     #'ellama-tools-trash-files-tool)
+                 (or (eq ellama-tools-trash-command 'emacs)
+                     (equal ellama-tools-trash-command
+                            (ellama-tools--default-trash-command))))))))
 
 (defun ellama-tools--tool-call-values (async call-args)
   "Return positional CALL-ARGS, excluding callback when ASYNC."
@@ -1736,8 +1746,8 @@ Returns a new tool definition with the :function wrapped."
          (confirm-func (ellama-tools--make-confirm-wrapper func name))
          (wrapped-func
           (ellama-tools--make-dlp-wrapper confirm-func tool-plist)))
-    ;; Return a new plist with the wrapped function
-    (setq tool-plist (plist-put tool-plist :function wrapped-func))
+    ;; Keep the original function in the tool definition captured by DLP.
+    (setq tool-plist (plist-put (copy-sequence tool-plist) :function wrapped-func))
     (plist-put tool-plist :args wrapped-args)))
 
 (defun ellama-tools--tool-name= (tool name)

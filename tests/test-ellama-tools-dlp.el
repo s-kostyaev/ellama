@@ -65,6 +65,57 @@
   (ellama-tools-dlp--irreversible-call-verdict
    context (lambda () (list (cons "cmd" (prin1-to-string text))))))
 
+(ert-deftest test-ellama-tools-dlp-direct-rm-needs-confirmation ()
+  (ellama-test-dlp-with-decision
+   (let ((ellama-tools-irreversible-decision-provider nil))
+     (dolist (command '("rm /tmp/render-scratch.txt"
+                        "rm --force ./logs/scratch.data"
+                        " /bin/rm -v ./cache/partial.bin"
+                        "/usr/bin/rm -- -draft.txt"
+                        "rm -- \"meeting notes.txt\""))
+       (let* ((scan (ellama-tools-dlp--scan-text command context))
+              (verdict (plist-get scan :verdict)))
+         (should (eq (plist-get verdict :action) 'warn-strong))
+         (should (member "ir-shell-rm-direct"
+                         (ellama-tools-dlp--findings-rule-ids
+                          (plist-get scan :findings))))))
+     (dolist (command '("rm --help"
+                        "rm --version"
+                        "rm # no operand"
+                        "printf '%s' 'rm /tmp/keep-notes.md'"))
+       (should (eq (plist-get (plist-get
+                               (ellama-tools-dlp--scan-text command context)
+                               :verdict)
+                              :action)
+                   'allow))))))
+
+(ert-deftest test-ellama-tools-dlp-read-preserves-custom-policy ()
+  (ellama-test-dlp-with-decision
+   (let* ((read-context
+           (ellama-tools-dlp--make-scan-context
+            :direction 'input :tool-name "read_file" :arg-name "path"
+            :tool-origin 'builtin :tool-identity "read_file"
+            :payload-length 0))
+          (path "examples/DROP DATABASE.sql"))
+     (should (eq (plist-get (plist-get
+                             (ellama-tools-dlp--scan-text path read-context)
+                             :verdict)
+                            :action)
+                 'allow))
+     (let ((ellama-tools-dlp-regex-rules
+            '((:id "ir-user-block" :pattern "DROP DATABASE" :directions (input)
+               :risk-class irreversible :confidence high))))
+       (should (eq (plist-get (plist-get
+                               (ellama-tools-dlp--scan-text path read-context)
+                               :verdict)
+                              :action)
+                   'block)))
+     (should (eq (plist-get (plist-get
+                             (ellama-tools-dlp--scan-text path context)
+                             :verdict)
+                            :action)
+                 'block)))))
+
 (ert-deftest test-ellama-tools-dlp-decision-policy-and-threshold ()
   (ellama-test-dlp-with-decision
    (dolist (case '((enforce warn 0.5 warn-strong)

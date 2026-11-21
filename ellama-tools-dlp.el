@@ -361,6 +361,20 @@
          :risk-class 'irreversible
          :confidence 'medium
          :requires-typed-confirm t)
+   (list :id "ir-shell-rm-direct"
+         :pattern
+         (concat
+          "\\`[ \t]*\\(?:/usr/bin/\\|/bin/\\)?rm[ \t]+"
+          "\\(?:\\(?:-[dfiIPrRvW]+\\|--force\\|--recursive\\|--dir\\|"
+          "--verbose\\|--interactive\\(?:=[[:alpha:]]+\\)?\\)[ \t]+\\)*"
+          "\\(?:--[ \t]+[^ \t\r\n;&|<>()#]\\|[^- \t\r\n;&|<>()#]\\)")
+         :directions '(input)
+         :tools '("shell_command")
+         :args '("cmd")
+         :severity 'medium
+         :risk-class 'irreversible
+         :confidence 'medium
+         :requires-typed-confirm t)
    (list :id "ir-sql-delete"
          :pattern "\\bDELETE[[:space:]]+FROM\\b"
          :case-fold t
@@ -778,6 +792,8 @@ or a plist with `:score' and/or `:reject'."
              (not (or (null (plist-get context :tool-identity))
                       (stringp (plist-get context :tool-identity)))))
     (error "DLP scan context :tool-identity must be nil or a string"))
+  (unless (ellama-tools-dlp--bool-or-nil-p (plist-get context :recoverable-input))
+    (error "DLP scan context :recoverable-input must be boolean or nil"))
   context)
 
 (defun ellama-tools-dlp--scan-context-p (context)
@@ -790,7 +806,7 @@ or a plist with `:score' and/or `:reject'."
 
 (cl-defun ellama-tools-dlp--make-scan-context
     (&key direction tool-name arg-name payload-length truncated
-          tool-origin server-id tool-identity)
+          tool-origin server-id tool-identity recoverable-input)
   "Build a DLP scan context plist.
 DIRECTION must contain `input'/'output'.
 TOOL-NAME is a tool name.
@@ -799,7 +815,8 @@ PAYLOAD-LENGTH is a length of a payload.
 TRUNCATED is a flag show that payload was truncated.
 TOOL-ORIGIN can be `builtin' or `mcp'.
 SERVER-ID is MCP server category identifier.
-TOOL-IDENTITY is a stable identity string."
+TOOL-IDENTITY is a stable identity string.
+RECOVERABLE-INPUT marks a built-in tool with a recoverable operation."
   (ellama-tools-dlp--validate-scan-context
    (list :direction direction
          :tool-name tool-name
@@ -808,7 +825,8 @@ TOOL-IDENTITY is a stable identity string."
          :truncated truncated
          :tool-origin tool-origin
          :server-id server-id
-         :tool-identity tool-identity)))
+         :tool-identity tool-identity
+         :recoverable-input recoverable-input)))
 
 (defun ellama-tools-dlp--scan-context-get (context key &optional default)
   "Return KEY from scan CONTEXT, or DEFAULT when KEY is absent."
@@ -1605,7 +1623,7 @@ When RULES is nil, combine built-in and user regex rules."
   (let ((selected-rules (or rules
                             (append
                              ellama-tools-dlp--default-regex-rules
-                             (when ellama-tools-irreversible-enabled
+                             (when (ellama-tools-dlp--irreversible-scan-p context)
                                ellama-tools-dlp--default-irreversible-regex-rules)
                              ellama-tools-dlp-regex-rules)))
         (all-findings nil))
@@ -2078,7 +2096,7 @@ Match exact arg names and nested path prefixes like `arg.', `arg[0]'."
 
 (defun ellama-tools-dlp--tool-risk-class (context)
   "Return risk class for scan CONTEXT.
-Result is one of `read', `mutating', `irreversible' or `unknown'."
+Result is `read', `recoverable', `mutating', `irreversible' or `unknown'."
   (let* ((tool (plist-get context :tool-name))
          (tool-identity (plist-get context :tool-identity))
          (tool-origin (plist-get context :tool-origin))
@@ -2087,12 +2105,21 @@ Result is one of `read', `mutating', `irreversible' or `unknown'."
     (cond
      (override override)
      ((eq tool-origin 'builtin)
-      (or (cdr (assoc tool ellama-tools-dlp--builtin-risk-profile))
-          'mutating))
+      (if (plist-get context :recoverable-input)
+          'recoverable
+        (or (cdr (assoc tool ellama-tools-dlp--builtin-risk-profile))
+            'mutating)))
      ((eq tool-origin 'mcp)
       'unknown)
      (t
       'unknown))))
+
+(defun ellama-tools-dlp--irreversible-scan-p (context)
+  "Return non-nil when built-in irreversible detectors apply to CONTEXT."
+  (and ellama-tools-irreversible-enabled
+       (eq (plist-get context :direction) 'input)
+       (not (memq (ellama-tools-dlp--tool-risk-class context)
+                  '(read recoverable)))))
 
 (defun ellama-tools-dlp--unknown-mcp-tool-p (context)
   "Return non-nil when CONTEXT refers to an unknown MCP tool."
@@ -2845,10 +2872,8 @@ Call ARGUMENT-DETAILS to obtain the named, printable tool arguments.
 Return nil if the check is disabled or a plist with the check result.
 Errors contain no provider message or payload."
   (when (and ellama-tools-dlp-enabled
-             ellama-tools-irreversible-enabled
              ellama-tools-irreversible-decision-provider
-             (eq (plist-get context :direction) 'input)
-             (not (eq (ellama-tools-dlp--tool-risk-class context) 'read)))
+             (ellama-tools-dlp--irreversible-scan-p context))
     (condition-case nil
         (cond
          ((plist-get context :truncated)
