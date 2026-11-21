@@ -1,2 +1,4 @@
 ellama.texi
 *.elc
+31_*
+deps/
