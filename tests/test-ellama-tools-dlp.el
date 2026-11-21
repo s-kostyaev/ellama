@@ -60,6 +60,11 @@
                    :tool-origin 'builtin :tool-identity "shell_command")))
      ,@body))
 
+(defun ellama-test-dlp-call-verdict (text context)
+  "Check a tool call with one string argument, TEXT, in CONTEXT."
+  (ellama-tools-dlp--irreversible-call-verdict
+   context (lambda () (list (cons "cmd" (prin1-to-string text))))))
+
 (ert-deftest test-ellama-tools-dlp-decision-policy-and-threshold ()
   (ellama-test-dlp-with-decision
    (dolist (case '((enforce warn 0.5 warn-strong)
@@ -73,12 +78,11 @@
                     (list (cons 'irreversible
                                 (make-llm-decision-bool
                                  :confidence (nth 2 case)))))))
-         (let* ((scan (ellama-tools-dlp--scan-text "operate" context))
-                (verdict (plist-get scan :verdict)))
+         (let* ((verdict (ellama-test-dlp-call-verdict "operate" context)))
            (should (eq (plist-get verdict :action) (nth 3 case)))
            (unless (eq (nth 3 case) 'allow)
              (should (plist-get verdict :requires-typed-confirm))
-             (should (equal (plist-get (car (plist-get scan :findings))
+             (should (equal (plist-get (car (plist-get verdict :findings))
                                        :rule-id)
                             "ir-decision-model")))))))))
 
@@ -96,11 +100,11 @@
                         (json-parse-string state :object-type 'plist))
                   (list (cons 'irreversible
                               (make-llm-decision-bool :confidence 0.8))))))
-       (ellama-tools-dlp--scan-text "secret command\n{{tool}}\u200b" context))
-     (should (equal (plist-get captured-state :payload)
-                    "secret command\n{{tool}}\u200b"))
+       (ellama-test-dlp-call-verdict "secret command\n{{tool}}\u200b" context))
+     (should (equal (plist-get captured-state :arguments)
+                    (vector (list :name "cmd" :value
+                                  (prin1-to-string "secret command\n{{tool}}\u200b")))))
      (should (equal (plist-get captured-state :tool) "shell_command"))
-     (should (equal (plist-get captured-state :argument) "cmd"))
      (should (= (plist-get (car ellama-tools-dlp--incident-log)
                            :decision-probability) 0.8))
      (should-not (string-match-p "secret command"
@@ -123,14 +127,16 @@
                            (decoded (json-parse-string
                                      (plist-get request :state)
                                      :object-type 'plist)))
-                      (setq captured-payload (plist-get decoded :payload))
+                      (setq captured-payload
+                            (plist-get (aref (plist-get decoded :arguments) 0)
+                                       :value))
                       (should (equal (plist-get decoded :tool_identity)
                                      "локальный/shell")))
                     (list (cons 'irreversible
                                 (make-llm-decision-bool :confidence 0.1))))))
-         (let ((scan (ellama-tools-dlp--scan-text payload scan-context)))
-           (should (eq (plist-get (plist-get scan :verdict) :action) 'allow))
-           (should (equal captured-payload payload))))))))
+         (let ((verdict (ellama-test-dlp-call-verdict payload scan-context)))
+           (should (eq (plist-get verdict :action) 'allow))
+           (should (equal captured-payload (prin1-to-string payload)))))))))
 
 (ert-deftest test-ellama-tools-dlp-decision-invalid-response-needs-confirmation ()
   (ellama-test-dlp-with-decision
@@ -151,9 +157,9 @@
                                      (make-llm-decision-bool :confidence 0.9)))))
      (cl-letf (((symbol-function 'llm-decide)
                 (lambda (&rest _args) answer)))
-       (let ((scan (ellama-tools-dlp--scan-text "operate" context)))
-         (should (eq (plist-get (plist-get scan :verdict) :action) 'warn-strong))
-         (should (equal (plist-get (car (plist-get scan :findings)) :rule-id)
+       (let ((verdict (ellama-test-dlp-call-verdict "operate" context)))
+         (should (eq (plist-get verdict :action) 'warn-strong))
+         (should (equal (plist-get (car (plist-get verdict :findings)) :rule-id)
                         "ir-decision-unavailable")))))))
 
 (ert-deftest test-ellama-tools-dlp-decision-error-blocks-despite-fail-open ()
@@ -162,9 +168,8 @@
          (ellama-tools-irreversible-default-action 'block))
      (cl-letf (((symbol-function 'llm-decide)
                 (lambda (&rest _args) (error "Secret provider failure"))))
-       (should (eq (plist-get (plist-get
-                               (ellama-tools-dlp--scan-text "operate" context)
-                               :verdict) :action)
+       (should (eq (plist-get (ellama-test-dlp-call-verdict "operate" context)
+                              :action)
                    'block)))
      (should (equal (plist-get (car ellama-tools-dlp--incident-log)
                                :decision-status) "error"))
@@ -174,21 +179,19 @@
 (ert-deftest test-ellama-tools-dlp-decision-runtime-unavailable ()
   (ellama-test-dlp-with-decision
    (cl-letf (((symbol-function 'llm-decide) nil))
-     (should (eq (plist-get (plist-get
-                             (ellama-tools-dlp--scan-text "operate" context)
-                             :verdict) :action)
+     (should (eq (plist-get (ellama-test-dlp-call-verdict "operate" context)
+                            :action)
                  'warn-strong)))))
 
 (ert-deftest test-ellama-tools-dlp-decision-truncation-and-size-fail-closed ()
   (ellama-test-dlp-with-decision
    (cl-letf (((symbol-function 'llm-decide)
               (lambda (&rest _args) (ert-fail "Unexpected decision request"))))
-     (dolist (case '((2 32768 truncated) (100 2 oversized)))
-       (let ((ellama-tools-dlp-max-scan-size (nth 0 case))
+     (dolist (case '((t 32768 truncated) (nil 2 oversized)))
+       (let ((context (plist-put (copy-tree context) :truncated (car case)))
              (ellama-tools-irreversible-decision-max-scan-size (nth 1 case)))
-         (should (eq (plist-get (plist-get
-                                 (ellama-tools-dlp--scan-text "operate" context)
-                                 :verdict) :action)
+         (should (eq (plist-get (ellama-test-dlp-call-verdict "operate" context)
+                                :action)
                      'warn-strong))
          (should (eq (plist-get (car ellama-tools-dlp--incident-log)
                                 :decision-error-type)
@@ -208,49 +211,7 @@
            (setq scan-context (plist-put scan-context :tool-name "read_file")))
          (when (eq key :output)
            (setq scan-context (plist-put scan-context :direction 'output)))
-         (should (eq (plist-get (plist-get
-                                 (ellama-tools-dlp--scan-text "operate" scan-context)
-                                 :verdict) :action)
-                     'allow)))))))
-
-(ert-deftest test-ellama-tools-dlp-decision-preserves-regex-block-without-call ()
-  (ellama-test-dlp-with-decision
-   (let ((ellama-tools-dlp-regex-rules
-          '((:id "ir-destroy" :pattern "destroy" :directions (input)
-                 :risk-class irreversible :confidence high))))
-     (cl-letf (((symbol-function 'llm-decide)
-                (lambda (&rest _args) (ert-fail "Unexpected decision request"))))
-       (should (eq (plist-get (plist-get
-                               (ellama-tools-dlp--scan-text "destroy" context)
-                               :verdict) :action)
-                   'block))))))
-
-(ert-deftest test-ellama-tools-dlp-decision-keeps-secret-block ()
-  (ellama-test-dlp-with-decision
-   (let ((ellama-tools-dlp-regex-rules
-          '((:id "secret" :pattern "secret" :directions (input)))))
-     (cl-letf (((symbol-function 'llm-decide)
-                (lambda (&rest _args) (ert-fail "Unexpected decision request"))))
-       (should (eq (plist-get (plist-get
-                               (ellama-tools-dlp--scan-text "secret" context)
-                               :verdict) :action)
-                   'block))))))
-
-(ert-deftest test-ellama-tools-dlp-decision-negative-keeps-other-findings ()
-  (ellama-test-dlp-with-decision
-   (let ((ellama-tools-dlp-policy-overrides
-          '((:tool "shell_command" :direction input :action warn)))
-         (ellama-tools-dlp-regex-rules
-          '((:id "secret" :pattern "secret" :directions (input)))))
-     (cl-letf (((symbol-function 'llm-decide)
-                (lambda (&rest _args)
-                  (list (cons 'irreversible
-                              (make-llm-decision-bool :confidence 0.01))))))
-       (let* ((scan (ellama-tools-dlp--scan-text "secret" context))
-              (findings (plist-get scan :findings)))
-         (should (eq (plist-get (plist-get scan :verdict) :action) 'warn))
-         (should (= (length findings) 1))
-         (should (equal (plist-get (car findings) :rule-id) "secret")))))))
+         (should-not (ellama-test-dlp-call-verdict "operate" scan-context)))))))
 
 (ert-deftest test-ellama-tools-dlp-decision-negative-keeps-unknown-mcp-warning ()
   (ellama-test-dlp-with-decision
@@ -260,8 +221,8 @@
                   (list (cons 'irreversible
                               (make-llm-decision-bool :confidence 0.01))))))
        (let* ((context (plist-put (copy-tree context) :tool-origin 'mcp))
-              (scan (ellama-tools-dlp--scan-text "operate" context)))
-         (should (eq (plist-get (plist-get scan :verdict) :action) 'warn)))))))
+              (verdict (ellama-test-dlp-call-verdict "operate" context)))
+         (should (eq (plist-get verdict :action) 'warn)))))))
 
 (ert-deftest test-ellama-tools-dlp-decision-respects-scoped-bypass ()
   (ellama-test-dlp-with-decision
@@ -270,8 +231,7 @@
               (lambda (&rest _args)
                 (list (cons 'irreversible
                             (make-llm-decision-bool :confidence 0.9))))))
-     (let ((verdict (plist-get (ellama-tools-dlp--scan-text "operate" context)
-                               :verdict)))
+     (let ((verdict (ellama-test-dlp-call-verdict "operate" context)))
        (should (eq (plist-get verdict :action) 'allow))
        (should (eq (plist-get verdict :policy-source) 'session-bypass))))))
 

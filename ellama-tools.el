@@ -1149,11 +1149,12 @@ CHILD may be a string key segment or an integer index."
 
 (defun ellama-tools--dlp-walk-strings-1
     (node path callback seen node-count depth)
-  "Walk NODE and call CALLBACK for string leave at PATH.
-SEEN tracks composite objects to avoid cycles.  NODE-COUNT is a one-slot
-vector used as a mutable traversal counter.  DEPTH is current nesting depth."
-  (when (and (<= depth ellama-tools--dlp-input-max-walk-depth)
-             (< (aref node-count 0) ellama-tools--dlp-input-max-walk-nodes))
+  "Walk NODE and call CALLBACK for each string leaf at PATH.
+SEEN tracks composite objects to avoid cycles.  NODE-COUNT holds the number
+of visited nodes and a flag for incomplete scans.  DEPTH is the nesting depth."
+  (if (or (> depth ellama-tools--dlp-input-max-walk-depth)
+          (>= (aref node-count 0) ellama-tools--dlp-input-max-walk-nodes))
+      (aset node-count 1 t)
     (aset node-count 0 (1+ (aref node-count 0)))
     (cond
      ((stringp node)
@@ -1232,55 +1233,67 @@ vector used as a mutable traversal counter.  DEPTH is current nesting depth."
 
 (defun ellama-tools--dlp-walk-strings (value root-path callback)
   "Call CALLBACK for each string leaf in VALUE using ROOT-PATH.
-CALLBACK receives `(TEXT PATH)'.  Traverse lists, vectors and hash tables."
-  (ellama-tools--dlp-walk-strings-1
-   value root-path callback
-   (make-hash-table :test 'eq)
-   (vector 0)
-   0))
+CALLBACK receives `(TEXT PATH)'.  Return non-nil if a walk limit was hit."
+  (let ((node-count (vector 0 nil)))
+    (ellama-tools--dlp-walk-strings-1
+     value root-path callback
+     (make-hash-table :test 'eq)
+     node-count
+     0)
+    (aref node-count 1)))
 
 (defun ellama-tools--dlp-scan-input-value
     (tool-name arg-name value &optional tool-metadata)
   "Scan VALUE for TOOL-NAME under ARG-NAME and return a decision plist."
-  (let (warn-message warn-strong-message)
+  (let (warn-message warn-strong-message skip-decision truncated)
     (catch 'done
-      (ellama-tools--dlp-walk-strings
-       value arg-name
-       (lambda (text path)
-         (let* ((scan (ellama-tools-dlp--scan-text
-                       text
-                       (ellama-tools--dlp-make-scan-context
-                        'input tool-name path tool-metadata)))
-                (verdict (plist-get scan :verdict))
-                (action (plist-get verdict :action))
-                (message (plist-get verdict :message)))
-           (cond
-            ((eq action 'block)
-             (throw 'done
-                    (list :action 'block
-                          :message (or message
-                                       (format "DLP blocked input for %s"
-                                               tool-name))
-                          :audit-sink-failure
-                          (plist-get verdict :audit-sink-failure))))
-            ((and (eq action 'warn-strong)
-                  (not warn-strong-message))
-             (setq warn-strong-message
-                   (or message
-                       (format "DLP warned strongly on input for tool %s"
-                               tool-name))))
-            ((and (eq action 'warn) (not warn-message))
-             (setq warn-message
-                   (or message
-                       (format "DLP warned on input for tool %s"
-                               tool-name))))))))
-      (cond
-       (warn-strong-message
-        (list :action 'warn-strong :message warn-strong-message))
-       (warn-message
-        (list :action 'warn :message warn-message))
-       (t
-        (list :action 'allow))))))
+      (when
+          (ellama-tools--dlp-walk-strings
+           value arg-name
+           (lambda (text path)
+             (let* ((scan (ellama-tools-dlp--scan-text
+                           text
+                           (ellama-tools--dlp-make-scan-context
+                            'input tool-name path tool-metadata)))
+                    (verdict (plist-get scan :verdict))
+                    (action (plist-get verdict :action))
+                    (message (plist-get verdict :message)))
+               (when (or (ellama-tools-dlp--has-irreversible-findings-p
+                          (plist-get scan :findings))
+                         (memq (plist-get verdict :configured-action)
+                               '(block redact)))
+                 (setq skip-decision t))
+               (when (plist-get (plist-get scan :context) :truncated)
+                 (setq truncated t))
+               (cond
+                ((eq action 'block)
+                 (throw 'done
+                        (list :action 'block
+                              :message (or message
+                                           (format "DLP blocked input for %s"
+                                                   tool-name))
+                              :audit-sink-failure
+                              (plist-get verdict :audit-sink-failure))))
+                ((and (eq action 'warn-strong)
+                      (not warn-strong-message))
+                 (setq warn-strong-message
+                       (or message
+                           (format "DLP warned strongly on input for tool %s"
+                                   tool-name))))
+                ((and (eq action 'warn) (not warn-message))
+                 (setq warn-message
+                       (or message
+                           (format "DLP warned on input for tool %s"
+                                   tool-name))))))))
+        (setq truncated t))
+      (append (list :skip-decision skip-decision :truncated truncated)
+              (cond
+               (warn-strong-message
+                (list :action 'warn-strong :message warn-strong-message))
+               (warn-message
+                (list :action 'warn :message warn-message))
+               (t
+                (list :action 'allow)))))))
 
 (defun ellama-tools--dlp-input-decision (tool-plist call-args)
   "Scan TOOL-PLIST CALL-ARGS and return decision plist.
@@ -1295,9 +1308,11 @@ Return plist with keys `:action' and optional `:message'."
          (specs declared-args)
          (index 0)
          warn-message
-         warn-strong-message)
+         warn-strong-message
+         skip-decision
+         truncated)
     (catch 'done
-      (while (and values specs)
+      (while values
         (let* ((value (car values))
                (spec (car specs))
                (raw-name (or (plist-get spec :name)
@@ -1310,6 +1325,10 @@ Return plist with keys `:action' and optional `:message'."
                    tool-name arg-name value tool-metadata))
                  (action (plist-get arg-decision :action))
                  (message (plist-get arg-decision :message)))
+            (when (plist-get arg-decision :skip-decision)
+              (setq skip-decision t))
+            (when (plist-get arg-decision :truncated)
+              (setq truncated t))
             (cond
              ((eq action 'block)
               (throw 'done arg-decision))
@@ -1320,11 +1339,24 @@ Return plist with keys `:action' and optional `:message'."
         (setq values (cdr values))
         (setq specs (cdr specs))
         (setq index (1+ index)))
-      (if warn-strong-message
-          (list :action 'warn-strong :message warn-strong-message)
-        (if warn-message
-            (list :action 'warn :message warn-message)
-          (list :action 'allow))))))
+      (let* ((model-verdict
+              (unless skip-decision
+                (ellama-tools-dlp--irreversible-call-verdict
+                 (plist-put (ellama-tools--dlp-make-scan-context
+                             'input tool-name nil tool-metadata)
+                            :truncated truncated)
+                 (lambda ()
+                   (ellama-tools--dlp-call-details tool-plist call-args)))))
+             (model-action (plist-get model-verdict :action)))
+        (cond
+         ((eq model-action 'block) model-verdict)
+         (warn-strong-message
+          (list :action 'warn-strong :message warn-strong-message))
+         ((eq model-action 'warn-strong) model-verdict)
+         (warn-message
+          (list :action 'warn :message warn-message))
+         ((eq model-action 'warn) model-verdict)
+         (t (list :action 'allow)))))))
 
 (defun ellama-tools--dlp-call-details (tool-plist call-args)
   "Return named printable details for TOOL-PLIST called with CALL-ARGS."

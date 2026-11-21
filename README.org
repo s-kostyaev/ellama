@@ -1183,9 +1183,10 @@ Key settings:
   decision API in llm 0.33.0 or later. Nil disables decision checks.
 - ~ellama-tools-irreversible-decision-threshold~: Minimum probability for an
   irreversible finding (default ~0.5~, inclusive).
-- ~ellama-tools-irreversible-decision-max-scan-size~: Maximum input bytes sent
-  to the decision provider (default ~32768~). Larger or truncated inputs require
-  the irreversible policy instead of skipping the check.
+- ~ellama-tools-irreversible-decision-max-scan-size~: Maximum size in bytes of
+  the serialized tool call sent to the decision provider (default ~32768~).
+  Ellama applies the irreversible policy if the tool call exceeds this limit or
+  the local input scan is incomplete.
 - ~ellama-tools-irreversible-unknown-tool-action~: Default action for unknown
   MCP tools (~warn~ or ~allow~).
 - ~ellama-tools-irreversible-require-typed-confirm~: Require typed phrase for
@@ -1277,19 +1278,21 @@ For example, with a model already installed in Ollaya:
 #+END_SRC
 
 The model answers a boolean question about permanent data loss, overwriting
-shared history, external sending or publishing, and moving money. Each request
-contains one input string and its tool identity and argument name. It has no
-conversation history or tools. Structured arguments are checked one string leaf
-at a time, as with the other DLP detectors; the model does not see the complete
-tool call or filesystem recovery state.
+shared history, external sending or publishing, and moving money. After the
+local input scan, Ellama sends at most one request per tool call. The request
+contains the tool identity and all supplied argument names and values, including
+numbers, boolean flags, and nested values. Use a provider you trust with those
+arguments. The provider only sees the call data, so it cannot verify filesystem
+state or whether an operation can be recovered.
 
 A probability at or above the threshold adds an irreversible finding. With
 ~ellama-tools-irreversible-default-action~ set to ~warn~, execution requires
 typed confirmation. With ~block~, it blocks in ~enforce~ and requires typed
 confirmation in ~monitor~. Negative answers never clear regex findings or
 approve an unknown MCP tool. Existing scoped bypasses and trusted project policy
-still apply. Inputs already flagged as irreversible, inputs blocked in
-~enforce~, read-only tools, and outputs do not make a decision request.
+still apply. Ellama skips the decision request for read-only tools, outputs, and
+calls whose local scan found irreversible behavior or set a block or redaction
+policy.
 
 API errors, malformed probabilities, and inputs above the size limit or
 truncated by Ellama use the same irreversible policy. They do not silently allow
