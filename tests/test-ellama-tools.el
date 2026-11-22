@@ -5481,6 +5481,8 @@ END_ELLAMA_AGENT_STATE"))
               (process-environment (copy-sequence process-environment)))
           (with-temp-file "saved notes.txt" (insert "Only copy"))
           (with-temp-file "saved.txt" (insert "Only copy"))
+          (with-temp-file "source.txt" (insert "Other data"))
+          (with-temp-file "-a" (insert "Only copy"))
           (with-temp-file "empty.txt")
           (setenv "ELLAMA_SCOPE_TEST" "saved notes.txt")
           (setenv "ELLAMA_SCOPE_DEFAULT" nil)
@@ -5488,6 +5490,13 @@ END_ELLAMA_AGENT_STATE"))
                              ": >| \"saved notes.txt\""
                              "printf '%s' 'final > marker' > 'saved notes.txt'"
                              "printf '%s' ok > \"$(echo saved.txt)\""
+                             ": 3>saved.txt"
+                             "(printf '%s' note) > saved.txt"
+                             "{ printf '%s' note; } > saved.txt"
+                             "printf '%s' note | tee saved.txt"
+                             "printf '%s' note | tee ./-a"
+                             "cp source.txt saved.txt"
+                             "printf '%s' revision > new.txt; cp new.txt saved.txt"
                              "/bin/echo ok > 'saved notes.txt'"
                              "echo ok && : > 'saved notes.txt'"
                              "echo ok ; : > 'saved notes.txt'"
@@ -5508,6 +5517,18 @@ END_ELLAMA_AGENT_STATE"))
                              ": > empty.txt"
                              ": >> 'saved notes.txt'"
                              ": >&1"
+                             ": 3>>saved.txt"
+                             ": 3>&1"
+                             "(printf '%s' note) >> saved.txt"
+                             "{ printf '%s' note; } >> saved.txt"
+                             "false && (printf '%s' note) > saved.txt"
+                             "printf '%s' note | tee -a"
+                             "printf '%s' note | tee -a saved.txt"
+                             "cp saved.txt ./saved.txt"
+                             "cp missing.txt saved.txt"
+                             "cp -n source.txt saved.txt"
+                             "printf '%s' revision > new.txt; cp missing.txt saved.txt"
+                             "printf '%s' revision > new.txt; cp -n new.txt saved.txt"
                              "echo ': > saved.txt'"
                              "echo ok >> 'saved notes.txt'"
                              "echo ': > saved.txt' # > 'saved notes.txt'"
@@ -5542,7 +5563,16 @@ END_ELLAMA_AGENT_STATE"))
                     ((symbol-function 'file-regular-p)
                      (lambda (&rest _) (ert-fail "Denied path was inspected"))))
             (should-not (ellama-tools--nonempty-shell-truncation-p
-                         ": > 'saved notes.txt'"))))
+                         ": > 'saved notes.txt'")))
+          (cl-letf (((symbol-function 'ellama-tools--tool-check-file-access)
+                     (lambda (path op)
+                       (when (and (eq op 'read)
+                                  (equal (file-name-nondirectory path) "source.txt"))
+                         "Denied")))
+                    ((symbol-function 'file-equal-p)
+                     (lambda (&rest _) (ert-fail "Denied source was inspected"))))
+            (should-not (ellama-tools--nonempty-shell-truncation-p
+                         "cp source.txt saved.txt"))))
       (delete-directory directory t))))
 
 (ert-deftest test-ellama-tools-dlp-sql-commit-checks-unfiltered-update ()

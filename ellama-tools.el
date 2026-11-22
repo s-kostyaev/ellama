@@ -1357,17 +1357,60 @@ CALLBACK receives `(TEXT PATH)'.  Return non-nil if a walk limit was hit."
                  ?c))
         'null-output)))))
 
+(defun ellama-tools--shell-local-output-file (word &optional operand)
+  "Resolve WORD as a local shell output path.
+When OPERAND is non-nil, reject words that a command could treat as options."
+  (when-let* ((word)
+              (path (ellama-tools--shell-output-path word))
+              ((string-match-p "\\`[a-zA-Z0-9_./ -]+\\'" path))
+              ((not (and operand (string-prefix-p "-" path))))
+              ((not (string-suffix-p "/" path)))
+              ((not (member ".." (split-string path "/" t)))))
+    (expand-file-name path)))
+
+(defun ellama-tools--nonempty-shell-output-p (file)
+  "Return non-nil if FILE is a readable local regular file with data."
+  (and file
+       (not (ellama-tools--tool-check-file-access file 'read))
+       (file-regular-p file)
+       (> (file-attribute-size (file-attributes (file-truename file))) 0)))
+
+(defun ellama-tools--shell-copy-overwrites-p (created source output)
+  "Check if a simple cp can clobber OUTPUT with SOURCE.
+CREATED is a literal path written by a preceding printer, or nil."
+  (and source
+       (not (equal source output))
+       (ellama-tools--nonempty-shell-output-p output)
+       (not (ellama-tools--tool-check-file-access output 'write))
+       (not (ellama-tools--tool-check-file-access source 'read))
+       (if (file-exists-p source)
+           (and (file-regular-p source)
+                (file-readable-p source)
+                (not (file-equal-p source output)))
+         (and (equal source created)
+              (not (file-symlink-p source))
+              (not (ellama-tools--tool-check-file-access source 'write))
+              (file-writable-p source)))))
+
 (defun ellama-tools--nonempty-shell-truncation-p (command)
-  "Return non-nil if COMMAND redirects a null command or printer to data."
+  "Recognize supported forms of COMMAND that can clobber a file with data."
   (save-match-data
     (let* ((case-fold-search nil)
+           (posix (ellama-tools--posix-shell-p))
            (word (concat "\\(?:[a-zA-Z0-9_./%:+,-]+\\|'[^'\n\r\0]*'\\|"
                          "\"[^\"$`!\\\n\r\0]*\"\\)"))
-           (printer (concat "\\(?:/bin/\\|/usr/bin/\\)?\\(?:printf\\|echo\\)"
+           (program "\\(?:/bin/\\|/usr/bin/\\)?")
+           (printer (concat program "\\(?:printf\\|echo\\)"
                             "\\(?:[ \t]+" word "\\)*"))
+           (simple (concat "\\(?::\\|" printer "\\)"))
+           (writer (if posix
+                       (concat "\\(?:" simple "\\(?:[ \t]+[0-9]\\)?"
+                               "\\|([ \t]*" simple "[ \t]*)"
+                               "\\|{[ \t]+" simple "[ \t]*;[ \t]+}\\)")
+                     simple))
            (lead (concat "\\`[ \t]*\\(?:\\(?:true[ \t]*&&\\|false[ \t]*||"
                          "\\|\\(?:true\\|false\\)[ \t]*;"
-                         "\\|\\(?::\\|" printer "\\)[ \t]*\\(?:&&\\|;\\)"
+                         "\\|" simple "[ \t]*\\(?:&&\\|;\\)"
                          "\\)[ \t]*\\)*"))
            (target (concat "\\(?:[a-zA-Z0-9_./-]+"
                            "\\|'[a-zA-Z0-9_./ -]+'"
@@ -1375,34 +1418,37 @@ CALLBACK receives `(TEXT PATH)'.  Return non-nil if a walk limit was hit."
                            ellama-tools--shell-output-echo-prefix
                            ellama-tools--shell-output-echo-operand ")\\)\"\\)")))
       (when (and (not (file-remote-p default-directory))
-                 (string-match
-                  (concat lead "\\(?:test[ \t]+-[fs][ \t]+\\(" target
-                          "\\)[ \t]*&&[ \t]*\\)?"
-                          "\\(?::\\|" printer "\\)[ \t]*>|?[ \t]*"
-                          "\\(" target "\\)[ \t]*\\'")
-                  command))
-        (let ((guard (match-string 1 command))
-              (output (match-string 2 command)))
-          (condition-case nil
-              (when-let* ((path (ellama-tools--shell-output-path output))
-                          ((string-match-p "\\`[a-zA-Z0-9_./ -]+\\'" path))
-                          ((not (string-suffix-p "/" path)))
-                          ((not (member ".." (split-string path "/" t))))
-                          (file (expand-file-name path)))
-                ;; A regular file with data satisfies both -f and -s
-                ;; when the test and the redirection refer to that path.
-                (and (or (not guard)
-                         (let ((checked (ellama-tools--shell-output-path guard)))
-                           (and checked
-                                (string-match-p "\\`[a-zA-Z0-9_./ -]+\\'" checked)
-                                (not (string-suffix-p "/" checked))
-                                (not (member ".." (split-string checked "/" t)))
-                                (equal (expand-file-name checked) file))))
-                     (not (ellama-tools--tool-check-file-access file 'read))
-                     (file-regular-p file)
-                     (> (file-attribute-size (file-attributes (file-truename file)))
-                        0)))
-            (error nil)))))))
+                 (<= (string-bytes command) ellama-tools-dlp-max-scan-size))
+        (condition-case nil
+            (cond
+             ((string-match
+               (concat lead "\\(?:test[ \t]+-[fs][ \t]+\\(" target
+                       "\\)[ \t]*&&[ \t]*\\)?"
+                       writer "[ \t]*>|?[ \t]*\\(" target "\\)[ \t]*\\'")
+               command)
+              (let* ((guard (match-string 1 command))
+                     (file (ellama-tools--shell-local-output-file (match-string 2 command))))
+                ;; A regular file with data satisfies both -f and -s.
+                (and (or (not guard) (equal (ellama-tools--shell-local-output-file guard) file))
+                     (ellama-tools--nonempty-shell-output-p file))))
+             ((not posix) nil)
+             ((string-match
+               (concat "\\`[ \t]*" printer "[ \t]*|[ \t]*" program "tee[ \t]+"
+                       "\\(" target "\\)[ \t]*\\'") command)
+              (ellama-tools--nonempty-shell-output-p
+               (ellama-tools--shell-local-output-file (match-string 1 command) t)))
+             ((string-match
+               (concat "\\`[ \t]*\\(?:" printer "[ \t]*>[ \t]*\\(" target
+                       "\\)[ \t]*\\(?:;\\|&&\\)[ \t]*\\)?" program "cp[ \t]+"
+                       "\\(" target "\\)[ \t]+\\(" target "\\)[ \t]*\\'") command)
+              (let ((created (match-string 1 command))
+                    (source (match-string 2 command))
+                    (output (match-string 3 command)))
+                (ellama-tools--shell-copy-overwrites-p
+                 (ellama-tools--shell-local-output-file created)
+                 (ellama-tools--shell-local-output-file source t)
+                 (ellama-tools--shell-local-output-file output t)))))
+          (error nil))))))
 
 (defun ellama-tools--dlp-scan-input-value
     (tool-name arg-name value &optional tool-metadata)
