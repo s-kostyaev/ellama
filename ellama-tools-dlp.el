@@ -1658,7 +1658,7 @@ Include scoping fields because cached entries store the normalized rule plist."
   (member name '("sql" "query" "statement")))
 
 (defun ellama-tools-dlp--sql-statement-p (text)
-  "Return non-nil when TEXT starts with a SQL statement or comment."
+  "Check for a SQL statement or comment at the beginning of TEXT."
   (let ((case-fold-search t))
     (string-match-p
      (concat "\\`[ \t\r\n]*\\(?:--[ \t]\\|"
