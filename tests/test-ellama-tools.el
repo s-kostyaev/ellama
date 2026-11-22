@@ -5430,6 +5430,56 @@ END_ELLAMA_AGENT_STATE"))
                      "rm file\ntrue" "rm .GIT/config" "printf 'rm file'"))
     (should-not (ellama-tools--literal-rm-path command))))
 
+(ert-deftest test-ellama-tools-dlp-literal-shell-truncation ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((directory (make-temp-file "ellama-truncate-" t))
+        (ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-regex-rules nil)
+        (ellama-tools-dlp-llm-check-enabled nil)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-log-targets '(memory))
+        (ellama-tools-dlp--incident-log nil)
+        (ellama-tools-irreversible-enabled t)
+        (ellama-tools-irreversible-default-action 'warn)
+        (ellama-tools-irreversible-decision-provider nil)
+        (ellama-tools-irreversible-project-overrides-enabled nil)
+        (ellama-tools-dlp--session-bypasses nil)
+        (ellama-tools-use-srt nil)
+        (tool '(:name "shell_command" :async t
+                :function ellama-tools-shell-command-tool
+                :args ((:name "cmd" :type string)))))
+    (unwind-protect
+        (let ((default-directory (file-name-as-directory directory)))
+          (with-temp-file "saved notes.txt" (insert "Only copy"))
+          (with-temp-file "empty.txt")
+          (dolist (command '(": > 'saved notes.txt'" ": >| \"saved notes.txt\""))
+            (let ((decision (ellama-tools--dlp-input-decision
+                             tool (list #'ignore command))))
+              (should (eq (plist-get decision :action) 'warn-strong))
+              (should (member "ir-shell-truncate-file"
+                              (plist-get (car ellama-tools-dlp--incident-log)
+                                         :rule-ids)))))
+          (dolist (command '(": > missing.txt" ": > empty.txt"
+                             ": >> 'saved notes.txt'" ": >&1"
+                             "echo ': > saved.txt'" ": > \"$target\""))
+            (should (eq (plist-get (ellama-tools--dlp-input-decision
+                                   tool (list #'ignore command))
+                                  :action)
+                        'allow)))
+          (let ((custom-tool (plist-put (copy-sequence tool) :function #'ignore)))
+            (should (eq (plist-get (ellama-tools--dlp-input-decision
+                                   custom-tool '(ignore ": > 'saved notes.txt'"))
+                                  :action)
+                        'allow)))
+          (cl-letf (((symbol-function 'ellama-tools--tool-check-file-access)
+                     (lambda (&rest _) "Denied"))
+                    ((symbol-function 'file-regular-p)
+                     (lambda (&rest _) (ert-fail "Denied path was inspected"))))
+            (should-not (ellama-tools--nonempty-shell-truncation-p
+                         ": > 'saved notes.txt'"))))
+      (delete-directory directory t))))
+
 (ert-deftest test-ellama-tools-rm-git-evidence-is-rechecked-after-confirmation ()
   (ellama-test--ensure-local-ellama-tools)
   (skip-unless (executable-find "git"))

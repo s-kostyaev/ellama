@@ -689,6 +689,8 @@ and `:recoverable-input' values."
               :tool-identity (format "%s/%s" category tool-name))
       (list :tool-origin 'builtin
             :tool-identity tool-name
+            :shell-command (eq (plist-get tool-plist :function)
+                               #'ellama-tools-shell-command-tool)
             :recoverable-input
             (and (eq (plist-get tool-plist :function)
                      #'ellama-tools-trash-files-tool)
@@ -1256,6 +1258,34 @@ CALLBACK receives `(TEXT PATH)'.  Return non-nil if a walk limit was hit."
      0)
     (aref node-count 1)))
 
+(defun ellama-tools--nonempty-shell-truncation-p (command)
+  "Return non-nil if a literal null COMMAND redirects to a nonempty file."
+  ;; Accept only a complete null command with one literal output path.
+  ;; Shell expansion, extra commands, and other redirections need their
+  ;; usual checks.
+  (save-match-data
+    (let ((case-fold-search nil)
+          (bare "[a-zA-Z0-9_./-]+")
+          (quoted "[a-zA-Z0-9_./ -]+"))
+      (when (and (not (file-remote-p default-directory))
+                 (string-match
+                  (concat "\\`[ \t]*:[ \t]*>|?[ \t]*"
+                          "\\(?:\\(" bare "\\)\\|'\\(" quoted "\\)'"
+                          "\\|\"\\(" quoted "\\)\"\\)[ \t]*\\'")
+                  command))
+        (let ((path (or (match-string 1 command) (match-string 2 command)
+                        (match-string 3 command))))
+          (condition-case nil
+              (and (not (string-suffix-p "/" path))
+                   (not (member ".." (split-string path "/" t)))
+                   (let ((file (expand-file-name path)))
+                     (and (not (ellama-tools--tool-check-file-access file 'read))
+                          (file-regular-p file)
+                          (> (file-attribute-size
+                              (file-attributes (file-truename file)))
+                             0))))
+            (error nil)))))))
+
 (defun ellama-tools--dlp-scan-input-value
     (tool-name arg-name value &optional tool-metadata)
   "Scan VALUE for TOOL-NAME under ARG-NAME and return a decision plist."
@@ -1265,10 +1295,18 @@ CALLBACK receives `(TEXT PATH)'.  Return non-nil if a walk limit was hit."
           (ellama-tools--dlp-walk-strings
            value arg-name
            (lambda (text path)
-             (let* ((scan (ellama-tools-dlp--scan-text
-                           text
-                           (ellama-tools--dlp-make-scan-context
-                            'input tool-name path tool-metadata)))
+             (let* ((context (ellama-tools--dlp-make-scan-context
+                              'input tool-name path tool-metadata))
+                    (scan
+                     (ellama-tools-dlp--scan-text
+                      text
+                      (if (and (plist-get tool-metadata :shell-command)
+                               (equal path "cmd")
+                               ellama-tools-dlp-enabled
+                               (ellama-tools-dlp--irreversible-scan-p context)
+                               (ellama-tools--nonempty-shell-truncation-p text))
+                          (plist-put context :shell-truncation t)
+                        context)))
                     (verdict (plist-get scan :verdict))
                     (action (plist-get verdict :action))
                     (message (plist-get verdict :message)))
