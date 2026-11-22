@@ -1681,7 +1681,7 @@ Include scoping fields because cached entries store the normalized rule plist."
      text)))
 
 (defun ellama-tools-dlp--sql-transaction-p (text)
-  "Check whether TEXT starts with a SQL transaction or savepoint statement."
+  "Recognize an initial SQL transaction or savepoint statement in TEXT."
   (let ((case-fold-search t))
     (string-match-p
      (concat "\\`[ \t\r\n]*\\(?:BEGIN\\(?:[ \t]+TRANSACTION\\)?"
@@ -3032,7 +3032,7 @@ Errors contain no provider message or payload."
 
 (defun ellama-tools-dlp--request-irreversible-decision (state &optional profile)
   "Ask the configured decision provider to classify tool call STATE.
-PROFILE selects the question for a shell command or SQL statement."
+Use PROFILE to select a question for the tool input."
   (pcase-let* ((`(,instructions ,positive ,negative)
                 (pcase profile
                   ((or 'literal-printer 'literal-shell)
