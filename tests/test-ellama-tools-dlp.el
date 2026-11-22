@@ -184,6 +184,22 @@
      (should-not (string-match-p "secret command"
                                  (prin1-to-string ellama-tools-dlp--incident-log))))))
 
+(ert-deftest test-ellama-tools-dlp-decision-question-for-local-shell ()
+  (ellama-test-dlp-with-decision
+   (let (instructions)
+     (cl-letf (((symbol-function 'llm-decide)
+                (lambda (_provider questions _state)
+                  (push (llm-question-bool-instructions (car questions))
+                        instructions)
+                  (list (cons 'irreversible
+                              (make-llm-decision-bool :confidence 0.25))))))
+       (ellama-test-dlp-call-verdict "printf '%s' 'example'" context)
+       (let ((mcp-context (copy-sequence context)))
+         (setq mcp-context (plist-put mcp-context :tool-origin 'mcp))
+         (ellama-test-dlp-call-verdict "example" mcp-context))
+       (should-not (string-match-p "command substitutions" (car instructions)))
+       (should (string-match-p "command substitutions" (cadr instructions)))))))
+
 (ert-deftest test-ellama-tools-dlp-decision-unicode-request-round-trip ()
   (ellama-test-dlp-with-decision
    (dolist (payload '("Сохрани правки в ellama.el"

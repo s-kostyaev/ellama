@@ -1259,17 +1259,21 @@ CALLBACK receives `(TEXT PATH)'.  Return non-nil if a walk limit was hit."
     (aref node-count 1)))
 
 (defun ellama-tools--nonempty-shell-truncation-p (command)
-  "Return non-nil if a literal null COMMAND redirects to a nonempty file."
-  ;; Accept only a complete null command with one literal output path.
+  "Return non-nil if a literal null or print COMMAND truncates a file."
+  ;; Accept a single null command or printer with literal arguments and
+  ;; one literal output path.
   ;; Shell expansion, extra commands, and other redirections need their
   ;; usual checks.
   (save-match-data
     (let ((case-fold-search nil)
           (bare "[a-zA-Z0-9_./-]+")
-          (quoted "[a-zA-Z0-9_./ -]+"))
+          (quoted "[a-zA-Z0-9_./ -]+")
+          (word "\\(?:[a-zA-Z0-9_./%:+,-]+\\|'[^'\n\r\0]*'\\|\"[^\"$`!\\\n\r\0]*\"\\)"))
       (when (and (not (file-remote-p default-directory))
                  (string-match
-                  (concat "\\`[ \t]*:[ \t]*>|?[ \t]*"
+                  (concat "\\`[ \t]*\\(?::"
+                          "\\|\\(?:/bin/\\|/usr/bin/\\)?\\(?:printf\\|echo\\)"
+                          "\\(?:[ \t]+" word "\\)*\\)[ \t]*>|?[ \t]*"
                           "\\(?:\\(" bare "\\)\\|'\\(" quoted "\\)'"
                           "\\|\"\\(" quoted "\\)\"\\)[ \t]*\\'")
                   command))
@@ -1398,7 +1402,7 @@ Return plist with keys `:action' and optional `:message'."
                              'input tool-name nil tool-metadata)
                             :truncated truncated)
                  (lambda ()
-                   (ellama-tools--dlp-call-details tool-plist call-args)))))
+                   (ellama-tools--dlp-call-details tool-plist call-args t)))))
              (model-action (plist-get model-verdict :action)))
         (cond
          ((eq model-action 'block) model-verdict)
@@ -1410,8 +1414,9 @@ Return plist with keys `:action' and optional `:message'."
          ((eq model-action 'warn) model-verdict)
          (t (list :action 'allow)))))))
 
-(defun ellama-tools--dlp-call-details (tool-plist call-args)
-  "Return named printable details for TOOL-PLIST called with CALL-ARGS."
+(defun ellama-tools--dlp-call-details (tool-plist call-args &optional decision)
+  "Return named details for TOOL-PLIST called with CALL-ARGS.
+When DECISION is non-nil, retain declared booleans as JSON values."
   (let* ((async (plist-get tool-plist :async))
          (values (if (and async call-args (functionp (car call-args)))
                      (cdr call-args)
@@ -1429,10 +1434,14 @@ Return plist with keys `:action' and optional `:message'."
                          raw-name)))
         (unless (functionp value)
           (push (cons arg-name
-                      (let ((print-circle t)
-                            (print-length nil)
-                            (print-level nil))
-                        (prin1-to-string value)))
+                      (if (and decision
+                               (member (plist-get spec :type) '(boolean "boolean"))
+                               (memq value '(t nil :false :json-false)))
+                          (if (eq value t) t :false)
+                        (let ((print-circle t)
+                              (print-length nil)
+                              (print-level nil))
+                          (prin1-to-string value))))
                 details)))
       (setq values (cdr values))
       (setq specs (cdr specs))

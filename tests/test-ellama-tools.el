@@ -5265,13 +5265,16 @@ END_ELLAMA_AGENT_STATE"))
                        "mcp-storage/set_retention"))
         (should (equal (plist-get (car requests) :arguments)
                        [(:name "days" :value "0")
-                        (:name "force" :value "t")]))
+                        (:name "force" :value t)]))
         (setq probability 0.1
               requests nil)
         (cl-letf (((symbol-function 'ellama-tools--dlp-confirm-warn)
                    (lambda (&rest _args) t)))
           (should (equal (funcall run 30 nil) "changed")))
         (should (equal executions '((30 nil))))
+        (should (equal (plist-get (car requests) :arguments)
+                       [(:name "days" :value "30")
+                        (:name "force" :value :false)]))
         (should (= (length requests) 1))))))
 
 (ert-deftest test-ellama-tools-irreversible-decision-after-local-scan ()
@@ -5453,7 +5456,9 @@ END_ELLAMA_AGENT_STATE"))
         (let ((default-directory (file-name-as-directory directory)))
           (with-temp-file "saved notes.txt" (insert "Only copy"))
           (with-temp-file "empty.txt")
-          (dolist (command '(": > 'saved notes.txt'" ": >| \"saved notes.txt\""))
+          (dolist (command '(": > 'saved notes.txt'" ": >| \"saved notes.txt\""
+                             "printf '%s' 'final > marker' > 'saved notes.txt'"
+                             "/bin/echo ok > 'saved notes.txt'"))
             (let ((decision (ellama-tools--dlp-input-decision
                              tool (list #'ignore command))))
               (should (eq (plist-get decision :action) 'warn-strong))
@@ -5462,7 +5467,11 @@ END_ELLAMA_AGENT_STATE"))
                                          :rule-ids)))))
           (dolist (command '(": > missing.txt" ": > empty.txt"
                              ": >> 'saved notes.txt'" ": >&1"
-                             "echo ': > saved.txt'" ": > \"$target\""))
+                             "echo ': > saved.txt'" ": > \"$target\""
+                             "echo ok >> 'saved notes.txt'"
+                             "echo ': > saved.txt' # > 'saved notes.txt'"
+                             "printf '%s' \"$(date)\" > 'saved notes.txt'"
+                             "echo ok && : > 'saved notes.txt'"))
             (should (eq (plist-get (ellama-tools--dlp-input-decision
                                    tool (list #'ignore command))
                                   :action)
