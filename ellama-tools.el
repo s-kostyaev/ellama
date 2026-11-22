@@ -35,6 +35,7 @@
 (require 'llm)
 (require 'seq)
 (require 'subr-x)
+(require 'vc-git)
 (require 'ellama-tools-dlp)
 
 (declare-function llm-standard-provider-p "llm-provider-utils" (provider))
@@ -84,6 +85,9 @@ next attempt is allowed so deliberate overwrites remain possible."
 
 (defvar ellama-tools--current-session nil
   "Current Ellama session used while executing tools.")
+
+(defvar ellama-tools--confirmed-rm-git-evidence nil
+  "Git commit cited during confirmation of the current shell tool call.")
 
 (defvar-local ellama-tools--session-file-snapshot nil
   "Temporary file containing the materialized current session transcript.")
@@ -1636,6 +1640,86 @@ return nil."
           nil)
       message)))
 
+(defun ellama-tools--literal-rm-path (command)
+  "Return the single relative path in a simple rm COMMAND, or nil."
+  (save-match-data
+    (let ((case-fold-search nil))
+      (when (and (stringp command)
+                 (string-match
+                  (concat "\\`[ \t]*rm[ \t]+"
+                          "\\(?:-f[ \t]+\\)?\\(?:--[ \t]+\\)?"
+                          "\\([a-zA-Z0-9_./-]+\\)[ \t]*\\'")
+                  command))
+        (let* ((path (match-string 1 command))
+               (parts (split-string path "/" t)))
+          (unless (or (string-prefix-p "-" path) (string-prefix-p "/" path)
+                      (string-suffix-p "/" path)
+                      (member (car (last parts)) '("." ".."))
+                      (member ".." parts)
+                      (member ".git" (mapcar #'downcase parts)))
+            path))))))
+
+(defun ellama-tools--git-read (directory &rest args)
+  "Run read-only Git ARGS in local DIRECTORY and return stdout on success."
+  (let ((default-directory directory)
+        (process-environment
+         (append '("GIT_CONFIG_NOSYSTEM=1" "GIT_CONFIG_GLOBAL=/dev/null"
+                   "GIT_NO_LAZY_FETCH=1" "GIT_ALLOW_PROTOCOL=")
+                 (seq-remove (lambda (entry) (string-prefix-p "GIT_" entry))
+                             process-environment)))
+        (coding-system-for-read 'utf-8-unix))
+    (with-temp-buffer
+      (when (eq 0 (apply #'call-process "git" nil (list t nil) nil
+                         "--no-replace-objects" "--literal-pathspecs"
+                         "-c" "core.fsmonitor=false" args))
+        (buffer-string)))))
+
+(defun ellama-tools--rm-git-evidence (tool-plist args)
+  "Return Git evidence for a simple rm in the built-in TOOL-PLIST and ARGS.
+Only inspect local, unsandboxed calls.  The returned commit describes
+the file at inspection time and never changes the DLP verdict."
+  (when (and (eq (plist-get tool-plist :function)
+                 #'ellama-tools-shell-command-tool)
+             (eq (plist-get (ellama-tools--tool-scan-metadata tool-plist)
+                            :tool-origin)
+                 'builtin))
+    (ellama-tools--rm-git-commit
+     (car (ellama-tools--tool-call-values (plist-get tool-plist :async) args)))))
+
+(defun ellama-tools--rm-git-commit (command)
+  "Return HEAD if COMMAND names one local file matching HEAD and the index."
+  (condition-case nil
+      (when-let* (((not (or ellama-tools-use-srt
+                            (file-remote-p default-directory))))
+                  (path (ellama-tools--literal-rm-path command))
+                  (file (expand-file-name path (file-truename default-directory)))
+                  ((equal file (file-truename file)))
+                  ((file-regular-p file))
+                  (attributes (file-attributes file))
+                  ((and (= (file-attribute-link-number attributes) 1)
+                        (<= (file-attribute-size attributes) (* 1024 1024))))
+                  (mode (pcase (file-modes file)
+                          (#o644 "100644")
+                          (#o755 "100755")))
+                  (root (vc-git-root (file-name-directory file)))
+                  (relative (file-relative-name file root))
+                  (head (ellama-tools--git-read root "rev-parse" "--verify"
+                                                "HEAD^{commit}"))
+                  (commit (string-trim-right head))
+                  (entry (ellama-tools--git-read root "ls-tree" "-z" commit
+                                                 "--" relative))
+                  (blob (ellama-tools--git-read root "hash-object" "--no-filters"
+                                                "--" relative))
+                  (object (string-trim-right blob))
+                  ((equal entry (concat mode " blob " object "\t" relative "\0")))
+                  ((equal (ellama-tools--git-read root "ls-files" "--stage" "-z"
+                                                  "--" relative)
+                          (concat mode " " object " 0\t" relative "\0")))
+                  ((equal (ellama-tools--git-read root "cat-file" "-t" object)
+                          "blob\n")))
+        commit)
+    (error nil)))
+
 (defun ellama-tools--make-dlp-wrapper (func tool-plist)
   "Make DLP wrapper for FUNC using TOOL-PLIST metadata."
   (let ((tool-name (plist-get tool-plist :name))
@@ -1707,18 +1791,27 @@ return nil."
                     async args
                     (ellama-tools--dlp-blocked-noninteractive-message
                      tool-name message))
-                 (if (not (ellama-tools--dlp-confirm-warn-strong
-                           tool-name message
-                           (ellama-tools--dlp-call-details tool-plist args)))
-                     (ellama-tools--dlp-return-message
-                      async args
-                      (format "DLP warning denied tool execution for %s"
-                              tool-name))
-                   (let ((result (apply func wrapped-args)))
-                     (if (and (not async) (stringp result))
-                         (ellama-tools--postprocess-output-result
-                          tool-name result output-context tool-metadata)
-                       result)))))
+                 (let* ((commit (ellama-tools--rm-git-evidence tool-plist args))
+                        (warning
+                         (if commit
+                             (format (concat "%s. Before confirmation, Ellama found "
+                                             "that the file's bytes and Git mode "
+                                             "matched the index and commit %s")
+                                     (or message "DLP warned on input") commit)
+                           message)))
+                   (if (not (ellama-tools--dlp-confirm-warn-strong
+                             tool-name warning
+                             (ellama-tools--dlp-call-details tool-plist args)))
+                       (ellama-tools--dlp-return-message
+                        async args
+                        (format "DLP warning denied tool execution for %s"
+                                tool-name))
+                     (let* ((ellama-tools--confirmed-rm-git-evidence commit)
+                            (result (apply func wrapped-args)))
+                       (if (and (not async) (stringp result))
+                           (ellama-tools--postprocess-output-result
+                            tool-name result output-context tool-metadata)
+                         result))))))
               (_
                (let ((result (apply func wrapped-args)))
                  (if (and (not async) (stringp result))
@@ -3766,6 +3859,13 @@ TIMEOUT is the optional command timeout in seconds."
                              (format "Command failed with exit code %d.\n%s"
                                      exit-code output)))))
                      (finish result)))))
+            (when (and ellama-tools--confirmed-rm-git-evidence
+                       (not (equal ellama-tools--confirmed-rm-git-evidence
+                                   (ellama-tools--rm-git-commit cmd))))
+              (kill-buffer buf)
+              (user-error
+               (concat "Ellama could not reverify the file against Git "
+                       "after confirmation. Submit the tool call again.")))
             (setq process
                   (apply #'start-file-process
                          "*ellama-shell-command*" buf

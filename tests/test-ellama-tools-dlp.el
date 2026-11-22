@@ -116,6 +116,29 @@
                             :action)
                  'block)))))
 
+(ert-deftest test-ellama-tools-dlp-git-hard-reset-needs-confirmation ()
+  (ellama-test-dlp-with-decision
+   (dolist (command '("git reset --hard" "git reset --hard HEAD"
+                     "git reset -q --hard HEAD~1"
+                     "git reset --hard HEAD && git status --short"
+                     "git reset --hard HEAD --; git status --short"
+                     "/usr/bin/git reset --hard --quiet origin/main"))
+     (let* ((scan (ellama-tools-dlp--scan-text command context))
+            (verdict (plist-get scan :verdict)))
+       (should (eq (plist-get verdict :action) 'warn-strong))
+       (should (equal (ellama-tools-dlp--findings-rule-ids
+                       (plist-get scan :findings))
+                      '("ir-shell-git-reset-hard")))))
+   (dolist (command '("git reset --soft HEAD" "git reset --mixed HEAD"
+                     "git reset --hard --help" "git reset --hard -h"
+                     "git reset --hard HEAD -- file"
+                     "git reset -- file" "printf '%s' 'git reset --hard HEAD'"))
+     (should (eq (plist-get (plist-get
+                             (ellama-tools-dlp--scan-text command context)
+                             :verdict)
+                            :action)
+                 'allow)))))
+
 (ert-deftest test-ellama-tools-dlp-decision-policy-and-threshold ()
   (ellama-test-dlp-with-decision
    (dolist (case '((enforce warn 0.5 warn-strong)
