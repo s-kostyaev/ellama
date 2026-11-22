@@ -17,7 +17,7 @@ python3 eval/irreversible/run.py
 python3 eval/irreversible/run.py --suite git
 ```
 
-The decision suite has 531 cases. The 52 Git cases run without Ollama. To
+The decision suite has 583 cases. The 52 Git cases run without Ollama. To
 run only the shell guard and SQL cases, pass both fixture group names.
 
 ```sh

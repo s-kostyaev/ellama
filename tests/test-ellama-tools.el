@@ -5433,6 +5433,28 @@ END_ELLAMA_AGENT_STATE"))
                      "rm file\ntrue" "rm .GIT/config" "printf 'rm file'"))
     (should-not (ellama-tools--literal-rm-path command))))
 
+(ert-deftest test-ellama-tools-shell-literal-shape-requires-complete-command ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((shell-file-name "/bin/sh")
+        (shell-command-switch "-c"))
+    (dolist (command '("printf '%s\\n' 'git reset --hard HEAD'"
+                       "echo '$(git reset --hard HEAD)'"))
+      (should (eq (ellama-tools--shell-literal-shape command) 'printer)))
+    (should (eq (ellama-tools--shell-literal-shape "false && git reset --hard main")
+                'skipped))
+    (should (eq (ellama-tools--shell-literal-shape "git clean -ndx") 'dry-run))
+    (should (eq (ellama-tools--shell-literal-shape "rm # no operand") 'no-operands))
+    (dolist (command '("echo 'ready'; git reset --hard main"
+                       "printf '%s' \"$(git reset --hard main)\""
+                       "echo 'ready' > only-copy"
+                       "false && git status; git reset --hard main"
+                       "true || false && git reset --hard main"
+                       "git clean -n; git clean -fdx"
+                       "rm # text\nrm -- only-copy"))
+      (should-not (ellama-tools--shell-literal-shape command)))
+    (let ((shell-command-switch "-lc"))
+      (should-not (ellama-tools--shell-literal-shape "echo 'hello'")))))
+
 (ert-deftest test-ellama-tools-dlp-literal-shell-truncation ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((directory (make-temp-file "ellama-truncate-" t))
@@ -5449,6 +5471,8 @@ END_ELLAMA_AGENT_STATE"))
         (ellama-tools-irreversible-project-overrides-enabled nil)
         (ellama-tools-dlp--session-bypasses nil)
         (ellama-tools-use-srt nil)
+        (shell-file-name "/bin/sh")
+        (shell-command-switch "-c")
         (tool '(:name "shell_command" :async t
                 :function ellama-tools-shell-command-tool
                 :args ((:name "cmd" :type string)))))
@@ -5456,12 +5480,14 @@ END_ELLAMA_AGENT_STATE"))
         (let ((default-directory (file-name-as-directory directory))
               (process-environment (copy-sequence process-environment)))
           (with-temp-file "saved notes.txt" (insert "Only copy"))
+          (with-temp-file "saved.txt" (insert "Only copy"))
           (with-temp-file "empty.txt")
           (setenv "ELLAMA_SCOPE_TEST" "saved notes.txt")
           (setenv "ELLAMA_SCOPE_DEFAULT" nil)
           (dolist (command '(": > 'saved notes.txt'"
                              ": >| \"saved notes.txt\""
                              "printf '%s' 'final > marker' > 'saved notes.txt'"
+                             "printf '%s' ok > \"$(echo saved.txt)\""
                              "/bin/echo ok > 'saved notes.txt'"
                              "echo ok && : > 'saved notes.txt'"
                              "echo ok ; : > 'saved notes.txt'"
@@ -5486,6 +5512,9 @@ END_ELLAMA_AGENT_STATE"))
                              "echo ok >> 'saved notes.txt'"
                              "echo ': > saved.txt' # > 'saved notes.txt'"
                              "printf '%s' \"$(date)\" > 'saved notes.txt'"
+                             ": > \"$(echo empty.txt)\""
+                             ": > \"$(echo 'saved.txt'; true)\""
+                             ": >> \"$(echo saved.txt)\""
                              "false && : > 'saved notes.txt'"
                              "true || : > 'saved notes.txt'"
                              "test -s empty.txt && echo ok > 'saved notes.txt'"

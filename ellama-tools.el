@@ -656,19 +656,22 @@ NAME is fallback label used when FUNC has no symbol name."
   "Build DLP scan context for DIRECTION, TOOL-NAME and ARG-NAME.
 TOOL-METADATA may include `:tool-origin', `:server-id', `:tool-identity'
 and `:recoverable-input' values."
-  (let ((tool-origin (plist-get tool-metadata :tool-origin))
-        (server-id (plist-get tool-metadata :server-id))
-        (tool-identity (plist-get tool-metadata :tool-identity)))
-    (ellama-tools-dlp--make-scan-context
-     :direction direction
-     :tool-name tool-name
-     :arg-name arg-name
-     :payload-length 0
-     :truncated nil
-     :tool-origin tool-origin
-     :server-id server-id
-     :tool-identity tool-identity
-     :recoverable-input (plist-get tool-metadata :recoverable-input))))
+  (let ((context
+         (ellama-tools-dlp--make-scan-context
+          :direction direction
+          :tool-name tool-name
+          :arg-name arg-name
+          :payload-length 0
+          :truncated nil
+          :tool-origin (plist-get tool-metadata :tool-origin)
+          :server-id (plist-get tool-metadata :server-id)
+          :tool-identity (plist-get tool-metadata :tool-identity)
+          :recoverable-input (plist-get tool-metadata :recoverable-input))))
+    (if-let* (((eq direction 'input))
+              ((or (null arg-name) (equal arg-name "cmd")))
+              (shape (plist-get tool-metadata :shell-literal-shape)))
+        (plist-put context :shell-literal-shape shape)
+      context)))
 
 (defun ellama-tools--tool-category-name (tool-plist)
   "Return normalized category name from TOOL-PLIST, or nil."
@@ -1258,8 +1261,24 @@ CALLBACK receives `(TEXT PATH)'.  Return non-nil if a walk limit was hit."
      0)
     (aref node-count 1)))
 
+(defun ellama-tools--posix-shell-p ()
+  "Return non-nil for a supported local POSIX shell invoked with `-c'."
+  (and (not (file-remote-p default-directory))
+       (equal shell-command-switch "-c")
+       (member shell-file-name '("/bin/sh" "/bin/bash" "/bin/dash"
+                                "/bin/zsh" "/bin/ksh" "/usr/bin/bash"
+                                "/usr/bin/dash" "/usr/bin/zsh"))))
+
+(defconst ellama-tools--shell-output-echo-prefix
+  "\\$(\\(?:/bin/\\|/usr/bin/\\)?echo[ \t]+"
+  "Start of a supported echo substitution in an output path.")
+
+(defconst ellama-tools--shell-output-echo-operand
+  "[a-zA-Z0-9_./][a-zA-Z0-9_./-]*"
+  "A single path word in an echo substitution, excluding options.")
+
 (defun ellama-tools--shell-output-path (word)
-  "Resolve a literal output path or a quoted variable in WORD."
+  "Resolve a supported output path in WORD without running the shell."
   (let* ((quoted (string-prefix-p "\"" word))
          (text (if (or quoted (string-prefix-p "'" word))
                    (substring word 1 -1)
@@ -1290,7 +1309,53 @@ CALLBACK receives `(TEXT PATH)'.  Return non-nil if a walk limit was hit."
            (string-match (concat "\\`\\$\\(?:{\\(" identifier
                                  "\\)}\\|\\(" identifier "\\)\\)\\'")
                          text))
-      (or chosen (getenv (or (match-string 1 text) (match-string 2 text))))))))
+      (or chosen (getenv (or (match-string 1 text) (match-string 2 text)))))
+     ((and quoted (ellama-tools--posix-shell-p)
+           (string-match (concat "\\`" ellama-tools--shell-output-echo-prefix
+                                 "\\(" ellama-tools--shell-output-echo-operand
+                                 "\\))\\'") text))
+      ;; A single literal operand determines the likely output path.  Use
+      ;; it only when checking for existing bytes that may be lost.
+      (or chosen (match-string 1 text))))))
+
+(defun ellama-tools--shell-literal-shape (command)
+  "Recognize supported non-mutating shapes in a complete shell COMMAND."
+  (when (and (stringp command)
+             (<= (string-bytes command) ellama-tools-dlp-max-scan-size)
+             (ellama-tools--posix-shell-p))
+    (let* ((case-fold-search nil)
+           (word (concat "\\(?:[a-zA-Z0-9_./%:+,=-]+\\|'[^'\r\n\0]*'\\|"
+                         "\"[^\"$`!\\\r\n\0]*\"\\)"))
+           (words (concat "\\(?:[ \t]+" word "\\)*"))
+           (program "\\(?:/bin/\\|/usr/bin/\\)?")
+           (format (regexp-opt '("%s" "'%s'" "\"%s\"" "'%s\\n'" "\"%s\\n\""))))
+      (cond
+       ((string-match-p
+         (concat "\\`[ \t]*" program "\\(?:echo\\|printf[ \t]+" format
+                 "\\)" words "[ \t]*\\'")
+         command)
+        'printer)
+       ((string-match-p
+         (concat "\\`[ \t]*\\(?:true[ \t]*&&[ \t]*\\)*"
+                 "\\(?:false[ \t]*&&\\|true[ \t]*||\\)[ \t]*"
+                 word words "\\(?:[ \t]*>[ \t]*" word "\\)?[ \t]*\\'")
+         command)
+        'skipped)
+       ((string-match-p
+         (concat "\\`[ \t]*" program "git[ \t]+clean[ \t]+"
+                 "\\(?:--dry-run\\|-[dfxX]*n[dfxX]*\\)[ \t]*\\'")
+         command)
+        'dry-run)
+       ((string-match-p
+         (concat "\\`[ \t]*" program "rm\\(?:[ \t]+#[^\r\n\0]*\\)?[ \t]*\\'")
+         command)
+        'no-operands)
+       ((and (string-match-p "\\`[ \t]*:[ \t]*>[ \t]*/dev/null[ \t]*\\'" command)
+             (eq (aref (or (ignore-errors
+                             (file-attribute-modes (file-attributes "/dev/null"))) " ")
+                       0)
+                 ?c))
+        'null-output)))))
 
 (defun ellama-tools--nonempty-shell-truncation-p (command)
   "Return non-nil if COMMAND redirects a null command or printer to data."
@@ -1306,7 +1371,9 @@ CALLBACK receives `(TEXT PATH)'.  Return non-nil if a walk limit was hit."
                          "\\)[ \t]*\\)*"))
            (target (concat "\\(?:[a-zA-Z0-9_./-]+"
                            "\\|'[a-zA-Z0-9_./ -]+'"
-                           "\\|\"[a-zA-Z0-9_./ ${}:-]+\"\\)")))
+                           "\\|\"\\(?:[a-zA-Z0-9_./ ${}:-]+\\|"
+                           ellama-tools--shell-output-echo-prefix
+                           ellama-tools--shell-output-echo-operand ")\\)\"\\)")))
       (when (and (not (file-remote-p default-directory))
                  (string-match
                   (concat lead "\\(?:test[ \t]+-[fs][ \t]+\\(" target
@@ -1435,6 +1502,10 @@ Return plist with keys `:action' and optional `:message'."
          skip-decision
          sql-statement
          truncated)
+    (when-let* ((ellama-tools-dlp-enabled)
+                ((plist-get tool-metadata :shell-command))
+                (shape (ellama-tools--shell-literal-shape (car values))))
+      (setq tool-metadata (plist-put tool-metadata :shell-literal-shape shape)))
     (when-let* ((sql (ellama-tools--dlp-sql-commit-argument declared-args values)))
       (setq tool-metadata (plist-put tool-metadata :sql-commit-arg sql)))
     (catch 'done

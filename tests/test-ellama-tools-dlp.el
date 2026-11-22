@@ -149,8 +149,16 @@
                              (ellama-tools-dlp--scan-text plain context) :verdict)
                             :action)
                  'allow))
+     (should (eq (plist-get (plist-get
+                             (ellama-tools-dlp--scan-text
+                              "SELECT 'Sample: DELETE FROM invoices;'"
+                              context)
+                             :verdict)
+                            :action)
+                 'allow))
      (dolist (query '("EXPLAIN ANALYZE DELETE FROM invoices;"
                       "EXPLAIN DELETE FROM invoices; DELETE FROM orders;"
+                      "SELECT 'Example'; DELETE FROM invoices;"
                       "EXPLAIN DELETE FROM invoices; -- comment\nDELETE FROM orders;"))
        (should (eq (plist-get (plist-get
                                (ellama-tools-dlp--scan-text query context) :verdict)
@@ -161,6 +169,23 @@
                :risk-class irreversible :severity high :confidence high))))
        (should (eq (plist-get (plist-get
                                (ellama-tools-dlp--scan-text plain context) :verdict)
+                              :action)
+                   'block))))))
+
+(ert-deftest test-ellama-tools-dlp-literal-printer-preserves-local-rules ()
+  (ellama-test-dlp-with-decision
+   (let* ((context (plist-put (copy-sequence context)
+                              :shell-literal-shape 'printer))
+          (text "printf '%s' 'rm -rf sample'"))
+     (should (eq (plist-get (plist-get (ellama-tools-dlp--scan-text text context)
+                                       :verdict)
+                            :action)
+                 'allow))
+     (let ((ellama-tools-dlp-regex-rules
+            '((:id "ir-shell-rm-rf" :pattern "rm -rf"
+               :severity high :risk-class irreversible :confidence high))))
+       (should (eq (plist-get (plist-get (ellama-tools-dlp--scan-text text context)
+                                         :verdict)
                               :action)
                    'block))))))
 

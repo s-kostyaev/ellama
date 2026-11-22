@@ -1642,6 +1642,20 @@ Include scoping fields because cached entries store the normalized rule plist."
      "\\(?:--[ \t]+[^;[:cntrl:]\u2028\u2029]*\\)?[ \t\r\n]*\\'"))
   "One plain EXPLAIN of a simple DELETE.  Execution options are excluded.")
 
+(defconst ellama-tools-dlp--sql-select-literal-regexp
+  (concat "\\`[ \t\r\n]*SELECT[ \t\r\n]+'"
+          "\\(?:[^'\\[:cntrl:]]\\|''\\)*'[ \t\r\n]*;?[ \t\r\n]*\\'")
+  "One SELECT of a literal string, with doubled quotes as its only escape.")
+
+(defconst ellama-tools-dlp--sql-delete-rules
+  '("ir-sql-delete" "ir-sql-delete-no-where")
+  "Built-in DLP rules for DELETE statements.")
+
+(defconst ellama-tools-dlp--sql-mutation-rules
+  (append '("ir-sql-drop-database" "ir-sql-drop-schema")
+          ellama-tools-dlp--sql-delete-rules)
+  "Built-in regex rules for destructive SQL.")
+
 (defconst ellama-tools-dlp--sql-unfiltered-update-regexp
   (let* ((identifier "[a-zA-Z_][a-zA-Z_0-9]*")
          (table (concat identifier "\\(?:\\." identifier "\\)?"))
@@ -1667,10 +1681,10 @@ Include scoping fields because cached entries store the normalized rule plist."
      text)))
 
 (defun ellama-tools-dlp--detect-regex-findings
-    (text context &optional rules plain-sql-plan)
+    (text context &optional rules ignored-builtins)
   "Return regex detector findings for TEXT in CONTEXT.
 When RULES is nil, combine built-in and user regex rules.
-PLAIN-SQL-PLAN suppresses only the built-in DELETE rules."
+IGNORED-BUILTINS lists IDs of built-in irreversible rules to omit."
   (ellama-tools-dlp--validate-scan-context context)
   (unless (stringp text)
     (error "DLP regex detection expects a string payload"))
@@ -1678,12 +1692,11 @@ PLAIN-SQL-PLAN suppresses only the built-in DELETE rules."
                             (append
                              ellama-tools-dlp--default-regex-rules
                              (when (ellama-tools-dlp--irreversible-scan-p context)
-                               (if plain-sql-plan
+                               (if ignored-builtins
                                    (seq-remove
                                     (lambda (rule)
                                       (member (plist-get rule :id)
-                                              '("ir-sql-delete"
-                                                "ir-sql-delete-no-where")))
+                                              ignored-builtins))
                                     ellama-tools-dlp--default-irreversible-regex-rules)
                                  ellama-tools-dlp--default-irreversible-regex-rules))
                              ellama-tools-dlp-regex-rules)))
@@ -2920,10 +2933,18 @@ RAW-TEXT is the complete input before normalization, when available."
   (let* ((sql (and raw-text
                    (ellama-tools-dlp--irreversible-scan-p context)
                    (ellama-tools-dlp--sql-argument-p (plist-get context :arg-name))))
-         (plan (and sql
-                    (let ((case-fold-search t))
-                      (string-match-p ellama-tools-dlp--sql-plan-regexp raw-text))))
-         (findings (ellama-tools-dlp--detect-regex-findings text context nil plan)))
+         (ignored
+          (cond
+           ((and raw-text (eq (plist-get context :shell-literal-shape) 'printer))
+            (cons "ir-shell-rm-rf" ellama-tools-dlp--sql-mutation-rules))
+           (sql
+            (let ((case-fold-search t))
+              (cond
+               ((string-match-p ellama-tools-dlp--sql-select-literal-regexp raw-text)
+                ellama-tools-dlp--sql-mutation-rules)
+               ((string-match-p ellama-tools-dlp--sql-plan-regexp raw-text)
+                ellama-tools-dlp--sql-delete-rules))))))
+         (findings (ellama-tools-dlp--detect-regex-findings text context nil ignored)))
     (when (and sql (plist-get context :sql-commit)
                (let ((case-fold-search t))
                  (string-match-p ellama-tools-dlp--sql-unfiltered-update-regexp
@@ -2991,7 +3012,10 @@ Errors contain no provider message or payload."
                        (cond
                         ((and (eq (plist-get context :tool-origin) 'builtin)
                               (equal (plist-get context :tool-name) "shell_command"))
-                         'shell)
+                         (pcase (plist-get context :shell-literal-shape)
+                           ('printer 'literal-printer)
+                           ('nil 'shell)
+                           (_ 'literal-shell)))
                         ((plist-get context :sql-statement) 'sql)))
                       (list :payload-length size))))))
       (error (list :status 'error :error-type 'decision-check-error)))))
@@ -3001,6 +3025,28 @@ Errors contain no provider message or payload."
 PROFILE selects the question for a shell command or SQL statement."
   (pcase-let* ((`(,instructions ,positive ,negative)
                 (pcase profile
+                  ((or 'literal-printer 'literal-shell)
+                   (list (if (eq profile 'literal-printer)
+                             (concat
+                              "The shell syntax check identified a single echo or printf "
+                              "with literal operands and no redirection. Decide whether "
+                              "this call itself can destroy existing data or cause an "
+                              "external action. Treat the text printed to standard output "
+                              "as data, even when that text describes a destructive command.")
+                           (concat
+                            "Identify the command that would actually execute, then judge "
+                            "irreversible data loss or an external effect. Shell text "
+                            "printed by echo or printf is literal input. Comments and "
+                            "branches skipped by && or || do not execute. A redirect "
+                            "that opens a file and substitutions inside double quotes can execute."))
+                         (concat
+                          "An executed operation loses existing data without recovery, "
+                          "discards work, sends, publishes, transfers money, or changes "
+                          "shared history.")
+                         (concat
+                          "The call just prints, previews, runs a dry run, has no "
+                          "reachable harmful effect, creates a new local file, or "
+                          "changes a recoverable copy.")))
                   ('shell
                    (list (concat
                           "Can running this shell command permanently lose data or cause "
