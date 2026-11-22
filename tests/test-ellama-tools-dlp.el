@@ -249,10 +249,20 @@
         "SELECT 1"
         (plist-put (plist-put (copy-sequence context) :tool-name "sql_query")
                    :sql-statement t))
+       (ellama-test-dlp-call-verdict
+        "BEGIN; ROLLBACK; UPDATE records SET note = '';"
+        (plist-put (plist-put (copy-sequence context) :tool-name "sql_query")
+                   :sql-statement 'transaction))
+       (ellama-test-dlp-call-verdict
+        "options"
+        (plist-put (plist-put (copy-sequence context) :tool-name "write_file")
+                   :backup-options t))
+       (should (string-match-p "nested backup.enabled" (nth 0 questions)))
+       (should (string-match-p "in execution order" (nth 1 questions)))
        (should (string-match-p "Evaluate control flags before the statement"
-                               (nth 0 questions)))
-       (should (string-match-p "including nested options" (nth 1 questions)))
-       (should (string-match-p "regardless of exit status" (nth 2 questions)))))))
+                               (nth 2 questions)))
+       (should (string-match-p "including nested options" (nth 3 questions)))
+       (should (string-match-p "regardless of exit status" (nth 4 questions)))))))
 
 (ert-deftest test-ellama-tools-dlp-decision-unicode-request-round-trip ()
   (ellama-test-dlp-with-decision

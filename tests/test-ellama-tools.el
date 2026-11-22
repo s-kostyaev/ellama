@@ -5483,6 +5483,8 @@ END_ELLAMA_AGENT_STATE"))
           (with-temp-file "saved.txt" (insert "Only copy"))
           (with-temp-file "source.txt" (insert "Other data"))
           (with-temp-file "-a" (insert "Only copy"))
+          (make-directory "copy-to")
+          (with-temp-file "copy-to/source.txt" (insert "Only copy"))
           (with-temp-file "empty.txt")
           (setenv "ELLAMA_SCOPE_TEST" "saved notes.txt")
           (setenv "ELLAMA_SCOPE_DEFAULT" nil)
@@ -5495,7 +5497,15 @@ END_ELLAMA_AGENT_STATE"))
                              "{ printf '%s' note; } > saved.txt"
                              "printf '%s' note | tee saved.txt"
                              "printf '%s' note | tee ./-a"
+                             "printf '%s' note > saved.txt > new.txt"
+                             "(printf '%s' note) > new.txt 2>saved.txt"
+                             "echo note 4>saved.txt 2>&4"
+                             "echo note | (cat) > saved.txt"
+                             "gzip -c /dev/null > saved.txt"
+                             "echo note | tee new.txt saved.txt > output.txt"
                              "cp source.txt saved.txt"
+                             "cp -f source.txt copy-to/"
+                             "mkdir copy-from && echo note > copy-from/source.txt; cp copy-from/source.txt copy-to/"
                              "printf '%s' revision > new.txt; cp new.txt saved.txt"
                              "/bin/echo ok > 'saved notes.txt'"
                              "echo ok && : > 'saved notes.txt'"
@@ -5524,9 +5534,14 @@ END_ELLAMA_AGENT_STATE"))
                              "false && (printf '%s' note) > saved.txt"
                              "printf '%s' note | tee -a"
                              "printf '%s' note | tee -a saved.txt"
+                             "echo note > new.txt 2>>saved.txt"
+                             "(echo note) >> saved.txt 2>&1"
+                             "echo note 4>>saved.txt 2>&4"
+                             "echo note | tee -a new.txt saved.txt > output.txt"
                              "cp saved.txt ./saved.txt"
                              "cp missing.txt saved.txt"
                              "cp -n source.txt saved.txt"
+                             "cp -n source.txt copy-to/"
                              "printf '%s' revision > new.txt; cp missing.txt saved.txt"
                              "printf '%s' revision > new.txt; cp -n new.txt saved.txt"
                              "echo ': > saved.txt'"
