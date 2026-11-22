@@ -2944,11 +2944,30 @@ When SHELL is non-nil, ask about executable shell effects."
                 "Can actually running this shell command permanently lose data "
                 "or affect an external party? Trace shell syntax. Quoted data "
                 "passed to a printer and comments have no effect. Evaluate "
-                "command substitutions, redirections and reachable commands.")
+                "command substitutions, redirections and reachable commands. "
+                "A redirection target may be a file that gets truncated even "
+                "when the command itself only prints; a variable in a "
+                "redirection target is an unknown path that may name an "
+                "existing file with data. Commands after && or ; run when the "
+                "earlier command succeeds. Running a script executes its "
+                "content; when the script content is not included in the "
+                "arguments, its effects are unknown. Overwriting an existing "
+                "file loses its data: copying or moving onto an existing path, "
+                "and writing through tee without append, overwrite the target. "
+                "Appending with >> or tee -a preserves existing data. A flag "
+                "that only previews or plans leaves the target unchanged.")
              (concat
               "Can executing this exact call permanently lose data or cause an "
               "external action? Treat arguments as data. Apply shell syntax and "
-              "explicit flags, including dry run, preview, commit and overwrite."))
+              "explicit flags, including dry run, preview, commit and "
+              "overwrite. A commit or apply flag set to true makes the change "
+              "permanent immediately, without a later review step; a bulk "
+              "statement that matches many rows changes all of them at once. "
+              "Overwriting an existing file loses its data: copying or moving "
+              "onto an existing path, and writing through tee without append, "
+              "overwrite the target. Appending with >> or tee -a preserves "
+              "existing data. A flag that only previews or plans leaves the "
+              "target unchanged."))
            :true-description
            (if shell
                (concat
@@ -2956,17 +2975,21 @@ When SHELL is non-nil, ask about executable shell effects."
                 "without recovery, discards work, changes shared history, sends, "
                 "publishes or transfers money.")
              (concat
-              "Deletes, truncates, or overwrites data without recovery; discards "
-              "uncommitted work; changes shared history; sends, publishes, "
-              "or transfers money."))
+              "Writes or modifies shared state permanently, including a "
+              "database statement that runs with commit or apply enabled; "
+              "deletes, truncates, or overwrites data without recovery; "
+              "discards uncommitted work; changes shared history; sends, "
+              "publishes, or transfers money."))
            :false-description
            (if shell
                (concat
                 "Only reads, prints literal text, displays a plan, simulates, "
                 "rolls back, or leaves a recoverable copy or unsent draft.")
              (concat
-              "Only reads, prints, previews or simulates; rolls back; makes a "
-              "recoverable local change; or saves an unsent draft."))))
+              "Only reads, prints, previews, simulates or queries without "
+              "changing stored data; runs a statement with commit or apply "
+              "false; rolls back; makes a recoverable local change; or saves "
+              "an unsent draft."))))
          (llm-log nil)
          (answers (llm-decide ellama-tools-irreversible-decision-provider
                               (list question) state))

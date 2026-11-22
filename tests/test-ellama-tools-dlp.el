@@ -186,11 +186,15 @@
 
 (ert-deftest test-ellama-tools-dlp-decision-question-for-local-shell ()
   (ellama-test-dlp-with-decision
-   (let (instructions)
+   (let (instructions true-descriptions false-descriptions)
      (cl-letf (((symbol-function 'llm-decide)
                 (lambda (_provider questions _state)
                   (push (llm-question-bool-instructions (car questions))
                         instructions)
+                  (push (llm-question-bool-true-description (car questions))
+                        true-descriptions)
+                  (push (llm-question-bool-false-description (car questions))
+                        false-descriptions)
                   (list (cons 'irreversible
                               (make-llm-decision-bool :confidence 0.25))))))
        (ellama-test-dlp-call-verdict "printf '%s' 'example'" context)
@@ -198,7 +202,27 @@
          (setq mcp-context (plist-put mcp-context :tool-origin 'mcp))
          (ellama-test-dlp-call-verdict "example" mcp-context))
        (should-not (string-match-p "command substitutions" (car instructions)))
-       (should (string-match-p "command substitutions" (cadr instructions)))))))
+       (should (string-match-p "command substitutions" (cadr instructions)))
+       ;; The shell question must cover the observed miss classes:
+       ;; variable redirection targets, && chains, and scripts whose
+       ;; content is not part of the call.
+       (should (string-match-p "unknown path" (cadr instructions)))
+       (should (string-match-p "&& or ;" (cadr instructions)))
+       (should (string-match-p "effects are unknown" (cadr instructions)))
+       ;; Overwrite-by-copy and tee-without-append must be named, since
+       ;; they lose data without an explicit redirection.
+       (should (string-match-p "copying or moving onto an existing path"
+                               (cadr instructions)))
+       (should (string-match-p "tee without append" (cadr instructions)))
+       ;; The generic question must state what a commit flag does, and the
+       ;; positive criterion must name the commit-enabled write so a
+       ;; decision model treats a committed statement as irreversible.
+       (should (string-match-p "commit or apply flag" (car instructions)))
+       (should (string-match-p "commit or apply enabled"
+                               (car true-descriptions)))
+       ;; A statement run with commit false must remain on the false side.
+       (should (string-match-p "commit or apply false"
+                               (car false-descriptions)))))))
 
 (ert-deftest test-ellama-tools-dlp-decision-unicode-request-round-trip ()
   (ellama-test-dlp-with-decision

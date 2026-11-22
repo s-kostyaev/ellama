@@ -5458,7 +5458,11 @@ END_ELLAMA_AGENT_STATE"))
           (with-temp-file "empty.txt")
           (dolist (command '(": > 'saved notes.txt'" ": >| \"saved notes.txt\""
                              "printf '%s' 'final > marker' > 'saved notes.txt'"
-                             "/bin/echo ok > 'saved notes.txt'"))
+                             "/bin/echo ok > 'saved notes.txt'"
+                             "echo ok && : > 'saved notes.txt'"
+                             "echo ok ; : > 'saved notes.txt'"
+                             ": > \"$target\""
+                             "echo ok && : > \"$target\""))
             (let ((decision (ellama-tools--dlp-input-decision
                              tool (list #'ignore command))))
               (should (eq (plist-get decision :action) 'warn-strong))
@@ -5467,11 +5471,14 @@ END_ELLAMA_AGENT_STATE"))
                                          :rule-ids)))))
           (dolist (command '(": > missing.txt" ": > empty.txt"
                              ": >> 'saved notes.txt'" ": >&1"
-                             "echo ': > saved.txt'" ": > \"$target\""
+                             "echo ': > saved.txt'"
                              "echo ok >> 'saved notes.txt'"
                              "echo ': > saved.txt' # > 'saved notes.txt'"
                              "printf '%s' \"$(date)\" > 'saved notes.txt'"
-                             "echo ok && : > 'saved notes.txt'"))
+                             "echo ok && : > missing.txt"
+                             "echo ok && cat 'saved notes.txt' > /dev/null"
+                             "echo \"result: $x\""
+                             "printf '%s' \"$target\""))
             (should (eq (plist-get (ellama-tools--dlp-input-decision
                                    tool (list #'ignore command))
                                   :action)

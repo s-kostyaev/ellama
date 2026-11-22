@@ -1261,34 +1261,54 @@ CALLBACK receives `(TEXT PATH)'.  Return non-nil if a walk limit was hit."
 (defun ellama-tools--nonempty-shell-truncation-p (command)
   "Return non-nil if a literal null or print COMMAND truncates a file."
   ;; Accept a single null command or printer with literal arguments and
-  ;; one literal output path.
+  ;; one literal output path.  A leading `echo' or `:' segment joined by
+  ;; `&&' or `;' may precede the truncation: those segments succeed and
+  ;; the truncation still runs.
+  ;; A double-quoted redirection target that contains a variable names
+  ;; an unknown path: the shell may expand it to an existing file with
+  ;; data, so treat the truncation as real without a file check.
   ;; Shell expansion, extra commands, and other redirections need their
   ;; usual checks.
   (save-match-data
-    (let ((case-fold-search nil)
-          (bare "[a-zA-Z0-9_./-]+")
-          (quoted "[a-zA-Z0-9_./ -]+")
-          (word "\\(?:[a-zA-Z0-9_./%:+,-]+\\|'[^'\n\r\0]*'\\|\"[^\"$`!\\\n\r\0]*\"\\)"))
-      (when (and (not (file-remote-p default-directory))
-                 (string-match
-                  (concat "\\`[ \t]*\\(?::"
-                          "\\|\\(?:/bin/\\|/usr/bin/\\)?\\(?:printf\\|echo\\)"
-                          "\\(?:[ \t]+" word "\\)*\\)[ \t]*>|?[ \t]*"
-                          "\\(?:\\(" bare "\\)\\|'\\(" quoted "\\)'"
-                          "\\|\"\\(" quoted "\\)\"\\)[ \t]*\\'")
-                  command))
-        (let ((path (or (match-string 1 command) (match-string 2 command)
-                        (match-string 3 command))))
-          (condition-case nil
-              (and (not (string-suffix-p "/" path))
-                   (not (member ".." (split-string path "/" t)))
-                   (let ((file (expand-file-name path)))
-                     (and (not (ellama-tools--tool-check-file-access file 'read))
-                          (file-regular-p file)
-                          (> (file-attribute-size
-                              (file-attributes (file-truename file)))
-                             0))))
-            (error nil)))))))
+    (let* ((case-fold-search nil)
+           (bare "[a-zA-Z0-9_./-]+")
+           (quoted "[a-zA-Z0-9_./ -]+")
+           (word "\\(?:[a-zA-Z0-9_./%:+,-]+\\|'[^'\n\r\0]*'\\|\"[^\"$`!\\\n\r\0]*\"\\)")
+           (lead (concat "\\`[ \t]*"
+                         "\\(?:\\(?::\\|\\(?:/bin/\\|/usr/bin/\\)?"
+                         "\\(?:printf\\|echo\\)\\)"
+                         "\\(?:[ \t]+" word "\\)*[ \t]*"
+                         "\\(?:&&\\|;\\)[ \t]*\\)?"))
+           (trunc (concat "\\(?::"
+                         "\\|\\(?:/bin/\\|/usr/bin/\\)?\\(?:printf\\|echo\\)"
+                         "\\(?:[ \t]+" word "\\)*\\)[ \t]*>|?[ \t]*")))
+      (when (not (file-remote-p default-directory))
+        (or
+         ;; Literal output path: verify it names a non-empty file.
+         (and (string-match
+               (concat lead trunc
+                       "\\(?:\\(" bare "\\)\\|'\\(" quoted "\\)'"
+                       "\\|\"\\(" quoted "\\)\"\\)[ \t]*\\'")
+               command)
+              (let ((path (or (match-string 1 command)
+                              (match-string 2 command)
+                              (match-string 3 command))))
+                (condition-case nil
+                    (and (not (string-suffix-p "/" path))
+                         (not (member ".." (split-string path "/" t)))
+                         (let ((file (expand-file-name path)))
+                           (and (not (ellama-tools--tool-check-file-access
+                                       file 'read))
+                                (file-regular-p file)
+                                (> (file-attribute-size
+                                    (file-attributes (file-truename file)))
+                                   0))))
+                  (error nil))))
+         ;; Variable redirection target: the path is unknown but the
+         ;; truncation syntax is confirmed, so the risk is real.
+         (string-match-p
+          (concat lead trunc "\"[^\"]*\\$[^\"]*\"[ \t]*\\'")
+          command))))))
 
 (defun ellama-tools--dlp-scan-input-value
     (tool-name arg-name value &optional tool-metadata)
