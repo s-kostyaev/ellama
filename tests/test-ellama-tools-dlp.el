@@ -139,6 +139,31 @@
                             :action)
                  'allow)))))
 
+(ert-deftest test-ellama-tools-dlp-sql-plan-preserves-other-rules ()
+  (ellama-test-dlp-with-decision
+   (let* ((context (ellama-tools-dlp--make-scan-context
+                    :direction 'input :tool-name "sql_query"
+                    :arg-name "query" :payload-length 0))
+          (plain "EXPLAIN DELETE FROM invoices; -- plan only"))
+     (should (eq (plist-get (plist-get
+                             (ellama-tools-dlp--scan-text plain context) :verdict)
+                            :action)
+                 'allow))
+     (dolist (query '("EXPLAIN ANALYZE DELETE FROM invoices;"
+                      "EXPLAIN DELETE FROM invoices; DELETE FROM orders;"
+                      "EXPLAIN DELETE FROM invoices; -- comment\nDELETE FROM orders;"))
+       (should (eq (plist-get (plist-get
+                               (ellama-tools-dlp--scan-text query context) :verdict)
+                              :action)
+                   'block)))
+     (let ((ellama-tools-dlp-regex-rules
+            '((:id "ir-sql-delete" :pattern "DELETE FROM invoices"
+               :risk-class irreversible :severity high :confidence high))))
+       (should (eq (plist-get (plist-get
+                               (ellama-tools-dlp--scan-text plain context) :verdict)
+                              :action)
+                   'block))))))
+
 (ert-deftest test-ellama-tools-dlp-decision-policy-and-threshold ()
   (ellama-test-dlp-with-decision
    (dolist (case '((enforce warn 0.5 warn-strong)
@@ -184,45 +209,25 @@
      (should-not (string-match-p "secret command"
                                  (prin1-to-string ellama-tools-dlp--incident-log))))))
 
-(ert-deftest test-ellama-tools-dlp-decision-question-for-local-shell ()
+(ert-deftest test-ellama-tools-dlp-decision-question-profiles ()
   (ellama-test-dlp-with-decision
-   (let (instructions true-descriptions false-descriptions)
+   (let (questions)
      (cl-letf (((symbol-function 'llm-decide)
-                (lambda (_provider questions _state)
-                  (push (llm-question-bool-instructions (car questions))
-                        instructions)
-                  (push (llm-question-bool-true-description (car questions))
-                        true-descriptions)
-                  (push (llm-question-bool-false-description (car questions))
-                        false-descriptions)
+                (lambda (_provider request _state)
+                  (push (llm-question-bool-instructions (car request)) questions)
                   (list (cons 'irreversible
                               (make-llm-decision-bool :confidence 0.25))))))
        (ellama-test-dlp-call-verdict "printf '%s' 'example'" context)
-       (let ((mcp-context (copy-sequence context)))
-         (setq mcp-context (plist-put mcp-context :tool-origin 'mcp))
-         (ellama-test-dlp-call-verdict "example" mcp-context))
-       (should-not (string-match-p "command substitutions" (car instructions)))
-       (should (string-match-p "command substitutions" (cadr instructions)))
-       ;; The shell question must cover the observed miss classes:
-       ;; variable redirection targets, && chains, and scripts whose
-       ;; content is not part of the call.
-       (should (string-match-p "unknown path" (cadr instructions)))
-       (should (string-match-p "&& or ;" (cadr instructions)))
-       (should (string-match-p "effects are unknown" (cadr instructions)))
-       ;; Overwrite-by-copy and tee-without-append must be named, since
-       ;; they lose data without an explicit redirection.
-       (should (string-match-p "copying or moving onto an existing path"
-                               (cadr instructions)))
-       (should (string-match-p "tee without append" (cadr instructions)))
-       ;; The generic question must state what a commit flag does, and the
-       ;; positive criterion must name the commit-enabled write so a
-       ;; decision model treats a committed statement as irreversible.
-       (should (string-match-p "commit or apply flag" (car instructions)))
-       (should (string-match-p "commit or apply enabled"
-                               (car true-descriptions)))
-       ;; A statement run with commit false must remain on the false side.
-       (should (string-match-p "commit or apply false"
-                               (car false-descriptions)))))))
+       (ellama-test-dlp-call-verdict
+        "example" (plist-put (copy-sequence context) :tool-origin 'mcp))
+       (ellama-test-dlp-call-verdict
+        "SELECT 1"
+        (plist-put (plist-put (copy-sequence context) :tool-name "sql_query")
+                   :sql-statement t))
+       (should (string-match-p "Evaluate control flags before the statement"
+                               (nth 0 questions)))
+       (should (string-match-p "including nested options" (nth 1 questions)))
+       (should (string-match-p "regardless of exit status" (nth 2 questions)))))))
 
 (ert-deftest test-ellama-tools-dlp-decision-unicode-request-round-trip ()
   (ellama-test-dlp-with-decision

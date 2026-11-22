@@ -5453,36 +5453,56 @@ END_ELLAMA_AGENT_STATE"))
                 :function ellama-tools-shell-command-tool
                 :args ((:name "cmd" :type string)))))
     (unwind-protect
-        (let ((default-directory (file-name-as-directory directory)))
+        (let ((default-directory (file-name-as-directory directory))
+              (process-environment (copy-sequence process-environment)))
           (with-temp-file "saved notes.txt" (insert "Only copy"))
           (with-temp-file "empty.txt")
-          (dolist (command '(": > 'saved notes.txt'" ": >| \"saved notes.txt\""
+          (setenv "ELLAMA_SCOPE_TEST" "saved notes.txt")
+          (setenv "ELLAMA_SCOPE_DEFAULT" nil)
+          (dolist (command '(": > 'saved notes.txt'"
+                             ": >| \"saved notes.txt\""
                              "printf '%s' 'final > marker' > 'saved notes.txt'"
                              "/bin/echo ok > 'saved notes.txt'"
                              "echo ok && : > 'saved notes.txt'"
                              "echo ok ; : > 'saved notes.txt'"
-                             ": > \"$target\""
-                             "echo ok && : > \"$target\""))
+                             "true && : > 'saved notes.txt'"
+                             "test -f 'saved notes.txt' && : > './saved notes.txt'"
+                             "test -s 'saved notes.txt' && printf '%s' ok > 'saved notes.txt'"
+                             "echo ok > \"${ELLAMA_SCOPE_DEFAULT:-${ELLAMA_SCOPE_TEST:-empty.txt}}\""
+                             "false || echo ok > 'saved notes.txt'"
+                             ": > \"$ELLAMA_SCOPE_TEST\""
+                             "echo ok && : > \"${ELLAMA_SCOPE_DEFAULT:-saved notes.txt}\""))
             (let ((decision (ellama-tools--dlp-input-decision
                              tool (list #'ignore command))))
               (should (eq (plist-get decision :action) 'warn-strong))
               (should (member "ir-shell-truncate-file"
                               (plist-get (car ellama-tools-dlp--incident-log)
                                          :rule-ids)))))
-          (dolist (command '(": > missing.txt" ": > empty.txt"
-                             ": >> 'saved notes.txt'" ": >&1"
+          (dolist (command '(": > missing.txt"
+                             ": > empty.txt"
+                             ": >> 'saved notes.txt'"
+                             ": >&1"
                              "echo ': > saved.txt'"
                              "echo ok >> 'saved notes.txt'"
                              "echo ': > saved.txt' # > 'saved notes.txt'"
                              "printf '%s' \"$(date)\" > 'saved notes.txt'"
+                             "false && : > 'saved notes.txt'"
+                             "true || : > 'saved notes.txt'"
+                             "test -s empty.txt && echo ok > 'saved notes.txt'"
+                             ": > \"${ELLAMA_SCOPE_DEFAULT:-/dev/null}\""
+                             ": > \"\\$ELLAMA_SCOPE_TEST\""
                              "echo ok && : > missing.txt"
                              "echo ok && cat 'saved notes.txt' > /dev/null"
                              "echo \"result: $x\""
-                             "printf '%s' \"$target\""))
+                             "printf '%s' \"$target\""
+                             ": > \"$ELLAMA_SCOPE_DEFAULT\""))
             (should (eq (plist-get (ellama-tools--dlp-input-decision
                                    tool (list #'ignore command))
                                   :action)
                         'allow)))
+          (setenv "ELLAMA_SCOPE_TEST" "empty.txt")
+          (should-not (ellama-tools--nonempty-shell-truncation-p
+                       ": > \"${ELLAMA_SCOPE_TEST:-saved notes.txt}\""))
           (let ((custom-tool (plist-put (copy-sequence tool) :function #'ignore)))
             (should (eq (plist-get (ellama-tools--dlp-input-decision
                                    custom-tool '(ignore ": > 'saved notes.txt'"))
@@ -5495,6 +5515,36 @@ END_ELLAMA_AGENT_STATE"))
             (should-not (ellama-tools--nonempty-shell-truncation-p
                          ": > 'saved notes.txt'"))))
       (delete-directory directory t))))
+
+(ert-deftest test-ellama-tools-dlp-sql-commit-checks-unfiltered-update ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-regex-rules nil)
+        (ellama-tools-dlp-llm-check-enabled nil)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-log-targets '(memory))
+        (ellama-tools-dlp--incident-log nil)
+        (ellama-tools-irreversible-enabled t)
+        (ellama-tools-irreversible-default-action 'warn)
+        (ellama-tools-irreversible-decision-provider nil)
+        (ellama-tools-irreversible-project-overrides-enabled nil)
+        (ellama-tools-dlp--session-bypasses nil)
+        (tool '(:name "sql_query" :args ((:name "sql" :type string)
+                                         (:name "commit" :type boolean))))
+        (query "UPDATE app.orders SET active = FALSE, amount = 0;"))
+    (should (eq (plist-get (ellama-tools--dlp-input-decision tool (list query t))
+                           :action)
+                'warn-strong))
+    (should (member "ir-sql-committed-unfiltered-update"
+                    (plist-get (car ellama-tools-dlp--incident-log) :rule-ids)))
+    (dolist (args (list (list query nil)
+                        (list query "true")
+                        (list "UPDATE app.orders SET active = FALSE WHERE id = 1" t)
+                        (list "EXPLAIN UPDATE app.orders SET amount = 0" t)))
+      (should (eq (plist-get (ellama-tools--dlp-input-decision tool args)
+                             :action)
+                  'allow)))))
 
 (ert-deftest test-ellama-tools-rm-git-evidence-is-rechecked-after-confirmation ()
   (ellama-test--ensure-local-ellama-tools)

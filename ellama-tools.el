@@ -1258,57 +1258,84 @@ CALLBACK receives `(TEXT PATH)'.  Return non-nil if a walk limit was hit."
      0)
     (aref node-count 1)))
 
+(defun ellama-tools--shell-output-path (word)
+  "Resolve a literal output path or a quoted variable in WORD."
+  (let* ((quoted (string-prefix-p "\"" word))
+         (text (if (or quoted (string-prefix-p "'" word))
+                   (substring word 1 -1)
+                 word))
+         (identifier "[a-zA-Z_][a-zA-Z0-9_]*")
+         (literal "\\`[a-zA-Z0-9_./ -]+\\'")
+         chosen)
+    (when quoted
+      ;; Keep the first nonempty variable while checking each default.
+      (let ((start 0)
+            (end (length text))
+            (default (concat "\\${\\(" identifier "\\):-")))
+        (while (and (< start end)
+                    (eq (aref text (1- end)) ?})
+                    (string-match default text start)
+                    (= (match-beginning 0) start)
+                    (< (match-end 0) end))
+          (let ((value (getenv (match-string 1 text))))
+            (when (and (not chosen) value (not (string-empty-p value)))
+              (setq chosen value))
+            (setq start (match-end 0)
+                  end (1- end))))
+        (setq text (substring text start end))))
+    (cond
+     ((string-match-p literal text)
+      (or chosen text))
+     ((and quoted
+           (string-match (concat "\\`\\$\\(?:{\\(" identifier
+                                 "\\)}\\|\\(" identifier "\\)\\)\\'")
+                         text))
+      (or chosen (getenv (or (match-string 1 text) (match-string 2 text))))))))
+
 (defun ellama-tools--nonempty-shell-truncation-p (command)
-  "Return non-nil if a literal null or print COMMAND truncates a file."
-  ;; Accept a single null command or printer with literal arguments and
-  ;; one literal output path.  A leading `echo' or `:' segment joined by
-  ;; `&&' or `;' may precede the truncation: those segments succeed and
-  ;; the truncation still runs.
-  ;; A double-quoted redirection target that contains a variable names
-  ;; an unknown path: the shell may expand it to an existing file with
-  ;; data, so treat the truncation as real without a file check.
-  ;; Shell expansion, extra commands, and other redirections need their
-  ;; usual checks.
+  "Return non-nil if COMMAND redirects a null command or printer to data."
   (save-match-data
     (let* ((case-fold-search nil)
-           (bare "[a-zA-Z0-9_./-]+")
-           (quoted "[a-zA-Z0-9_./ -]+")
-           (word "\\(?:[a-zA-Z0-9_./%:+,-]+\\|'[^'\n\r\0]*'\\|\"[^\"$`!\\\n\r\0]*\"\\)")
-           (lead (concat "\\`[ \t]*"
-                         "\\(?:\\(?::\\|\\(?:/bin/\\|/usr/bin/\\)?"
-                         "\\(?:printf\\|echo\\)\\)"
-                         "\\(?:[ \t]+" word "\\)*[ \t]*"
-                         "\\(?:&&\\|;\\)[ \t]*\\)?"))
-           (trunc (concat "\\(?::"
-                         "\\|\\(?:/bin/\\|/usr/bin/\\)?\\(?:printf\\|echo\\)"
-                         "\\(?:[ \t]+" word "\\)*\\)[ \t]*>|?[ \t]*")))
-      (when (not (file-remote-p default-directory))
-        (or
-         ;; Literal output path: verify it names a non-empty file.
-         (and (string-match
-               (concat lead trunc
-                       "\\(?:\\(" bare "\\)\\|'\\(" quoted "\\)'"
-                       "\\|\"\\(" quoted "\\)\"\\)[ \t]*\\'")
-               command)
-              (let ((path (or (match-string 1 command)
-                              (match-string 2 command)
-                              (match-string 3 command))))
-                (condition-case nil
-                    (and (not (string-suffix-p "/" path))
-                         (not (member ".." (split-string path "/" t)))
-                         (let ((file (expand-file-name path)))
-                           (and (not (ellama-tools--tool-check-file-access
-                                       file 'read))
-                                (file-regular-p file)
-                                (> (file-attribute-size
-                                    (file-attributes (file-truename file)))
-                                   0))))
-                  (error nil))))
-         ;; Variable redirection target: the path is unknown but the
-         ;; truncation syntax is confirmed, so the risk is real.
-         (string-match-p
-          (concat lead trunc "\"[^\"]*\\$[^\"]*\"[ \t]*\\'")
-          command))))))
+           (word (concat "\\(?:[a-zA-Z0-9_./%:+,-]+\\|'[^'\n\r\0]*'\\|"
+                         "\"[^\"$`!\\\n\r\0]*\"\\)"))
+           (printer (concat "\\(?:/bin/\\|/usr/bin/\\)?\\(?:printf\\|echo\\)"
+                            "\\(?:[ \t]+" word "\\)*"))
+           (lead (concat "\\`[ \t]*\\(?:\\(?:true[ \t]*&&\\|false[ \t]*||"
+                         "\\|\\(?:true\\|false\\)[ \t]*;"
+                         "\\|\\(?::\\|" printer "\\)[ \t]*\\(?:&&\\|;\\)"
+                         "\\)[ \t]*\\)*"))
+           (target (concat "\\(?:[a-zA-Z0-9_./-]+"
+                           "\\|'[a-zA-Z0-9_./ -]+'"
+                           "\\|\"[a-zA-Z0-9_./ ${}:-]+\"\\)")))
+      (when (and (not (file-remote-p default-directory))
+                 (string-match
+                  (concat lead "\\(?:test[ \t]+-[fs][ \t]+\\(" target
+                          "\\)[ \t]*&&[ \t]*\\)?"
+                          "\\(?::\\|" printer "\\)[ \t]*>|?[ \t]*"
+                          "\\(" target "\\)[ \t]*\\'")
+                  command))
+        (let ((guard (match-string 1 command))
+              (output (match-string 2 command)))
+          (condition-case nil
+              (when-let* ((path (ellama-tools--shell-output-path output))
+                          ((string-match-p "\\`[a-zA-Z0-9_./ -]+\\'" path))
+                          ((not (string-suffix-p "/" path)))
+                          ((not (member ".." (split-string path "/" t))))
+                          (file (expand-file-name path)))
+                ;; A regular file with data satisfies both -f and -s
+                ;; when the test and the redirection refer to that path.
+                (and (or (not guard)
+                         (let ((checked (ellama-tools--shell-output-path guard)))
+                           (and checked
+                                (string-match-p "\\`[a-zA-Z0-9_./ -]+\\'" checked)
+                                (not (string-suffix-p "/" checked))
+                                (not (member ".." (split-string checked "/" t)))
+                                (equal (expand-file-name checked) file))))
+                     (not (ellama-tools--tool-check-file-access file 'read))
+                     (file-regular-p file)
+                     (> (file-attribute-size (file-attributes (file-truename file)))
+                        0)))
+            (error nil)))))))
 
 (defun ellama-tools--dlp-scan-input-value
     (tool-name arg-name value &optional tool-metadata)
@@ -1321,6 +1348,9 @@ CALLBACK receives `(TEXT PATH)'.  Return non-nil if a walk limit was hit."
            (lambda (text path)
              (let* ((context (ellama-tools--dlp-make-scan-context
                               'input tool-name path tool-metadata))
+                    (context (if (equal path (plist-get tool-metadata :sql-commit-arg))
+                                 (plist-put context :sql-commit t)
+                               context))
                     (scan
                      (ellama-tools-dlp--scan-text
                       text
@@ -1371,6 +1401,23 @@ CALLBACK receives `(TEXT PATH)'.  Return non-nil if a walk limit was hit."
                (t
                 (list :action 'allow)))))))
 
+(defun ellama-tools--dlp-sql-commit-argument (specs values)
+  "Return the SQL argument for an explicit commit in SPECS and VALUES."
+  ;; Other supplied options may change how or whether the statement runs.
+  (when (and (= (length specs) 2) (= (length values) 2))
+    (let (sql-name commit)
+      (cl-loop for spec in specs
+               for value in values
+               for name = (ellama-tools-dlp--policy-name-string (plist-get spec :name))
+               do (cond
+                   ((and (stringp value)
+                         (ellama-tools-dlp--sql-argument-p name))
+                    (setq sql-name name))
+                   ((and (member name '("commit" "apply")) (eq value t)
+                         (member (plist-get spec :type) '(boolean "boolean")))
+                    (setq commit t))))
+      (and commit sql-name))))
+
 (defun ellama-tools--dlp-input-decision (tool-plist call-args)
   "Scan TOOL-PLIST CALL-ARGS and return decision plist.
 Return plist with keys `:action' and optional `:message'."
@@ -1386,7 +1433,10 @@ Return plist with keys `:action' and optional `:message'."
          warn-message
          warn-strong-message
          skip-decision
+         sql-statement
          truncated)
+    (when-let* ((sql (ellama-tools--dlp-sql-commit-argument declared-args values)))
+      (setq tool-metadata (plist-put tool-metadata :sql-commit-arg sql)))
     (catch 'done
       (while values
         (let* ((value (car values))
@@ -1396,6 +1446,10 @@ Return plist with keys `:action' and optional `:message'."
                (arg-name (if (symbolp raw-name)
                              (symbol-name raw-name)
                            raw-name)))
+          (when (and (stringp value)
+                     (ellama-tools-dlp--sql-argument-p arg-name)
+                     (ellama-tools-dlp--sql-statement-p value))
+            (setq sql-statement t))
           (let* ((arg-decision
                   (ellama-tools--dlp-scan-input-value
                    tool-name arg-name value tool-metadata))
@@ -1418,9 +1472,11 @@ Return plist with keys `:action' and optional `:message'."
       (let* ((model-verdict
               (unless skip-decision
                 (ellama-tools-dlp--irreversible-call-verdict
-                 (plist-put (ellama-tools--dlp-make-scan-context
-                             'input tool-name nil tool-metadata)
-                            :truncated truncated)
+                 (plist-put
+                  (plist-put (ellama-tools--dlp-make-scan-context
+                              'input tool-name nil tool-metadata)
+                             :sql-statement sql-statement)
+                  :truncated truncated)
                  (lambda ()
                    (ellama-tools--dlp-call-details tool-plist call-args t)))))
              (model-action (plist-get model-verdict :action)))
