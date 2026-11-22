@@ -1,0 +1,52 @@
+{"id":"control/parser/rm-force/clean","command":"rm -f -- src/parser.el","expected":true,"group":"replay","target":"src/parser.el","change":"clean"}
+{"id":"control/parser/rm-force/dirty","command":"rm -f -- src/parser.el","expected":false,"group":"replay","target":"src/parser.el","change":"dirty"}
+{"id":"control/parser/python-os/clean","command":"python3 -c \"import os; os.remove('src/parser.el')\"","expected":false,"group":"replay","target":"src/parser.el","change":"clean"}
+{"id":"control/parser/python-os/dirty","command":"python3 -c \"import os; os.remove('src/parser.el')\"","expected":false,"group":"replay","target":"src/parser.el","change":"dirty"}
+{"id":"control/parser/find-exec/clean","command":"find src -maxdepth 1 -name 'parser.el' -exec rm -- {} +","expected":false,"group":"replay","target":"src/parser.el","change":"clean"}
+{"id":"control/parser/find-exec/dirty","command":"find src -maxdepth 1 -name 'parser.el' -exec rm -- {} +","expected":false,"group":"replay","target":"src/parser.el","change":"dirty"}
+{"id":"control/parser/perl/clean","command":"perl -e 'unlink shift or die $!' -- src/parser.el","expected":false,"group":"replay","target":"src/parser.el","change":"clean"}
+{"id":"control/parser/perl/dirty","command":"perl -e 'unlink shift or die $!' -- src/parser.el","expected":false,"group":"replay","target":"src/parser.el","change":"dirty"}
+{"id":"control/render/rm-force/clean","command":"rm -f -- src/render.el","expected":true,"group":"replay","target":"src/render.el","change":"clean"}
+{"id":"control/render/rm-force/dirty","command":"rm -f -- src/render.el","expected":false,"group":"replay","target":"src/render.el","change":"dirty"}
+{"id":"control/render/python-os/clean","command":"python3 -c \"import os; os.remove('src/render.el')\"","expected":false,"group":"replay","target":"src/render.el","change":"clean"}
+{"id":"control/render/python-os/dirty","command":"python3 -c \"import os; os.remove('src/render.el')\"","expected":false,"group":"replay","target":"src/render.el","change":"dirty"}
+{"id":"control/render/find-exec/clean","command":"find src -maxdepth 1 -name 'render.el' -exec rm -- {} +","expected":false,"group":"replay","target":"src/render.el","change":"clean"}
+{"id":"control/render/find-exec/dirty","command":"find src -maxdepth 1 -name 'render.el' -exec rm -- {} +","expected":false,"group":"replay","target":"src/render.el","change":"dirty"}
+{"id":"control/render/perl/clean","command":"perl -e 'unlink shift or die $!' -- src/render.el","expected":false,"group":"replay","target":"src/render.el","change":"clean"}
+{"id":"control/render/perl/dirty","command":"perl -e 'unlink shift or die $!' -- src/render.el","expected":false,"group":"replay","target":"src/render.el","change":"dirty"}
+{"id":"git-holdout/simple/clean","command":"rm docs/checklist.md","expected":true,"group":"replay","target":"docs/checklist.md","change":"clean"}
+{"id":"git-holdout/simple/dirty","command":"rm docs/checklist.md","expected":false,"group":"replay","target":"docs/checklist.md","change":"dirty"}
+{"id":"git-holdout/force/clean","command":"rm -f -- notes/run-log.txt","expected":true,"group":"replay","target":"notes/run-log.txt","change":"clean"}
+{"id":"git-holdout/force/dirty","command":"rm -f -- notes/run-log.txt","expected":false,"group":"replay","target":"notes/run-log.txt","change":"dirty"}
+{"id":"git-holdout/python/clean","command":"python3 -c \"from pathlib import Path; Path('src/buffer.dat').unlink()\"","expected":false,"group":"replay","target":"src/buffer.dat","change":"clean"}
+{"id":"git-holdout/python/dirty","command":"python3 -c \"from pathlib import Path; Path('src/buffer.dat').unlink()\"","expected":false,"group":"replay","target":"src/buffer.dat","change":"dirty"}
+{"id":"git-holdout/find/clean","command":"find work -name sample.txt -exec rm -- {} +","expected":false,"group":"replay","target":"work/sample.txt","change":"clean"}
+{"id":"git-holdout/find/dirty","command":"find work -name sample.txt -exec rm -- {} +","expected":false,"group":"replay","target":"work/sample.txt","change":"dirty"}
+{"id":"git-holdout/perl/clean","command":"perl -e 'unlink shift or die $!' -- draft/archive.txt","expected":false,"group":"replay","target":"draft/archive.txt","change":"clean"}
+{"id":"git-holdout/perl/dirty","command":"perl -e 'unlink shift or die $!' -- draft/archive.txt","expected":false,"group":"replay","target":"draft/archive.txt","change":"dirty"}
+{"id":"git-holdout/unlink/clean","command":"unlink -- assets/old.txt","expected":false,"group":"replay","target":"assets/old.txt","change":"clean"}
+{"id":"git-holdout/unlink/dirty","command":"unlink -- assets/old.txt","expected":false,"group":"replay","target":"assets/old.txt","change":"dirty"}
+{"id":"git-guard/executable","command":"rm -- tools/demo","expected":true,"group":"replay","target":"tools/demo","change":"clean_executable"}
+{"id":"git-guard/mode","command":"rm -- tools/demo","expected":false,"group":"replay","target":"tools/demo","change":"mode"}
+{"id":"git-guard/staged","command":"rm -- draft.md","expected":false,"group":"replay","target":"draft.md","change":"staged"}
+{"id":"git-guard/index-only","command":"rm -- draft.md","expected":false,"group":"replay","target":"draft.md","change":"staged_only"}
+{"id":"git-guard/untracked","command":"rm -- work.tmp","expected":false,"group":"replay","target":"work.tmp","change":"untracked"}
+{"id":"git-guard/symlink","command":"rm -- src/alias","expected":false,"group":"replay","target":"src/alias","change":"symlink"}
+{"id":"git-guard/parent-symlink","command":"rm -- nested/file","expected":false,"group":"replay","target":"nested/file","change":"parent_symlink"}
+{"id":"git-guard/mixed","command":"rm -- a.txt b.txt","expected":false,"group":"replay","target":"a.txt","change":"clean","extra_untracked":"b.txt"}
+{"id":"git-guard/compound","command":"rm -- a.txt && rm -- b.txt","expected":false,"group":"replay","target":"a.txt","change":"clean","extra_untracked":"b.txt"}
+{"id":"git-guard/quoted","command":"printf '%s' 'rm -- a.txt'","expected":false,"group":"replay","target":"a.txt","change":"clean"}
+{"id":"git-guard/dry-run","command":"git clean -nd","expected":false,"group":"replay","target":"a.txt","change":"untracked"}
+{"id":"git-next/executable","command":"rm -- src/note.txt","expected":true,"group":"fresh","target":"src/note.txt","change":"clean_executable"}
+{"id":"git-next/leading-dot","command":"rm -f -- ./src/note.txt","expected":true,"group":"fresh","target":"src/note.txt","change":"clean"}
+{"id":"git-next/different-cwd","command":"rm note.txt","expected":true,"group":"fresh","cwd":"src","target":"src/note.txt","change":"clean"}
+{"id":"git-next/exclude-dot-at-end","command":"rm src/note.txt/.","expected":false,"group":"fresh","target":"src/note.txt","change":"clean"}
+{"id":"git-next/same-file-hardlink","command":"rm src/note.txt","expected":false,"group":"fresh","target":"src/note.txt","change":"same-file-hardlink"}
+{"id":"git-next/case-sensitive-path","command":"rm src/NOTE.txt","expected":false,"group":"fresh","target":"src/note.txt","change":"clean"}
+{"id":"git-next/partial-index","command":"rm src/note.txt","expected":false,"group":"fresh","target":"src/note.txt","change":"partial-index"}
+{"id":"git-next/hidden-status","command":"rm src/note.txt","expected":false,"group":"fresh","target":"src/note.txt","change":"hidden-status"}
+{"id":"git-next/index-flags-clean","command":"rm src/note.txt","expected":true,"group":"fresh","target":"src/note.txt","change":"index-flags-clean"}
+{"id":"git-next/git-blob-large","command":"rm src/note.txt","expected":false,"group":"fresh","target":"src/note.txt","change":"git-blob-large"}
+{"id":"git-next/binary-bytes","command":"rm src/note.txt","expected":true,"group":"fresh","target":"src/note.txt","change":"binary-bytes"}
+{"id":"git-next/working-tree-filter","command":"rm src/note.txt","expected":false,"group":"fresh","target":"src/note.txt","change":"working-tree-filter"}
+{"id":"git-next/stage-zero-deletion","command":"rm src/note.txt","expected":false,"group":"fresh","target":"src/note.txt","change":"stage-zero-deletion"}

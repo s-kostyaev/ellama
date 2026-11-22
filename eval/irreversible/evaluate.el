@@ -1,0 +1,149 @@
+;;; evaluate.el --- Manual irreversible-action evaluations -*- lexical-binding: t; -*-
+
+;; Copyright (C) 2026  Free Software Foundation, Inc.
+
+;; This file is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation, either version 3 or (at your option)
+;; any later version.
+
+;;; Commentary:
+;; The Python runner supplies synthetic tool arguments and working directories.
+;; Evaluate the input policy without calling the selected tool.
+
+;;; Code:
+
+(require 'cl-lib)
+(require 'json)
+(require 'ellama-tools)
+
+(defun ellama-eval--irreversible-lisp-value (value)
+  "Convert JSON VALUE to the values passed to Ellama tools."
+  (cond
+   ((eq value :false) nil)
+   ((hash-table-p value)
+    (maphash (lambda (key item)
+               (puthash key (ellama-eval--irreversible-lisp-value item) value))
+             value)
+    value)
+   ((vectorp value)
+    (vconcat (mapcar #'ellama-eval--irreversible-lisp-value value)))
+   (t value)))
+
+(defun ellama-eval--irreversible-decision-case (case)
+  "Return the policy verdict for the synthetic tool call in CASE."
+  (let* ((tool-name (gethash "tool" case))
+         (category (gethash "category" case))
+         (function (unless category
+                     (pcase tool-name
+                       ("shell_command" #'ellama-tools-shell-command-tool)
+                       ("trash_files" #'ellama-tools-trash-files-tool))))
+         (async (or function (eq (gethash "async_" case) t)))
+         (values (mapcar #'ellama-eval--irreversible-lisp-value
+                        (gethash "values" case)))
+         (tool (list :name tool-name :category category :function function
+                     :async async
+                     :args (cl-mapcar (lambda (name type)
+                                        (list :name name :type type))
+                                      (append (gethash "names" case) nil)
+                                      (append (gethash "types" case) nil))))
+         (call (if async (cons #'ignore values) values))
+         (ellama-tools-dlp--incident-log nil)
+         (process-environment (copy-sequence process-environment))
+         (decide (symbol-function 'llm-decide))
+         (extract (symbol-function 'llm-provider-decide-extract-result))
+         (calls 0)
+         requests responses elapsed failure verdict)
+    (when-let* ((vars (gethash "fixture_env" case)))
+      (maphash (lambda (key value)
+                 (setenv key (and (stringp value) value)))
+               vars))
+    (setq verdict
+          (cl-letf (((symbol-function 'llm-decide)
+                     (lambda (provider questions state)
+                       (cl-incf calls)
+                       (push (llm-provider-decide-request provider questions state)
+                             requests)
+                       (let ((start (float-time)))
+                         (unwind-protect
+                             (condition-case err
+                                 (funcall decide provider questions state)
+                               (error
+                                (setq failure (error-message-string err))
+                                (signal (car err) (cdr err))))
+                           (push (* 1000 (- (float-time) start)) elapsed)))))
+                    ((symbol-function 'llm-provider-decide-extract-result)
+                     (lambda (provider response)
+                       (push response responses)
+                       (funcall extract provider response))))
+            (ellama-tools--dlp-input-decision tool call)))
+    (let* ((action (plist-get verdict :action))
+           (irrev (memq action '(block warn-strong)))
+           (incidents ellama-tools-dlp--incident-log)
+           (rules (delete-dups
+                   (cl-mapcan (lambda (incident)
+                               (append (plist-get incident :rule-ids) nil))
+                             incidents))))
+      (list :actual (if irrev t :false)
+            :action (symbol-name action)
+            :calls calls :rules (vconcat rules)
+            :model_ms (vconcat (nreverse elapsed))
+            :requests (vconcat (nreverse requests))
+            :responses (vconcat (nreverse responses))
+            :error (or failure
+                       (cl-some (lambda (incident)
+                                  (when-let* ((reason
+                                               (plist-get incident :decision-error-type)))
+                                    (format "%s" reason)))
+                                incidents)
+                       :null)))))
+
+(defun ellama-eval--irreversible-run (cases suite)
+  "Evaluate the synthetic CASES in SUITE and print one JSON record per case."
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-log-targets '(memory))
+        (ellama-tools-dlp-llm-check-enabled nil)
+        (ellama-tools-irreversible-enabled t)
+        (ellama-tools-irreversible-default-action 'warn)
+        (ellama-tools-irreversible-unknown-tool-action 'warn)
+        (ellama-tools-irreversible-decision-threshold 0.5)
+        (ellama-tools-irreversible-project-overrides-enabled nil)
+        (ellama-tools-dlp--session-bypasses nil)
+        (ellama-tools-dlp-policy-overrides nil)
+        (ellama-tools-irreversible-tool-risk-overrides nil)
+        (ellama-tools-use-srt nil)
+        (ellama-tools-irreversible-decision-provider
+         (when (equal suite "decisions")
+           (require 'llm-typesafe)
+           (make-llm-typesafe-compatible
+            :model (getenv "ELLAMA_EVAL_MODEL")
+            :url (getenv "ELLAMA_EVAL_ENDPOINT"))))
+        (llm-log nil))
+    (dolist (case cases)
+      (let* ((default-directory
+              (file-name-as-directory (gethash "working_directory" case)))
+             (result (if (equal suite "git")
+                         (list :actual (if (ellama-tools--rm-git-commit
+                                            (gethash "command" case))
+                                           t :false))
+                       (ellama-eval--irreversible-decision-case case))))
+        (princ (decode-coding-string
+                (json-serialize
+                 (append (list :id (gethash "id" case)
+                               :group (gethash "group" case)
+                               :expected (gethash "expected" case))
+                         result))
+                'utf-8))
+        (terpri)))))
+
+(let ((cases (with-temp-buffer
+               (insert-file-contents (getenv "ELLAMA_EVAL_FIXTURES"))
+               (mapcar (lambda (line)
+                         (json-parse-string line :object-type 'hash-table
+                                            :array-type 'array :false-object :false))
+                       (split-string (buffer-string) "\n" t)))))
+  (ellama-eval--irreversible-run cases (getenv "ELLAMA_EVAL_SUITE")))
+
+;;; evaluate.el ends here
