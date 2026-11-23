@@ -2467,7 +2467,7 @@ Use EXPECTED-STAT to reject a changed version before reading its bytes."
       nil)))
 
 (defun ellama-tools--session-write-entry (session file)
-  "Return SESSION's current write entry for FILE if its evidence still holds."
+  "Return SESSION's write entry after verifying FILE and any required backup."
   (when-let* ((files (gethash session ellama-tools--session-file-writes))
               (entry (gethash file files)))
     (if (and (ellama-tools--fingerprint-matches-p file (plist-get entry :stamp))
