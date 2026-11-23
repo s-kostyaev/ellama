@@ -2267,7 +2267,7 @@ Allow RECURSIVE removal options when preparing a trash hint."
   "Options for reading Git evidence without filters or hooks.")
 
 (defun ellama-tools--git-read-environment ()
-  "Return an environment for local reads of Git data."
+  "Return a restricted environment for Git."
   (append '("GIT_CONFIG_NOSYSTEM=1" "GIT_CONFIG_GLOBAL=/dev/null"
             "GIT_NO_LAZY_FETCH=1" "GIT_ALLOW_PROTOCOL=")
           (seq-remove (lambda (entry) (string-prefix-p "GIT_" entry))
