@@ -1730,8 +1730,10 @@ accepts three kinds of local recovery evidence.
 
    • *Git.*  The file's bytes and mode must match both ‘HEAD’ and the
      index.  An unstaged or staged change that differs from ‘HEAD’
-     requires its own recovery evidence.  Ellama skips this Git check
-     when ‘srt’ is enabled.
+     requires its own recovery evidence.  When ‘srt’ is enabled, Ellama
+     runs the Git checks inside the sandbox.  Git can establish recovery
+     only if the policy lets it read the file, index, and commit data it
+     needs.
    • *Writes by the active session.*  Ellama can recognize a saved
      version after a supported write to a new file, a verified starting
      version, or a version it already recorded for the same session.
@@ -3140,35 +3142,35 @@ Node: DLP for Tool Input/Output68217
 Node: How Ellama handles findings75357
 Node: The irreversible-action decision model76715
 Node: File overwrites and backups79888
-Node: Moving files to the trash82287
-Node: SRT Filesystem Policy for Tools91559
-Node: Context Management97230
-Node: Transient Menus for Context Management98298
-Node: Managing the Context100372
-Node: Considerations101147
-Node: Minor modes101474
-Node: ellama-context-header-line-mode101986
-Node: ellama-context-header-line-global-mode102604
-Node: ellama-context-mode-line-mode103008
-Node: ellama-context-mode-line-global-mode103587
-Node: ellama-session-header-line-mode103981
-Node: ellama-session-mode-line-mode104485
-Node: Using Blueprints104912
-Node: Key Components105308
-Node: Creating and Managing105667
-Node: Blueprint Files106305
-Node: Variables106724
-Node: Keymap and Mode107060
-Node: Transient Menus107584
-Node: Running Blueprints Programmatically108098
-Node: MCP Integration108652
-Node: Agent Skills110446
-Node: Directory Structure110845
-Node: Creating a Skill111825
-Node: How It Works112215
-Node: Acknowledgments112621
-Node: Contributions113307
-Node: GNU Free Documentation License113832
+Node: Moving files to the trash82419
+Node: SRT Filesystem Policy for Tools91691
+Node: Context Management97362
+Node: Transient Menus for Context Management98430
+Node: Managing the Context100504
+Node: Considerations101279
+Node: Minor modes101606
+Node: ellama-context-header-line-mode102118
+Node: ellama-context-header-line-global-mode102736
+Node: ellama-context-mode-line-mode103140
+Node: ellama-context-mode-line-global-mode103719
+Node: ellama-session-header-line-mode104113
+Node: ellama-session-mode-line-mode104617
+Node: Using Blueprints105044
+Node: Key Components105440
+Node: Creating and Managing105799
+Node: Blueprint Files106437
+Node: Variables106856
+Node: Keymap and Mode107192
+Node: Transient Menus107716
+Node: Running Blueprints Programmatically108230
+Node: MCP Integration108784
+Node: Agent Skills110578
+Node: Directory Structure110977
+Node: Creating a Skill111957
+Node: How It Works112347
+Node: Acknowledgments112753
+Node: Contributions113439
+Node: GNU Free Documentation License113964
 
 End Tag Table
 
