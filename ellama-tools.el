@@ -1182,9 +1182,31 @@ CHILD may be a string key segment or an integer index."
       (cadr entry)
     (cdr entry)))
 
+(defun ellama-tools--dlp-walk-object-member
+    (key value path index callback seen node-count depth)
+  "Scan KEY and VALUE of the object at PATH using CALLBACK.
+INDEX identifies the member when the key is sensitive or unsupported.
+Pass SEEN, NODE-COUNT and DEPTH to the input walker."
+  (let* ((key-name (unless (and (stringp key)
+                                (or (text-properties-at 0 key)
+                                    (next-property-change 0 key)))
+                     (ellama-tools--dlp-arg-path-key-name key)))
+         (member-path (ellama-tools--dlp-arg-path-append path index))
+         (sensitive (if key-name
+                        (ellama-tools--dlp-walk-strings-1
+                         (if (symbolp key) (symbol-name key) key-name)
+                         (concat member-path ".key") callback seen node-count depth t)
+                      ;; The decision serializer would include the whole key.
+                      (aset node-count 1 t)))
+         (value-path (if sensitive
+                         (concat member-path ".value")
+                       (ellama-tools--dlp-arg-path-append path key-name))))
+    (ellama-tools--dlp-walk-strings-1 value value-path callback seen node-count depth)))
+
 (defun ellama-tools--dlp-walk-strings-1
-    (node path callback seen node-count depth)
+    (node path callback seen node-count depth &optional key)
   "Walk NODE and call CALLBACK for each string leaf at PATH.
+Pass KEY to CALLBACK when NODE is an object key.
 SEEN tracks composite objects to avoid cycles.  NODE-COUNT holds the number
 of visited nodes and a flag for incomplete scans.  DEPTH is the nesting depth."
   (if (or (> depth ellama-tools--dlp-input-max-walk-depth)
@@ -1193,7 +1215,7 @@ of visited nodes and a flag for incomplete scans.  DEPTH is the nesting depth."
     (aset node-count 0 (1+ (aref node-count 0)))
     (cond
      ((stringp node)
-      (funcall callback node path))
+      (funcall callback node path key))
      ((consp node)
       (unless (gethash node seen)
         (puthash node t seen)
@@ -1202,26 +1224,16 @@ of visited nodes and a flag for incomplete scans.  DEPTH is the nesting depth."
           (let ((rest node)
                 (pair-index 0))
             (while rest
-              (let* ((key-name
-                      (or (ellama-tools--dlp-arg-path-key-name (car rest))
-                          (format "key%d" pair-index)))
-                     (child-path
-                      (ellama-tools--dlp-arg-path-append path key-name)))
-                (ellama-tools--dlp-walk-strings-1
-                 (cadr rest) child-path callback seen node-count (1+ depth)))
+              (ellama-tools--dlp-walk-object-member
+               (car rest) (cadr rest) path pair-index callback seen node-count (1+ depth))
               (setq rest (cddr rest))
               (setq pair-index (1+ pair-index)))))
          ((ellama-tools--dlp-alist-like-p node)
           (let ((entry-index 0))
             (dolist (entry node)
-              (let* ((key-name
-                      (or (ellama-tools--dlp-arg-path-key-name (car entry))
-                          (format "item%d" entry-index)))
-                     (child-path
-                      (ellama-tools--dlp-arg-path-append path key-name)))
-                (ellama-tools--dlp-walk-strings-1
-                 (ellama-tools--dlp-alist-entry-value entry)
-                 child-path callback seen node-count (1+ depth)))
+              (ellama-tools--dlp-walk-object-member
+               (car entry) (ellama-tools--dlp-alist-entry-value entry)
+               path entry-index callback seen node-count (1+ depth))
               (setq entry-index (1+ entry-index)))))
          ((ellama-tools--dlp-proper-list-length node)
           (let ((index 0))
@@ -1254,21 +1266,17 @@ of visited nodes and a flag for incomplete scans.  DEPTH is the nesting depth."
         (let ((entry-index 0))
           (maphash
            (lambda (key item)
-             (let* ((key-name
-                     (or (ellama-tools--dlp-arg-path-key-name key)
-                         (format "key%d" entry-index)))
-                    (child-path
-                     (ellama-tools--dlp-arg-path-append path key-name)))
-               (ellama-tools--dlp-walk-strings-1
-                item child-path callback seen node-count (1+ depth))
-               (setq entry-index (1+ entry-index))))
+             (ellama-tools--dlp-walk-object-member
+              key item path entry-index callback seen node-count (1+ depth))
+             (setq entry-index (1+ entry-index)))
            node))))
      (t
       nil))))
 
 (defun ellama-tools--dlp-walk-strings (value root-path callback)
-  "Call CALLBACK for each string leaf in VALUE using ROOT-PATH.
-CALLBACK receives `(TEXT PATH)'.  Return non-nil if a walk limit was hit."
+  "Call CALLBACK for string leaves and object keys in VALUE using ROOT-PATH.
+CALLBACK receives `(TEXT PATH KEY)' and returns non-nil for a sensitive key.
+Return non-nil when the traversal is incomplete."
   (let ((node-count (vector 0 nil)))
     (ellama-tools--dlp-walk-strings-1
      value root-path callback
@@ -1709,13 +1717,13 @@ TARGET matches a path that the detector can resolve locally."
 (defun ellama-tools--dlp-scan-input-value
     (tool-name arg-name value &optional tool-metadata)
   "Scan VALUE for TOOL-NAME under ARG-NAME and return a decision plist."
-  (let (warn-message warn-strong-message skip-decision truncated shell-outputs overwrite
-        irreversible overwrite-risk)
+  (let (warn-message warn-strong-message skip-decision truncated sensitive-key
+        shell-outputs overwrite irreversible overwrite-risk)
     (catch 'done
       (when
           (ellama-tools--dlp-walk-strings
            value arg-name
-           (lambda (text path)
+           (lambda (text path key)
              (let* ((context (ellama-tools--dlp-make-scan-context
                               'input tool-name path tool-metadata))
                     (context (if (equal path (plist-get tool-metadata :sql-commit-arg))
@@ -1746,14 +1754,20 @@ TARGET matches a path that the detector can resolve locally."
                                  (plist-put context :overwrite-source (plist-get evidence :source))
                                context))
                     (scan
-                     (ellama-tools-dlp--scan-text
-                      text
-                      (if shell-risk
-                          (plist-put context :shell-truncation t)
-                        context)))
+                     (let ((ellama-tools-dlp-llm-check-enabled
+                            (and (not key) ellama-tools-dlp-llm-check-enabled)))
+                       (ellama-tools-dlp--scan-text
+                        text
+                        (if shell-risk
+                            (plist-put context :shell-truncation t)
+                          context))))
                     (verdict (plist-get scan :verdict))
                     (action (plist-get verdict :action))
                     (message (plist-get verdict :message))
+                    (key-finding (and key (plist-get scan :findings)))
+                    (incomplete (or (plist-get (plist-get scan :context) :truncated)
+                                    (and key ellama-tools-dlp-enabled
+                                         (not (plist-member verdict :configured-action)))))
                     (irreversible-finding (ellama-tools-dlp--has-irreversible-findings-p
                                            (plist-get scan :findings))))
                (when outputs (setq shell-outputs outputs))
@@ -1765,11 +1779,13 @@ TARGET matches a path that the detector can resolve locally."
                                    outputs))
                  (setq overwrite-risk t))
                (when irreversible-finding (setq irreversible t))
+               (when key-finding
+                 (setq sensitive-key t))
                (when (or irreversible-finding
                          (memq (plist-get verdict :configured-action)
                                '(block redact)))
                  (setq skip-decision t))
-               (when (plist-get (plist-get scan :context) :truncated)
+               (when incomplete
                  (setq truncated t))
                (cond
                 ((eq action 'block)
@@ -1792,10 +1808,12 @@ TARGET matches a path that the detector can resolve locally."
                  (setq warn-message
                        (or message
                            (format "DLP warned on input for tool %s"
-                                   tool-name))))))))
+                                   tool-name)))))
+               (or key-finding incomplete))))
         (setq truncated t))
-      (append (list :skip-decision skip-decision :truncated truncated :shell-outputs shell-outputs
-                    :overwrite-evidence overwrite :irreversible irreversible :overwrite-risk overwrite-risk)
+      (append (list :skip-decision skip-decision :truncated truncated :sensitive-key sensitive-key
+                    :shell-outputs shell-outputs :overwrite-evidence overwrite
+                    :irreversible irreversible :overwrite-risk overwrite-risk)
               (cond
                (warn-strong-message
                 (list :action 'warn-strong :message warn-strong-message))
@@ -1857,7 +1875,8 @@ Return plist with keys `:action' and optional `:message'."
                          (plist-get tool-metadata :file-editor) (stringp (car values))
                          (ellama-tools--file-overwrite-evidence (car values))))
          preview
-         truncated)
+         truncated
+         sensitive-key)
     (when-let* ((ellama-tools-dlp-enabled)
                 ((plist-get tool-metadata :shell-command))
                 (shape (ellama-tools--shell-literal-shape (car values))))
@@ -1898,6 +1917,8 @@ Return plist with keys `:action' and optional `:message'."
               (setq skip-decision t))
             (when (plist-get arg-decision :truncated)
               (setq truncated t))
+            (when (plist-get arg-decision :sensitive-key)
+              (setq sensitive-key t))
             (when-let* ((outputs (plist-get arg-decision :shell-outputs)))
               (setq shell-outputs outputs))
             (when-let* ((recovery (plist-get arg-decision :overwrite-evidence)))
@@ -1915,14 +1936,15 @@ Return plist with keys `:action' and optional `:message'."
         (setq specs (cdr specs))
         (setq index (1+ index)))
       (let* ((model-verdict
-              (unless (or skip-decision overwrite)
+              (when (or truncated sensitive-key (not (or skip-decision overwrite)))
                 (let ((context (ellama-tools--dlp-make-scan-context
                                 'input tool-name nil tool-metadata)))
                   (setq context (plist-put context :sql-statement sql-statement)
                         context (plist-put context :sql-transaction-steps (and (= sql-count 1) sql-steps))
                         context (plist-put context :backup-options (and backup-options (not preview)))
                         context (plist-put context :shell-outputs shell-outputs)
-                        context (plist-put context :truncated truncated))
+                        context (plist-put context :truncated truncated)
+                        context (plist-put context :sensitive-key sensitive-key))
                   (ellama-tools-dlp--irreversible-call-verdict
                    context (lambda ()
                              (ellama-tools--dlp-call-details tool-plist call-args t))))))
@@ -1940,6 +1962,8 @@ Return plist with keys `:action' and optional `:message'."
                                    (or irreversible (ellama-tools-dlp--has-irreversible-findings-p
                                                      (plist-get model-verdict :findings))))
                 verdict (plist-put verdict :overwrite-risk overwrite-risk))
+          (when truncated
+            (setq verdict (plist-put verdict :truncated t)))
           (if overwrite (plist-put verdict :overwrite-evidence overwrite) verdict))))))
 
 (defun ellama-tools--dlp-call-details (tool-plist call-args &optional decision)
@@ -2705,6 +2729,10 @@ When MULTIPLE is non-nil, require independent destinations and local Git data."
   (when (and (plist-get decision :irreversible)
              (not (plist-get decision :audit-sink-failure)))
     (cond
+     ((plist-get decision :truncated)
+      (if (plist-get metadata :file-editor)
+          "\nSplit the change into smaller edits so Ellama can scan each call completely."
+        "\nRetry with smaller arguments and plain object keys so Ellama can scan the complete input."))
      ((and (plist-get metadata :shell-command)
            (ellama-tools--literal-rm-path (car values) t))
       "\nUse trash_files for this local file so it can be recovered from the trash.")

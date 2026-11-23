@@ -3030,12 +3030,14 @@ Call ARGUMENT-DETAILS to obtain named arguments as strings or JSON booleans.
 Return nil if the check is disabled or a plist with the check result.
 Errors contain no provider message or payload."
   (when (and ellama-tools-dlp-enabled
-             ellama-tools-irreversible-decision-provider
              (ellama-tools-dlp--irreversible-scan-p context))
     (condition-case nil
         (cond
          ((plist-get context :truncated)
           (list :status 'error :error-type 'truncated))
+         ((not ellama-tools-irreversible-decision-provider) nil)
+         ((plist-get context :sensitive-key)
+          (list :status 'error :error-type 'sensitive-key))
          ((not (fboundp 'llm-decide))
           (list :status 'error :error-type 'runtime-unavailable))
          (t
