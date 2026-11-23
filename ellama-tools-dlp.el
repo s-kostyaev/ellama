@@ -2922,6 +2922,7 @@ LLM-CHECK, and DECISION-CHECK will be recorded."
            :configured-action configured-action
            :deterministic-action deterministic-action
            :policy-source (plist-get verdict :policy-source)
+           :overwrite-source (plist-get context :overwrite-source)
            :decision-id (plist-get verdict :decision-id)
            :bypass-id (plist-get verdict :bypass-id)
            :bypass-expires-at (plist-get verdict :bypass-expires-at)

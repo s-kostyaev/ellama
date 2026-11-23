@@ -43,6 +43,9 @@ def fixture_path(directory, name):
 
 def prepare_decision_case(case, sandbox):
     prepared = dict(case, working_directory=str(sandbox))
+    if "git_change" in case:
+        return prepare_git_case(dict(prepared, target=case["fixture_file"],
+                                     change=case["git_change"]), sandbox)
     if "fixture_file" not in case:
         return prepared
     sandbox.mkdir()
