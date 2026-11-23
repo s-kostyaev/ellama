@@ -1417,11 +1417,14 @@ CREATED is a path written by a preceding printer, possibly under DIRECTORY."
                            (not (ellama-tools--tool-check-file-access directory 'write))
                            (file-writable-p directory)))))))))
 
-(defun ellama-tools--shell-output-redirections (text target)
+(defun ellama-tools--shell-output-redirections (text target &optional plain)
   "Parse a trailing sequence of output redirections in TEXT using TARGET.
+When PLAIN is non-nil, accept only literal stdout output redirections.
 Return (t . OUTPUTS) with (MODE . OPERAND) pairs, or nil on unsupported syntax."
-  (let ((pattern (concat "[ \t]*[0-9]?\\(?:\\(>>\\|>|?\\)[ \t]*\\(" target
-                         "\\)\\|>&[ \t]*[0-9-]\\|\\(<[ \t]*/dev/null\\)\\)"))
+  (let ((pattern (concat "[ \t]*" (unless plain "[0-9]?")
+                         "\\(?:\\(>>\\|>|?\\)[ \t]*\\(" target "\\)"
+                         (unless plain "\\|>&[ \t]*[0-9-]\\|\\(<[ \t]*/dev/null\\)")
+                         "\\)"))
         (position 0)
         paths invalid-input)
     (while (and (string-match pattern text position) (= (match-beginning 0) position))
@@ -1732,9 +1735,11 @@ TARGET matches a path that the detector can resolve locally."
                                                       (equal (plist-get output :state) "nonempty")))
                                                outputs)))
                     (evidence (and shell
-                                   (if truncation
-                                       (ellama-tools--shell-overwrite-evidence text)
-                                     (ellama-tools--shell-no-loss-evidence text outputs))))
+                                   (cond
+                                    ((cdr outputs)
+                                     (ellama-tools--shell-multiple-output-evidence text outputs))
+                                    (truncation (ellama-tools--shell-overwrite-evidence text))
+                                    (t (ellama-tools--shell-no-loss-evidence text outputs)))))
                     (shell-risk (and shell (not evidence)
                                      (or truncation (ellama-tools--nonempty-shell-truncation-p text))))
                     (context (if evidence
@@ -2264,8 +2269,19 @@ the file at inspection time and never changes the DLP verdict."
   "Return HEAD if COMMAND names one local file matching HEAD and the index."
   (ellama-tools--git-file-commit (ellama-tools--literal-rm-path command)))
 
-(defun ellama-tools--git-file-commit (path)
-  "Return HEAD if local PATH matches the Git object and index exactly."
+(defun ellama-tools--git-local-metadata-p (root)
+  "Check that Git recovery data is stored under ROOT's own .git directory."
+  (let* ((git-dir (expand-file-name ".git" root))
+         (objects (expand-file-name "objects" git-dir)))
+    (and (file-directory-p git-dir)
+         (equal git-dir (file-truename git-dir))
+         (not (file-attributes (expand-file-name "commondir" git-dir)))
+         (equal objects (file-truename objects))
+         (not (file-attributes (expand-file-name "info/alternates" objects))))))
+
+(defun ellama-tools--git-file-commit (path &optional local-metadata)
+  "Return HEAD if local PATH matches the Git object and index exactly.
+When LOCAL-METADATA is non-nil, require recovery data under .git."
   (condition-case nil
       (when-let* (((not (or ellama-tools-use-srt
                             (file-remote-p default-directory))))
@@ -2280,6 +2296,7 @@ the file at inspection time and never changes the DLP verdict."
                           (#o644 "100644")
                           (#o755 "100755")))
                   (root (vc-git-root (file-name-directory file)))
+                  ((or (not local-metadata) (ellama-tools--git-local-metadata-p root)))
                   (relative (file-relative-name file root))
                   (head (ellama-tools--git-read root "rev-parse" "--verify"
                                                 "HEAD^{commit}"))
@@ -2298,30 +2315,45 @@ the file at inspection time and never changes the DLP verdict."
         commit)
     (error nil)))
 
-(defun ellama-tools--literal-file-output (command)
-  "Return the literal path, writer and output mode in COMMAND."
+(defun ellama-tools--literal-file-outputs (command)
+  "Return a supported COMMAND's literal writer and complete list of outputs."
   (when (ellama-tools--posix-shell-p)
     (save-match-data
-      (let ((case-fold-search nil))
-        (when (string-match
-               (concat "\\`[ \t]*\\([^\n\r\0]+?\\)[ \t]*\\(>>\\|>|?\\)[ \t]*\\("
-                       ellama-tools--shell-output-target-pattern "\\)[ \t]*\\'") command)
-          (let* ((writer (string-trim-right (match-string 1 command)))
-                 (operator (match-string 2 command))
-                 (operand (match-string 3 command))
+      (let* ((case-fold-search nil)
+             (word "\\(?:[a-zA-Z0-9_./%:+,=-]+\\|'[^'\r\n\0]*'\\|\"[^\"$`!\r\n\0]*\"\\)")
+             (prefix (concat "[a-zA-Z0-9_./:-]+\\(?:[ \t]+" word "\\)*")))
+        (when (string-match (concat "\\`[ \t]*\\(" prefix "\\)[ \t]*\\(>[^\r\n\0]*\\)\\'") command)
+          (let* ((writer (match-string 1 command))
+                 (suffix (match-string 2 command))
+                 (separated (< (match-end 1) (match-beginning 2)))
                  (program (cond
                            ((string-match "\\`command[ \t]+" writer)
                             (substring writer (match-end 0)))
                            ((or (equal writer ":") (string-match-p "\\`/\\(?:usr/\\)?bin/" writer))
-                            writer)))
-                 (path (and (not (string-match-p "[$`]" operand))
-                            (ellama-tools--shell-output-path operand))))
+                            writer))))
             (when (and program
-                       (or (equal program ":") (eq (ellama-tools--shell-literal-shape program) 'printer))
-                       path (not (file-name-absolute-p path))
-                       (not (member ".." (split-string path "/" t)))
-                       (not (member ".git" (mapcar #'downcase (split-string path "/" t)))))
-              (list :path path :writer program :mode (if (equal operator ">>") "append" "truncate")))))))))
+                       (or (equal program ":") (eq (ellama-tools--shell-literal-shape program) 'printer)))
+              (when-let* ((redirects (cdr (ellama-tools--shell-output-redirections
+                                           suffix ellama-tools--shell-output-target-pattern t)))
+                          ((or separated (null (cdr redirects))))
+                          (targets
+                           (cl-loop for (mode . operand) in redirects
+                                    for path = (and (not (string-match-p "[$`]" operand))
+                                                    (ellama-tools--shell-output-path operand))
+                                    for parts = (and path (split-string path "/" t))
+                                    unless (and path (not (file-name-absolute-p path))
+                                                (not (member ".." parts))
+                                                (not (member ".git" (mapcar #'downcase parts))))
+                                    return nil
+                                    collect (list :path path :mode mode))))
+                (list :writer program :targets targets)))))))))
+
+(defun ellama-tools--literal-file-output (command)
+  "Return the path, writer and mode for a single literal output in COMMAND."
+  (when-let* ((parsed (ellama-tools--literal-file-outputs command))
+              (targets (plist-get parsed :targets))
+              ((null (cdr targets))))
+    (append (car targets) (list :writer (plist-get parsed :writer)))))
 
 (defun ellama-tools--literal-overwrite (command)
   "Return the path and writer for a supported overwrite in COMMAND."
@@ -2514,15 +2546,16 @@ Use EXPECTED-STAT to reject a changed version before reading its bytes."
                        (puthash session (make-hash-table :test 'equal) ellama-tools--session-file-writes))))
         (puthash file (list :stamp stamp :backup (plist-get origin :backup)) files)))))
 
-(defun ellama-tools--file-overwrite-evidence (path)
-  "Return evidence for restoring PATH or replacing the current session's work."
+(defun ellama-tools--file-overwrite-evidence (path &optional local-git-metadata)
+  "Return evidence for restoring PATH or replacing the current session's work.
+When LOCAL-GIT-METADATA is non-nil, require Git recovery data under .git."
   (ignore-errors
     (when-let* ((file (ellama-tools--local-write-path path)))
       (let ((session (ellama-tools--active-session)))
         (cond
          ((when-let* ((entry (ellama-tools--session-write-entry session file)))
             (list :source 'session :path file :session session :entry entry)))
-         ((when-let* ((commit (ellama-tools--git-file-commit file)))
+         ((when-let* ((commit (ellama-tools--git-file-commit file local-git-metadata)))
             (list :source 'git :path file :commit commit)))
          ((when-let* ((backup (ellama-tools--session-file-backup session file)))
             (list :source 'backup :path file :session session :backup backup))))))))
@@ -2532,31 +2565,87 @@ Use EXPECTED-STAT to reject a changed version before reading its bytes."
   (when-let* ((path (car (ellama-tools--literal-overwrite command))))
     (ellama-tools--file-overwrite-evidence path)))
 
+(defun ellama-tools--shell-independent-output-p (path)
+  "Check that PATH can be written independently of other output files."
+  (let ((attributes (file-attributes path)))
+    (and (not (member ".git" (mapcar #'downcase (split-string path "/" t))))
+         (or (not attributes)
+             (eq (file-attribute-type attributes) t)
+             (and (string-prefix-p "-" (file-attribute-modes attributes))
+                  (= (file-attribute-link-number attributes) 1))))))
+
+(defun ellama-tools--shell-output-target-evidence (target observation &optional recoverable)
+  "Check TARGET against OBSERVATION and return evidence when eligible.
+When RECOVERABLE is non-nil, also check recovery evidence for truncation."
+  (when-let* ((mode (plist-get target :mode))
+              ((equal mode (plist-get observation :mode)))
+              (file (ellama-tools--local-write-path (plist-get target :path)))
+              (observed (ellama-tools--shell-local-output-file (plist-get observation :operand)))
+              ((equal file (file-truename observed)))
+              ((not (string-match-p "\\`/\\(?:dev\\|proc\\|sys\\)\\(?:/\\|\\'\\)" file)))
+              ((or (not recoverable) (ellama-tools--shell-independent-output-p file)))
+              (state (plist-get observation :state)))
+    (cond
+     ((member state '("empty" "missing" "directory"))
+      (list :source 'shell-no-loss :path file :state state :mode mode))
+     ;; Appending can damage a file format while preserving the old bytes.
+     ((and recoverable (equal state "nonempty") (equal mode "truncate"))
+      (ellama-tools--file-overwrite-evidence file t)))))
+
 (defun ellama-tools--shell-no-loss-evidence (command outputs)
   "Return checked evidence for a literal writer in COMMAND and its OUTPUTS."
   (ignore-errors
     (when-let* (((= (length outputs) 1))
-                (output (ellama-tools--literal-file-output command))
-                (mode (plist-get output :mode))
-                ((equal mode (plist-get (car outputs) :mode)))
-                (file (ellama-tools--local-write-path (plist-get output :path)))
-                (observed (ellama-tools--shell-local-output-file (plist-get (car outputs) :operand)))
-                ((equal file (file-truename observed)))
-                ((not (string-match-p "\\`/\\(?:dev\\|proc\\|sys\\)\\(?:/\\|\\'\\)" file)))
-                (state (plist-get (car outputs) :state))
-                ((member state '("empty" "missing" "directory"))))
-      ;; Appending can damage a file format while preserving the old bytes.
-      (list :source 'shell-no-loss :path file :state state :mode mode))))
+                (output (ellama-tools--literal-file-output command)))
+      (ellama-tools--shell-output-target-evidence output (car outputs)))))
 
-(defun ellama-tools--overwrite-evidence-current-p (evidence path session)
-  "Check EVIDENCE for the current PATH before writing on behalf of SESSION."
+(defun ellama-tools--overwrite-backup-path (proof)
+  "Return the backup path required by the overwrite PROOF, if any."
+  (plist-get (or (plist-get proof :backup)
+                 (plist-get (plist-get proof :entry) :backup))
+             :destination))
+
+(defun ellama-tools--shell-output-alias-p (path destinations)
+  "Check whether PATH names any of DESTINATIONS."
+  (and path
+       (seq-some (lambda (destination)
+                   (or (equal path destination) (file-equal-p path destination)))
+                 destinations)))
+
+(defun ellama-tools--shell-multiple-output-evidence (command outputs)
+  "Return evidence if every literal destination in COMMAND matches OUTPUTS."
+  (ignore-errors
+    ;; Each nonempty destination can require several synchronous Git checks.
+    (when-let* ((count (length outputs))
+                ((<= 2 count 16))
+                (targets (plist-get (ellama-tools--literal-file-outputs command) :targets))
+                ((= count (length targets)))
+                (evidence
+                 (cl-loop for target in targets
+                          for observation in outputs
+                          for proof = (ellama-tools--shell-output-target-evidence target observation t)
+                          unless proof return nil
+                          collect proof))
+                (paths (mapcar (lambda (proof) (plist-get proof :path)) evidence))
+                ((not (cl-loop for (path . remaining) on paths
+                               thereis (ellama-tools--shell-output-alias-p path remaining))))
+                ((not (seq-some (lambda (proof)
+                                  (ellama-tools--shell-output-alias-p
+                                   (ellama-tools--overwrite-backup-path proof) paths))
+                                evidence))))
+      (list :source 'shell-outputs :targets evidence))))
+
+(defun ellama-tools--overwrite-evidence-current-p (evidence path session &optional multiple)
+  "Check EVIDENCE for the current PATH before writing on behalf of SESSION.
+When MULTIPLE is non-nil, require independent destinations and local Git data."
   (or (not evidence)
       (ignore-errors
         (when-let* ((path)
                     (path (ellama-tools--local-write-path path))
-                    ((equal path (plist-get evidence :path))))
+                    ((equal path (plist-get evidence :path)))
+                    ((or (not multiple) (ellama-tools--shell-independent-output-p path))))
           (pcase (plist-get evidence :source)
-            ('git (equal (plist-get evidence :commit) (ellama-tools--git-file-commit path)))
+            ('git (equal (plist-get evidence :commit) (ellama-tools--git-file-commit path multiple)))
             ('session (and (eq session (plist-get evidence :session))
                            (equal (plist-get evidence :entry)
                                   (ellama-tools--session-write-entry session path))))
@@ -2565,6 +2654,45 @@ Use EXPECTED-STAT to reject a changed version before reading its bytes."
                                  (ellama-tools--session-file-backup session path))))
             ('shell-no-loss (equal (plist-get evidence :state)
                                    (ellama-tools--shell-output-state path))))))))
+
+(defun ellama-tools--shell-output-stamp (file)
+  "Return identity and modification data for FILE without reading its bytes."
+  (when-let* ((file)
+              (attributes (file-attributes file 'integer)))
+    (list (file-attribute-type attributes)
+          (file-attribute-size attributes)
+          (file-attribute-modification-time attributes)
+          (file-attribute-status-change-time attributes)
+          (file-attribute-inode-number attributes)
+          (file-attribute-device-number attributes))))
+
+(defun ellama-tools--shell-output-stamps (targets proofs)
+  "Snapshot the paths in TARGETS and any backups required by PROOFS."
+  (cl-mapcar (lambda (target proof)
+               (let ((file (ellama-tools--local-write-path (plist-get target :path)))
+                     (backup (ellama-tools--overwrite-backup-path proof)))
+                 (list file (ellama-tools--shell-output-stamp file)
+                       (ellama-tools--shell-output-stamp backup))))
+             targets proofs))
+
+(defun ellama-tools--shell-overwrite-evidence-current-p (command evidence session)
+  "Recheck every destination of COMMAND against EVIDENCE for SESSION."
+  (ignore-errors
+    (let* ((targets (plist-get (ellama-tools--literal-file-outputs command) :targets))
+           (multiple (eq (plist-get evidence :source) 'shell-outputs))
+           (proofs (if multiple (plist-get evidence :targets) (list evidence))))
+      (and (= (length targets) (length proofs))
+           (let ((stamps (and multiple (ellama-tools--shell-output-stamps targets proofs))))
+             (and (cl-every (lambda (target proof)
+                              (and (equal (plist-get target :mode)
+                                          (or (plist-get proof :mode) "truncate"))
+                                   (ellama-tools--overwrite-evidence-current-p
+                                    proof (plist-get target :path) session multiple)))
+                            targets proofs)
+                  ;; A later Git or backup check can take long enough for an
+                  ;; earlier destination to change before the shell starts.
+                  (or (not multiple)
+                      (equal stamps (ellama-tools--shell-output-stamps targets proofs)))))))))
 
 (defconst ellama-tools--overwrite-retry-hint
   (concat "\nPreserve the current file at a new path in this session with backup_file "
@@ -4760,15 +4888,12 @@ TIMEOUT is the optional command timeout in seconds."
               (user-error
                (concat "Ellama could not reverify the file against Git "
                        "after confirmation. Submit the tool call again.")))
-            (when ellama-tools--overwrite-evidence
-              (let* ((output (ellama-tools--literal-file-output cmd))
-                     (mode (or (plist-get ellama-tools--overwrite-evidence :mode) "truncate")))
-                (unless (and (equal mode (plist-get output :mode))
-                             (ellama-tools--overwrite-evidence-current-p
-                              ellama-tools--overwrite-evidence (plist-get output :path) session))
-                  (kill-buffer buf)
-                  (user-error "%s" (concat "Ellama could not reverify the overwrite target."
-                                          ellama-tools--overwrite-retry-hint)))))
+            (when (and ellama-tools--overwrite-evidence
+                       (not (ellama-tools--shell-overwrite-evidence-current-p
+                             cmd ellama-tools--overwrite-evidence session)))
+              (kill-buffer buf)
+              (user-error "%s" (concat "Ellama could not reverify the overwrite target."
+                                      ellama-tools--overwrite-retry-hint)))
             (setq process
                   (apply #'start-file-process
                          "*ellama-shell-command*" buf

@@ -89,6 +89,12 @@ def prepare_git_case(case, sandbox):
     git(sandbox, "init", "-q", "--template=")
     if change != "untracked":
         git(sandbox, "add", "--", name)
+    if case.get("extra_tracked"):
+        extra = fixture_path(sandbox, case["extra_tracked"])
+        extra.parent.mkdir(parents=True, exist_ok=True)
+        extra.write_bytes(b"Second committed fixture\n")
+        extra.chmod(0o644)
+        git(sandbox, "add", "--", case["extra_tracked"])
     git(sandbox, "commit", "--allow-empty", "-qm", "Add synthetic fixture")
 
     if change in ("dirty", "staged", "staged_only", "partial-index"):
