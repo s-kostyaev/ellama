@@ -30,9 +30,34 @@
     (vconcat (mapcar #'ellama-eval--irreversible-lisp-value value)))
    (t value)))
 
+(defun ellama-eval--backup-session (case)
+  "Set up the local backup and session described by CASE."
+  (when-let* ((kind (gethash "backup_state" case)))
+    (require 'ellama)
+    (let* ((session (make-ellama-session :id "eval-backup-owner"))
+           (source (gethash "fixture_file" case))
+           (backup "retained-copy.tsv")
+           (plan (and (fboundp 'ellama-tools--backup-plan)
+                      (ellama-tools--backup-plan source backup))))
+      (pcase kind
+        ("symlink" (make-symbolic-link source backup))
+        ("hardlink" (add-name-to-file source backup))
+        (_ (copy-file source backup)))
+      (when (and plan (not (equal kind "unrecorded"))
+                 (fboundp 'ellama-tools--record-file-backup))
+        (ellama-tools--record-file-backup session plan))
+      (pcase kind
+        ("deleted" (delete-file backup))
+        ("edited" (with-temp-file backup (insert "Changed backup\n")))
+        ("recreated" (delete-file backup) (copy-file source backup))
+        ("source-changed" (with-temp-file source (insert "Foreign edit\n")))
+        ("compound" (with-temp-file "other.tsv" (insert "Only copy of other data\n"))))
+      (if (equal kind "foreign") (make-ellama-session :id "eval-other-session") session))))
+
 (defun ellama-eval--irreversible-decision-case (case)
   "Return the policy verdict for the synthetic tool call in CASE."
   (let* ((tool-name (gethash "tool" case))
+         (ellama--current-session (ellama-eval--backup-session case))
          (category (gethash "category" case))
          (function (unless category
                      (pcase tool-name

@@ -98,6 +98,9 @@ next attempt is allowed so deliberate overwrites remain possible."
 (defvar ellama-tools--session-file-writes (make-hash-table :test 'eq :weakness 'key)
   "Fingerprint tables for file writes attributed to live Ellama sessions.")
 
+(defvar ellama-tools--session-file-backups (make-hash-table :test 'eq :weakness 'key)
+  "Last verified backup per original file in each live Ellama session.")
+
 (defvar-local ellama-tools--session-file-snapshot nil
   "Temporary file containing the materialized current session transcript.")
 
@@ -454,7 +457,7 @@ BEGIN_ELLAMA_AGENT_STATE block. When all items are complete, call
     ("coder"
      :system "You are an expert software developer. Make precise changes."
      :tools ("session_file" "read_file" "write_file" "edit_file" "append_file"
-             "prepend_file" "move_file" "grep" "grep_in_file" "project_root"
+             "prepend_file" "move_file" "backup_file" "grep" "grep_in_file" "project_root"
              "directory_tree" "count_lines" "lines_range" "shell_command")
      :provider 'ellama-coding-provider)
 
@@ -708,11 +711,11 @@ and `:recoverable-input' values."
                                '(ellama-tools-write-file-tool ellama-tools-edit-file-tool
                                  ellama-tools-append-file-tool ellama-tools-prepend-file-tool))
             :recoverable-input
-            (and (eq (plist-get tool-plist :function)
-                     #'ellama-tools-trash-files-tool)
-                 (or (eq ellama-tools-trash-command 'emacs)
-                     (equal ellama-tools-trash-command
-                            (ellama-tools--default-trash-command))))))))
+            (or (eq (plist-get tool-plist :function) #'ellama-tools-backup-file-tool)
+                (and (eq (plist-get tool-plist :function) #'ellama-tools-trash-files-tool)
+                     (or (eq ellama-tools-trash-command 'emacs)
+                         (equal ellama-tools-trash-command
+                                (ellama-tools--default-trash-command)))))))))
 
 (defun ellama-tools--tool-call-values (async call-args)
   "Return positional CALL-ARGS, excluding callback when ASYNC."
@@ -1703,7 +1706,8 @@ TARGET matches a path that the detector can resolve locally."
 (defun ellama-tools--dlp-scan-input-value
     (tool-name arg-name value &optional tool-metadata)
   "Scan VALUE for TOOL-NAME under ARG-NAME and return a decision plist."
-  (let (warn-message warn-strong-message skip-decision truncated shell-outputs overwrite)
+  (let (warn-message warn-strong-message skip-decision truncated shell-outputs overwrite
+        irreversible overwrite-risk)
     (catch 'done
       (when
           (ellama-tools--dlp-walk-strings
@@ -1728,24 +1732,32 @@ TARGET matches a path that the detector can resolve locally."
                                                       (equal (plist-get output :state) "nonempty")))
                                                outputs)))
                     (recovery (and truncation (ellama-tools--shell-overwrite-evidence text)))
+                    (shell-risk (and shell (not recovery)
+                                     (or truncation (ellama-tools--nonempty-shell-truncation-p text))))
                     (context (if recovery
                                  (plist-put context :overwrite-source (plist-get recovery :source))
                                context))
                     (scan
                      (ellama-tools-dlp--scan-text
                       text
-                      (if (and shell (not recovery)
-                               (or truncation
-                                   (ellama-tools--nonempty-shell-truncation-p text)))
+                      (if shell-risk
                           (plist-put context :shell-truncation t)
                         context)))
                     (verdict (plist-get scan :verdict))
                     (action (plist-get verdict :action))
-                    (message (plist-get verdict :message)))
+                    (message (plist-get verdict :message))
+                    (irreversible-finding (ellama-tools-dlp--has-irreversible-findings-p
+                                           (plist-get scan :findings))))
                (when outputs (setq shell-outputs outputs))
                (when recovery (setq overwrite recovery))
-               (when (or (ellama-tools-dlp--has-irreversible-findings-p
-                          (plist-get scan :findings))
+               (when (or shell-risk
+                         (seq-some (lambda (output)
+                                     (and (equal (plist-get output :mode) "replace_on_success")
+                                          (equal (plist-get output :state) "nonempty")))
+                                   outputs))
+                 (setq overwrite-risk t))
+               (when irreversible-finding (setq irreversible t))
+               (when (or irreversible-finding
                          (memq (plist-get verdict :configured-action)
                                '(block redact)))
                  (setq skip-decision t))
@@ -1758,6 +1770,8 @@ TARGET matches a path that the detector can resolve locally."
                               :message (or message
                                            (format "DLP blocked input for %s"
                                                    tool-name))
+                              :irreversible irreversible-finding
+                              :overwrite-risk shell-risk
                               :audit-sink-failure
                               (plist-get verdict :audit-sink-failure))))
                 ((and (eq action 'warn-strong)
@@ -1773,7 +1787,7 @@ TARGET matches a path that the detector can resolve locally."
                                    tool-name))))))))
         (setq truncated t))
       (append (list :skip-decision skip-decision :truncated truncated :shell-outputs shell-outputs
-                    :overwrite-evidence overwrite)
+                    :overwrite-evidence overwrite :irreversible irreversible :overwrite-risk overwrite-risk)
               (cond
                (warn-strong-message
                 (list :action 'warn-strong :message warn-strong-message))
@@ -1829,6 +1843,8 @@ Return plist with keys `:action' and optional `:message'."
          (sql-count 0)
          backup-options
          shell-outputs
+         irreversible
+         overwrite-risk
          (overwrite (and ellama-tools-dlp-enabled ellama-tools-irreversible-enabled
                          (plist-get tool-metadata :file-editor) (stringp (car values))
                          (ellama-tools--file-overwrite-evidence (car values))))
@@ -1878,6 +1894,8 @@ Return plist with keys `:action' and optional `:message'."
               (setq shell-outputs outputs))
             (when-let* ((recovery (plist-get arg-decision :overwrite-evidence)))
               (setq overwrite recovery))
+            (when (plist-get arg-decision :irreversible) (setq irreversible t))
+            (when (plist-get arg-decision :overwrite-risk) (setq overwrite-risk t))
             (cond
              ((eq action 'block)
               (throw 'done arg-decision))
@@ -1910,6 +1928,10 @@ Return plist with keys `:action' and optional `:message'."
                          (list :action 'warn :message warn-message))
                         ((eq model-action 'warn) model-verdict)
                         (t (list :action 'allow)))))
+          (setq verdict (plist-put verdict :irreversible
+                                   (or irreversible (ellama-tools-dlp--has-irreversible-findings-p
+                                                     (plist-get model-verdict :findings))))
+                verdict (plist-put verdict :overwrite-risk overwrite-risk))
           (if overwrite (plist-put verdict :overwrite-evidence overwrite) verdict))))))
 
 (defun ellama-tools--dlp-call-details (tool-plist call-args &optional decision)
@@ -2185,14 +2207,18 @@ return nil."
           nil)
       message)))
 
-(defun ellama-tools--literal-rm-path (command)
-  "Return the single relative path in a simple rm COMMAND, or nil."
+(defun ellama-tools--literal-rm-path (command &optional recursive)
+  "Return the single relative path in a simple rm COMMAND, or nil.
+Allow RECURSIVE removal options when preparing a trash hint."
   (save-match-data
     (let ((case-fold-search nil))
       (when (and (stringp command)
                  (string-match
                   (concat "\\`[ \t]*rm[ \t]+"
-                          "\\(?:-f[ \t]+\\)?\\(?:--[ \t]+\\)?"
+                          (if recursive
+                              "\\(?:\\(?:-[frR]+\\|--force\\|--recursive\\)[ \t]+\\)*"
+                            "\\(?:-f[ \t]+\\)?")
+                          "\\(?:--[ \t]+\\)?"
                           "\\([a-zA-Z0-9_./-]+\\)[ \t]*\\'")
                   command))
         (let* ((path (match-string 1 command))
@@ -2347,45 +2373,149 @@ Use EXPECTED-STAT to reject a changed version before reading its bytes."
                     (secure-hash 'sha256 (current-buffer)))))
       (when (equal stat (ellama-tools--write-stat file)) (cons digest stat)))))
 
-(defun ellama-tools--session-write-fingerprint (session file)
-  "Return SESSION's fingerprint for FILE if its recorded version matches."
+(defun ellama-tools--fingerprint-matches-p (file stamp)
+  "Check FILE against STAMP, including the hash of its current contents."
+  (and stamp (equal stamp (ellama-tools--write-fingerprint file (cdr stamp)))))
+
+(defun ellama-tools--backup-plan (source destination)
+  "Capture SOURCE before copying it to a new local DESTINATION."
+  (ignore-errors
+    (when-let* ((source (ellama-tools--local-write-path source))
+                (destination (ellama-tools--local-write-path destination))
+                ((not (equal source destination)))
+                ((not (file-attributes destination)))
+                ((file-writable-p destination))
+                (stamp (ellama-tools--write-fingerprint source)))
+      (list :source source :destination destination :original-stamp stamp))))
+
+(defun ellama-tools--record-file-backup (session plan)
+  "Record SESSION's backup from PLAN if both files match the original bytes."
+  (ignore-errors
+    (when-let* ((session)
+                (source (plist-get plan :source))
+                (destination (plist-get plan :destination))
+                (original (plist-get plan :original-stamp))
+                ((equal source (ellama-tools--local-write-path source)))
+                ((equal destination (ellama-tools--local-write-path destination)))
+                ((ellama-tools--fingerprint-matches-p source original))
+                (copy (ellama-tools--write-fingerprint destination))
+                ((and (equal (car original) (car copy))
+                      (not (equal (seq-take (cdr original) 2) (seq-take (cdr copy) 2))))))
+      (let ((files (or (gethash session ellama-tools--session-file-backups)
+                       (puthash session (make-hash-table :test 'equal) ellama-tools--session-file-backups))))
+        (puthash source (plist-put (copy-sequence plan) :copy-stamp copy) files)))))
+
+(defun ellama-tools--shell-backup-plan (command)
+  "Capture the source of a simple cp COMMAND with a new destination."
+  (when (ellama-tools--posix-shell-p)
+    (save-match-data
+      (let ((target ellama-tools--shell-output-target-pattern)
+            (case-fold-search nil))
+        (when (string-match
+               (concat "\\`[ \t]*\\(?:command[ \t]+\\|/bin/\\|/usr/bin/\\)?cp[ \t]+"
+                       "\\(?:-n[ \t]+\\)?\\(?:--[ \t]+\\)?\\(" target "\\)[ \t]+\\(" target "\\)[ \t]*\\'")
+               command)
+          (let ((source (match-string 1 command)) (destination (match-string 2 command)))
+            (when (and (not (string-match-p "[$`]" source))
+                       (not (string-match-p "[$`]" destination)))
+              (when-let* ((source (ellama-tools--shell-local-output-file source t))
+                          (destination (ellama-tools--shell-local-output-file destination t)))
+                (ellama-tools--backup-plan source destination)))))))))
+
+(defun ellama-tools-backup-file-tool (source destination)
+  "Copy the bytes on disk from SOURCE to new DESTINATION in this session."
+  (condition-case err
+      (let ((session (ellama-tools--active-session)))
+        (cond
+         ((not session) "Backup requires an active Ellama session.")
+         ((when-let* ((plan (ellama-tools--backup-plan source destination)))
+            (let ((original (plist-get plan :source)) (copy (plist-get plan :destination))
+                  (stamp (plist-get plan :original-stamp)))
+              (with-temp-buffer
+                (set-buffer-multibyte nil)
+                (insert-file-contents-literally original nil 0 (1+ (car (last stamp))))
+                (unless (and (equal (car stamp) (secure-hash 'sha256 (current-buffer)))
+                             (equal (cdr stamp) (ellama-tools--write-stat original)))
+                  (error "The original changed while it was being read"))
+                (let ((coding-system-for-write 'no-conversion)
+                      (write-region-annotate-functions nil)
+                      (write-region-post-annotation-function nil))
+                  (with-file-modes #o600
+                    (write-region (point-min) (point-max) copy nil 'silent nil 'excl))))
+              (if (ellama-tools--record-file-backup session plan)
+                  (format "Verified backup of %s saved to %s for this session. Keep it in place while editing."
+                          source destination)
+                "Could not verify the completed backup. Retry with a new destination."))))
+         (t "Backup requires a readable local regular file up to 1 MiB and a new writable destination.")))
+    (error (format "Cannot create backup: %s" (error-message-string err)))))
+
+(defun ellama-tools--backup-intact-p (backup)
+  "Check that BACKUP still names the verified separate copy."
+  (ignore-errors
+    (when-let* ((file (plist-get backup :destination))
+                ((equal file (ellama-tools--local-write-path file))))
+      (ellama-tools--fingerprint-matches-p file (plist-get backup :copy-stamp)))))
+
+(defun ellama-tools--session-file-backup (session file)
+  "Return SESSION's intact backup of the current version of FILE."
+  (when-let* ((files (gethash session ellama-tools--session-file-backups))
+              (backup (gethash file files)))
+    (if (and (ellama-tools--fingerprint-matches-p file (plist-get backup :original-stamp))
+             (ellama-tools--backup-intact-p backup))
+        backup
+      (remhash file files)
+      nil)))
+
+(defun ellama-tools--session-write-entry (session file)
+  "Return SESSION's current write entry for FILE if its evidence still holds."
   (when-let* ((files (gethash session ellama-tools--session-file-writes))
-              (recorded (gethash file files))
-              ((equal recorded (ellama-tools--write-fingerprint file (cdr recorded)))))
-    recorded))
+              (entry (gethash file files)))
+    (if (and (ellama-tools--fingerprint-matches-p file (plist-get entry :stamp))
+             (or (not (plist-get entry :backup))
+                 (ellama-tools--backup-intact-p (plist-get entry :backup))))
+        entry
+      (remhash file files)
+      nil)))
 
 (defun ellama-tools--session-write-origin (session path)
   "Return a checked PATH that SESSION can start or continue editing."
   (ignore-errors
     (when-let* ((session)
                 (file (ellama-tools--local-write-path path)))
-      (when (or (ellama-tools--session-write-fingerprint session file)
-                (ellama-tools--git-file-commit file)
-                (and (not (file-attributes file))
-                     (let ((parent (file-name-directory file)))
-                       (and (not (ellama-tools--tool-check-file-access parent 'list))
-                            (file-accessible-directory-p parent)))))
-        file))))
+      (let ((entry (ellama-tools--session-write-entry session file)))
+        (cond
+         (entry (list :path file :backup (plist-get entry :backup)))
+         ((or (ellama-tools--git-file-commit file)
+              (and (not (file-attributes file))
+                   (let ((parent (file-name-directory file)))
+                     (and (not (ellama-tools--tool-check-file-access parent 'list))
+                          (file-accessible-directory-p parent)))))
+          (list :path file))
+         ((when-let* ((backup (ellama-tools--session-file-backup session file)))
+            (list :path file :backup backup))))))))
 
-(defun ellama-tools--record-session-write (session file digest)
-  "Attribute FILE to SESSION when its saved bytes match DIGEST."
+(defun ellama-tools--record-session-write (session origin digest)
+  "Attribute the write from ORIGIN to SESSION when saved bytes match DIGEST."
   (ignore-errors
-    (when-let* ((file (ellama-tools--local-write-path file))
+    (when-let* ((file (ellama-tools--local-write-path (plist-get origin :path)))
                 (stamp (ellama-tools--write-fingerprint file))
                 ((equal (car stamp) digest)))
       (let ((files (or (gethash session ellama-tools--session-file-writes)
                        (puthash session (make-hash-table :test 'equal) ellama-tools--session-file-writes))))
-        (puthash file stamp files)))))
+        (puthash file (list :stamp stamp :backup (plist-get origin :backup)) files)))))
 
 (defun ellama-tools--file-overwrite-evidence (path)
   "Return evidence for restoring PATH or replacing the current session's work."
   (ignore-errors
     (when-let* ((file (ellama-tools--local-write-path path)))
       (let ((session (ellama-tools--active-session)))
-        (if-let* ((stamp (ellama-tools--session-write-fingerprint session file)))
-            (list :source 'session :path file :session session :fingerprint stamp)
-          (when-let* ((commit (ellama-tools--git-file-commit file)))
-            (list :source 'git :path file :commit commit)))))))
+        (cond
+         ((when-let* ((entry (ellama-tools--session-write-entry session file)))
+            (list :source 'session :path file :session session :entry entry)))
+         ((when-let* ((commit (ellama-tools--git-file-commit file)))
+            (list :source 'git :path file :commit commit)))
+         ((when-let* ((backup (ellama-tools--session-file-backup session file)))
+            (list :source 'backup :path file :session session :backup backup))))))))
 
 (defun ellama-tools--shell-overwrite-evidence (command)
   "Return local evidence for a supported overwrite in COMMAND."
@@ -2402,8 +2532,28 @@ Use EXPECTED-STAT to reject a changed version before reading its bytes."
           (pcase (plist-get evidence :source)
             ('git (equal (plist-get evidence :commit) (ellama-tools--git-file-commit path)))
             ('session (and (eq session (plist-get evidence :session))
-                           (equal (plist-get evidence :fingerprint)
-                                  (ellama-tools--session-write-fingerprint session path)))))))))
+                           (equal (plist-get evidence :entry)
+                                  (ellama-tools--session-write-entry session path))))
+            ('backup (and (eq session (plist-get evidence :session))
+                          (equal (plist-get evidence :backup)
+                                 (ellama-tools--session-file-backup session path)))))))))
+
+(defconst ellama-tools--overwrite-retry-hint
+  (concat "\nPreserve the current file at a new path in this session with backup_file "
+          "or a simple cp -n, or verify that its current bytes are committed in Git. "
+          "Keep the copy in place, read the file, and retry as a single-file edit.")
+  "Guidance returned when a file overwrite cannot proceed.")
+
+(defun ellama-tools--dlp-refusal-hint (decision metadata values)
+  "Return a safer retry for an irreversible DECISION on METADATA and VALUES."
+  (when (and (plist-get decision :irreversible)
+             (not (plist-get decision :audit-sink-failure)))
+    (cond
+     ((and (plist-get metadata :shell-command)
+           (ellama-tools--literal-rm-path (car values) t))
+      "\nUse trash_files for this local file so it can be recovered from the trash.")
+     ((or (plist-get metadata :file-editor) (plist-get decision :overwrite-risk))
+      ellama-tools--overwrite-retry-hint))))
 
 (defun ellama-tools--make-dlp-wrapper (func tool-plist)
   "Make DLP wrapper for FUNC using TOOL-PLIST metadata."
@@ -2430,6 +2580,8 @@ Use EXPECTED-STAT to reject a changed version before reading its bytes."
                  (ellama-tools--overwrite-evidence (plist-get decision :overwrite-evidence))
                  (action (plist-get decision :action))
                  (message (plist-get decision :message))
+                 (hint (ellama-tools--dlp-refusal-hint
+                        decision tool-metadata (ellama-tools--tool-call-values async args)))
                  (audit-sink-failure
                   (plist-get decision :audit-sink-failure)))
             (pcase action
@@ -2456,16 +2608,14 @@ Use EXPECTED-STAT to reject a changed version before reading its bytes."
                            result))))
                  (ellama-tools--dlp-return-message
                   async args
-                  (or message
-                      (format "DLP blocked input for tool %s" tool-name)))))
+                  (concat (or message (format "DLP blocked input for tool %s" tool-name)) hint))))
               ('warn
                (if (not (ellama-tools--dlp-confirm-warn
                          tool-name message nil
                          (ellama-tools--dlp-call-details tool-plist args)))
                    (ellama-tools--dlp-return-message
                     async args
-                    (format "DLP warning denied tool execution for %s"
-                            tool-name))
+                    (concat (format "DLP warning denied tool execution for %s" tool-name) hint))
                  (let ((result (apply func wrapped-args)))
                    (if (and (not async) (stringp result))
                        (ellama-tools--postprocess-output-result
@@ -2475,8 +2625,7 @@ Use EXPECTED-STAT to reject a changed version before reading its bytes."
                (if noninteractive
                    (ellama-tools--dlp-return-message
                     async args
-                    (ellama-tools--dlp-blocked-noninteractive-message
-                     tool-name message))
+                    (concat (ellama-tools--dlp-blocked-noninteractive-message tool-name message) hint))
                  (let* ((commit (ellama-tools--rm-git-evidence tool-plist args))
                         (warning
                          (if commit
@@ -2490,8 +2639,7 @@ Use EXPECTED-STAT to reject a changed version before reading its bytes."
                              (ellama-tools--dlp-call-details tool-plist args)))
                        (ellama-tools--dlp-return-message
                         async args
-                        (format "DLP warning denied tool execution for %s"
-                                tool-name))
+                        (concat (format "DLP warning denied tool execution for %s" tool-name) hint))
                      (let* ((ellama-tools--confirmed-rm-git-evidence commit)
                             (result (apply func wrapped-args)))
                        (if (and (not async) (stringp result))
@@ -3997,8 +4145,8 @@ edit.  CALLBACK receives the final tool output after all relevant hooks finish."
           ((plist-get before :failed)
            (funcall callback (ellama-tools--sectioned-output before-sections)))
           ((not (ellama-tools--overwrite-evidence-current-p evidence file-name session))
-           (funcall callback (concat "Ellama could not reverify the overwrite target. "
-                                     "Submit the tool call again.")))
+           (funcall callback (concat "Ellama could not reverify the overwrite target."
+                                     ellama-tools--overwrite-retry-hint)))
           (t
            (let ((ellama-tools--write-session session))
              (funcall edit-fn))
@@ -4399,7 +4547,7 @@ TIMEOUT is the optional command timeout in seconds."
 
 (defun ellama-tools--write-file-buffer-content (file-name content)
   "Write CONTENT to FILE-NAME and update any visiting buffer."
-  (let ((tracked-file (ellama-tools--session-write-origin ellama-tools--write-session file-name))
+  (let ((origin (ellama-tools--session-write-origin ellama-tools--write-session file-name))
         (buffer (find-file-noselect file-name)))
     (with-temp-buffer
       (insert content)
@@ -4414,9 +4562,9 @@ TIMEOUT is the optional command timeout in seconds."
                   (replace-region-contents (point-min) (point-max) source)
                 (funcall (symbol-function 'replace-buffer-contents) source)))
             (save-buffer)
-            (when tracked-file
+            (when origin
               (ellama-tools--record-session-write
-               ellama-tools--write-session tracked-file
+               ellama-tools--write-session origin
                (secure-hash 'sha256 (encode-coding-string content 'raw-text))))
             ;; Revert the buffer silently to avoid user prompts when
             ;; Emacs detects that the visited file has changed on disk.
@@ -4464,6 +4612,13 @@ Replace OLDCONTENT with NEWCONTENT."
   nil)
 
 (ellama-tools-define-tool
+ '(:function ellama-tools-backup-file-tool
+   :name "backup_file"
+   :args ((:name "source" :type string :description "Path to the local file on disk.")
+          (:name "destination" :type string :description "A new path for the backup copy."))
+   :description "Copy a local file of up to 1 MiB to a new path and verify the backup for this session."))
+
+(ellama-tools-define-tool
  '(:function
    ellama-tools-edit-file-tool
    :name
@@ -4508,7 +4663,7 @@ TIMEOUT is the optional command timeout in seconds."
     (condition-case err
         (let ((buf (get-buffer-create
                     (concat (make-temp-name " *ellama shell command") "*")))
-              process timer done timed-out tracked-file tracked-digest)
+              process timer done timed-out write-origin tracked-digest backup-plan)
           (cl-labels
               ((command-output ()
                  ;; trim trailing newline to reduce noisy tool output
@@ -4557,14 +4712,19 @@ TIMEOUT is the optional command timeout in seconds."
                             (t
                              (format "Command failed with exit code %d.\n%s"
                                      exit-code output)))))
-                     (when (and (zerop exit-code) tracked-file)
-                       (ellama-tools--record-session-write session tracked-file tracked-digest))
+                     (when (zerop exit-code)
+                       (when write-origin
+                         (ellama-tools--record-session-write session write-origin tracked-digest))
+                       (when backup-plan
+                         (ellama-tools--record-file-backup session backup-plan)))
                      (finish result)))))
             (when-let* ((session)
                         (overwrite (ellama-tools--literal-overwrite cmd))
                         (digest (ellama-tools--literal-writer-digest (cdr overwrite))))
-              (setq tracked-file (ellama-tools--session-write-origin session (car overwrite))
+              (setq write-origin (ellama-tools--session-write-origin session (car overwrite))
                     tracked-digest digest))
+            (when session
+              (setq backup-plan (ellama-tools--shell-backup-plan cmd)))
             (when (and ellama-tools--confirmed-rm-git-evidence
                        (not (equal ellama-tools--confirmed-rm-git-evidence
                                    (ellama-tools--rm-git-commit cmd))))
@@ -4577,8 +4737,8 @@ TIMEOUT is the optional command timeout in seconds."
                      (and ellama-tools--overwrite-evidence (car (ellama-tools--literal-overwrite cmd)))
                      session)
               (kill-buffer buf)
-              (user-error (concat "Ellama could not reverify the overwrite target. "
-                                  "Submit the tool call again.")))
+              (user-error "%s" (concat "Ellama could not reverify the overwrite target."
+                                      ellama-tools--overwrite-retry-hint)))
             (setq process
                   (apply #'start-file-process
                          "*ellama-shell-command*" buf

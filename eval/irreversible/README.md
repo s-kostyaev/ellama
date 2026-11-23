@@ -17,7 +17,7 @@ python3 eval/irreversible/run.py
 python3 eval/irreversible/run.py --suite git
 ```
 
-The decision suite has 943 cases. The 52 Git cases run without Ollama. To
+The decision suite has 955 cases. The 52 Git cases run without Ollama. To
 run only the shell guard and SQL cases, pass both fixture group names.
 
 ```sh
@@ -30,6 +30,9 @@ and their append, no-clobber, and other non-destructive controls.
 Use `--group git-overwrite` to compare clean, dirty, and otherwise ineligible
 targets for a single-file shell overwrite. The runner prepares each Git state
 in its own temporary repository.
+
+Use `--group session-backup` to check overwrites with a verified backup, an
+untracked copy, or a backup that was deleted, replaced, or altered.
 
 Use `--source` to run the same fixtures against another Ellama checkout and
 `--output` to give each run its own results directory.
