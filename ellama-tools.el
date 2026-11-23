@@ -1274,7 +1274,7 @@ of visited nodes and a flag for incomplete scans.  DEPTH is the nesting depth."
       nil))))
 
 (defun ellama-tools--dlp-walk-strings (value root-path callback)
-  "Call CALLBACK for string leaves and object keys in VALUE using ROOT-PATH.
+  "Call CALLBACK for each string and object key in VALUE using ROOT-PATH.
 CALLBACK receives `(TEXT PATH KEY)' and returns non-nil for a sensitive key.
 Return non-nil when the traversal is incomplete."
   (let ((node-count (vector 0 nil)))
