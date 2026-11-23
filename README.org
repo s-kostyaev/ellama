@@ -1295,7 +1295,9 @@ accepts three kinds of local recovery evidence.
 
 - *Git.* The file's bytes and mode must match both ~HEAD~ and the index. An
   unstaged or staged change that differs from ~HEAD~ requires its own recovery
-  evidence. Ellama skips this Git check when ~srt~ is enabled.
+  evidence. When ~srt~ is enabled, Ellama runs the Git checks inside the
+  sandbox. Git can establish recovery only if the policy lets it read the
+  file, index, and commit data it needs.
 - *Writes by the active session.* Ellama can recognize a saved version after
   a supported write to a new file, a verified starting version, or a version
   it already recorded for the same session.
