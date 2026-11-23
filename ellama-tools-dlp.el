@@ -451,14 +451,17 @@ to `warn-strong' in monitor mode."
 
 (defcustom ellama-tools-irreversible-decision-provider nil
   "Optional decision provider for irreversible tool input checks.
-Nil disables this detector.  Requires the decision API in llm 0.33.0
-or later and a provider supporting `llm-decide'.  No chat provider fallback
-is used.  Requests contain tool metadata and all argument names and values.
-The provider receives no conversation history or tools.
-Positive decisions and failed checks use the existing irreversible policy
-and typed confirmation.  Negative decisions never remove regex findings.
-Ellama skips the request for read-only tools, outputs, and calls with a
-local irreversible finding or a block or redaction policy."
+Use nil to keep the local checks only.  Use llm 0.33.0 or later
+with a provider that supports `llm-decide'.  The request contains tool
+metadata and argument names and values.  It omits chat history and tool
+definitions.
+A positive verdict or failed request uses the irreversible policy.
+A negative verdict leaves local findings in effect.  An incomplete local
+scan also uses the irreversible policy, even with no provider.
+Ellama skips the request for read-only tools and outputs.  An irreversible
+finding, a local block or redaction policy, or verified file recovery can
+settle a call without the provider.  Ellama also withholds requests when
+the local scan detects a sensitive object key."
   :type 'sexp
   :group 'ellama-tools-dlp)
 

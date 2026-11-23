@@ -1101,26 +1101,14 @@ scanned by tool output DLP.
 
 ** DLP for Tool Input/Output
 
-Ellama includes an optional DLP (Data Loss Prevention) layer for tool calls.  It
-can scan:
+Ellama's data loss prevention (DLP) checks tool arguments before execution and
+scans tool output before returning it to the model. It uses regex rules and can
+match secrets from environment variables, including common base64, base64url,
+and hex encodings. An optional LLM check can block content the local rules
+miss.
 
-- tool input (arguments sent from the model to tools)
-- tool output (strings returned from tools back to the model)
-
-The DLP layer supports regex-based rules and exact secret detection derived from
-environment variables (including common encoded variants such as
-base64/base64url and hex).  It also includes an optional LLM-based semantic
-check as a block-only backstop for payloads that look unsafe but do not match a
-deterministic rule.
-
-Recommended initial rollout:
-
-- enable DLP
-- keep mode in ~monitor~
-- review incidents before switching selected paths to ~enforce~
-- if enabling the LLM detector, start with a small tool allowlist
-
-Example minimal setup:
+Start in ~monitor~ and review the incident log before switching to ~enforce~.
+If you enable the LLM check, start with a short tool allowlist.
 
 #+BEGIN_SRC emacs-lisp
   (setopt ellama-tools-dlp-enabled t)
@@ -1131,8 +1119,9 @@ Example minimal setup:
 Key settings:
 
 - ~ellama-tools-dlp-enabled~: Enable DLP scanning for tool input/output.
-- ~ellama-tools-dlp-mode~: Rollout mode. Use ~monitor~ for detect+log only, or
-  ~enforce~ to apply actions.
+- ~ellama-tools-dlp-mode~: Use ~monitor~ to log ordinary findings or ~enforce~
+  to apply their configured actions. Irreversible warnings can still ask for
+  confirmation in ~monitor~.
 - ~ellama-tools-dlp-regex-rules~: Regex detector rules (IDs, patterns,
   direction/tool/arg scoping, enable/disable, case folding).
 - ~ellama-tools-dlp-scan-env-exact-secrets~: Enable exact-secret detection from
@@ -1152,7 +1141,7 @@ Key settings:
   deterministic findings are empty (~clean-only~) or on every non-blocked scan
   (~always-unless-blocked~).
 - ~ellama-tools-dlp-max-scan-size~: Maximum bytes scanned per input/output
-  payload (default 5 MB; larger payloads are truncated for scanning).
+  payload (default 5 MiB; larger payloads are truncated for scanning).
 - ~ellama-tools-dlp-input-default-action~: Default action for input findings in
   ~enforce~ mode (~allow~, ~warn~, ~block~).
 - ~ellama-tools-dlp-output-default-action~: Default action for output findings
@@ -1164,11 +1153,9 @@ Key settings:
   that should not prompt on every agent read. It does not bypass input DLP,
   non-read tool output DLP, irreversible checks, ~srt~ checks, or line-budget
   truncation.
-- ~ellama-tools-dlp-policy-overrides~: Per-tool/per-arg overrides and
-  exceptions.  For structured input args, nested string values are scanned with
-  path-like arg names (for example ~payload.items[0].token~).  Override ~:arg~
-  matches exact names and nested path prefixes (for example ~"payload"~ matches
-  ~payload.items[0].token~).
+- ~ellama-tools-dlp-policy-overrides~: Rules and exceptions for specific tools
+  and arguments. ~:arg~ matches an exact path or a nested path prefix, so
+  ~"payload"~ also matches ~payload.items[0].token~.
 - ~ellama-tools-dlp-log-targets~: Incident log targets (~memory~, ~message~,
   ~file~).
 - ~ellama-tools-dlp-audit-log-file~: JSONL path used when ~file~ sink is
@@ -1180,7 +1167,7 @@ Key settings:
 - ~ellama-tools-irreversible-default-action~: Default irreversible action
   (~warn~ or ~block~, with monitor downgrade to ~warn-strong~).
 - ~ellama-tools-irreversible-decision-provider~: Optional provider for the
-  decision API in llm 0.33.0 or later. Nil disables decision checks.
+  decision API in llm 0.33.0 or later. Nil leaves the local checks in charge.
 - ~ellama-tools-irreversible-decision-threshold~: Minimum probability for an
   irreversible finding (default ~0.5~, inclusive).
 - ~ellama-tools-irreversible-decision-max-scan-size~: Maximum size in bytes of
@@ -1226,153 +1213,156 @@ Example:
                         "ellama\\(?:-[[:alnum:]-]+\\)?\\.el\\'")))
 #+END_SRC
 
-Enforcement behavior (v1):
+*** How Ellama handles findings
 
-- input ~block~ prevents tool execution
-- input ~warn~ asks for explicit confirmation before execution
-- output ~block~ returns a safe denial string
-- output ~redact~ replaces detected fragments with placeholders
-- output ~warn~ follows ~ellama-tools-dlp-output-warn-behavior~ (~confirm~ by
-  default)
+An input ~block~ stops the call. An input ~warn~ asks before running it. For
+output, ~block~ returns a denial and ~redact~ replaces the matching text.
+~ellama-tools-dlp-output-warn-behavior~ controls output warnings and defaults
+to ~confirm~.
 
-LLM safety check behavior (v1):
+The optional LLM safety check uses an isolated request with no tools. In
+~monitor~, Ellama logs its unsafe verdicts. In ~enforce~, those verdicts can add
+a block. Redaction still depends on the local findings.
 
-- the LLM detector runs only when ~ellama-tools-dlp-llm-check-enabled~ is
-  non-nil
-- the checker uses an isolated structured-output request with no tools
-- in ~monitor~, unsafe LLM verdicts are logged but do not change the result
-- in ~enforce~, an unsafe LLM verdict may force ~block~
-- LLM findings never trigger ~warn~ or ~redact~ and do not affect redaction
+Irreversible warnings use ~warn-strong~. With typed confirmation enabled,
+type ~I UNDERSTAND THIS CANNOT BE UNDONE~ to proceed. High-confidence
+irreversible findings block in ~enforce~ and ask for confirmation in ~monitor~.
+For other irreversible findings, Ellama checks the session bypass, then the
+trusted project policy, then ~ellama-tools-irreversible-default-action~.
+Unknown MCP tools default to ~warn~. Trust for a project policy applies to its
+repository root, remote URL, and policy hash. If writing the audit record
+fails, Ellama stops the call unless the user explicitly approves that
+failure in an interactive session.
 
-Irreversible action safety (v1):
+*** The irreversible-action decision model
 
-- irreversible warnings use ~warn-strong~ with typed confirmation phrase ~I
-  UNDERSTAND THIS CANNOT BE UNDONE~
-- in ~enforce~, high-confidence irreversible findings hard ~block~
-- in ~monitor~, high-confidence irreversible findings still require typed
-  confirmation and do not hard block
-- unknown MCP tool identities default to ~warn~ (configurable via
-  ~ellama-tools-irreversible-unknown-tool-action~)
-- policy precedence for irreversible decisions: ~high-confidence enforce block~
-  > ~session bypass~ > ~project override~ > global irreversible default
-- project overrides are ignored until the repository policy is explicitly
-  trusted; trust is bound to repo root, remote URL, and policy hash
-- audit sink write failure for irreversible decisions is fail-closed; in
-  interactive sessions a separate explicit confirmation can override once
+Ellama first checks the arguments locally. It applies the irreversible policy
+to known risks such as a direct ~rm~ with recognized options and a file
+operand, or a supported shell redirection that would truncate a nonempty file
+without a verified way to recover it. A simple local ~rm~ may show the Git commit during confirmation.
+Ellama rechecks that commit before starting the command.
 
-Ellama applies the irreversible policy to direct ~rm~ calls with a file operand
-and recognized options, even without a decision provider. The built-in
-irreversible detectors skip read-only tools and the built-in ~trash_files~
-implementation. User-defined DLP rules and the usual tool permissions still
-apply.
+Set ~ellama-tools-irreversible-decision-provider~ to let a model assess calls
+that still need a decision. This setting defaults to ~nil~ and requires
+~llm~ 0.33.0 or later and a provider that supports ~llm-decide~. Ellama uses
+only the provider you assign here. ~ellama-tools-dlp-llm-check-enabled~
+controls the separate DLP safety check.
 
-Decision models for irreversible input:
-
-Set ~ellama-tools-irreversible-decision-provider~ to add a decision model to
-regex checks. This detector is disabled by default and is independent of the
-chat-based ~ellama-tools-dlp-llm-check-enabled~ safety check. It requires llm
-0.33.0 or later and a provider that supports ~llm-decide~.
-
-For example, with a model already installed in Ollaya:
+This example assumes the local server exposes ~/v1/systemone~ and has the
+named model installed. Set the URL and model to match your server.
 
 #+BEGIN_SRC emacs-lisp
   (require 'llm-typesafe)
   (setopt ellama-tools-irreversible-decision-provider
           (make-llm-typesafe-compatible
-           :url "http://localhost:11435/v1/systemone"
-           :model "your-installed-decision-model"))
+           :url "http://127.0.0.1:11434/v1/systemone"
+           :model "pplx-decider-flash"))
 #+END_SRC
 
-The model answers a boolean question about permanent data loss, overwriting
-shared history, external sending or publishing, and moving money. After the
-local input scan, Ellama sends at most one request per tool call. The request
-contains the tool identity and all supplied argument names and values, including
-numbers, boolean flags, and nested values. Use a provider you trust with those
-arguments. The provider only sees the call data, so it cannot verify filesystem
-state or whether an operation can be recovered.
+Ellama asks at most one question per eligible call. It picks a question that
+fits the operation, such as reachable shell effects, the order of statements
+in a SQL transaction, or a replacement with explicit backup options. The
+provider receives the tool identity and argument names and values. For
+supported shell commands, it can also receive observed destination paths,
+write modes, and file states. Use a provider you trust with that data. The
+request excludes the chat history and tool definitions.
 
-A probability at or above the threshold adds an irreversible finding. With
-~ellama-tools-irreversible-default-action~ set to ~warn~, execution requires
-typed confirmation. With ~block~, it blocks in ~enforce~ and requires typed
-confirmation in ~monitor~. Negative answers never clear regex findings or
-approve an unknown MCP tool. Existing scoped bypasses and trusted project policy
-still apply. Ellama skips the decision request for read-only tools, the built-in
-~trash_files~ implementation, outputs, and calls whose local scan found
-irreversible behavior or set a block or redaction policy.
+The local scan covers keys as well as values in nested input. If it detects a
+sensitive key, Ellama identifies it by position in diagnostics and withholds
+the decision request. Read-only tools and the built-in trash backends also
+skip the model. Ellama uses local results when an irreversible finding, a
+block or redaction policy, or verified file evidence settles the call.
+User-defined DLP rules and ordinary tool confirmation still apply.
 
-API errors, malformed probabilities, and inputs above the size limit or
-truncated by Ellama use the same irreversible policy. They do not silently allow
-execution, even when ~ellama-tools-dlp-input-fail-open~ is enabled.  Incident
-records include the decision status, probability, and error type; they omit the
-input text and provider error messages.
+A score at or above ~ellama-tools-irreversible-decision-threshold~ adds an
+irreversible finding. A low score leaves local findings and unknown MCP
+warnings in effect. A failed request or one that exceeds the request-size
+limit follows the irreversible policy. If the local scan is incomplete,
+Ellama applies that policy before using any recovery evidence, even with no
+decision provider. Split a file edit into smaller calls if it exceeds the
+scan limit.
 
-The check runs synchronously before execution, so cold model loading can pause
-the tool call. Choose a model using both quality and latency results; Ellama
-does not select one automatically. The llm 0.33.0 API does not expose provider
-abstention or truncation metadata. Use a server that rejects truncated or
-undecidable requests with an error; a negative model answer is not proof that
-the operation is recoverable.
+The check is synchronous, so loading a cold model can delay a tool call.
+Incident records include the decision status, probability when available, and
+error type. Use a server that returns an error when it cannot assess the full
+request. The decision API in ~llm~ 0.33.0 supplies no separate signal for
+provider-side truncation or abstention.
 
-Moving files to the trash:
+*** File overwrites and backups
 
-The ~trash_files~ tool moves local files and directories to the trash using
-~ellama-tools-trash-command~. Defaults are selected by operating system:
+For built-in file edits and supported literal shell redirections, Ellama
+accepts three kinds of local recovery evidence.
 
-- macOS: ~"trash"~. macOS 15 and later include this command. If it is missing,
-  select ~emacs~ or install
-  [[https://github.com/sindresorhus/macos-trash][macos-trash]] with ~brew
-  install macos-trash~.
-- GNU/Linux: ~("gio" "trash")~ when ~gio~ is available in Emacs' ~exec-path~;
-  otherwise ~emacs~. ~gio~ comes with GLib and is often already installed on
-  desktop systems. Another option is ~"trash-put"~ from
-  [[https://github.com/andreafrancia/trash-cli][trash-cli]], available through
-  distribution package managers, for example ~sudo apt install trash-cli~ on
-  Debian or Ubuntu.
-- Windows: ~"recycle.exe"~ from
-  [[https://www.maddogsw.com/cmdutils/][cmdutils]]. Install it and add its
-  directory to Emacs' ~exec-path~, or configure a full executable path.
-- Other systems: ~emacs~, which calls the built-in ~move-file-to-trash~
-  function.
+- *Git.* The file's bytes and mode must match both ~HEAD~ and the index. An
+  unstaged or staged change that differs from ~HEAD~ requires its own recovery
+  evidence. Ellama skips this Git check when ~srt~ is enabled.
+- *Writes by the active session.* Ellama can recognize a saved version after
+  a supported write to a new file, a verified starting version, or a version
+  it already recorded for the same session.
+- *A backup made by the active session.* Use ~backup_file~ to copy the file to
+  a new path. Ellama can also record a simple ~cp~ or ~cp -n~ to a new path.
+  Keep that copy in place while editing. If a later edit still depends on
+  the backup, deleting, replacing, or changing the copy invalidates the
+  evidence.
 
-The ~emacs~ backend uses ~system-move-file-to-trash~ when supported by the Emacs
-build. Otherwise it uses Emacs' ~trash-directory~ or the freedesktop.org home
-trash. Emacs' freedesktop backend does not use per-volume trashcans.  Built-in
-transfers run synchronously. The built-in backend is disabled on Windows: Emacs
-uses an API whose undo flag only preserves recovery information if possible,
-rather than requiring recycling. See the
-[[https://learn.microsoft.com/en-us/windows/win32/api/shellapi/ns-shellapi-shfileopstructw][Windows
-API documentation]]. For Windows, configure a utility that refuses permanent
-deletion when recycling is unavailable.  External commands must be installed
-separately if unavailable; Ellama does not install them. Make sure they are in
-Emacs' ~exec-path~, or configure a full executable path.
+Git, session, and backup evidence is limited to regular local files of up to
+1 MiB. Symbolic links and files with unsaved buffer edits fall back to the
+ordinary checks. For session writes and backups, Ellama stores file metadata
+and a SHA-256 digest. It rechecks the destination and any required backup before
+writing, after any confirmation. If the evidence changed, Ellama stops the
+write. Another process can still change the filesystem between that check and
+the shell opening a file.
 
-You can use another utility that accepts file paths as arguments:
+Ellama can handle a simple literal shell write locally if the destination is
+empty or missing. A directory rejects ordinary output redirection. Ellama can
+check two to sixteen literal destinations in one command when each passes the
+local check and the paths are independent. The command loses that exemption
+if one destination is the backup required by another. Dynamic paths,
+pipelines, and appending to a nonempty file remain subject to the ordinary
+checks.
+
+Enable ~backup_file~ with ~(ellama-tools-enable-by-name "backup_file")~.
+If an overwrite is refused, commit the current version to Git or make a
+session backup, then read the file and retry the edit. If Ellama reports an
+incomplete scan, split the edit first.
+
+*** Moving files to the trash
+
+Use ~trash_files~ when you want to be able to recover a removed file. Ellama
+chooses a backend through ~ellama-tools-trash-command~.
+
+- macOS uses ~"trash"~. If the command is unavailable, use ~emacs~ or install
+  [[https://github.com/sindresorhus/macos-trash][macos-trash]].
+- GNU/Linux uses ~("gio" "trash")~ when ~gio~ is on Emacs' ~exec-path~, and
+  ~emacs~ otherwise. ~"trash-put"~ from
+  [[https://github.com/andreafrancia/trash-cli][trash-cli]] is another option.
+- Windows uses ~"recycle.exe"~ from
+  [[https://www.maddogsw.com/cmdutils/][cmdutils]]. Install it and put it on
+  Emacs' ~exec-path~, or set a full executable path. Choose a utility that
+  refuses permanent deletion if recycling is unavailable.
+- Other systems use ~emacs~, which calls ~move-file-to-trash~.
 
 #+BEGIN_SRC emacs-lisp
-  ;; Use built-in Emacs trash on supported systems without an extra utility:
   (setopt ellama-tools-trash-command 'emacs)
-  ;; Or choose an external command:
-  ;; (setopt ellama-tools-trash-command '("gio" "trash"))
-  ;; Or use an executable's full path:
-  ;; (setopt ellama-tools-trash-command "C:/Tools/cmdutils/recycle.exe")
   (ellama-tools-enable-by-name "trash_files")
 #+END_SRC
 
-A string names one executable; use a list for fixed arguments. Shell aliases and
-pipelines are not supported. The tool passes literal absolute paths, so file
-names are not expanded as shell expressions. Only configure a command that moves
-paths to the trash; Ellama cannot verify the behavior of a custom executable.
+Use a string to name an executable or a list to add fixed arguments. Ellama
+passes absolute paths as literal arguments. It applies the normal confirmation
+and DLP checks, including irreversible checks for custom commands.
 
-The tool uses the normal confirmation and DLP checks. External commands run
-through the shell sandbox when ~srt~ is enabled; its policy must allow the trash
-utility's required access, including writing to the trash location.  The ~emacs~
-backend refuses to run with ~srt~ enabled because its operations cannot run
-inside that sandbox; configure an external trash command instead. A missing
-command or failed transfer returns an error; Ellama never retries with permanent
-deletion. A failed or timed-out transfer may have moved some files already, so
-check their locations before retrying. Set ~ellama-tools-trash-command~ to ~nil~
-to disable execution.  Existing shell commands and scripts are not automatically
-rewritten to use the trash.
+With ~srt~ enabled, use an external trash command and allow it to write to the
+trash location. The built-in Emacs backend is also unavailable on Windows,
+where the native API can delete without recycling. See the
+[[https://learn.microsoft.com/en-us/windows/win32/api/shellapi/ns-shellapi-shfileopstructw][Windows API documentation]].
+On supported systems, Emacs uses the system trash when available and otherwise
+uses ~trash-directory~ or the freedesktop home trash. Its freedesktop backend
+does not use per-volume trashcans.
+
+A failed or timed-out call may have moved some files. Check their locations
+before retrying. Ellama reports transfer errors without retrying through
+permanent deletion. Set ~ellama-tools-trash-command~ to ~nil~ to disable tool
+execution. Existing shell commands and scripts keep their original behavior.
 
 Session bypass helper:
 
@@ -1525,8 +1515,8 @@ Tuning helpers:
 Incident stats include rollups by risk class, rule ID, tool identity, and
 decision type (including ~bypass~).
 
-For a longer rollout/tuning walkthrough and more override examples, see
-~docs/dlp_rollout_guide.md~.
+See the [[file:docs/dlp_rollout_guide.md][DLP rollout guide]] for override examples and the
+[[file:eval/irreversible/README.md][manual evaluation guide]] for the decision and Git suites.
 
 Troubleshooting:
 

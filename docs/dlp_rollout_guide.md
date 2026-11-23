@@ -4,8 +4,8 @@
 
 Enable and tune `ellama` tool DLP safely with minimal disruption.
 
-This guide assumes the DLP implementation is present in `ellama-tools-dlp.el`
-and integrated through `ellama-tools.el`.
+See the [README's DLP section](../README.org#dlp-for-tool-inputoutput) for
+decision-provider setup, file recovery checks, and the trash tool.
 
 ## Recommended Initial Rollout (Monitor Mode)
 
@@ -43,10 +43,11 @@ Helpers:
 
 ## Example Scoped Overrides
 
-Structured input arguments are scanned recursively. Nested string values use
-path-like arg names (for example `content.items[0].token`) in DLP context and
-incidents. Override `:arg` matches exact arg names and nested path prefixes, so
-`"content"` matches `content.items[0].token`.
+Ellama scans nested keys and string values locally. An incident for a value
+can show a path such as `content.items[0].token`. A sensitive key appears by
+position, such as `content[0].key`, and Ellama keeps the call out of the
+decision request. Override `:arg` matches an exact path or a nested prefix,
+so `"content"` also matches `content.items[0].token`.
 
 Allow a noisy input argument for a specific tool:
 
