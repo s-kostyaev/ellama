@@ -1680,16 +1680,51 @@ Include scoping fields because cached entries store the normalized rule plist."
              "DROP\\|ALTER\\|TRUNCATE\\|WITH\\)\\_>\\)")
      text)))
 
+(defconst ellama-tools-dlp--sql-leading-trivia-pattern
+  (concat "[ \t\r\n]*\\(?:\\(?:--[^\r\n]*[\r\n]"
+          "\\|/\\*\\(?:[^*]\\|\\*+[^*/]\\)*\\*+/\\)[ \t\r\n]*\\)*")
+  "Whitespace and complete SQL comments before a statement.")
+
 (defun ellama-tools-dlp--sql-transaction-p (text)
   "Recognize an initial SQL transaction or savepoint statement in TEXT."
   (let ((case-fold-search t))
     (string-match-p
-     (concat "\\`[ \t\r\n]*\\(?:\\(?:--[^\r\n]*[\r\n]"
-             "\\|/\\*\\(?:[^*]\\|\\*+[^*/]\\)*\\*+/\\)[ \t\r\n]*\\)*"
+     (concat "\\`" ellama-tools-dlp--sql-leading-trivia-pattern
              "\\(?:BEGIN\\(?:[ \t]+\\(?:DEFERRED\\|IMMEDIATE\\|EXCLUSIVE\\)\\)?"
              "\\(?:[ \t]+TRANSACTION\\)?\\|START[ \t]+TRANSACTION"
              "\\|SAVEPOINT[ \t]+[a-zA-Z_][a-zA-Z_0-9]*\\)[ \t\r\n]*;")
      text)))
+
+(defun ellama-tools-dlp--sql-transaction-steps (text)
+  "Summarize supported SQL TEXT when END is a transaction statement."
+  (let ((case-fold-search t)
+        (token (concat "--[^\r\n]*\\|/\\*\\(?:[^*]\\|\\*+[^*/]\\)*\\*+/"
+                       "\\|'\\(?:[^'\\]\\|''\\)*'\\|\"\\(?:[^\"]\\|\"\"\\)*\""
+                       "\\|;\\|['\"`$]\\|/\\*"))
+        (start 0) (position 0) statements steps alias invalid)
+    (when (and (<= (string-bytes text) ellama-tools-irreversible-decision-max-scan-size)
+               (string-match-p "\\_<END\\_>" text))
+      (while (and (not invalid) (string-match token text position))
+        (setq position (match-end 0))
+        (pcase (match-string 0 text)
+          (";" (push (substring text start (match-beginning 0)) statements)
+               (setq start position))
+          ((or "'" "\"" "`" "$" "/*") (setq invalid t))))
+      (push (substring text start) statements)
+      (dolist (statement statements)
+        (unless invalid
+          (cond
+           ((string-match-p (concat "\\`" ellama-tools-dlp--sql-leading-trivia-pattern "\\'") statement))
+           ((string-match-p (concat "\\`" ellama-tools-dlp--sql-leading-trivia-pattern
+                                    "END\\(?:[ \t]+TRANSACTION\\)?[ \t\r\n]*\\'") statement)
+            (setq alias t)
+            (push "COMMIT" steps))
+           ((string-match (concat "\\`" ellama-tools-dlp--sql-leading-trivia-pattern
+                                  "\\(BEGIN\\|START\\|SAVEPOINT\\|RELEASE\\|ROLLBACK\\|COMMIT"
+                                  "\\|SELECT\\|UPDATE\\|INSERT\\|DELETE\\)\\_>") statement)
+            (push (upcase (match-string 1 statement)) steps))
+           (t (setq invalid t)))))
+      (when (and alias (not invalid)) steps))))
 
 (defun ellama-tools-dlp--detect-regex-findings
     (text context &optional rules ignored-builtins)
@@ -3004,6 +3039,7 @@ Errors contain no provider message or payload."
           (list :status 'error :error-type 'runtime-unavailable))
          (t
           (let* ((outputs (plist-get context :shell-outputs))
+                 (sql-steps (plist-get context :sql-transaction-steps))
                  (call (list :tool (plist-get context :tool-name)
                              :tool_identity (plist-get context :tool-identity)
                              :arguments
@@ -3012,7 +3048,9 @@ Errors contain no provider message or payload."
                                         (list :name (car arg) :value (cdr arg)))
                                       (funcall argument-details)))))
                  (state (json-serialize
-                         (if outputs (plist-put call :shell_outputs (vconcat outputs)) call)))
+                         (cond (outputs (plist-put call :shell_outputs (vconcat outputs)))
+                               (sql-steps (plist-put call :sql_transaction_steps (vconcat sql-steps)))
+                               (t call))))
                  (size (string-bytes state)))
             (if (> size ellama-tools-irreversible-decision-max-scan-size)
                 (list :status 'error :error-type 'oversized :payload-length size)
@@ -3030,6 +3068,7 @@ Errors contain no provider message or payload."
                              ('printer 'literal-printer)
                              ('nil 'shell)
                              (_ 'literal-shell))))
+                        (sql-steps 'sql-transaction-end)
                         ((eq (plist-get context :sql-statement) 'transaction) 'sql-transaction)
                         ((plist-get context :sql-statement) 'sql)
                         ((plist-get context :backup-options) 'backup-options)))
@@ -3112,6 +3151,14 @@ Use PROFILE to select a question for the tool input."
                           "write can take effect through autocommit. Apply explicit tool-level "
                           "dry run, preview or commit flags to the whole call. Treat quoted "
                           "text and comments as data.")
+                         "At least one executed write persists and destroys, replaces or removes stored data."
+                         "The call only reads, simulates or rolls back every executed write."))
+                  ('sql-transaction-end
+                   (list (concat
+                          "Trace the SQL script in order using sql_transaction_steps when present. "
+                          "COMMIT in the steps includes an equivalent END statement. A later ROLLBACK "
+                          "cannot undo a previously committed UPDATE. Check explicit tool-level dry run, "
+                          "preview or commit flags, then decide whether a destructive write persists.")
                          "At least one executed write persists and destroys, replaces or removes stored data."
                          "The call only reads, simulates or rolls back every executed write."))
                   ('backup-options

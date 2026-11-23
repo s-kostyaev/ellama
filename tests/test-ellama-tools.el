@@ -5481,6 +5481,7 @@ END_ELLAMA_AGENT_STATE"))
               (process-environment (copy-sequence process-environment)))
           (with-temp-file "saved notes.txt" (insert "Only copy"))
           (with-temp-file "saved.txt" (insert "Only copy"))
+          (make-symbolic-link "saved.txt" "linked.txt")
           (with-temp-file "source.txt" (insert "Other data"))
           (with-temp-file "-a" (insert "Only copy"))
           (make-directory "copy-to")
@@ -5503,6 +5504,16 @@ END_ELLAMA_AGENT_STATE"))
                              "echo note | (cat) > saved.txt"
                              "gzip -c /dev/null > saved.txt"
                              "echo note | tee new.txt saved.txt > output.txt"
+                             "wc -c /dev/null > saved.txt | cat >/dev/null"
+                             "echo note | (cat > saved.txt) | wc -c"
+                             "{ command printf %s note > saved.txt; } 2>/dev/null"
+                             "test -s saved.txt && wc -c /dev/null > saved.txt"
+                             "case current in current) echo note > saved.txt ;; esac"
+                             "ln saved.txt copy.txt && wc -c /dev/null > copy.txt"
+                             "wc -c /dev/null > \"$(printf '%s' saved.txt)\""
+                             "note=$(printf %s value > saved.txt); printf %s \"$note\""
+                             "command printf %s note </dev/null > saved.txt"
+                             "command printf %s note > linked.txt"
                              "cp source.txt saved.txt"
                              "cp -f source.txt copy-to/"
                              "mkdir copy-from && echo note > copy-from/source.txt; cp copy-from/source.txt copy-to/"
@@ -5538,6 +5549,11 @@ END_ELLAMA_AGENT_STATE"))
                              "(echo note) >> saved.txt 2>&1"
                              "echo note 4>>saved.txt 2>&4"
                              "echo note | tee -a new.txt saved.txt > output.txt"
+                             "wc -c /dev/null >> saved.txt | cat >/dev/null"
+                             "case other in current) echo note > saved.txt ;; esac"
+                             "ln saved.txt copy.txt && wc -c /dev/null >> copy.txt"
+                             "wc -c /dev/null >> \"$(printf '%s' saved.txt)\""
+                             "command printf %s note >> linked.txt"
                              "cp saved.txt ./saved.txt"
                              "cp missing.txt saved.txt"
                              "cp -n source.txt saved.txt"
@@ -5566,6 +5582,10 @@ END_ELLAMA_AGENT_STATE"))
                                   :action)
                         'allow)))
           (setenv "ELLAMA_SCOPE_TEST" "empty.txt")
+          (cl-letf (((symbol-function 'ellama-tools--tool-check-file-access)
+                     (lambda (path _op)
+                       (when (string-suffix-p "/saved.txt" path) "Denied"))))
+            (should-not (ellama-tools--shell-output-state "linked.txt")))
           (should-not (ellama-tools--nonempty-shell-truncation-p
                        ": > \"${ELLAMA_SCOPE_TEST:-saved notes.txt}\""))
           (let ((custom-tool (plist-put (copy-sequence tool) :function #'ignore)))

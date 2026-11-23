@@ -264,6 +264,15 @@
        (should (string-match-p "including nested options" (nth 3 questions)))
        (should (string-match-p "regardless of exit status" (nth 4 questions)))))))
 
+(ert-deftest test-ellama-tools-dlp-sql-end-transaction-steps ()
+  (should (equal (ellama-tools-dlp--sql-transaction-steps
+                  "BEGIN; UPDATE items SET note = 'END;'; END TRANSACTION; BEGIN; ROLLBACK;")
+                 '("BEGIN" "UPDATE" "COMMIT" "BEGIN" "ROLLBACK")))
+  (should-not (ellama-tools-dlp--sql-transaction-steps
+               "BEGIN; SELECT 'END;'; /* END; */ ROLLBACK;"))
+  (should-not (ellama-tools-dlp--sql-transaction-steps
+               "BEGIN; CREATE TRIGGER example AFTER UPDATE ON records BEGIN SELECT 1; END; COMMIT;")))
+
 (ert-deftest test-ellama-tools-dlp-decision-unicode-request-round-trip ()
   (ellama-test-dlp-with-decision
    (dolist (payload '("Сохрани правки в ellama.el"

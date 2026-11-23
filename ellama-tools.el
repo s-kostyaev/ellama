@@ -1269,9 +1269,9 @@ CALLBACK receives `(TEXT PATH)'.  Return non-nil if a walk limit was hit."
                                 "/bin/zsh" "/bin/ksh" "/usr/bin/bash"
                                 "/usr/bin/dash" "/usr/bin/zsh"))))
 
-(defconst ellama-tools--shell-output-echo-prefix
-  "\\$(\\(?:/bin/\\|/usr/bin/\\)?echo[ \t]+"
-  "Start of a supported echo substitution in an output path.")
+(defconst ellama-tools--shell-output-print-prefix
+  "\\$(\\(?:/bin/\\|/usr/bin/\\)?\\(?:echo\\|printf[ \t]+\\(?:%s\\|'%s'\\|\"%s\"\\)\\)[ \t]+"
+  "Start of a literal printing substitution in an output path.")
 
 (defconst ellama-tools--shell-output-echo-operand
   "[a-zA-Z0-9_./][a-zA-Z0-9_./-]*"
@@ -1311,7 +1311,7 @@ CALLBACK receives `(TEXT PATH)'.  Return non-nil if a walk limit was hit."
                          text))
       (or chosen (getenv (or (match-string 1 text) (match-string 2 text)))))
      ((and quoted (ellama-tools--posix-shell-p)
-           (string-match (concat "\\`" ellama-tools--shell-output-echo-prefix
+           (string-match (concat "\\`" ellama-tools--shell-output-print-prefix
                                  "\\(" ellama-tools--shell-output-echo-operand
                                  "\\))\\'") text))
       ;; A single literal operand determines the likely output path.  Use
@@ -1405,22 +1405,27 @@ CREATED is a path written by a preceding printer, possibly under DIRECTORY."
   "Parse a trailing sequence of output redirections in TEXT using TARGET.
 Return (t . OUTPUTS) with (MODE . OPERAND) pairs, or nil on unsupported syntax."
   (let ((pattern (concat "[ \t]*[0-9]?\\(?:\\(>>\\|>|?\\)[ \t]*\\(" target
-                         "\\)\\|>&[ \t]*[0-9-]\\)"))
+                         "\\)\\|>&[ \t]*[0-9-]\\|\\(<[ \t]*/dev/null\\)\\)"))
         (position 0)
-        paths)
+        paths invalid-input)
     (while (and (string-match pattern text position) (= (match-beginning 0) position))
       (setq position (match-end 0))
-      (when-let* ((operator (match-string 1 text)))
-        (push (cons (if (equal operator ">>") "append" "truncate")
-                    (match-string 2 text)) paths)))
-    (when (string-match-p "\\`[ \t]*\\'" (substring text position))
+      (if (match-beginning 3)
+          (when (or (ellama-tools--tool-check-file-access "/dev/null" 'read)
+                    (not (file-readable-p "/dev/null")))
+            (setq invalid-input t))
+        (when-let* ((operator (match-string 1 text)))
+          (push (cons (if (equal operator ">>") "append" "truncate")
+                      (match-string 2 text)) paths))))
+    (when (and (not invalid-input)
+               (string-match-p "\\`[ \t]*\\'" (substring text position)))
       (cons t (nreverse paths)))))
 
 (defconst ellama-tools--shell-output-target-pattern
   (concat "\\(?:[a-zA-Z0-9_./-]+"
           "\\|'[a-zA-Z0-9_./ -]+'"
           "\\|\"\\(?:[a-zA-Z0-9_./ ${}:-]+\\|"
-          ellama-tools--shell-output-echo-prefix
+          ellama-tools--shell-output-print-prefix
           ellama-tools--shell-output-echo-operand ")\\)\"\\)")
   "An output operand with syntax supported by the local file resolver.")
 
@@ -1459,8 +1464,8 @@ Return (t . OUTPUTS) with (MODE . OPERAND) pairs, or nil on unsupported syntax."
                           "\\)\\(?:[ \t]\\|\\'\\)") stage)
     (list (cons "replace_on_success" (match-string 1 stage))))))
 
-(defun ellama-tools--shell-output-operands (command)
-  "Collect output operands of a literal simple command or pipeline in COMMAND."
+(defun ellama-tools--shell-simple-output-operands (command)
+  "Collect output operands of a literal leaf or a group in COMMAND."
   (let* ((target ellama-tools--shell-output-target-pattern)
          (word "\\(?:[a-zA-Z0-9_./%:+,=-]+\\|'[^'\n\r\0]*'\\|\"[^\"$`!\\\n\r\0]*\"\\)")
          (simple (concat "[a-zA-Z0-9_./:-]+\\(?:[ \t]+" word "\\)*"))
@@ -1469,27 +1474,114 @@ Return (t . OUTPUTS) with (MODE . OPERAND) pairs, or nil on unsupported syntax."
                         "\\|{[ \t]+" list "[ \t]*;[ \t]+}\\)"))
          (command (or (ellama-tools--shell-literal-heredoc-head command) command)))
     (when (string-match
-           (concat "\\`[ \t]*\\(?:" stage "[ \t]*|[ \t]*\\)*\\(" stage "\\)"
-                   "\\([ \t]*\\(?:[0-9]?>[^\r\n\0]*\\)?\\)\\'") command)
+           (concat "\\`[ \t]*\\(" stage "\\)"
+                   "\\([ \t]*\\(?:[0-9]?[<>][^\r\n\0]*\\)?\\)\\'") command)
       (let* ((last (match-string 1 command))
              (redirects (ellama-tools--shell-output-redirections (match-string 2 command) target)))
         (when redirects
-          (append (ellama-tools--shell-named-outputs last target) (cdr redirects)))))))
+          (cons t (append (ellama-tools--shell-named-outputs last target) (cdr redirects))))))))
+
+(defun ellama-tools--shell-pipeline-stages (command)
+  "Split COMMAND at outer pipeline operators, preserving groups and quotes."
+  (let ((start 0) (position 0) closing stages invalid)
+    (while (and (not invalid) (< position (length command)))
+      (let ((char (aref command position)))
+        (pcase char
+          ((or ?\' ?\")
+           (if (string-match (if (eq char ?\') "'[^'\r\n]*'" "\"[^\"\\\r\n]*\"") command position)
+               (if (= (match-beginning 0) position)
+                   (setq position (1- (match-end 0)))
+                 (setq invalid t))
+             (setq invalid t)))
+          (?\( (push ?\) closing))
+          (?{ (push ?} closing))
+          ((or ?\) ?}) (unless (eq char (pop closing)) (setq invalid t)))
+          (?|
+           (unless (or closing (eq (and (> position 0) (aref command (1- position))) ?>))
+             (if (memq (and (< (1+ position) (length command)) (aref command (1+ position))) '(?| ?&))
+                 (setq invalid t)
+               (push (substring command start position) stages)
+               (setq start (1+ position))))))
+        (setq position (1+ position))))
+    (when (and stages (not invalid) (not closing))
+      (nreverse (cons (substring command start) stages)))))
+
+(defun ellama-tools--shell-output-operands (command &optional depth)
+  "Collect literal output operands of COMMAND, including nested supported forms.
+DEPTH bounds the traversal.  Return (t . OUTPUTS), or nil on unsupported syntax."
+  (when (< (or depth 0) 8)
+    (let ((next (1+ (or depth 0)))
+          (target ellama-tools--shell-output-target-pattern))
+      (or (ellama-tools--shell-simple-output-operands command)
+          (when (string-match
+                 (concat "\\`[ \t]*test[ \t]+-\\([fs]\\)[ \t]+\\(" target "\\)[ \t]*&&[ \t]*\\(.*\\)\\'") command)
+            (let* ((flag (match-string 1 command))
+                   (word (match-string 2 command))
+                   (body (match-string 3 command))
+                   (state (ellama-tools--shell-output-state word)))
+              (when (or (equal state "nonempty") (and (equal flag "f") (equal state "empty")))
+                (ellama-tools--shell-output-operands body next))))
+          (when (string-match
+                 "\\`[ \t]*case[ \t]+\\([a-zA-Z0-9_-]+\\)[ \t]+in[ \t]+\\([a-zA-Z0-9_-]+\\))[ \t]*\\(.*?\\)[ \t]*;;[ \t]*esac[ \t]*\\'"
+                 command)
+            (let ((subject (match-string 1 command)) (pattern (match-string 2 command))
+                  (body (match-string 3 command)))
+              (if (equal subject pattern) (ellama-tools--shell-output-operands body next) (list t))))
+          (when-let* ((stages (ellama-tools--shell-pipeline-stages command))
+                      (parsed (mapcar (lambda (stage) (ellama-tools--shell-output-operands stage next)) stages))
+                      ((not (memq nil parsed))))
+            (cons t (mapcan #'cdr parsed)))
+          (when (or (string-match "\\`[ \t]*(\\(.*\\))\\([ \t]*[<>0-9].*\\|[ \t]*\\)\\'" command)
+                    (string-match "\\`[ \t]*{[ \t]+\\(.*\\);[ \t]+}\\([ \t]*[<>0-9].*\\|[ \t]*\\)\\'" command))
+            (let* ((body (match-string 1 command))
+                   (redirects (ellama-tools--shell-output-redirections (match-string 2 command) target))
+                   (inside (and redirects (ellama-tools--shell-output-operands body next))))
+              (when inside (cons t (append (cdr redirects) (cdr inside))))))
+          (when (string-match
+                 "\\`[ \t]*\\([a-zA-Z_][a-zA-Z0-9_]*\\)=\\$(\\(.*\\))[ \t]*;[ \t]*printf[ \t]+%s[ \t]+\"\\$\\1\"[ \t]*\\'"
+                 command)
+            (ellama-tools--shell-output-operands (match-string 2 command) next))))))
 
 (defun ellama-tools--shell-output-state (word)
   "Return the observed file state for WORD when local access is permitted."
   (when-let* ((file (ellama-tools--shell-local-output-file word))
               ((not (ellama-tools--tool-check-file-access file 'read))))
-    (let ((attributes (file-attributes file)))
+    (let* ((attributes (file-attributes file))
+           (link (stringp (file-attribute-type attributes))))
+      (when link
+        (let ((target (file-truename file)))
+          (setq attributes (and (not (file-remote-p target))
+                                (not (ellama-tools--tool-check-file-access target 'read))
+                                (file-attributes target)))))
       (cond
        ((eq (file-attribute-type attributes) t) "directory")
        ((and attributes (string-prefix-p "-" (file-attribute-modes attributes)))
         (if (> (file-attribute-size attributes) 0) "nonempty" "empty"))
-       ((and (not attributes)
+       ((and (not attributes) (not link)
              (let ((parent (file-name-directory file)))
                (and (not (ellama-tools--tool-check-file-access parent 'list))
                     (file-accessible-directory-p parent))))
         "missing")))))
+
+(defun ellama-tools--shell-hardlink-prefix (command)
+  "Return (SOURCE ALIAS REST) for a local hard-link prelude in COMMAND."
+  (let ((target ellama-tools--shell-output-target-pattern))
+    (when (string-match
+           (concat "\\`[ \t]*\\(?:/bin/\\|/usr/bin/\\)?ln[ \t]+\\(" target "\\)[ \t]+\\(" target
+                   "\\)[ \t]*\\(?:;\\|&&\\)[ \t]*\\(.*\\)\\'") command)
+      (let* ((source (match-string 1 command))
+             (alias (match-string 2 command))
+             (rest (match-string 3 command))
+             (source-file (ellama-tools--shell-local-output-file source t))
+             (alias-file (ellama-tools--shell-local-output-file alias t)))
+        (when (and source-file alias-file
+                   (equal (file-name-directory source-file) (file-name-directory alias-file))
+                   (not (ellama-tools--tool-check-file-access alias-file 'read))
+                   (not (ellama-tools--tool-check-file-access alias-file 'write))
+                   (not (file-attributes alias-file))
+                   (file-writable-p alias-file)
+                   (member (ellama-tools--shell-output-state source) '("nonempty" "empty")))
+          (list source alias-file rest))))))
 
 (defun ellama-tools--shell-output-evidence (command)
   "Collect permitted local output metadata for COMMAND without executing it."
@@ -1497,12 +1589,19 @@ Return (t . OUTPUTS) with (MODE . OPERAND) pairs, or nil on unsupported syntax."
              (<= (string-bytes command) ellama-tools-irreversible-decision-max-scan-size)
              (ellama-tools--posix-shell-p))
     (save-match-data
-      (let ((case-fold-search nil))
+      (let* ((case-fold-search nil)
+             (hardlink (ignore-errors (ellama-tools--shell-hardlink-prefix command)))
+             (outputs (cdr (ellama-tools--shell-output-operands (or (nth 2 hardlink) command)))))
         (delq nil
               (mapcar (lambda (output)
-                        (when-let* ((state (ignore-errors (ellama-tools--shell-output-state (cdr output)))))
-                          (list :mode (car output) :operand (cdr output) :state state)))
-                      (ellama-tools--shell-output-operands command)))))))
+                        (let* ((word (cdr output))
+                               (source (when (and hardlink
+                                                  (equal (ellama-tools--shell-local-output-file word)
+                                                         (nth 1 hardlink)))
+                                         (car hardlink)))
+                               (state (ignore-errors (ellama-tools--shell-output-state (or source word)))))
+                          (when state (list :mode (car output) :operand word :state state))))
+                      outputs))))))
 
 (defun ellama-tools--shell-tee-overwrites-p (operands suffix target)
   "Check for an overwrite in tee OPERANDS or its redirection SUFFIX.
@@ -1702,6 +1801,8 @@ Return plist with keys `:action' and optional `:message'."
          warn-strong-message
          skip-decision
          sql-statement
+         sql-steps
+         (sql-count 0)
          backup-options
          shell-outputs
          preview
@@ -1722,9 +1823,11 @@ Return plist with keys `:action' and optional `:message'."
                              (symbol-name raw-name)
                            raw-name)))
           (when (and (stringp value) (ellama-tools-dlp--sql-argument-p arg-name))
+            (cl-incf sql-count)
             (cond
              ((ellama-tools-dlp--sql-transaction-p value)
-              (setq sql-statement 'transaction))
+              (setq sql-statement 'transaction
+                    sql-steps (ellama-tools-dlp--sql-transaction-steps value)))
              ((and (not sql-statement) (ellama-tools-dlp--sql-statement-p value))
               (setq sql-statement t))))
           (when (and (equal arg-name "options") (ellama-tools--dlp-replacement-backup-p value))
@@ -1759,6 +1862,7 @@ Return plist with keys `:action' and optional `:message'."
                 (let ((context (ellama-tools--dlp-make-scan-context
                                 'input tool-name nil tool-metadata)))
                   (setq context (plist-put context :sql-statement sql-statement)
+                        context (plist-put context :sql-transaction-steps (and (= sql-count 1) sql-steps))
                         context (plist-put context :backup-options (and backup-options (not preview)))
                         context (plist-put context :shell-outputs shell-outputs)
                         context (plist-put context :truncated truncated))
