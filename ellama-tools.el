@@ -1731,11 +1731,14 @@ TARGET matches a path that the detector can resolve locally."
                                                  (and (equal (plist-get output :mode) "truncate")
                                                       (equal (plist-get output :state) "nonempty")))
                                                outputs)))
-                    (recovery (and truncation (ellama-tools--shell-overwrite-evidence text)))
-                    (shell-risk (and shell (not recovery)
+                    (evidence (and shell
+                                   (if truncation
+                                       (ellama-tools--shell-overwrite-evidence text)
+                                     (ellama-tools--shell-no-loss-evidence text outputs))))
+                    (shell-risk (and shell (not evidence)
                                      (or truncation (ellama-tools--nonempty-shell-truncation-p text))))
-                    (context (if recovery
-                                 (plist-put context :overwrite-source (plist-get recovery :source))
+                    (context (if evidence
+                                 (plist-put context :overwrite-source (plist-get evidence :source))
                                context))
                     (scan
                      (ellama-tools-dlp--scan-text
@@ -1749,7 +1752,7 @@ TARGET matches a path that the detector can resolve locally."
                     (irreversible-finding (ellama-tools-dlp--has-irreversible-findings-p
                                            (plist-get scan :findings))))
                (when outputs (setq shell-outputs outputs))
-               (when recovery (setq overwrite recovery))
+               (when evidence (setq overwrite evidence))
                (when (or shell-risk
                          (seq-some (lambda (output)
                                      (and (equal (plist-get output :mode) "replace_on_success")
@@ -2295,16 +2298,17 @@ the file at inspection time and never changes the DLP verdict."
         commit)
     (error nil)))
 
-(defun ellama-tools--literal-overwrite (command)
-  "Return the path and writer for a supported overwrite in COMMAND."
+(defun ellama-tools--literal-file-output (command)
+  "Return the literal path, writer and output mode in COMMAND."
   (when (ellama-tools--posix-shell-p)
     (save-match-data
       (let ((case-fold-search nil))
         (when (string-match
-               (concat "\\`[ \t]*\\([^\n\r\0]+?\\)[ \t]*>|?[ \t]*\\("
+               (concat "\\`[ \t]*\\([^\n\r\0]+?\\)[ \t]*\\(>>\\|>|?\\)[ \t]*\\("
                        ellama-tools--shell-output-target-pattern "\\)[ \t]*\\'") command)
           (let* ((writer (string-trim-right (match-string 1 command)))
-                 (operand (match-string 2 command))
+                 (operator (match-string 2 command))
+                 (operand (match-string 3 command))
                  (program (cond
                            ((string-match "\\`command[ \t]+" writer)
                             (substring writer (match-end 0)))
@@ -2317,7 +2321,13 @@ the file at inspection time and never changes the DLP verdict."
                        path (not (file-name-absolute-p path))
                        (not (member ".." (split-string path "/" t)))
                        (not (member ".git" (mapcar #'downcase (split-string path "/" t)))))
-              (cons path program))))))))
+              (list :path path :writer program :mode (if (equal operator ">>") "append" "truncate")))))))))
+
+(defun ellama-tools--literal-overwrite (command)
+  "Return the path and writer for a supported overwrite in COMMAND."
+  (when-let* ((output (ellama-tools--literal-file-output command))
+              ((equal (plist-get output :mode) "truncate")))
+    (cons (plist-get output :path) (plist-get output :writer))))
 
 (defun ellama-tools--literal-writer-digest (writer)
   "Return the expected byte digest for a bounded literal WRITER."
@@ -2522,6 +2532,22 @@ Use EXPECTED-STAT to reject a changed version before reading its bytes."
   (when-let* ((path (car (ellama-tools--literal-overwrite command))))
     (ellama-tools--file-overwrite-evidence path)))
 
+(defun ellama-tools--shell-no-loss-evidence (command outputs)
+  "Return checked evidence for a literal writer in COMMAND and its OUTPUTS."
+  (ignore-errors
+    (when-let* (((= (length outputs) 1))
+                (output (ellama-tools--literal-file-output command))
+                (mode (plist-get output :mode))
+                ((equal mode (plist-get (car outputs) :mode)))
+                (file (ellama-tools--local-write-path (plist-get output :path)))
+                (observed (ellama-tools--shell-local-output-file (plist-get (car outputs) :operand)))
+                ((equal file (file-truename observed)))
+                ((not (string-match-p "\\`/\\(?:dev\\|proc\\|sys\\)\\(?:/\\|\\'\\)" file)))
+                (state (plist-get (car outputs) :state))
+                ((member state '("empty" "missing" "directory"))))
+      ;; Appending can damage a file format while preserving the old bytes.
+      (list :source 'shell-no-loss :path file :state state :mode mode))))
+
 (defun ellama-tools--overwrite-evidence-current-p (evidence path session)
   "Check EVIDENCE for the current PATH before writing on behalf of SESSION."
   (or (not evidence)
@@ -2536,7 +2562,9 @@ Use EXPECTED-STAT to reject a changed version before reading its bytes."
                                   (ellama-tools--session-write-entry session path))))
             ('backup (and (eq session (plist-get evidence :session))
                           (equal (plist-get evidence :backup)
-                                 (ellama-tools--session-file-backup session path)))))))))
+                                 (ellama-tools--session-file-backup session path))))
+            ('shell-no-loss (equal (plist-get evidence :state)
+                                   (ellama-tools--shell-output-state path))))))))
 
 (defconst ellama-tools--overwrite-retry-hint
   (concat "\nPreserve the current file at a new path in this session with backup_file "
@@ -4732,13 +4760,15 @@ TIMEOUT is the optional command timeout in seconds."
               (user-error
                (concat "Ellama could not reverify the file against Git "
                        "after confirmation. Submit the tool call again.")))
-            (unless (ellama-tools--overwrite-evidence-current-p
-                     ellama-tools--overwrite-evidence
-                     (and ellama-tools--overwrite-evidence (car (ellama-tools--literal-overwrite cmd)))
-                     session)
-              (kill-buffer buf)
-              (user-error "%s" (concat "Ellama could not reverify the overwrite target."
-                                      ellama-tools--overwrite-retry-hint)))
+            (when ellama-tools--overwrite-evidence
+              (let* ((output (ellama-tools--literal-file-output cmd))
+                     (mode (or (plist-get ellama-tools--overwrite-evidence :mode) "truncate")))
+                (unless (and (equal mode (plist-get output :mode))
+                             (ellama-tools--overwrite-evidence-current-p
+                              ellama-tools--overwrite-evidence (plist-get output :path) session))
+                  (kill-buffer buf)
+                  (user-error "%s" (concat "Ellama could not reverify the overwrite target."
+                                          ellama-tools--overwrite-retry-hint)))))
             (setq process
                   (apply #'start-file-process
                          "*ellama-shell-command*" buf
