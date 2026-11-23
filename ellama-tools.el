@@ -1403,17 +1403,106 @@ CREATED is a path written by a preceding printer, possibly under DIRECTORY."
 
 (defun ellama-tools--shell-output-redirections (text target)
   "Parse a trailing sequence of output redirections in TEXT using TARGET.
-Return (t . PATHS) with truncating operands, or nil for unsupported syntax."
+Return (t . OUTPUTS) with (MODE . OPERAND) pairs, or nil on unsupported syntax."
   (let ((pattern (concat "[ \t]*[0-9]?\\(?:\\(>>\\|>|?\\)[ \t]*\\(" target
                          "\\)\\|>&[ \t]*[0-9-]\\)"))
         (position 0)
         paths)
     (while (and (string-match pattern text position) (= (match-beginning 0) position))
       (setq position (match-end 0))
-      (when (member (match-string 1 text) '(">" ">|"))
-        (push (match-string 2 text) paths)))
+      (when-let* ((operator (match-string 1 text)))
+        (push (cons (if (equal operator ">>") "append" "truncate")
+                    (match-string 2 text)) paths)))
     (when (string-match-p "\\`[ \t]*\\'" (substring text position))
-      (cons t paths))))
+      (cons t (nreverse paths)))))
+
+(defconst ellama-tools--shell-output-target-pattern
+  (concat "\\(?:[a-zA-Z0-9_./-]+"
+          "\\|'[a-zA-Z0-9_./ -]+'"
+          "\\|\"\\(?:[a-zA-Z0-9_./ ${}:-]+\\|"
+          ellama-tools--shell-output-echo-prefix
+          ellama-tools--shell-output-echo-operand ")\\)\"\\)")
+  "An output operand with syntax supported by the local file resolver.")
+
+(defun ellama-tools--shell-literal-heredoc-head (command)
+  "Return the prefix of COMMAND before a single quoted here-document."
+  (when (string-match
+         "\\`\\([^\n\r]+?\\)[ \t]*<<[ \t]*'\\([A-Za-z_][A-Za-z_0-9]*\\)'[ \t]*\n"
+         command)
+    (let ((head (match-string 1 command))
+          (delimiter (match-string 2 command))
+          (start (match-end 0)))
+      (when (and (string-match (concat "^" delimiter "\n?\\'") command start)
+                 (not (string-match-p (concat "^" delimiter "$")
+                                      (substring command start (match-beginning 0)))))
+        head))))
+
+(defun ellama-tools--shell-named-outputs (stage target)
+  "Return literal output operands for a pipeline STAGE using TARGET."
+  (cond
+   ((string-match
+     (concat "\\`\\(?:/bin/\\|/usr/bin/\\)?tee\\(?:[ \t]+\\(-a\\)\\)?"
+             "\\(?:[ \t]+--\\)?[ \t]+\\(" target "\\(?:[ \t]+" target "\\)*\\)[ \t]*\\'")
+     stage)
+    (let ((mode (if (match-beginning 1) "append" "truncate"))
+          (operands (match-string 2 stage))
+          (position 0) outputs)
+      (while (string-match target operands position)
+        (setq position (match-end 0))
+        (push (cons mode (match-string 0 operands)) outputs))
+      ;; Other options may change the meaning of the remaining arguments.
+      (unless (seq-some (lambda (output)
+                          (not (ellama-tools--shell-local-output-file (cdr output) t)))
+                        outputs)
+        (nreverse outputs))))
+   ((string-match (concat "\\`\\(?:/bin/\\|/usr/bin/\\)?sort[ \t]+-o[ \t]+\\(" target
+                          "\\)\\(?:[ \t]\\|\\'\\)") stage)
+    (list (cons "replace_on_success" (match-string 1 stage))))))
+
+(defun ellama-tools--shell-output-operands (command)
+  "Collect output operands of a literal simple command or pipeline in COMMAND."
+  (let* ((target ellama-tools--shell-output-target-pattern)
+         (word "\\(?:[a-zA-Z0-9_./%:+,=-]+\\|'[^'\n\r\0]*'\\|\"[^\"$`!\\\n\r\0]*\"\\)")
+         (simple (concat "[a-zA-Z0-9_./:-]+\\(?:[ \t]+" word "\\)*"))
+         (list (concat simple "\\(?:[ \t]*;[ \t]*" simple "\\)*"))
+         (stage (concat "\\(?:" simple "\\|([ \t]*" list "[ \t]*)"
+                        "\\|{[ \t]+" list "[ \t]*;[ \t]+}\\)"))
+         (command (or (ellama-tools--shell-literal-heredoc-head command) command)))
+    (when (string-match
+           (concat "\\`[ \t]*\\(?:" stage "[ \t]*|[ \t]*\\)*\\(" stage "\\)"
+                   "\\([ \t]*\\(?:[0-9]?>[^\r\n\0]*\\)?\\)\\'") command)
+      (let* ((last (match-string 1 command))
+             (redirects (ellama-tools--shell-output-redirections (match-string 2 command) target)))
+        (when redirects
+          (append (ellama-tools--shell-named-outputs last target) (cdr redirects)))))))
+
+(defun ellama-tools--shell-output-state (word)
+  "Return the observed file state for WORD when local access is permitted."
+  (when-let* ((file (ellama-tools--shell-local-output-file word))
+              ((not (ellama-tools--tool-check-file-access file 'read))))
+    (let ((attributes (file-attributes file)))
+      (cond
+       ((eq (file-attribute-type attributes) t) "directory")
+       ((and attributes (string-prefix-p "-" (file-attribute-modes attributes)))
+        (if (> (file-attribute-size attributes) 0) "nonempty" "empty"))
+       ((and (not attributes)
+             (let ((parent (file-name-directory file)))
+               (and (not (ellama-tools--tool-check-file-access parent 'list))
+                    (file-accessible-directory-p parent))))
+        "missing")))))
+
+(defun ellama-tools--shell-output-evidence (command)
+  "Collect permitted local output metadata for COMMAND without executing it."
+  (when (and (stringp command)
+             (<= (string-bytes command) ellama-tools-irreversible-decision-max-scan-size)
+             (ellama-tools--posix-shell-p))
+    (save-match-data
+      (let ((case-fold-search nil))
+        (delq nil
+              (mapcar (lambda (output)
+                        (when-let* ((state (ignore-errors (ellama-tools--shell-output-state (cdr output)))))
+                          (list :mode (car output) :operand (cdr output) :state state)))
+                      (ellama-tools--shell-output-operands command)))))))
 
 (defun ellama-tools--shell-tee-overwrites-p (operands suffix target)
   "Check for an overwrite in tee OPERANDS or its redirection SUFFIX.
@@ -1426,9 +1515,10 @@ TARGET matches a path that the detector can resolve locally."
         (push (ellama-tools--shell-local-output-file (match-string 0 operands) t) files))
       (and (not (memq nil files))
            (or (seq-some #'ellama-tools--nonempty-shell-output-p files)
-               (seq-some (lambda (word)
-                           (ellama-tools--nonempty-shell-output-p
-                            (ellama-tools--shell-local-output-file word)))
+               (seq-some (lambda (output)
+                           (and (equal (car output) "truncate")
+                                (ellama-tools--nonempty-shell-output-p
+                                 (ellama-tools--shell-local-output-file (cdr output)))))
                          (cdr redirections)))))))
 
 (defun ellama-tools--nonempty-shell-truncation-p (command)
@@ -1452,11 +1542,7 @@ TARGET matches a path that the detector can resolve locally."
                          "\\|\\(?:true\\|false\\)[ \t]*;"
                          "\\|" simple "[ \t]*\\(?:&&\\|;\\)"
                          "\\)[ \t]*\\)*"))
-           (target (concat "\\(?:[a-zA-Z0-9_./-]+"
-                           "\\|'[a-zA-Z0-9_./ -]+'"
-                           "\\|\"\\(?:[a-zA-Z0-9_./ ${}:-]+\\|"
-                           ellama-tools--shell-output-echo-prefix
-                           ellama-tools--shell-output-echo-operand ")\\)\"\\)"))
+           (target ellama-tools--shell-output-target-pattern)
            (redirects (if posix
                           "\\([ \t]*[0-9]?>[^\r\n\0]*\\)"
                         (concat "\\([ \t]*>|?[ \t]*" target "\\)"))))
@@ -1473,10 +1559,11 @@ TARGET matches a path that the detector can resolve locally."
                        (paths (ellama-tools--shell-output-redirections (match-string 2 command) target))
                        (checked (ellama-tools--shell-local-output-file guard)))
                   ;; A regular file with data satisfies both -f and -s.
-                  (seq-some (lambda (word)
-                              (let ((file (ellama-tools--shell-local-output-file word)))
-                                (and (or (not guard) (equal checked file))
-                                     (ellama-tools--nonempty-shell-output-p file))))
+                  (seq-some (lambda (output)
+                              (when (equal (car output) "truncate")
+                                (let ((file (ellama-tools--shell-local-output-file (cdr output))))
+                                  (and (or (not guard) (equal checked file))
+                                       (ellama-tools--nonempty-shell-output-p file)))))
                             (cdr paths)))))
              ((not posix) nil)
              ((string-match
@@ -1504,7 +1591,7 @@ TARGET matches a path that the detector can resolve locally."
 (defun ellama-tools--dlp-scan-input-value
     (tool-name arg-name value &optional tool-metadata)
   "Scan VALUE for TOOL-NAME under ARG-NAME and return a decision plist."
-  (let (warn-message warn-strong-message skip-decision truncated)
+  (let (warn-message warn-strong-message skip-decision truncated shell-outputs)
     (catch 'done
       (when
           (ellama-tools--dlp-walk-strings
@@ -1515,19 +1602,26 @@ TARGET matches a path that the detector can resolve locally."
                     (context (if (equal path (plist-get tool-metadata :sql-commit-arg))
                                  (plist-put context :sql-commit t)
                                context))
+                    (shell (and (plist-get tool-metadata :shell-command)
+                                (equal path "cmd")
+                                ellama-tools-dlp-enabled
+                                (ellama-tools-dlp--irreversible-scan-p context)))
+                    (outputs (and shell (ellama-tools--shell-output-evidence text)))
                     (scan
                      (ellama-tools-dlp--scan-text
                       text
-                      (if (and (plist-get tool-metadata :shell-command)
-                               (equal path "cmd")
-                               ellama-tools-dlp-enabled
-                               (ellama-tools-dlp--irreversible-scan-p context)
-                               (ellama-tools--nonempty-shell-truncation-p text))
+                      (if (and shell
+                               (or (seq-some (lambda (output)
+                                               (and (equal (plist-get output :mode) "truncate")
+                                                    (equal (plist-get output :state) "nonempty")))
+                                             outputs)
+                                   (ellama-tools--nonempty-shell-truncation-p text)))
                           (plist-put context :shell-truncation t)
                         context)))
                     (verdict (plist-get scan :verdict))
                     (action (plist-get verdict :action))
                     (message (plist-get verdict :message)))
+               (when outputs (setq shell-outputs outputs))
                (when (or (ellama-tools-dlp--has-irreversible-findings-p
                           (plist-get scan :findings))
                          (memq (plist-get verdict :configured-action)
@@ -1556,7 +1650,7 @@ TARGET matches a path that the detector can resolve locally."
                            (format "DLP warned on input for tool %s"
                                    tool-name))))))))
         (setq truncated t))
-      (append (list :skip-decision skip-decision :truncated truncated)
+      (append (list :skip-decision skip-decision :truncated truncated :shell-outputs shell-outputs)
               (cond
                (warn-strong-message
                 (list :action 'warn-strong :message warn-strong-message))
@@ -1609,6 +1703,7 @@ Return plist with keys `:action' and optional `:message'."
          skip-decision
          sql-statement
          backup-options
+         shell-outputs
          preview
          truncated)
     (when-let* ((ellama-tools-dlp-enabled)
@@ -1647,6 +1742,8 @@ Return plist with keys `:action' and optional `:message'."
               (setq skip-decision t))
             (when (plist-get arg-decision :truncated)
               (setq truncated t))
+            (when-let* ((outputs (plist-get arg-decision :shell-outputs)))
+              (setq shell-outputs outputs))
             (cond
              ((eq action 'block)
               (throw 'done arg-decision))
@@ -1663,6 +1760,7 @@ Return plist with keys `:action' and optional `:message'."
                                 'input tool-name nil tool-metadata)))
                   (setq context (plist-put context :sql-statement sql-statement)
                         context (plist-put context :backup-options (and backup-options (not preview)))
+                        context (plist-put context :shell-outputs shell-outputs)
                         context (plist-put context :truncated truncated))
                   (ellama-tools-dlp--irreversible-call-verdict
                    context (lambda ()
