@@ -2266,39 +2266,23 @@ Allow RECURSIVE removal options when preparing a trash hint."
   '("--no-pager" "--no-replace-objects" "--literal-pathspecs" "-c" "core.fsmonitor=false")
   "Options for reading Git evidence without filters or hooks.")
 
-(defun ellama-tools--git-read-process (program &rest args)
-  "Run Git probe PROGRAM with ARGS and return stdout on success."
-  (let* ((process-environment
-          (append '("GIT_CONFIG_NOSYSTEM=1" "GIT_CONFIG_GLOBAL=/dev/null"
-                    "GIT_NO_LAZY_FETCH=1" "GIT_ALLOW_PROTOCOL=" "GIT_OPTIONAL_LOCKS=0")
-                  (seq-remove (lambda (entry) (string-prefix-p "GIT_" entry))
-                              process-environment)))
-         (coding-system-for-read 'utf-8-unix)
-         (argv (apply #'ellama-tools--command-argv program args)))
-    (with-temp-buffer
-      (when (eq 0 (apply #'call-process (car argv) nil (list t nil) nil (cdr argv)))
-        (buffer-string)))))
+(defun ellama-tools--git-read-environment ()
+  "Return an environment for local reads of Git data."
+  (append '("GIT_CONFIG_NOSYSTEM=1" "GIT_CONFIG_GLOBAL=/dev/null"
+            "GIT_NO_LAZY_FETCH=1" "GIT_ALLOW_PROTOCOL=")
+          (seq-remove (lambda (entry) (string-prefix-p "GIT_" entry))
+                      process-environment)))
 
 (defun ellama-tools--git-read (directory &rest args)
-  "Run read-only Git ARGS for DIRECTORY and return stdout on success."
-  (when-let* ((git (executable-find "git")))
-    (apply #'ellama-tools--git-read-process git "-C" directory
-           (append ellama-tools--git-read-options args))))
-
-(defun ellama-tools--git-file-evidence (file local-metadata)
-  "Collect Git records for FILE.
-Require a local .git directory when LOCAL-METADATA is non-nil."
-  (when-let* ((root (vc-git-root (file-name-directory file)))
-              ((or (not local-metadata) (ellama-tools--git-local-metadata-p root)))
-              (relative (file-relative-name file root))
-              (head (ellama-tools--git-read root "rev-parse" "--verify" "HEAD^{commit}"))
-              (commit (string-trim-right head))
-              (entry (ellama-tools--git-read root "ls-tree" "-z" commit "--" relative))
-              (hash (ellama-tools--git-read root "hash-object" "--no-filters" "--" relative))
-              (object (string-trim-right hash))
-              (index (ellama-tools--git-read root "ls-files" "--stage" "-z" "--" relative))
-              (type (ellama-tools--git-read root "cat-file" "-t" object)))
-    (list root commit object entry index type)))
+  "Run read-only Git ARGS in local DIRECTORY and return stdout on success."
+  (let ((default-directory directory)
+        (process-environment (ellama-tools--git-read-environment))
+        (coding-system-for-read 'utf-8-unix))
+    (with-temp-buffer
+      (when (eq 0 (apply #'call-process "git" nil (list t nil) nil
+                         "--no-replace-objects" "--literal-pathspecs"
+                         "-c" "core.fsmonitor=false" args))
+        (buffer-string)))))
 
 (defconst ellama-tools--git-srt-probe
   (concat "set -eu\n"
@@ -2318,18 +2302,28 @@ Require a local .git directory when LOCAL-METADATA is non-nil."
           "read_git cat-file -t \"$object\"\n")
   "Read the Git records for a file in one SRT process.")
 
-(defun ellama-tools--git-srt-file-evidence (file)
-  "Collect the Git records for FILE under the current SRT policy."
-  (when-let* ((git (executable-find "git"))
-              ;; Keep SRT in the tool's working directory, for relative settings.
-              (data (ellama-tools--git-read-process
-                     "/bin/sh" "-c" ellama-tools--git-srt-probe "ellama-git"
-                     git file (file-name-directory file))))
-    (pcase (split-string data "\0")
-      (`(,root ,commit ,object ,entry ,index ,type)
-       (when (and (file-name-absolute-p root) (not (file-remote-p root)))
-         (list (file-name-as-directory root) commit object
-               (concat entry "\0") (concat index "\0") type))))))
+(defun ellama-tools--git-srt-file-commit (file mode local-metadata)
+  "Verify Git recovery for FILE with MODE inside SRT.
+Require a local .git directory when LOCAL-METADATA is non-nil."
+  (when-let* ((git (executable-find "git")))
+    (let* ((process-environment (cons "GIT_OPTIONAL_LOCKS=0" (ellama-tools--git-read-environment)))
+           (coding-system-for-read 'utf-8-unix)
+           ;; Keep SRT in the tool's working directory, for relative settings.
+           (argv (ellama-tools--command-argv
+                  "/bin/sh" "-c" ellama-tools--git-srt-probe "ellama-git"
+                  git file (file-name-directory file))))
+      (with-temp-buffer
+        (when (eq 0 (apply #'call-process (car argv) nil (list t nil) nil (cdr argv)))
+          (pcase (split-string (buffer-string) "\0")
+            (`(,root ,commit ,object ,entry ,index "blob\n")
+             (when (and (file-name-absolute-p root)
+                        (not (file-remote-p root))
+                        (or (not local-metadata) (ellama-tools--git-local-metadata-p root)))
+               (let ((relative (file-relative-name file (file-name-as-directory root))))
+                 (when (and (not (member ".." (split-string relative "/" t)))
+                            (equal entry (concat mode " blob " object "\t" relative))
+                            (equal index (concat mode " " object " 0\t" relative)))
+                   commit))))))))))
 
 (defun ellama-tools--rm-git-evidence (tool-plist args)
   "Return Git evidence for a simple rm in the built-in TOOL-PLIST and ARGS.
@@ -2379,20 +2373,27 @@ When LOCAL-METADATA is non-nil, require recovery data under .git."
                         (<= (file-attribute-size attributes) (* 1024 1024))))
                   (mode (pcase (file-modes file)
                           (#o644 "100644")
-                          (#o755 "100755")))
-                  (records (if ellama-tools-use-srt
-                               (ellama-tools--git-srt-file-evidence file)
-                             (ellama-tools--git-file-evidence file local-metadata))))
-        (pcase records
-          (`(,root ,commit ,object ,entry ,index "blob\n")
-           (let ((relative (file-relative-name file root)))
-             (when (and (or (not ellama-tools-use-srt)
-                            (not local-metadata)
-                            (ellama-tools--git-local-metadata-p root))
-                        (not (member ".." (split-string relative "/" t)))
-                        (equal entry (concat mode " blob " object "\t" relative "\0"))
-                        (equal index (concat mode " " object " 0\t" relative "\0")))
-               commit)))))
+                          (#o755 "100755"))))
+        (if ellama-tools-use-srt
+            (ellama-tools--git-srt-file-commit file mode local-metadata)
+          (when-let* ((root (vc-git-root (file-name-directory file)))
+                      ((or (not local-metadata) (ellama-tools--git-local-metadata-p root)))
+                      (relative (file-relative-name file root))
+                      (head (ellama-tools--git-read root "rev-parse" "--verify"
+                                                    "HEAD^{commit}"))
+                      (commit (string-trim-right head))
+                      (entry (ellama-tools--git-read root "ls-tree" "-z" commit
+                                                     "--" relative))
+                      (blob (ellama-tools--git-read root "hash-object" "--no-filters"
+                                                    "--" relative))
+                      (object (string-trim-right blob))
+                      ((equal entry (concat mode " blob " object "\t" relative "\0")))
+                      ((equal (ellama-tools--git-read root "ls-files" "--stage" "-z"
+                                                      "--" relative)
+                              (concat mode " " object " 0\t" relative "\0")))
+                      ((equal (ellama-tools--git-read root "cat-file" "-t" object)
+                              "blob\n")))
+            commit)))
     (error nil)))
 
 (defun ellama-tools--literal-file-outputs (command)

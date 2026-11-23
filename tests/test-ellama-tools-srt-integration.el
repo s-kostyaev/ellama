@@ -790,7 +790,10 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
               (should (ellama-tools--shell-overwrite-evidence-current-p command evidence nil))
               ;; Deny the index only.  Git can still discover the worktree.
               (write-policy (vector (expand-file-name ".git/index" root)))
-              (should (ellama-tools--git-read default-directory "rev-parse" "--show-toplevel"))
+              (should (eq 0 (plist-get (ellama-test-srt-integration--call
+                                        default-directory (expand-file-name settings)
+                                        "git" "rev-parse" "--show-toplevel")
+                                       :exit)))
               (should-not (ellama-tools--git-file-commit file))
               (should-not (ellama-tools--shell-overwrite-evidence-current-p command evidence nil))
               (should (eq (plist-get (ellama-tools--dlp-input-decision tool (list #'ignore command))
