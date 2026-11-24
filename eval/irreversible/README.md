@@ -73,6 +73,36 @@ returning `null`. Ellama applies the configured irreversible-action policy to
 an abstention or invalid response. Use the eval to see how the model's
 scores behave at your threshold.
 
+## Checks that run locally
+
+Ellama can recognize a literal Git push and some shell redirections before
+consulting the decision model. It checks the order in which the shell opens
+files, including a write that occurs before a later input redirection fails.
+
+To use the same approach for a known MCP tool, add its full identity to
+`ellama-tools-irreversible-tool-effects`. The identity includes the server
+category and tool name. This configuration registers a file copy tool
+and a SQL script tool.
+
+```elisp
+(setopt ellama-tools-irreversible-tool-effects
+        '(("mcp-files/copy_file" . local-copy)
+          ("mcp-db/execute_sql_script" . sqlite-script)))
+```
+
+Choose a contract that matches the tool implementation.
+
+| Contract | Effect Ellama can establish |
+| --- | --- |
+| `local-copy` | `source`, `destination` and `overwrite` describe a copy onto a verified nonempty local destination without recovery. |
+| `local-batch` | An item in `operations` has `mode` set to `overwrite` and would replace the contents of its local `path` with the text in `with`. |
+| `event-publication` | The tool sets an `event` to public `visibility` with a boolean `notify_attendees` argument. Publication matters even when attendee notifications are disabled. |
+| `sqlite-script` | The tool runs its sole SQL argument in order on a SQLite connection starting in autocommit mode. Ellama recognizes simple updates that persist after a commit or that run outside a transaction. |
+
+Both local contracts require the server to use the same filesystem and
+working directory as Ellama. The decision model remains available when
+Ellama cannot establish an effect from the registered contract.
+
 ## Select cases
 
 Pass `--group` once per group. This command runs the shell guard and SQL cases.

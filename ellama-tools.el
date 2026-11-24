@@ -1306,7 +1306,10 @@ Return non-nil when the traversal is incomplete."
 
 (defun ellama-tools--shell-output-path (word)
   "Resolve a supported output path in WORD without running the shell."
-  (let* ((quoted (string-prefix-p "\"" word))
+  (let* ((word (if (string-match "\\`\"\\([a-zA-Z0-9_./ -]+\\)\"\\([a-zA-Z0-9_./-]+\\)\\'" word)
+                   (concat (match-string 1 word) (match-string 2 word))
+                 word))
+         (quoted (string-prefix-p "\"" word))
          (text (if (or quoted (string-prefix-p "'" word))
                    (substring word 1 -1)
                  word))
@@ -1358,6 +1361,10 @@ Return non-nil when the traversal is incomplete."
            (format (regexp-opt '("%s" "'%s'" "\"%s\"" "'%s\\n'" "\"%s\\n\""))))
       (cond
        ((string-match-p
+         (concat "\\`[ \t]*\\(?:/bin/\\|/usr/bin/\\)"
+                 "\\(?:echo\\|printf[ \t]+" format "\\)" words "[ \t]*\\'") command)
+        'trusted-printer)
+       ((string-match-p
          (concat "\\`[ \t]*" program "\\(?:echo\\|printf[ \t]+" format
                  "\\)" words "[ \t]*\\'")
          command)
@@ -1383,6 +1390,18 @@ Return non-nil when the traversal is incomplete."
                        0)
                  ?c))
         'null-output)))))
+
+(defun ellama-tools--literal-git-push-p (command)
+  "Recognize a complete, literal Git push in COMMAND."
+  (and (stringp command)
+       (<= (string-bytes command) ellama-tools-dlp-max-scan-size)
+       (ellama-tools--posix-shell-p)
+       (let ((case-fold-search nil))
+         (string-match-p
+          (concat "\\`[ \t]*\\(?:command[ \t]+\\|/usr/bin/\\|/bin/\\)?git[ \t]+push"
+                  "\\(?:[ \t]+\\(?:--force-with-lease\\|--force\\|--set-upstream\\|-f\\|-u\\)\\)*"
+                  "\\(?:[ \t]+[a-zA-Z0-9_./+:][a-zA-Z0-9_./:+@-]*\\)*[ \t]*\\'")
+          command))))
 
 (defun ellama-tools--shell-local-output-file (word &optional operand directory)
   "Resolve WORD as a local shell output path.
@@ -1454,6 +1473,7 @@ Return (t . OUTPUTS) with (MODE . OPERAND) pairs, or nil on unsupported syntax."
 (defconst ellama-tools--shell-output-target-pattern
   (concat "\\(?:[a-zA-Z0-9_./-]+"
           "\\|'[a-zA-Z0-9_./ -]+'"
+          "\\|\"[a-zA-Z0-9_./ -]+\"[a-zA-Z0-9_./-]+"
           "\\|\"\\(?:[a-zA-Z0-9_./ ${}:-]+\\|"
           ellama-tools--shell-output-print-prefix
           ellama-tools--shell-output-echo-operand ")\\)\"\\)")
@@ -1543,6 +1563,12 @@ DEPTH bounds the traversal.  Return (t . OUTPUTS), or nil on unsupported syntax.
     (let ((next (1+ (or depth 0)))
           (target ellama-tools--shell-output-target-pattern))
       (or (ellama-tools--shell-simple-output-operands command)
+          ;; The output opens before the input, including when the input fails.
+          (when (string-match
+                 (concat "\\`[ \t]*\\(?:command[ \t]+\\|/bin/\\|/usr/bin/\\)?cat"
+                         "[ \t]*>[ \t]*\\(" target "\\)[ \t]*<[ \t]*" target "[ \t]*\\'")
+                 command)
+            (list t (cons "truncate" (match-string 1 command))))
           (when (string-match
                  (concat "\\`[ \t]*test[ \t]+-\\([fs]\\)[ \t]+\\(" target "\\)[ \t]*&&[ \t]*\\(.*\\)\\'") command)
             (let* ((flag (match-string 1 command))
@@ -1785,6 +1811,7 @@ TARGET matches a path that the detector can resolve locally."
                (when key-finding
                  (setq sensitive-key t))
                (when (or irreversible-finding
+                         (and shell (eq (plist-get context :shell-literal-shape) 'trusted-printer))
                          (memq (plist-get verdict :configured-action)
                                '(block redact)))
                  (setq skip-decision t))
@@ -1852,6 +1879,80 @@ TARGET matches a path that the detector can resolve locally."
               (= (hash-table-count backup) 1)
               (memq (gethash "enabled" backup 'missing) '(t nil :false :json-false))))))
 
+(defcustom ellama-tools-irreversible-tool-effects nil
+  "Known effect contracts indexed by full MCP tool identity.
+An entry such as (\"mcp-files/copy_file\" . local-copy) opts in the
+named tool.  Use local-copy and local-batch only for a tool that
+operates on the same local files and working directory as Ellama.
+Use sqlite-script for a tool that runs its query in order on a
+SQLite connection in autocommit mode, without a surrounding transaction.
+Set this only for implementations whose argument semantics you know."
+  :type '(alist :key-type string
+                :value-type (choice (const local-copy) (const local-batch)
+                                    (const event-publication) (const sqlite-script)))
+  :group 'ellama-tools-dlp)
+
+(defun ellama-tools--unrecoverable-destination-p (path)
+  "Check whether PATH is a confirmed nonempty local destination without recovery."
+  (when-let* (((stringp path))
+              ((not (string-empty-p path)))
+              (file (ellama-tools--local-write-path path))
+              (attrs (file-attributes file))
+              ((null (file-attribute-type attrs)))
+              ((string-prefix-p "-" (file-attribute-modes attrs)))
+              ((> (file-attribute-size attrs) 0)))
+    (not (ellama-tools--file-overwrite-evidence file))))
+
+(defun ellama-tools--registered-tool-effect (contract args)
+  "Return an irreversible rule established by CONTRACT and named ARGS."
+  (pcase contract
+    ('local-copy
+     (when (and (= (length args) 3) (eq (cdr (assoc "overwrite" args)) t))
+       (when-let* ((source (cdr (assoc "source" args)))
+                   ((stringp source))
+                   ((not (string-empty-p source)))
+                   ((not (file-remote-p source)))
+                   ((not (file-remote-p default-directory)))
+                   ((not (ellama-tools--tool-check-file-access source 'read)))
+                   ((file-regular-p source))
+                   ((file-readable-p source))
+                   (destination (cdr (assoc "destination" args)))
+                   ((ellama-tools--unrecoverable-destination-p destination))
+                   ((not (file-equal-p source destination))))
+         "ir-tool-overwrite")))
+    ('local-batch
+     (when-let* (((= (length args) 1))
+                 (operations (cdr (assoc "operations" args)))
+                 ((and (vectorp operations) (<= (length operations) 16)))
+                 ((seq-every-p
+                   (lambda (op)
+                     (and (hash-table-p op) (stringp (gethash "path" op))
+                          (pcase (gethash "mode" op)
+                            ("preview"
+                             (or (= (hash-table-count op) 2)
+                                 (and (= (hash-table-count op) 3) (stringp (gethash "with" op)))))
+                            ("overwrite"
+                             (and (= (hash-table-count op) 3) (stringp (gethash "with" op)))))))
+                   operations)))
+       (when (seq-some (lambda (op)
+                         (and (equal (gethash "mode" op) "overwrite")
+                              (ellama-tools--unrecoverable-destination-p (gethash "path" op))))
+                       operations)
+         "ir-tool-overwrite")))
+    ('event-publication
+     (when-let* (((= (length args) 3))
+                 (event (cdr (assoc "event" args)))
+                 ((and (stringp event) (not (string-empty-p event))))
+                 (notification (assoc "notify_attendees" args))
+                 ((memq (cdr notification) '(t nil :false :json-false)))
+                 ((equal (cdr (assoc "visibility" args)) "public")))
+       "ir-tool-publication"))
+    ('sqlite-script
+     (when (and (= (length args) 1)
+                (ellama-tools-dlp--sql-argument-p (caar args))
+                (ellama-tools-dlp--sqlite-persistent-write-p (cdar args)))
+       "ir-sql-persistent-write"))))
+
 (defun ellama-tools--dlp-input-decision (tool-plist call-args)
   "Scan TOOL-PLIST CALL-ARGS and return decision plist.
 Return plist with keys `:action' and optional `:message'."
@@ -1863,6 +1964,15 @@ Return plist with keys `:action' and optional `:message'."
                      (cdr call-args)
                    call-args))
          (command (and (plist-get tool-metadata :shell-command) (car values)))
+         (contract (and (eq (plist-get tool-metadata :tool-origin) 'mcp)
+                        (cdr (assoc (plist-get tool-metadata :tool-identity)
+                                    ellama-tools-irreversible-tool-effects))))
+         (effect-args (and contract (= (length declared-args) (length values))
+                           (cl-mapcar (lambda (spec value)
+                                        (cons (ellama-tools-dlp--policy-name-string
+                                               (plist-get spec :name))
+                                              value))
+                                      declared-args values)))
          (specs declared-args)
          (index 0)
          warn-message
@@ -1947,6 +2057,14 @@ Return plist with keys `:action' and optional `:message'."
                         context (plist-put context :sql-transaction-steps (and (= sql-count 1) sql-steps))
                         context (plist-put context :backup-options (and backup-options (not preview)))
                         context (plist-put context :shell-outputs shell-outputs)
+                        context (plist-put context :observe-effect
+                                           (lambda ()
+                                             (cond
+                                              ((ellama-tools--literal-git-push-p command)
+                                               "ir-shell-git-push")
+                                              (effect-args
+                                               (ellama-tools--registered-tool-effect
+                                                contract effect-args)))))
                         context (plist-put context :shell-deletion-observation
                                            (when command
                                              (lambda ()
@@ -2514,7 +2632,9 @@ file contents, or discovered paths.  An unverified result proves no recovery."
                            ((or (equal writer ":") (string-match-p "\\`/\\(?:usr/\\)?bin/" writer))
                             writer))))
             (when (and program
-                       (or (equal program ":") (eq (ellama-tools--shell-literal-shape program) 'printer)))
+                       (or (equal program ":")
+                           (memq (ellama-tools--shell-literal-shape program)
+                                 '(printer trusted-printer))))
               (when-let* ((redirects (cdr (ellama-tools--shell-output-redirections
                                            suffix ellama-tools--shell-output-target-pattern t)))
                           ((or separated (null (cdr redirects))))
