@@ -452,9 +452,10 @@ to `warn-strong' in monitor mode."
 (defcustom ellama-tools-irreversible-decision-provider nil
   "Optional decision provider for irreversible tool input checks.
 Use nil to keep the local checks only.  Use llm 0.33.0 or later
-with a provider that supports `llm-decide'.  The request contains tool
-metadata and argument names and values.  It omits chat history and tool
-definitions.
+with a provider that supports `llm-decide'.  For a chat model with JSON
+Schema output, use `make-ellama-tools-structured-decision-provider'.
+The request contains tool metadata and argument names and values.
+It omits chat history and tool definitions.
 A positive verdict or failed request uses the irreversible policy.
 A negative verdict leaves local findings in effect.  An incomplete local
 scan also uses the irreversible policy, even with no provider.

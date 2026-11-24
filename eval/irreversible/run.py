@@ -138,23 +138,34 @@ def prepare_git_case(case, sandbox):
     return dict(case, working_directory=str(working_directory))
 
 
-def ollama_request(host, route, payload=None):
+def provider_request(host, route, payload=None, api_key=None):
     request = urllib.request.Request(
         host + route,
         data=None if payload is None else json.dumps(payload).encode(),
         headers={"Content-Type": "application/json"},
     )
+    if api_key:
+        request.add_unredirected_header("Authorization", f"Bearer {api_key}")
     with urllib.request.urlopen(request, timeout=120) as response:
         return json.load(response)
 
 
 def ollama_identity(host, model):
-    tags = ollama_request(host, "/api/tags")["models"]
+    tags = provider_request(host, "/api/tags")["models"]
     tag = model if ":" in model.rsplit("/", 1)[-1] else f"{model}:latest"
     installed = next((item for item in tags if item["name"] == tag), None)
     if installed is None:
         raise ValueError(f"Ollama has no local tag named {tag}")
-    return {"runtime": ollama_request(host, "/api/version"), "model": installed}
+    return {"runtime": provider_request(host, "/api/version"), "model": installed}
+
+
+def chat_identity(host, model):
+    response = provider_request(host, "/v1/models", api_key=os.environ.get("ELLAMA_EVAL_API_KEY"))
+    installed = next((item for item in response["data"] if item["id"] == model), None)
+    if installed is None:
+        raise ValueError(f"The chat endpoint does not list model {model!r}; use an ID from /v1/models")
+    # oMLX fills the OpenAI `created` timestamp on every listing.
+    return {"model": {key: value for key, value in installed.items() if key != "created"}}
 
 
 def warm_ollama(host, model):
@@ -169,7 +180,7 @@ def warm_ollama(host, model):
             },
         },
     }
-    response = ollama_request(host, "/v1/systemone", payload)
+    response = provider_request(host, "/v1/systemone", payload)
     if response["answers"]["check"]["type"] != "noul":
         raise ValueError("Ollama returned an unexpected answer to the warmup")
 
@@ -201,12 +212,24 @@ def summarize(rows, suite):
 
 def run(args):
     suite = args.suite
+    structured = args.backend == "structured-chat"
+    if structured and (suite != "decisions" or not args.model):
+        raise ValueError("--backend structured-chat requires the decision suite and an explicit --model")
+    if not structured and (args.thinking or args.max_output_tokens is not None):
+        raise ValueError("--thinking and --max-output-tokens require --backend structured-chat")
+    if args.max_output_tokens is not None and args.max_output_tokens <= 0:
+        raise ValueError("--max-output-tokens must be positive")
+    max_tokens = args.max_output_tokens or (1024 if args.thinking else 128)
+    host = (args.host or ("http://127.0.0.1:8000" if structured else "http://127.0.0.1:11434")).rstrip("/")
+    model = args.model or "pplx-decider-flash"
     suite_file = EVAL_DIR / ("decisions.jsonl" if suite == "decisions" else "git-evidence.jsonl")
     rows = [r for r in read_rows(suite_file) if not args.group or r["group"] in args.group]
     if not rows:
         raise ValueError("No fixtures matched the requested groups")
     source = args.source.resolve()
-    source_files = ("ellama-tools.el", "ellama-tools-dlp.el")
+    source_files = ["ellama-tools.el", "ellama-tools-dlp.el"]
+    if structured:
+        source_files.append("ellama-tools-structured-decision.el")
     metadata = {
         "suite": suite,
         "source_commit": git(source, "rev-parse", "HEAD").decode().strip(),
@@ -215,10 +238,14 @@ def run(args):
         "evaluator_sha256": {name: sha256(EVAL_DIR / name) for name in ("run.py", "evaluate.el")},
         "groups": args.group,
     }
-    host = args.host.rstrip("/")
     if suite == "decisions":
-        metadata.update(ollama_identity(host, args.model), threshold=0.5)
-        warm_ollama(host, args.model)
+        identity = chat_identity if structured else ollama_identity
+        resolved_model = identity(host, model)
+        metadata.update(resolved_model, backend=args.backend, host=host, threshold=0.5)
+        if structured:
+            metadata.update(thinking=args.thinking, max_output_tokens=max_tokens, temperature=0)
+        else:
+            warm_ollama(host, model)
 
     output = args.output
     if output is None:
@@ -247,8 +274,11 @@ def run(args):
             **os.environ,
             "ELLAMA_EVAL_FIXTURES": str(fixture_file),
             "ELLAMA_EVAL_SUITE": suite,
-            "ELLAMA_EVAL_ENDPOINT": f"{host}/v1/systemone",
-            "ELLAMA_EVAL_MODEL": args.model,
+            "ELLAMA_EVAL_BACKEND": args.backend,
+            "ELLAMA_EVAL_ENDPOINT": f"{host}/v1/" if structured else f"{host}/v1/systemone",
+            "ELLAMA_EVAL_MODEL": model,
+            "ELLAMA_EVAL_THINKING": "true" if args.thinking else "false",
+            "ELLAMA_EVAL_MAX_OUTPUT_TOKENS": str(max_tokens),
         }
         emacs = [
             args.emacs, "-Q", "-batch", "--eval", "(package-initialize)",
@@ -264,10 +294,8 @@ def run(args):
     observed = read_rows(output / "rows.jsonl")
     if [(r["id"], r["expected"]) for r in observed] != [(r["id"], r["expected"]) for r in rows]:
         raise ValueError("Evaluator output does not match the selected fixtures")
-    if suite == "decisions" and ollama_identity(host, args.model) != {
-        key: metadata[key] for key in ("runtime", "model")
-    }:
-        raise ValueError("Ollama or its selected model changed during the run")
+    if suite == "decisions" and identity(host, model) != resolved_model:
+        raise ValueError("The provider or its selected model changed during the run")
     reports = summarize(observed, suite)
     with (output / "summary.json").open("x", encoding="utf-8") as report:
         json.dump({**metadata, "metrics": reports}, report, indent=2, ensure_ascii=False)
@@ -279,12 +307,15 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--suite", choices=("decisions", "git"), default="decisions")
+    parser.add_argument("--backend", choices=("systemone", "structured-chat"), default="systemone")
     parser.add_argument("--group", action="append", help="include this fixture group; repeat as needed")
     parser.add_argument("--source", type=Path, default=REPO, help="Ellama checkout to evaluate")
     parser.add_argument("--output", type=Path, help="directory for JSONL results and summary")
     parser.add_argument("--emacs", default="emacs", help="Emacs executable")
-    parser.add_argument("--host", default="http://127.0.0.1:11434", help="Ollama base URL")
-    parser.add_argument("--model", default="pplx-decider-flash", help="installed Ollama model tag")
+    parser.add_argument("--host", help="server base URL without /v1")
+    parser.add_argument("--model", help="installed model tag or chat model ID")
+    parser.add_argument("--thinking", action="store_true", help="enable thinking for structured chat")
+    parser.add_argument("--max-output-tokens", type=int, help="structured chat output token budget")
     try:
         return run(parser.parse_args())
     except (OSError, ValueError, subprocess.CalledProcessError) as error:

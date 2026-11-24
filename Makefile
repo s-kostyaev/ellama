@@ -13,6 +13,7 @@ export TMPDIR
 
 # This order is based on the packages dependency graph.
 ELLAMA_COMPILE_ORDER = \
+	ellama-tools-structured-decision.el \
 	ellama-tools-dlp.el \
 	ellama-tools.el \
 	ellama-skills.el \

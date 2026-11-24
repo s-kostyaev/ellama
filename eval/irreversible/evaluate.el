@@ -123,6 +123,25 @@
                                 incidents)
                        :null)))))
 
+(defun ellama-eval--irreversible-provider ()
+  "Build the decision provider selected by the Python runner."
+  (let ((model (getenv "ELLAMA_EVAL_MODEL"))
+        (endpoint (getenv "ELLAMA_EVAL_ENDPOINT")))
+    (if (equal (getenv "ELLAMA_EVAL_BACKEND") "structured-chat")
+        (progn
+          (require 'ellama-tools-structured-decision)
+          (make-ellama-tools-structured-decision-provider
+           :chat-provider
+           (make-llm-openai-compatible
+            :url endpoint :chat-model model :key (getenv "ELLAMA_EVAL_API_KEY")
+            :default-chat-max-tokens (string-to-number (getenv "ELLAMA_EVAL_MAX_OUTPUT_TOKENS"))
+            :default-chat-non-standard-params
+            `((chat_template_kwargs .
+               ((enable_thinking . ,(if (equal (getenv "ELLAMA_EVAL_THINKING") "true")
+                                        t :false))))))))
+      (require 'llm-typesafe)
+      (make-llm-typesafe-compatible :model model :url endpoint))))
+
 (defun ellama-eval--irreversible-run (cases suite)
   "Evaluate the synthetic CASES in SUITE and print one JSON record per case."
   (let ((ellama-tools-dlp-enabled t)
@@ -141,11 +160,18 @@
         (ellama-tools-use-srt nil)
         (ellama-tools-irreversible-decision-provider
          (when (equal suite "decisions")
-           (require 'llm-typesafe)
-           (make-llm-typesafe-compatible
-            :model (getenv "ELLAMA_EVAL_MODEL")
-            :url (getenv "ELLAMA_EVAL_ENDPOINT"))))
+           (ellama-eval--irreversible-provider)))
         (llm-log nil))
+    (when (and ellama-tools-irreversible-decision-provider
+               (equal (getenv "ELLAMA_EVAL_BACKEND") "structured-chat"))
+      (unless (eq (plist-get
+                   (ellama-tools-dlp--request-irreversible-decision
+                    (concat "{\"tool\":\"shell_command\",\"tool_identity\":\"shell_command\","
+                            "\"arguments\":[{\"name\":\"cmd\",\"value\":\"printf example\"}]}")
+                    'literal-printer)
+                   :status)
+                  'ok)
+        (error "Structured chat warmup did not return a valid decision")))
     (dolist (case cases)
       (let* ((default-directory
               (file-name-as-directory (gethash "working_directory" case)))

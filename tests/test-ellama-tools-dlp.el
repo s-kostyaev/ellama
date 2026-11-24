@@ -26,6 +26,7 @@
 
 (require 'cl-lib)
 (require 'ert)
+(require 'ellama-tools-structured-decision)
 
 (defconst ellama-test-dlp-root
   (expand-file-name
@@ -233,6 +234,97 @@
                            :decision-probability) 0.8))
      (should-not (string-match-p "secret command"
                                  (prin1-to-string ellama-tools-dlp--incident-log))))))
+
+(defun ellama-test-dlp-structured-provider ()
+  "Return a decision adapter around an example chat provider."
+  (make-ellama-tools-structured-decision-provider
+   :chat-provider
+   (make-llm-openai-compatible
+    :url "http://127.0.0.1:8000/v1/" :chat-model "test-chat" :key "example-key"
+    :default-chat-max-tokens 256
+    :default-chat-non-standard-params
+    '((chat_template_kwargs . ((enable_thinking . :false)))))))
+
+(defun ellama-test-dlp-structured-response (content &optional finish fields)
+  "Build a chat response with CONTENT, a FINISH reason and message FIELDS."
+  `((choices . [((finish_reason . ,(or finish "stop"))
+                 (message . ((content . ,content) ,@fields)))])))
+
+(ert-deftest test-ellama-tools-dlp-structured-decision-reuses-question-and-state ()
+  (ellama-test-dlp-with-decision
+   (let (question state request)
+     (cl-letf (((symbol-function 'llm-decide)
+                (lambda (_provider questions input)
+                  (setq question (car questions) state input)
+                  (list (cons 'irreversible (make-llm-decision-bool :confidence 0.7))))))
+       (ellama-test-dlp-call-verdict "пример" context))
+     (let ((ellama-tools-irreversible-decision-provider (ellama-test-dlp-structured-provider))
+           (llm-log t))
+       (cl-letf (((symbol-function 'llm-request-plz-sync)
+                  (cl-function
+                   (lambda (url &key headers data)
+                     (should (equal url "http://127.0.0.1:8000/v1/chat/completions"))
+                     (should (equal (cdr (assoc "Authorization" headers)) "Bearer example-key"))
+                     (should-not llm-log)
+                     (setq request data)
+                     (ellama-test-dlp-structured-response "{\"probability\":0.7}")))))
+         (should (eq (plist-get (ellama-test-dlp-call-verdict "пример" context) :action)
+                     'warn-strong))))
+     (let* ((messages (plist-get request :messages))
+            (instructions (plist-get (aref messages 0) :content))
+            (format (plist-get request :response_format)))
+       (should (equal (mapcar (lambda (msg) (plist-get msg :role)) messages)
+                      '("system" "user")))
+       (should (equal (plist-get (aref messages 1) :content) state))
+       (dolist (part (list (llm-question-bool-instructions question)
+                           (llm-question-bool-true-description question)
+                           (llm-question-bool-false-description question)))
+         (should (string-match-p (regexp-quote part) instructions)))
+       (should (equal (plist-get format :type) "json_schema"))
+       (should (eq (plist-get (plist-get format :json_schema) :strict) t))
+       (should (eq (plist-get request :stream) :false))
+       (should-not (plist-member request :tools))
+       (should (= (plist-get request :max_tokens) 256))
+       (should (equal (plist-get request :chat_template_kwargs) '((enable_thinking . :false))))))))
+
+(ert-deftest test-ellama-tools-dlp-structured-decision-enforces-response-contract ()
+  (ellama-test-dlp-with-decision
+   (let ((ellama-tools-irreversible-decision-provider (ellama-test-dlp-structured-provider))
+         (ellama-tools-irreversible-default-action 'block)
+         (ellama-tools-dlp-input-fail-open t))
+     (dolist (case '( ("{\"probability\":0}" nil nil allow)
+                      ("{\"probability\":0.5}" nil nil block)
+                      ("{\"probability\":0.1}" "length" nil block)
+                      ("{\"probability\":0.1}" nil ((refusal . "refused")) block)
+                      ("{\"probability\":0.1}" nil ((tool_calls . [((id . "unexpected"))])) block)
+                      ("{\"probability\":null}" nil nil block)
+                      ("{\"probability\":\"0.1\"}" nil nil block)
+                      ("{\"probability\":-0.1}" nil nil block)
+                      ("{\"probability\":1.1}" nil nil block)
+                      ("{\"probability\":0.9,\"probability\":0.1}" nil nil block)
+                      ("{\"probability\":0.1,\"extra\":true}" nil nil block)
+                      ("{\"probability\":0.1} text" nil nil block)
+                      ("{\"probability\":" nil nil block)
+                      ("{}" nil nil block)))
+       (pcase-let ((`(,content ,finish ,fields ,action) case))
+         (cl-letf (((symbol-function 'llm-request-plz-sync)
+                    (lambda (&rest _)
+                      (ellama-test-dlp-structured-response content finish fields))))
+           (should (eq (plist-get (ellama-test-dlp-call-verdict "review" context) :action)
+                       action))))))))
+
+(ert-deftest test-ellama-tools-dlp-structured-decision-honors-preflight ()
+  (ellama-test-dlp-with-decision
+   (let ((ellama-tools-irreversible-decision-provider (ellama-test-dlp-structured-provider)))
+     (cl-letf (((symbol-function 'llm-request-plz-sync)
+                (lambda (&rest _) (ert-fail "Unexpected chat request"))))
+       (should-not (ellama-test-dlp-call-verdict
+                    "read only" (plist-put (copy-sequence context) :tool-name "read_file")))
+       (dolist (field '(:sensitive-key :truncated))
+         (should (eq (plist-get
+                      (ellama-test-dlp-call-verdict "review" (plist-put (copy-sequence context) field t))
+                      :action)
+                     'warn-strong)))))))
 
 (ert-deftest test-ellama-tools-dlp-decision-question-profiles ()
   (ellama-test-dlp-with-decision
