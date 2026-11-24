@@ -25,9 +25,9 @@
                  :schema
                  (:type "object" :additionalProperties :false
                         :properties
-                        (:reasoning (:type "string")
-                                    :probability (:type ["number" "null"] :minimum 0 :maximum 1))
-                        :required ["reasoning" "probability"])))
+                        (:short_reasoning (:type "string")
+                                          :probability (:type ["number" "null"] :minimum 0 :maximum 1))
+                        :required ["short_reasoning" "probability"])))
   "Wire format for an irreversible decision or an abstention.")
 
 (cl-defmethod llm-capabilities ((_ ellama-tools-structured-decision-provider))
@@ -68,14 +68,13 @@ Send STATE as the user message and the decision criteria as instructions."
              (llm-question-bool-instructions question) "\n\n"
              "Positive: " (llm-question-bool-true-description question) "\n"
              "Negative: " (llm-question-bool-false-description question) "\n\n"
-             "In the JSON object, write reasoning first. In one or two short sentences, trace "
+             "In the JSON object, write short_reasoning first. Briefly trace "
              "the actual effects and the evidence that determines whether they meet the positive criterion. "
              "Then write probability for the positive criterion as a number from 0 to 1, "
              "or null if you cannot decide."))
            (prompt (llm-make-chat-prompt
                     state :context instructions
-                    :temperature (or (llm-standard-chat-provider-default-chat-temperature chat) 0)
-                    :max-tokens (or (llm-standard-chat-provider-default-chat-max-tokens chat) 128)))
+                    :temperature (or (llm-standard-chat-provider-default-chat-temperature chat) 0)))
            (request (llm-provider-chat-request chat prompt nil)))
       ;; Some compatible servers advertise unfamiliar model IDs to llm.
       (setq request (plist-put request :stream :false))
@@ -95,7 +94,7 @@ Send STATE as the user message and the decision criteria as instructions."
                  (result (json-read)))
             (skip-chars-forward " \t\n\r")
             (when (and (eobp) (consp result) (= (length result) 2)
-                       (stringp (alist-get "reasoning" result nil nil #'equal)))
+                       (stringp (alist-get "short_reasoning" result nil nil #'equal)))
               (let ((probability (alist-get "probability" result nil nil #'equal)))
                 (when (and (numberp probability) (<= 0 probability 1))
                   probability)))))

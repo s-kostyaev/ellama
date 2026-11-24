@@ -15,6 +15,7 @@
 
 (require 'cl-lib)
 (require 'json)
+(require 'subr-x)
 (require 'ellama-tools)
 
 (defun ellama-eval--irreversible-lisp-value (value)
@@ -126,7 +127,8 @@
 (defun ellama-eval--irreversible-provider ()
   "Build the decision provider selected by the Python runner."
   (let ((model (getenv "ELLAMA_EVAL_MODEL"))
-        (endpoint (getenv "ELLAMA_EVAL_ENDPOINT")))
+        (endpoint (getenv "ELLAMA_EVAL_ENDPOINT"))
+        (max-output-tokens (getenv "ELLAMA_EVAL_MAX_OUTPUT_TOKENS")))
     (if (equal (getenv "ELLAMA_EVAL_BACKEND") "structured-chat")
         (progn
           (require 'ellama-tools-structured-decision)
@@ -134,7 +136,9 @@
            :chat-provider
            (make-llm-openai-compatible
             :url endpoint :chat-model model :key (getenv "ELLAMA_EVAL_API_KEY")
-            :default-chat-max-tokens (string-to-number (getenv "ELLAMA_EVAL_MAX_OUTPUT_TOKENS"))
+            :default-chat-max-tokens
+            (unless (string-empty-p (or max-output-tokens ""))
+              (string-to-number max-output-tokens))
             :default-chat-non-standard-params
             `((chat_template_kwargs .
                ((enable_thinking . ,(if (equal (getenv "ELLAMA_EVAL_THINKING") "true")

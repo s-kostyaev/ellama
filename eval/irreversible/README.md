@@ -37,12 +37,11 @@ python3 eval/irreversible/run.py --backend structured-chat \
 
 Add `--group original` for a short first run. The evaluator warms up the
 model once and then checks cases in order. The JSON schema puts a short
-`reasoning` string before `probability`. The evaluator uses temperature 0,
-disables the server's native thinking, and allows 128 output tokens by
-default. The JSON `reasoning` field works independently of the server's
-thinking mode. Add `--thinking` to enable native thinking and raise the
-default budget to 1024 tokens. Use `--max-output-tokens` to set the budget
-explicitly. For a server that requires authentication, set
+`short_reasoning` string before `probability`. The evaluator uses temperature
+0 and lets the server choose the output token limit. Use
+`--max-output-tokens` to request a limit. Add `--thinking` to enable native
+thinking. The JSON schema includes `short_reasoning` in both modes.
+For a server that requires authentication, set
 `ELLAMA_EVAL_API_KEY` and use that same key as a bearer token when listing
 models.
 
@@ -67,7 +66,7 @@ provider in Emacs. This setting is separate from the command-line evaluation.
 ```
 
 The chat server receives the same tool state and decision criteria. The
-adapter checks that `reasoning` is a string and passes a numeric
+adapter checks that `short_reasoning` is a string and passes a numeric
 `probability` between 0 and 1 to Ellama's policy. The model can abstain by
 returning `null`. Ellama applies the configured irreversible-action policy to
 an abstention or invalid response. Use the eval to see how the model's

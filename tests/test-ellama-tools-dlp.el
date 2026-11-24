@@ -235,13 +235,13 @@
      (should-not (string-match-p "secret command"
                                  (prin1-to-string ellama-tools-dlp--incident-log))))))
 
-(defun ellama-test-dlp-structured-provider ()
-  "Return a decision adapter around an example chat provider."
+(defun ellama-test-dlp-structured-provider (&optional max-tokens)
+  "Return an example decision adapter with optional MAX-TOKENS."
   (make-ellama-tools-structured-decision-provider
    :chat-provider
    (make-llm-openai-compatible
     :url "http://127.0.0.1:8000/v1/" :chat-model "test-chat" :key "example-key"
-    :default-chat-max-tokens 256
+    :default-chat-max-tokens max-tokens
     :default-chat-non-standard-params
     '((chat_template_kwargs . ((enable_thinking . :false)))))))
 
@@ -258,7 +258,7 @@
                   (setq question (car questions) state input)
                   (list (cons 'irreversible (make-llm-decision-bool :confidence 0.7))))))
        (ellama-test-dlp-call-verdict "пример" context))
-     (let ((ellama-tools-irreversible-decision-provider (ellama-test-dlp-structured-provider))
+     (let ((ellama-tools-irreversible-decision-provider (ellama-test-dlp-structured-provider 256))
            (llm-log t))
        (cl-letf (((symbol-function 'llm-request-plz-sync)
                   (cl-function
@@ -268,7 +268,7 @@
                      (should-not llm-log)
                      (setq request data)
                      (ellama-test-dlp-structured-response
-                      "{\"reasoning\":\"Changes a tracked value.\",\"probability\":0.7}")))))
+                      "{\"short_reasoning\":\"Changes a tracked value.\",\"probability\":0.7}")))))
          (should (eq (plist-get (ellama-test-dlp-call-verdict "пример" context) :action)
                      'warn-strong))))
      (let* ((messages (plist-get request :messages))
@@ -287,8 +287,8 @@
          (should (string-match-p (regexp-quote part) instructions)))
        (should (equal (plist-get format :type) "json_schema"))
        (should (eq (plist-get json-schema :strict) t))
-       (should (equal (mapcar #'car properties) '(reasoning probability)))
-       (should (equal (plist-get schema :required) ["reasoning" "probability"]))
+       (should (equal (mapcar #'car properties) '(short_reasoning probability)))
+       (should (equal (plist-get schema :required) ["short_reasoning" "probability"]))
        (should (eq (plist-get request :stream) :false))
        (should-not (plist-member request :tools))
        (should (= (plist-get request :max_tokens) 256))
@@ -299,29 +299,33 @@
    (let ((ellama-tools-irreversible-decision-provider (ellama-test-dlp-structured-provider))
          (ellama-tools-irreversible-default-action 'block)
          (ellama-tools-dlp-input-fail-open t)
-         (negative "{\"reasoning\":\"Read only.\",\"probability\":0.1}"))
+         (negative "{\"short_reasoning\":\"Read only.\",\"probability\":0.1}"))
      (dolist (case `((,negative nil nil allow)
-                     ("{\"reasoning\":\"Read only.\",\"probability\":0}" nil nil allow)
-                     ("{\"reasoning\":\"Read only.\",\"probability\":0.5}" nil nil block)
+                     ("{\"short_reasoning\":\"Read only.\",\"probability\":0}" nil nil allow)
+                     ("{\"short_reasoning\":\"Read only.\",\"probability\":0.5}" nil nil block)
                      (,negative "length" nil block)
                      (,negative nil ((refusal . "refused")) block)
                      (,negative nil ((tool_calls . [((id . "unexpected"))])) block)
-                     ("{\"reasoning\":\"Unclear.\",\"probability\":null}" nil nil block)
-                     ("{\"reasoning\":\"Read only.\",\"probability\":\"0.1\"}" nil nil block)
-                     ("{\"reasoning\":\"Read only.\",\"probability\":-0.1}" nil nil block)
-                     ("{\"reasoning\":\"Read only.\",\"probability\":1.1}" nil nil block)
-                     ("{\"reasoning\":\"Read only.\",\"probability\":0.9,\"probability\":0.1}" nil nil block)
-                     ("{\"reasoning\":\"Read only.\",\"reasoning\":\"Write.\",\"probability\":0.1}" nil nil block)
-                     ("{\"reasoning\":\"Read only.\",\"probability\":0.1,\"extra\":true}" nil nil block)
+                     ("{\"short_reasoning\":\"Unclear.\",\"probability\":null}" nil nil block)
+                     ("{\"short_reasoning\":\"Read only.\",\"probability\":\"0.1\"}" nil nil block)
+                     ("{\"short_reasoning\":\"Read only.\",\"probability\":-0.1}" nil nil block)
+                     ("{\"short_reasoning\":\"Read only.\",\"probability\":1.1}" nil nil block)
+                     ("{\"short_reasoning\":\"Read only.\",\"probability\":0.9,\"probability\":0.1}" nil nil block)
+                     ("{\"short_reasoning\":\"Read only.\",\"short_reasoning\":\"Write.\",\"probability\":0.1}" nil nil block)
+                     ("{\"short_reasoning\":\"Read only.\",\"probability\":0.1,\"extra\":true}" nil nil block)
                      (,(concat negative " text") nil nil block)
-                     ("{\"reasoning\":\"Reading the" nil nil block)
+                     ("{\"short_reasoning\":\"Reading the" nil nil block)
                      ("{\"probability\":0.1}" nil nil block)
-                     ("{\"reasoning\":true,\"probability\":0.1}" nil nil block)
+                     ("{\"reasoning\":\"Read only.\",\"probability\":0.1}" nil nil block)
+                     ("{\"short_reasoning\":true,\"probability\":0.1}" nil nil block)
                      ("{}" nil nil block)))
        (pcase-let ((`(,content ,finish ,fields ,action) case))
          (cl-letf (((symbol-function 'llm-request-plz-sync)
-                    (lambda (&rest _)
-                      (ellama-test-dlp-structured-response content finish fields))))
+                    (cl-function
+                     (lambda (_url &key data &allow-other-keys)
+                       (should-not (plist-member data :max_tokens))
+                       (should-not (plist-member data :max_completion_tokens))
+                       (ellama-test-dlp-structured-response content finish fields)))))
            (should (eq (plist-get (ellama-test-dlp-call-verdict "review" context) :action)
                        action))))))))
 

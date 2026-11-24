@@ -219,7 +219,6 @@ def run(args):
         raise ValueError("--thinking and --max-output-tokens require --backend structured-chat")
     if args.max_output_tokens is not None and args.max_output_tokens <= 0:
         raise ValueError("--max-output-tokens must be positive")
-    max_tokens = args.max_output_tokens or (1024 if args.thinking else 128)
     host = (args.host or ("http://127.0.0.1:8000" if structured else "http://127.0.0.1:11434")).rstrip("/")
     model = args.model or "pplx-decider-flash"
     suite_file = EVAL_DIR / ("decisions.jsonl" if suite == "decisions" else "git-evidence.jsonl")
@@ -243,7 +242,7 @@ def run(args):
         resolved_model = identity(host, model)
         metadata.update(resolved_model, backend=args.backend, host=host, threshold=0.5)
         if structured:
-            metadata.update(thinking=args.thinking, max_output_tokens=max_tokens, temperature=0)
+            metadata.update(thinking=args.thinking, max_output_tokens=args.max_output_tokens, temperature=0)
         else:
             warm_ollama(host, model)
 
@@ -278,7 +277,7 @@ def run(args):
             "ELLAMA_EVAL_ENDPOINT": f"{host}/v1/" if structured else f"{host}/v1/systemone",
             "ELLAMA_EVAL_MODEL": model,
             "ELLAMA_EVAL_THINKING": "true" if args.thinking else "false",
-            "ELLAMA_EVAL_MAX_OUTPUT_TOKENS": str(max_tokens),
+            "ELLAMA_EVAL_MAX_OUTPUT_TOKENS": str(args.max_output_tokens or ""),
         }
         emacs = [
             args.emacs, "-Q", "-batch", "--eval", "(package-initialize)",
