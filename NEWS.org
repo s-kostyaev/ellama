@@ -1,3 +1,25 @@
+* Version 1.34.0
+- Add an optional decision model for irreversible tool calls. Set
+  ~ellama-tools-irreversible-decision-provider~ to enable it. Ellama makes at
+  most one request per eligible call, using the tool arguments and available
+  file or SQL evidence. Ellama now requires ~llm~ 0.33.0 or later.
+- Check known effects locally, including direct file removals, hard Git resets,
+  and shell output that would erase an existing file. For supported shell writes
+  with several destinations, Ellama checks each destination and can settle the
+  call without the model.
+- Verify file recovery using a matching Git version, a version written by the
+  active session, or a backup that session created. Ellama rechecks the evidence
+  before the write. With ~srt~ enabled, Git reads follow the same sandbox policy
+  as the tool call.
+- Add ~trash_files~ for recoverable removals and ~backup_file~ for saving a copy
+  before an edit. The trash backend is configurable, and refusals can point to
+  the trash or a backup where appropriate.
+- Scan nested argument keys locally and withhold the decision request when a key
+  contains a secret. An incomplete scan or a failed decision request follows the
+  configured irreversible-action policy.
+- Add manual evaluations for irreversible verdicts and Git recovery. The suites
+  run on demand and report results without executing fixture commands.
+
 * Version 1.33.2
 - Fix file reads when a path uses ordinary spaces in place of nonbreaking
   spaces, as can happen with macOS screenshot names. If the exact path is
