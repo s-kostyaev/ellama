@@ -709,7 +709,7 @@ and `:recoverable-input' values."
                                #'ellama-tools-shell-command-tool)
             :file-editor (memq (plist-get tool-plist :function)
                                '(ellama-tools-write-file-tool ellama-tools-edit-file-tool
-                                 ellama-tools-append-file-tool ellama-tools-prepend-file-tool))
+                                                              ellama-tools-append-file-tool ellama-tools-prepend-file-tool))
             :recoverable-input
             (or (eq (plist-get tool-plist :function) #'ellama-tools-backup-file-tool)
                 (and (eq (plist-get tool-plist :function) #'ellama-tools-trash-files-tool)
@@ -1290,8 +1290,8 @@ Return non-nil when the traversal is incomplete."
   (and (not (file-remote-p default-directory))
        (equal shell-command-switch "-c")
        (member shell-file-name '("/bin/sh" "/bin/bash" "/bin/dash"
-                                "/bin/zsh" "/bin/ksh" "/usr/bin/bash"
-                                "/usr/bin/dash" "/usr/bin/zsh"))))
+                                 "/bin/zsh" "/bin/ksh" "/usr/bin/bash"
+                                 "/usr/bin/dash" "/usr/bin/zsh"))))
 
 (defconst ellama-tools--shell-output-print-prefix
   "\\$(\\(?:/bin/\\|/usr/bin/\\)?\\(?:echo\\|printf[ \t]+\\(?:%s\\|'%s'\\|\"%s\"\\)\\)[ \t]+"
@@ -1697,7 +1697,7 @@ TARGET matches a path that the detector can resolve locally."
                        "\\(" target "\\(?:[ \t]+" target "\\)*\\)"
                        "\\([ \t]*\\(?:[0-9]?>[^\r\n\0]*\\)?\\)\\'") command)
               (ellama-tools--shell-tee-overwrites-p (match-string 1 command)
-                                                   (match-string 2 command) target))
+                                                    (match-string 2 command) target))
              ((string-match
                (concat "\\`[ \t]*\\(?:\\(?:" program "mkdir[ \t]+\\(" target
                        "\\)[ \t]*\\(?:;\\|&&\\)[ \t]*\\)?" printer "[ \t]*>[ \t]*\\(" target
@@ -1718,7 +1718,7 @@ TARGET matches a path that the detector can resolve locally."
     (tool-name arg-name value &optional tool-metadata)
   "Scan VALUE for TOOL-NAME under ARG-NAME and return a decision plist."
   (let (warn-message warn-strong-message skip-decision truncated sensitive-key
-        shell-outputs overwrite irreversible overwrite-risk)
+                     shell-outputs overwrite irreversible overwrite-risk)
     (catch 'done
       (when
           (ellama-tools--dlp-walk-strings
@@ -4854,10 +4854,10 @@ Replace OLDCONTENT with NEWCONTENT."
 
 (ellama-tools-define-tool
  '(:function ellama-tools-backup-file-tool
-   :name "backup_file"
-   :args ((:name "source" :type string :description "Path to the local file on disk.")
-          (:name "destination" :type string :description "A new path for the backup copy."))
-   :description "Copy a local file of up to 1 MiB to a new path and verify the backup for this session."))
+             :name "backup_file"
+             :args ((:name "source" :type string :description "Path to the local file on disk.")
+                    (:name "destination" :type string :description "A new path for the backup copy."))
+             :description "Copy a local file of up to 1 MiB to a new path and verify the backup for this session."))
 
 (ellama-tools-define-tool
  '(:function
@@ -4978,7 +4978,7 @@ TIMEOUT is the optional command timeout in seconds."
                              cmd ellama-tools--overwrite-evidence session)))
               (kill-buffer buf)
               (user-error "%s" (concat "Ellama could not reverify the overwrite target."
-                                      ellama-tools--overwrite-retry-hint)))
+                                       ellama-tools--overwrite-retry-hint)))
             (setq process
                   (apply #'start-file-process
                          "*ellama-shell-command*" buf

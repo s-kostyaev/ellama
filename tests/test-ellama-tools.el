@@ -395,14 +395,14 @@ Return list with result and prompt."
         (progn
           (write-region "protected" nil file nil 'silent)
           (ellama-test--with-temp-srt-settings
-              (json-encode (list :filesystem (list :denyRead (vector file))))
-            (let ((ellama-tools-use-srt t)
-                  (ellama-tools-srt-args (list "--settings" settings-file)))
-              (should (string-match-p "srt policy denied read access"
-                                      (ellama-tools-read-file-tool file)))
-              (should (equal (json-read-from-string
-                              (ellama-tools-read-file-tool typed-name))
-                             (format "File %s does not exist." typed-name))))))
+           (json-encode (list :filesystem (list :denyRead (vector file))))
+           (let ((ellama-tools-use-srt t)
+                 (ellama-tools-srt-args (list "--settings" settings-file)))
+             (should (string-match-p "srt policy denied read access"
+                                     (ellama-tools-read-file-tool file)))
+             (should (equal (json-read-from-string
+                             (ellama-tools-read-file-tool typed-name))
+                            (format "File %s does not exist." typed-name))))))
       (delete-directory dir t))))
 
 (ert-deftest test-ellama-read-file-tool-auto-detects-audio ()
@@ -5391,7 +5391,7 @@ END_ELLAMA_AGENT_STATE"))
          (ellama-tools-dlp--session-bypasses nil)
          (ellama-tools-dlp-policy-overrides nil)
          (tool '(:name "write_file" :async t :function ellama-tools-write-file-tool
-                 :args ((:name "file_name" :type string) (:name "content" :type string))))
+                       :args ((:name "file_name" :type string) (:name "content" :type string))))
          (content (make-string 64 ?x))
          (requests 0))
     (unwind-protect
@@ -5574,8 +5574,8 @@ END_ELLAMA_AGENT_STATE"))
         (shell-file-name "/bin/sh")
         (shell-command-switch "-c")
         (tool '(:name "shell_command" :async t
-                :function ellama-tools-shell-command-tool
-                :args ((:name "cmd" :type string)))))
+                      :function ellama-tools-shell-command-tool
+                      :args ((:name "cmd" :type string)))))
     (unwind-protect
         (let ((default-directory (file-name-as-directory directory))
               (process-environment (copy-sequence process-environment)))
@@ -5678,8 +5678,8 @@ END_ELLAMA_AGENT_STATE"))
                              "printf '%s' \"$target\""
                              ": > \"$ELLAMA_SCOPE_DEFAULT\""))
             (should (eq (plist-get (ellama-tools--dlp-input-decision
-                                   tool (list #'ignore command))
-                                  :action)
+                                    tool (list #'ignore command))
+                                   :action)
                         'allow)))
           (setenv "ELLAMA_SCOPE_TEST" "empty.txt")
           (cl-letf (((symbol-function 'ellama-tools--tool-check-file-access)
@@ -5690,8 +5690,8 @@ END_ELLAMA_AGENT_STATE"))
                        ": > \"${ELLAMA_SCOPE_TEST:-saved notes.txt}\""))
           (let ((custom-tool (plist-put (copy-sequence tool) :function #'ignore)))
             (should (eq (plist-get (ellama-tools--dlp-input-decision
-                                   custom-tool '(ignore ": > 'saved notes.txt'"))
-                                  :action)
+                                    custom-tool '(ignore ": > 'saved notes.txt'"))
+                                   :action)
                         'allow)))
           (cl-letf (((symbol-function 'ellama-tools--tool-check-file-access)
                      (lambda (&rest _) "Denied"))
@@ -5723,8 +5723,8 @@ END_ELLAMA_AGENT_STATE"))
          (ellama-tools-dlp-llm-check-enabled nil)
          (ellama-tools-dlp-log-targets '(memory))
          (tool '(:name "shell_command" :async t
-                 :function ellama-tools-shell-command-tool
-                 :args ((:name "cmd" :type string))))
+                       :function ellama-tools-shell-command-tool
+                       :args ((:name "cmd" :type string))))
          (command "wc -c /dev/null > output.txt")
          states)
     (unwind-protect
@@ -5774,7 +5774,7 @@ END_ELLAMA_AGENT_STATE"))
          (ellama-tools-irreversible-default-action 'warn)
          (ellama-tools-irreversible-decision-provider 'test-provider)
          (tool '(:name "shell_command" :async t :function ellama-tools-shell-command-tool
-                 :args ((:name "cmd" :type string))))
+                       :args ((:name "cmd" :type string))))
          (command "command printf %s note > 'output file.txt'")
          (wrapped (plist-get (ellama-tools-wrap-with-confirm tool) :function))
          result started)
@@ -5837,7 +5837,7 @@ END_ELLAMA_AGENT_STATE"))
          (ellama-tools-irreversible-decision-provider 'test-provider)
          (process-environment (copy-sequence process-environment))
          (tool '(:name "shell_command" :async t :function ellama-tools-shell-command-tool
-                 :args ((:name "cmd" :type string))))
+                       :args ((:name "cmd" :type string))))
          (wrapped (plist-get (ellama-tools-wrap-with-confirm tool) :function))
          (command "command printf %s next > tracked.txt > 'second file.txt'")
          (cross-write "command printf %s next > primary.txt > backup.txt")
@@ -6060,7 +6060,7 @@ END_ELLAMA_AGENT_STATE"))
          (ellama-tools-edit-before-shell-commands nil)
          (ellama-tools-edit-after-shell-commands nil)
          (tool '(:name "shell_command" :async t :function ellama-tools-shell-command-tool
-                 :args ((:name "cmd" :type string))))
+                       :args ((:name "cmd" :type string))))
          (command "command printf %s next > draft.txt")
          (args (list #'ignore command))
          result)
@@ -6074,7 +6074,7 @@ END_ELLAMA_AGENT_STATE"))
             (should (eq (plist-get evidence :source) 'session))
             (should (ellama-tools--overwrite-evidence-current-p evidence "draft.txt" session))
             (let* ((writer '(:name "write_file" :async t :function ellama-tools-write-file-tool
-                             :args ((:name "file_name" :type string) (:name "content" :type string))))
+                                   :args ((:name "file_name" :type string) (:name "content" :type string))))
                    (write-decision (ellama-tools--dlp-input-decision writer '(ignore "draft.txt" "Next version"))))
               (should (eq (plist-get write-decision :action) 'allow))
               (should (eq (plist-get (plist-get write-decision :overwrite-evidence) :source) 'session)))
@@ -6139,9 +6139,9 @@ END_ELLAMA_AGENT_STATE"))
          (shell-command-switch "-c")
          (source "source.txt") (backup "source.bak")
          (shell '(:name "shell_command" :async t :function ellama-tools-shell-command-tool
-                  :args ((:name "cmd" :type string))))
+                        :args ((:name "cmd" :type string))))
          (writer '(:name "write_file" :async t :function ellama-tools-write-file-tool
-                   :args ((:name "file_name" :type string) (:name "content" :type string))))
+                         :args ((:name "file_name" :type string) (:name "content" :type string))))
          (write (plist-get (ellama-tools-wrap-with-confirm writer) :function))
          (shell-call (plist-get (ellama-tools-wrap-with-confirm shell) :function))
          (command "command printf %s revision > source.txt")
@@ -6198,8 +6198,8 @@ END_ELLAMA_AGENT_STATE"))
             (should (string-match-p "trash_files" result)))
           (should-not (ellama-tools--dlp-refusal-hint '(:action block) '(:shell-command t) (list command)))
           (should (string-match-p "trash_files" (ellama-tools--dlp-refusal-hint
-                                                '(:action block :irreversible t)
-                                                '(:shell-command t) '("rm -rf documents"))))
+                                                 '(:action block :irreversible t)
+                                                 '(:shell-command t) '("rm -rf documents"))))
           (should-not (ellama-tools--dlp-refusal-hint '(:action block :irreversible t)
                                                       '(:shell-command t) '("rm -rf /"))))
       (when-let* ((buffer (get-file-buffer (expand-file-name source))))

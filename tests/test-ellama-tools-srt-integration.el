@@ -753,7 +753,7 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
          (ellama-tools-irreversible-decision-provider nil)
          (ellama-tools-irreversible-project-overrides-enabled nil)
          (tool '(:name "shell_command" :async t :function ellama-tools-shell-command-tool
-                 :args ((:name "cmd" :type string))))
+                       :args ((:name "cmd" :type string))))
          (command "command printf %s next > 'notes file.txt'")
          (file "notes file.txt"))
     (unwind-protect
@@ -766,8 +766,8 @@ directory-scoped write-policy denials that local `move_file' checks enforce."
           (should (eq 0 (call-process "git" nil nil nil "-C" root "init" "-q" "--template=")))
           (should (eq 0 (call-process "git" nil nil nil "add" "--" file)))
           (should (eq 0 (call-process "git" nil nil nil "-c" "user.name=Ellama Test"
-                                     "-c" "user.email=test@example.invalid" "-c" "commit.gpgSign=false"
-                                     "-c" "core.hooksPath=/dev/null" "commit" "-qm" "Fixture")))
+                                      "-c" "user.email=test@example.invalid" "-c" "commit.gpgSign=false"
+                                      "-c" "core.hooksPath=/dev/null" "commit" "-qm" "Fixture")))
           (cl-labels ((write-policy (deny)
                         (with-temp-file settings
                           (insert (json-serialize

@@ -1711,7 +1711,7 @@ Include scoping fields because cached entries store the normalized rule plist."
         (setq position (match-end 0))
         (pcase (match-string 0 text)
           (";" (push (substring text start (match-beginning 0)) statements)
-               (setq start position))
+           (setq start position))
           ((or "'" "\"" "`" "$" "/*") (setq invalid t))))
       (push (substring text start) statements)
       (dolist (statement statements)

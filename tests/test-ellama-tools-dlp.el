@@ -104,7 +104,7 @@
                  'allow))
      (let ((ellama-tools-dlp-regex-rules
             '((:id "ir-user-block" :pattern "DROP DATABASE" :directions (input)
-               :risk-class irreversible :confidence high))))
+                   :risk-class irreversible :confidence high))))
        (should (eq (plist-get (plist-get
                                (ellama-tools-dlp--scan-text path read-context)
                                :verdict)
@@ -119,10 +119,10 @@
 (ert-deftest test-ellama-tools-dlp-git-hard-reset-needs-confirmation ()
   (ellama-test-dlp-with-decision
    (dolist (command '("git reset --hard" "git reset --hard HEAD"
-                     "git reset -q --hard HEAD~1"
-                     "git reset --hard HEAD && git status --short"
-                     "git reset --hard HEAD --; git status --short"
-                     "/usr/bin/git reset --hard --quiet origin/main"))
+                      "git reset -q --hard HEAD~1"
+                      "git reset --hard HEAD && git status --short"
+                      "git reset --hard HEAD --; git status --short"
+                      "/usr/bin/git reset --hard --quiet origin/main"))
      (let* ((scan (ellama-tools-dlp--scan-text command context))
             (verdict (plist-get scan :verdict)))
        (should (eq (plist-get verdict :action) 'warn-strong))
@@ -130,9 +130,9 @@
                        (plist-get scan :findings))
                       '("ir-shell-git-reset-hard")))))
    (dolist (command '("git reset --soft HEAD" "git reset --mixed HEAD"
-                     "git reset --hard --help" "git reset --hard -h"
-                     "git reset --hard HEAD -- file"
-                     "git reset -- file" "printf '%s' 'git reset --hard HEAD'"))
+                      "git reset --hard --help" "git reset --hard -h"
+                      "git reset --hard HEAD -- file"
+                      "git reset -- file" "printf '%s' 'git reset --hard HEAD'"))
      (should (eq (plist-get (plist-get
                              (ellama-tools-dlp--scan-text command context)
                              :verdict)
@@ -166,7 +166,7 @@
                    'block)))
      (let ((ellama-tools-dlp-regex-rules
             '((:id "ir-sql-delete" :pattern "DELETE FROM invoices"
-               :risk-class irreversible :severity high :confidence high))))
+                   :risk-class irreversible :severity high :confidence high))))
        (should (eq (plist-get (plist-get
                                (ellama-tools-dlp--scan-text plain context) :verdict)
                               :action)
@@ -183,7 +183,7 @@
                  'allow))
      (let ((ellama-tools-dlp-regex-rules
             '((:id "ir-shell-rm-rf" :pattern "rm -rf"
-               :severity high :risk-class irreversible :confidence high))))
+                   :severity high :risk-class irreversible :confidence high))))
        (should (eq (plist-get (plist-get (ellama-tools-dlp--scan-text text context)
                                          :verdict)
                               :action)
