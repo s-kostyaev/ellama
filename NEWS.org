@@ -1,3 +1,11 @@
+* Version 1.34.1
+- Include Git recovery evidence in the decision model's request for supported
+  single-file deletions. Ellama checks that the file's bytes and mode match both
+  ~HEAD~ and the index. If the evidence no longer holds before the shell starts,
+  Ellama stops the deletion.
+- Create committed and modified files for the paired deletion cases in the
+  manual evaluation.
+
 * Version 1.34.0
 - Add an optional decision model for irreversible tool calls. Set
   ~ellama-tools-irreversible-decision-provider~ to enable it. Ellama makes at
