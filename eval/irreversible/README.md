@@ -36,11 +36,12 @@ python3 eval/irreversible/run.py --backend structured-chat \
 ```
 
 Add `--group original` for a short first run. The evaluator warms up the
-model once and then checks cases in order. The JSON schema puts a short
-`short_reasoning` string before `probability`. The evaluator uses temperature
-0 and lets the server choose the output token limit. Use
-`--max-output-tokens` to request a limit. Add `--thinking` to enable native
-thinking. The JSON schema includes `short_reasoning` in both modes.
+model once and then checks cases in order. The JSON schema puts
+`short_reasoning` before `probability` and limits the string to 512
+characters. The evaluator uses temperature 0 and the server's output token
+limit. Use `--max-output-tokens` to request a limit. Add `--thinking` to
+enable native thinking. The JSON schema includes `short_reasoning` in both
+modes.
 For a server that requires authentication, set
 `ELLAMA_EVAL_API_KEY` and use that same key as a bearer token when listing
 models.

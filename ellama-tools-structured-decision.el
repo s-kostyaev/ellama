@@ -18,14 +18,18 @@
   "Decision adapter for a CHAT-PROVIDER made with `make-llm-openai-compatible'."
   chat-provider)
 
+(defconst ellama-tools-structured-decision--reasoning-max-length 512
+  "Maximum number of characters in the structured reasoning field.")
+
 (defconst ellama-tools-structured-decision--format
-  '(:type "json_schema"
+  `(:type "json_schema"
           :json_schema
           (:name "irreversible_decision" :strict t
                  :schema
                  (:type "object" :additionalProperties :false
                         :properties
-                        (:short_reasoning (:type "string")
+                        (:short_reasoning (:type "string"
+                                                 :maxLength ,ellama-tools-structured-decision--reasoning-max-length)
                                           :probability (:type ["number" "null"] :minimum 0 :maximum 1))
                         :required ["short_reasoning" "probability"])))
   "Wire format for an irreversible decision or an abstention.")
@@ -91,10 +95,12 @@ Send STATE as the user message and the decision criteria as instructions."
           (let* ((json-object-type 'alist)
                  (json-key-type 'string)
                  (json-array-type 'vector)
-                 (result (json-read)))
+                 (result (json-read))
+                 (reasoning (and (consp result)
+                                 (alist-get "short_reasoning" result nil nil #'equal))))
             (skip-chars-forward " \t\n\r")
-            (when (and (eobp) (consp result) (= (length result) 2)
-                       (stringp (alist-get "short_reasoning" result nil nil #'equal)))
+            (when (and (eobp) (stringp reasoning) (= (length result) 2)
+                       (<= (length reasoning) ellama-tools-structured-decision--reasoning-max-length))
               (let ((probability (alist-get "probability" result nil nil #'equal)))
                 (when (and (numberp probability) (<= 0 probability 1))
                   probability)))))
