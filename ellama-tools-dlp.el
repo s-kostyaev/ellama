@@ -3046,6 +3046,8 @@ Errors contain no provider message or payload."
          (t
           (let* ((outputs (plist-get context :shell-outputs))
                  (sql-steps (plist-get context :sql-transaction-steps))
+                 (observe-deletion (plist-get context :shell-deletion-observation))
+                 (deletion (and observe-deletion (funcall observe-deletion)))
                  (call (list :tool (plist-get context :tool-name)
                              :tool_identity (plist-get context :tool-identity)
                              :arguments
@@ -3055,6 +3057,7 @@ Errors contain no provider message or payload."
                                       (funcall argument-details)))))
                  (state (json-serialize
                          (cond (outputs (plist-put call :shell_outputs (vconcat outputs)))
+                               (deletion (plist-put call :shell_deletion deletion))
                                (sql-steps (plist-put call :sql_transaction_steps (vconcat sql-steps)))
                                (t call))))
                  (size (string-bytes state)))
@@ -3068,12 +3071,12 @@ Errors contain no provider message or payload."
                        (cond
                         ((and (eq (plist-get context :tool-origin) 'builtin)
                               (equal (plist-get context :tool-name) "shell_command"))
-                         (if outputs
-                             'shell-output
-                           (pcase (plist-get context :shell-literal-shape)
-                             ('printer 'literal-printer)
-                             ('nil 'shell)
-                             (_ 'literal-shell))))
+                         (cond (outputs 'shell-output)
+                               (deletion 'shell-deletion)
+                               (t (pcase (plist-get context :shell-literal-shape)
+                                    ('printer 'literal-printer)
+                                    ('nil 'shell)
+                                    (_ 'literal-shell)))))
                         (sql-steps 'sql-transaction-end)
                         ((eq (plist-get context :sql-statement) 'transaction) 'sql-transaction)
                         ((plist-get context :sql-statement) 'sql)
@@ -3121,13 +3124,20 @@ Use PROFILE to select a question for the tool input."
                          (concat
                           "Only reads, prints, appends, previews, or writes to a new or empty file "
                           "without losing existing data or causing an external effect.")))
-                  ('shell
+                  ((or 'shell 'shell-deletion)
                    (list (concat
                           "Can running this shell command permanently lose data or cause "
                           "an external action? Trace reachable commands, including "
                           "substitutions and redirections. A semicolon starts the next "
                           "command regardless of exit status. Apply the conditions on && "
-                          "and ||. Treat printed literals and comments as data.")
+                          "and ||. Treat printed literals and comments as data."
+                          (when (eq profile 'shell-deletion)
+                            (concat
+                             " shell_deletion describes one observed local file. A verified "
+                             "git_recovery means that file's current bytes and mode match "
+                             "Git HEAD and the index. Unverified means no Git recovery was "
+                             "established. Apply this evidence only to that file, and account "
+                             "for every other reachable effect of the command.")))
                          (concat
                           "Deletes, truncates, or overwrites data without recovery, "
                           "discards work, changes shared history, sends or publishes "

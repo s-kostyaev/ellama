@@ -89,6 +89,9 @@ next attempt is allowed so deliberate overwrites remain possible."
 (defvar ellama-tools--confirmed-rm-git-evidence nil
   "Git commit cited during confirmation of the current shell tool call.")
 
+(defvar ellama-tools--shell-deletion-recovery nil
+  "Internal Git proof behind the current command's provider observation.")
+
 (defvar ellama-tools--overwrite-evidence nil
   "Local evidence used to classify the current overwrite as recoverable.")
 
@@ -1859,6 +1862,7 @@ Return plist with keys `:action' and optional `:message'."
          (values (if (and async call-args (functionp (car call-args)))
                      (cdr call-args)
                    call-args))
+         (command (and (plist-get tool-metadata :shell-command) (car values)))
          (specs declared-args)
          (index 0)
          warn-message
@@ -1869,6 +1873,7 @@ Return plist with keys `:action' and optional `:message'."
          (sql-count 0)
          backup-options
          shell-outputs
+         shell-deletion-evidence
          irreversible
          overwrite-risk
          (overwrite (and ellama-tools-dlp-enabled ellama-tools-irreversible-enabled
@@ -1878,8 +1883,7 @@ Return plist with keys `:action' and optional `:message'."
          truncated
          sensitive-key)
     (when-let* ((ellama-tools-dlp-enabled)
-                ((plist-get tool-metadata :shell-command))
-                (shape (ellama-tools--shell-literal-shape (car values))))
+                (shape (ellama-tools--shell-literal-shape command)))
       (setq tool-metadata (plist-put tool-metadata :shell-literal-shape shape)))
     (when-let* ((sql (ellama-tools--dlp-sql-commit-argument declared-args values)))
       (setq tool-metadata (plist-put tool-metadata :sql-commit-arg sql)))
@@ -1943,6 +1947,12 @@ Return plist with keys `:action' and optional `:message'."
                         context (plist-put context :sql-transaction-steps (and (= sql-count 1) sql-steps))
                         context (plist-put context :backup-options (and backup-options (not preview)))
                         context (plist-put context :shell-outputs shell-outputs)
+                        context (plist-put context :shell-deletion-observation
+                                           (when command
+                                             (lambda ()
+                                               (setq shell-deletion-evidence
+                                                     (ellama-tools--shell-deletion-evidence command))
+                                               (plist-get shell-deletion-evidence :observation))))
                         context (plist-put context :truncated truncated)
                         context (plist-put context :sensitive-key sensitive-key))
                   (ellama-tools-dlp--irreversible-call-verdict
@@ -1964,6 +1974,8 @@ Return plist with keys `:action' and optional `:message'."
                 verdict (plist-put verdict :overwrite-risk overwrite-risk))
           (when truncated
             (setq verdict (plist-put verdict :truncated t)))
+          (when (plist-get shell-deletion-evidence :commit)
+            (setq verdict (plist-put verdict :shell-deletion-recovery shell-deletion-evidence)))
           (if overwrite (plist-put verdict :overwrite-evidence overwrite) verdict))))))
 
 (defun ellama-tools--dlp-call-details (tool-plist call-args &optional decision)
@@ -2396,6 +2408,95 @@ When LOCAL-METADATA is non-nil, require recovery data under .git."
             commit)))
     (error nil)))
 
+(defun ellama-tools--shell-deletion-path (command)
+  "Return the literal operand of a supported single-file deletion COMMAND."
+  (let* ((path "[a-zA-Z0-9_./ -]+")
+         (word (concat "\\([a-zA-Z0-9_./-]+\\|'" path "'\\|\"" path "\"\\)"))
+         (program "\\`[ \t]*\\(?:/bin/\\|/usr/bin/\\)?"))
+    (cond
+     ((ellama-tools--literal-rm-path command))
+     ((string-match (concat program "unlink[ \t]+\\(?:--[ \t]+\\)?" word "[ \t]*\\'") command)
+      (ellama-tools--shell-output-path (match-string 1 command)))
+     ((string-match (concat program "perl[ \t]+-e[ \t]+'unlink[ \t]+shift"
+                            "\\(?:[ \t]+or[ \t]+die[ \t]+\\$!\\)?'[ \t]+--[ \t]+" word "[ \t]*\\'")
+                    command)
+      (ellama-tools--shell-output-path (match-string 1 command)))
+     ((string-match (concat program "python\\(?:3\\(?:\\.[0-9]+\\)?\\)?[ \t]+-c[ \t]+"
+                            "\"\\(?:import os;[ \t]*os\\.\\(?:unlink\\|remove\\)('\\(" path "\\)')"
+                            "\\|from pathlib import Path;[ \t]*Path('\\(" path "\\)')\\.unlink()\\)\"[ \t]*\\'")
+                    command)
+      (or (match-string 1 command) (match-string 2 command))))))
+
+(defun ellama-tools--shell-find-unique-file (directory name shallow)
+  "Find the sole NAME below DIRECTORY within a bounded local scan.
+When SHALLOW is non-nil, inspect only direct children.  Skip symlink descent."
+  (let ((budget 128) (pending (list directory)) found)
+    (catch 'incomplete
+      (while pending
+        (let ((parent (pop pending)))
+          (when (ellama-tools--tool-check-file-access parent 'list)
+            (throw 'incomplete nil))
+          (let ((entries (directory-files parent t directory-files-no-dot-files-regexp t (1+ budget))))
+            (cl-decf budget (length entries))
+            (when (< budget 0) (throw 'incomplete nil))
+            (dolist (file entries)
+              (when (equal name (file-name-nondirectory file))
+                (when found (throw 'incomplete nil))
+                (setq found file))
+              (unless shallow
+                (when (or (equal (downcase (file-name-nondirectory file)) ".git")
+                          (ellama-tools--tool-check-file-access file 'read))
+                  (throw 'incomplete nil))
+                (when (and (not (file-symlink-p file)) (file-directory-p file))
+                  (push file pending)))))))
+      found)))
+
+(defun ellama-tools--shell-deletion-evidence (command)
+  "Observe one supported deletion target in COMMAND without running it.
+Return internal Git evidence and a provider observation containing no Git ID,
+file contents, or discovered paths.  An unverified result proves no recovery."
+  (ignore-errors
+    (when (and (stringp command) (ellama-tools--posix-shell-p)
+               (<= (string-bytes command) ellama-tools-irreversible-decision-max-scan-size))
+      (save-match-data
+        (let* ((case-fold-search nil)
+               (cwd (file-truename default-directory))
+               (operand (ellama-tools--shell-deletion-path command))
+               (observation (and operand (list :operand operand)))
+               (path operand))
+          (when (string-match
+                 (concat "\\`[ \t]*\\(?:/bin/\\|/usr/bin/\\)?find[ \t]+\\([a-zA-Z0-9_./-]+\\)"
+                         "[ \t]+\\(?:\\(-maxdepth[ \t]+1\\)[ \t]+\\)?-name[ \t]+"
+                         "\\(['\"]?\\)\\([a-zA-Z0-9_.-]+\\)\\3[ \t]+-exec[ \t]+"
+                         "\\(?:/bin/\\|/usr/bin/\\)?rm[ \t]+--[ \t]+{}[ \t]+\\+[ \t]*\\'")
+                 command)
+            (let* ((root (match-string 1 command))
+                   (shallow (match-beginning 2))
+                   (name (match-string 4 command))
+                   (directory (and (not (string-prefix-p "-" root))
+                                   (ellama-tools--shell-deletion-relative-p root)
+                                   (directory-file-name (expand-file-name root cwd)))))
+              (when (and directory (not (ellama-tools--tool-check-file-access directory 'list))
+                         (equal directory (file-truename directory))
+                         (not (equal name (file-name-nondirectory directory))))
+                (setq path (when-let* ((match (ellama-tools--shell-find-unique-file directory name shallow)))
+                             (file-relative-name match cwd))
+                      observation (list :find_root root :find_name name)))))
+          (when-let* ((path) ((ellama-tools--shell-deletion-relative-p path))
+                      (file (expand-file-name path cwd))
+                      ((not (ellama-tools--tool-check-file-access file 'read)))
+                      ((equal file (file-truename file)))
+                      ((file-regular-p file)))
+            (let ((commit (ellama-tools--git-file-commit file)))
+              (list :file file :commit commit
+                    :observation (plist-put observation :git_recovery
+                                            (if commit "verified" "unverified"))))))))))
+
+(defun ellama-tools--shell-deletion-relative-p (path)
+  "Check that PATH is relative and has no traversal or Git metadata component."
+  (and (not (file-name-absolute-p path))
+       (not (seq-intersection (mapcar #'downcase (split-string path "/" t)) '(".." ".git")))))
+
 (defun ellama-tools--literal-file-outputs (command)
   "Return a supported COMMAND's literal writer and complete list of outputs."
   (when (ellama-tools--posix-shell-p)
@@ -2819,6 +2920,7 @@ When MULTIPLE is non-nil, require independent destinations and local Git data."
           (let* ((decision (ellama-tools--dlp-input-decision
                             tool-plist args))
                  (ellama-tools--overwrite-evidence (plist-get decision :overwrite-evidence))
+                 (ellama-tools--shell-deletion-recovery (plist-get decision :shell-deletion-recovery))
                  (action (plist-get decision :action))
                  (message (plist-get decision :message))
                  (hint (ellama-tools--dlp-refusal-hint
@@ -4973,6 +5075,12 @@ TIMEOUT is the optional command timeout in seconds."
               (user-error
                (concat "Ellama could not reverify the file against Git "
                        "after confirmation. Submit the tool call again.")))
+            (when (and ellama-tools--shell-deletion-recovery
+                       (not (equal ellama-tools--shell-deletion-recovery
+                                   (ellama-tools--shell-deletion-evidence cmd))))
+              (kill-buffer buf)
+              (user-error (concat "Ellama could not reverify deletion recovery.  "
+                                  "Submit the call again or use trash_files")))
             (when (and ellama-tools--overwrite-evidence
                        (not (ellama-tools--shell-overwrite-evidence-current-p
                              cmd ellama-tools--overwrite-evidence session)))
