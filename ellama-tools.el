@@ -1421,14 +1421,28 @@ When OPERAND is non-nil, reject options.  DIRECTORY permits a trailing slash."
        (file-regular-p file)
        (> (file-attribute-size (file-attributes (file-truename file))) 0)))
 
+(defun ellama-tools--shell-readable-input-p (word)
+  "Check that literal WORD names a readable local file or the null device."
+  (when-let* (((not (string-match-p "[$`]" word)))
+              (file (ellama-tools--shell-local-output-file word t))
+              ((not (ellama-tools--tool-check-file-access file 'read)))
+              ((file-readable-p file)))
+    (or (file-regular-p file)
+        (when-let* (((equal file "/dev/null"))
+                    (attributes (file-attributes file)))
+          (string-prefix-p "c" (file-attribute-modes attributes))))))
+
+(defun ellama-tools--shell-copy-destination (source output)
+  "Resolve OUTPUT to the path that cp would write for SOURCE."
+  (if (file-directory-p output)
+      (expand-file-name (file-name-nondirectory source) (file-name-as-directory output))
+    output))
+
 (defun ellama-tools--shell-copy-overwrites-p (directory created source output)
   "Check if a simple cp can clobber OUTPUT with SOURCE.
 CREATED is a path written by a preceding printer, possibly under DIRECTORY."
   (when (and source output (not (ellama-tools--tool-check-file-access output 'read)))
-    (let ((destination (if (file-directory-p output)
-                           (expand-file-name (file-name-nondirectory source)
-                                             (file-name-as-directory output))
-                         output)))
+    (let ((destination (ellama-tools--shell-copy-destination source output)))
       (and (not (equal source destination))
            (ellama-tools--nonempty-shell-output-p destination)
            (not (ellama-tools--tool-check-file-access destination 'write))
@@ -1447,21 +1461,23 @@ CREATED is a path written by a preceding printer, possibly under DIRECTORY."
                            (not (ellama-tools--tool-check-file-access directory 'write))
                            (file-writable-p directory)))))))))
 
-(defun ellama-tools--shell-output-redirections (text target &optional plain)
+(defun ellama-tools--shell-output-redirections (text target &optional plain checked-input)
   "Parse a trailing sequence of output redirections in TEXT using TARGET.
 When PLAIN is non-nil, accept only literal stdout output redirections.
+When CHECKED-INPUT is non-nil, also accept readable local input operands.
 Return (t . OUTPUTS) with (MODE . OPERAND) pairs, or nil on unsupported syntax."
   (let ((pattern (concat "[ \t]*" (unless plain "[0-9]?")
                          "\\(?:\\(>>\\|>|?\\)[ \t]*\\(" target "\\)"
-                         (unless plain "\\|>&[ \t]*[0-9-]\\|\\(<[ \t]*/dev/null\\)")
+                         (unless plain
+                           (concat "\\|>&[ \t]*[0-9-]\\|<[ \t]*\\("
+                                   (if checked-input target "/dev/null") "\\)"))
                          "\\)"))
         (position 0)
         paths invalid-input)
     (while (and (string-match pattern text position) (= (match-beginning 0) position))
       (setq position (match-end 0))
       (if (match-beginning 3)
-          (when (or (ellama-tools--tool-check-file-access "/dev/null" 'read)
-                    (not (file-readable-p "/dev/null")))
+          (unless (ellama-tools--shell-readable-input-p (match-string 3 text))
             (setq invalid-input t))
         (when-let* ((operator (match-string 1 text)))
           (push (cons (if (equal operator ">>") "append" "truncate")
@@ -1796,6 +1812,7 @@ TARGET matches a path that the detector can resolve locally."
                                                outputs)))
                     (evidence (and shell
                                    (cond
+                                    (no-output (list :source 'shell-no-outputs))
                                     ((cdr outputs)
                                      (ellama-tools--shell-multiple-output-evidence text outputs))
                                     (truncation
@@ -2729,6 +2746,108 @@ file contents, or discovered paths.  An unverified result proves no recovery."
                                     collect (list :path path :mode mode))))
                 (list :writer program :targets targets)))))))))
 
+(defun ellama-tools--shell-system-utility-p (prefix name)
+  "Check that PREFIX and NAME select a supported system utility."
+  (cond
+   ((or (getenv "BASH_ENV") (getenv "ENV")) nil)
+   ((string-prefix-p "/" prefix) (file-executable-p (concat prefix name)))
+   (t
+    (and (not ellama-tools-use-srt)
+         (member shell-file-name '("/bin/sh" "/bin/bash" "/bin/dash"
+                                   "/usr/bin/bash" "/usr/bin/dash"))
+         (not (seq-some (lambda (entry)
+                          (or (string-prefix-p "BASH_FUNC_" entry)
+                              (string-match-p "=()[ \t]*{" entry)))
+                        process-environment))
+         (when-let* ((path (getenv "PATH"))
+                     (exec-path (parse-colon-path path)))
+           (and (seq-every-p (lambda (dir)
+                               (and dir (file-name-absolute-p dir) (not (file-remote-p dir))))
+                             exec-path)
+                (member (executable-find name)
+                        (list (concat "/bin/" name) (concat "/usr/bin/" name)))))))))
+
+(defun ellama-tools--shell-copy-output (arguments)
+  "Return the output target for a supported cp with ARGUMENTS."
+  (let ((word ellama-tools--shell-output-target-pattern))
+    (when (string-match
+           (concat "\\`[ \t]+\\(?:\\(-[fn]\\)[ \t]+\\)?\\(?:--[ \t]+\\)?"
+                   "\\(" word "\\)[ \t]+\\(" word "\\)[ \t]*\\'") arguments)
+      (let ((flag (match-string 1 arguments))
+            (input (match-string 2 arguments))
+            (output (match-string 3 arguments)))
+        (when-let* (((not (string-match-p "[$`]" output)))
+                    ((ellama-tools--shell-readable-input-p input))
+                    (source (ellama-tools--shell-local-output-file input t))
+                    ((file-regular-p source))
+                    (path (ellama-tools--shell-local-output-file output t t))
+                    ((not (ellama-tools--tool-check-file-access path 'read)))
+                    ((or (not (string-suffix-p "/" (ellama-tools--shell-output-path output)))
+                         (file-directory-p path)))
+                    ((or (not (file-directory-p path))
+                         (not (ellama-tools--tool-check-file-access path 'list))))
+                    (destination (ellama-tools--shell-copy-destination source path))
+                    ((not (file-directory-p destination)))
+                    ((not (file-equal-p source destination))))
+          (list t (list :path (if (file-name-absolute-p (ellama-tools--shell-output-path output))
+                                  destination
+                                (file-relative-name destination default-directory))
+                        :mode (if (equal flag "-n") "copy-no-clobber" "truncate"))))))))
+
+(defun ellama-tools--shell-utility-output-target (output)
+  "Resolve an OUTPUT from a supported shell utility."
+  (let ((word (cdr output)))
+    (when-let* (((not (string-match-p "[$`]" word)))
+                (file (ellama-tools--shell-local-output-file word t)))
+      (if (equal file "/dev/null")
+          (when (ellama-tools--shell-readable-input-p word) 'discarded)
+        (list :path (ellama-tools--shell-output-path word) :mode (car output)
+              :require-no-loss t)))))
+
+(defun ellama-tools--shell-stream-outputs (name arguments)
+  "Prove output effects for a supported NAME with ARGUMENTS."
+  (let ((word ellama-tools--shell-output-target-pattern)
+        (options (pcase name
+                   ("tee" "[ \t]+-a")
+                   ("wc" "\\(?:[ \t]+-[clmw]+\\)*")
+                   ("cut" "[ \t]+-[bcf][ \t]+[0-9]+\\(?:[-,][0-9]+\\)*"))))
+    (when (string-match
+           (concat "\\`" options "\\(?:[ \t]+--\\)?"
+                   "\\(\\(?:[ \t]+" word "\\)*\\)"
+                   "\\([ \t]*\\(?:[0-9]?[<>][^\r\n\0]*\\)?\\)\\'") arguments)
+      (let* ((operands (match-string 1 arguments))
+             (suffix (match-string 2 arguments))
+             (redirects (ellama-tools--shell-output-redirections suffix word nil t))
+             (tee (equal name "tee"))
+             (position 0)
+             words)
+        (while (string-match word operands position)
+          (setq position (match-end 0))
+          (push (match-string 0 operands) words))
+        (when (and redirects (<= (length words) 16)
+                   (or tee (seq-every-p #'ellama-tools--shell-readable-input-p words)))
+          (let* ((outputs (append (cdr redirects)
+                                  (when tee
+                                    (mapcar (lambda (word) (cons "append" word))
+                                            (nreverse words)))))
+                 (targets (mapcar #'ellama-tools--shell-utility-output-target outputs)))
+            (unless (memq nil targets)
+              (cons t (delq 'discarded targets)))))))))
+
+(defun ellama-tools--shell-utility-outputs (command)
+  "Collect complete output effects of a supported literal utility COMMAND."
+  (when (string-match
+         "\\`[ \t]*\\(?:command[ \t]+\\)?\\(/bin/\\|/usr/bin/\\|\\)\\(cp\\|tee\\|wc\\|cut\\)\\_>" command)
+    (let ((prefix (match-string 1 command))
+          (name (match-string 2 command))
+          (arguments (substring command (match-end 0))))
+      (condition-case nil
+          (when (ellama-tools--shell-system-utility-p prefix name)
+            (if (equal name "cp")
+                (ellama-tools--shell-copy-output arguments)
+              (ellama-tools--shell-stream-outputs name arguments)))
+        (file-error nil)))))
+
 (defun ellama-tools--shell-complete-outputs (command &optional depth)
   "Prove the complete output effects of supported literal COMMAND.
 Return (t . TARGETS) in redirection order.  DEPTH bounds group traversal."
@@ -2741,6 +2860,7 @@ Return (t . TARGETS) in redirection order.  DEPTH bounds group traversal."
         (cond
          ((when-let* ((literal (ellama-tools--literal-file-outputs command)))
             (cons t (plist-get literal :targets))))
+         ((ellama-tools--shell-utility-outputs command))
          ((or (eq (ellama-tools--shell-literal-shape command) 'trusted-printer)
               (and (string-match "\\`[ \t]*command[ \t]+" command)
                    (memq (ellama-tools--shell-literal-shape (substring command (match-end 0)))
@@ -3004,14 +3124,16 @@ When RECOVERABLE is non-nil, also check recovery evidence for truncation."
               ((or (not recoverable) (ellama-tools--shell-independent-output-p file)))
               (state (plist-get observation :state)))
     (cond
-     ((member state '("empty" "missing" "directory"))
+     ((or (member state '("empty" "missing" "directory"))
+          (and (equal mode "copy-no-clobber") (equal state "nonempty")))
       (list :source 'shell-no-loss :path file :state state :mode mode))
      ((and (equal state "nonempty") (equal mode "append")
            (file-regular-p file)
            (ellama-tools--shell-independent-output-p file))
       (when-let* ((stamp (ellama-tools--shell-output-stamp file)))
         (list :source 'shell-append :path file :mode mode :stamp stamp)))
-     ((and recoverable (equal state "nonempty") (equal mode "truncate"))
+     ((and recoverable (not (plist-get target :require-no-loss))
+           (equal state "nonempty") (equal mode "truncate"))
       (ellama-tools--file-overwrite-evidence file t)))))
 
 (defun ellama-tools--shell-no-loss-evidence (command outputs)
@@ -3114,21 +3236,23 @@ When MULTIPLE is non-nil, require independent destinations and local Git data."
 (defun ellama-tools--shell-overwrite-evidence-current-p (command evidence session)
   "Recheck every destination of COMMAND against EVIDENCE for SESSION."
   (ignore-errors
-    (let* ((targets (cdr (ellama-tools--shell-complete-outputs command)))
-           (multiple (eq (plist-get evidence :source) 'shell-outputs))
-           (proofs (if multiple (plist-get evidence :targets) (list evidence))))
-      (and (= (length targets) (length proofs))
-           (let ((stamps (and multiple (ellama-tools--shell-output-stamps targets proofs))))
-             (and (cl-every (lambda (target proof)
-                              (and (equal (plist-get target :mode)
-                                          (or (plist-get proof :mode) "truncate"))
-                                   (ellama-tools--overwrite-evidence-current-p
-                                    proof (plist-get target :path) session multiple)))
-                            targets proofs)
-                  ;; A later Git or backup check can take long enough for an
-                  ;; earlier destination to change before the shell starts.
-                  (or (not multiple)
-                      (equal stamps (ellama-tools--shell-output-stamps targets proofs)))))))))
+    (if (eq (plist-get evidence :source) 'shell-no-outputs)
+        (equal (ellama-tools--shell-complete-outputs command) '(t))
+      (let* ((targets (cdr (ellama-tools--shell-complete-outputs command)))
+             (multiple (eq (plist-get evidence :source) 'shell-outputs))
+             (proofs (if multiple (plist-get evidence :targets) (list evidence))))
+        (and (= (length targets) (length proofs))
+             (let ((stamps (and multiple (ellama-tools--shell-output-stamps targets proofs))))
+               (and (cl-every (lambda (target proof)
+                                (and (equal (plist-get target :mode)
+                                            (or (plist-get proof :mode) "truncate"))
+                                     (ellama-tools--overwrite-evidence-current-p
+                                      proof (plist-get target :path) session multiple)))
+                              targets proofs)
+                    ;; A later Git or backup check can take long enough for an
+                    ;; earlier destination to change before the shell starts.
+                    (or (not multiple)
+                        (equal stamps (ellama-tools--shell-output-stamps targets proofs))))))))))
 
 (defconst ellama-tools--overwrite-retry-hint
   (concat "\nPreserve the current file at a new path in this session with backup_file "
@@ -5341,8 +5465,12 @@ TIMEOUT is the optional command timeout in seconds."
                        (not (ellama-tools--shell-overwrite-evidence-current-p
                              cmd ellama-tools--overwrite-evidence session)))
               (kill-buffer buf)
-              (user-error "%s" (concat "Ellama could not reverify the overwrite target."
-                                       ellama-tools--overwrite-retry-hint)))
+              (user-error "%s"
+                          (if (eq (plist-get ellama-tools--overwrite-evidence :source)
+                                  'shell-no-outputs)
+                              "Ellama could not reverify the shell command. Submit it again."
+                            (concat "Ellama could not reverify the overwrite target."
+                                    ellama-tools--overwrite-retry-hint))))
             (setq process
                   (apply #'start-file-process
                          "*ellama-shell-command*" buf

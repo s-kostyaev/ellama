@@ -86,6 +86,20 @@ and metadata before running the command. A nonrecursive `/bin/rm` or
 bytes and mode match Git HEAD and the index. Ellama rechecks that proof
 before launching the shell.
 
+The local shell checks also cover a two-path `cp`, `tee -a` with literal
+destinations, and `wc` or `cut` with supported options and literal inputs
+or standard input. For `cp`, Ellama resolves the file inside an existing
+destination directory and honors `-n`. It applies the irreversible policy
+to replacement of nonempty data without verified recovery. Before running
+a permitted command, Ellama rechecks the effective destination.
+Truncating a nonempty file through an output redirection on `tee`, `wc`,
+or `cut` still triggers the irreversible policy.
+
+Use the system binary's absolute path when shell startup or PATH resolution
+is ambiguous. For unqualified names, Ellama checks PATH on supported
+noninteractive `sh`, Bash, and Dash configurations. Commands outside the
+supported forms can still use the decision model.
+
 To use the same approach for a known MCP tool, add its full identity to
 `ellama-tools-irreversible-tool-effects`. The identity includes the server
 category and tool name. This configuration registers a file copy tool
