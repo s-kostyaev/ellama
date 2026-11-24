@@ -1736,36 +1736,63 @@ Include scoping fields because cached entries store the normalized rule plist."
            (t (setq invalid t)))))
       (when (and alias (not invalid)) (nreverse steps)))))
 
-(defun ellama-tools-dlp--sqlite-persistent-write-p (text)
-  "Recognize a persistent UPDATE in a supported SQLite script TEXT.
-Assume the caller has established autocommit at entry.  Stop at any
-unsupported statement before an UPDATE is known to persist."
+(defun ellama-tools-dlp--sqlite-write-effect (text)
+  "Classify supported SQLite script TEXT as persistent, safe, or unknown.
+The caller establishes autocommit at entry and confines writes to SQLite."
   (let ((case-fold-search t)
         (begin "BEGIN\\(?:[ \t]+\\(?:DEFERRED\\|IMMEDIATE\\|EXCLUSIVE\\)\\)?\\(?:[ \t]+TRANSACTION\\)?")
         (end "\\(?:COMMIT\\|END\\|ROLLBACK\\)\\(?:[ \t]+TRANSACTION\\)?")
         (filter "[ \t]+WHERE[ \t]+[a-zA-Z_][a-zA-Z_0-9]*[ \t]*=[ \t]*-?[0-9]+[ \t]*\\'")
-        transaction pending)
+        (delete (concat "\\`DELETE[ \t]+FROM[ \t]+"
+                        "\\(?:[a-zA-Z_][a-zA-Z_0-9]*\\.\\)?[a-zA-Z_][a-zA-Z_0-9]*\\'"))
+        (name "\\([a-zA-Z_][a-zA-Z_0-9]*\\)")
+        (statements (ellama-tools-dlp--sql-split-statements text))
+        frames)
     (catch 'effect
-      (dolist (part (ellama-tools-dlp--sql-split-statements text))
+      (dolist (part statements)
         (string-match (concat "\\`" ellama-tools-dlp--sql-leading-trivia-pattern) part)
         (let ((statement (string-trim (substring part (match-end 0)))))
           (cond
            ((or (string-empty-p statement) (string-match-p "\\`SELECT[ \t]+[0-9]+\\'" statement)))
            ((string-match-p (concat "\\`" begin "\\'") statement)
-            (when transaction (throw 'effect nil))
-            (setq transaction t))
+            (when frames (throw 'effect nil))
+            (push (cons 'transaction nil) frames))
+           ((string-match (concat "\\`SAVEPOINT[ \t]+" name "\\'") statement)
+            (when (>= (length frames) 32) (throw 'effect nil))
+            (push (cons (downcase (match-string 1 statement)) nil) frames))
+           ((string-match (concat "\\`ROLLBACK\\(?:[ \t]+TRANSACTION\\)?[ \t]+TO"
+                                  "\\(?:[ \t]+SAVEPOINT\\)?[ \t]+" name "\\'") statement)
+            (setq frames (cl-member (downcase (match-string 1 statement))
+                                    frames :key #'car :test #'equal))
+            (unless frames (throw 'effect nil))
+            (setcdr (car frames) nil))
+           ((string-match (concat "\\`RELEASE\\(?:[ \t]+SAVEPOINT\\)?[ \t]+" name "\\'") statement)
+            (let ((target (cl-member (downcase (match-string 1 statement))
+                                     frames :key #'car :test #'equal))
+                  dirty)
+              (unless target (throw 'effect nil))
+              (while (not (eq frames (cdr target)))
+                (when (cdar frames) (setq dirty t))
+                (pop frames))
+              (when dirty
+                (unless frames (throw 'effect 'persistent))
+                (setcdr (car frames) t))))
            ((string-match-p (concat "\\`" end "\\'") statement)
-            (unless transaction (throw 'effect nil))
-            (when (and pending (not (string-prefix-p "ROLLBACK" (upcase statement))))
-              (throw 'effect t))
-            (setq transaction nil pending nil))
-           ((string-match-p ellama-tools-dlp--sql-unfiltered-update-regexp
-                            (if (string-match filter statement)
-                                (substring statement 0 (match-beginning 0))
-                              statement))
-            (unless transaction (throw 'effect t))
-            (setq pending t))
-           (t (throw 'effect nil))))))))
+            (unless frames (throw 'effect nil))
+            (when (and (seq-some #'cdr frames)
+                       (not (string-prefix-p "ROLLBACK" (upcase statement))))
+              (throw 'effect 'persistent))
+            (setq frames nil))
+           (t
+            (let ((write (if (string-match filter statement)
+                             (substring statement 0 (match-beginning 0))
+                           statement)))
+              (unless (or (string-match-p ellama-tools-dlp--sql-unfiltered-update-regexp write)
+                          (string-match-p delete write))
+                (throw 'effect nil))
+              (unless frames (throw 'effect 'persistent))
+              (setcdr (car frames) t))))))
+      (when (and statements (not frames)) 'safe))))
 
 (defun ellama-tools-dlp--detect-regex-findings
     (text context &optional rules ignored-builtins)
@@ -3023,7 +3050,10 @@ RAW-TEXT is the complete input before normalization, when available."
                    (ellama-tools-dlp--sql-argument-p (plist-get context :arg-name))))
          (ignored
           (cond
-           ((and raw-text (eq (plist-get context :shell-literal-shape) 'trusted-printer))
+           ((and raw-text (plist-get context :git-deletion-commit))
+            '("ir-shell-rm-direct"))
+           ((and raw-text (or (plist-get context :shell-effect-verified)
+                              (eq (plist-get context :shell-literal-shape) 'trusted-printer)))
             (append '("ir-shell-rm-rf" "ir-shell-rm-rf-root" "ir-shell-rm-direct")
                     ellama-tools-dlp--sql-mutation-rules))
            ((and raw-text (eq (plist-get context :shell-literal-shape) 'printer))
@@ -3082,7 +3112,7 @@ Errors contain no provider message or payload."
          ((and (not (plist-get context :sensitive-key))
                (when-let* ((observe (plist-get context :observe-effect))
                            (rule (funcall observe)))
-                 (list :status 'local :rule-id rule))))
+                 (list :status 'local :rule-id (unless (eq rule 'safe) rule)))))
          ((not ellama-tools-irreversible-decision-provider) nil)
          ((plist-get context :sensitive-key)
           (list :status 'error :error-type 'sensitive-key))

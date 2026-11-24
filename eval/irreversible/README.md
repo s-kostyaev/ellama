@@ -78,6 +78,13 @@ scores behave at your threshold.
 Ellama can recognize a literal Git push and some shell redirections before
 consulting the decision model. It checks the order in which the shell opens
 files, including a write that occurs before a later input redirection fails.
+For supported literal shell lists, conditions, pipelines, and groups,
+Ellama checks each output path. A proven append to an independent regular
+file preserves its previous bytes. Ellama rechecks the file's identity
+and metadata before running the command. A nonrecursive `/bin/rm` or
+`/usr/bin/rm` of one relative file can also proceed when its current
+bytes and mode match Git HEAD and the index. Ellama rechecks that proof
+before launching the shell.
 
 To use the same approach for a known MCP tool, add its full identity to
 `ellama-tools-irreversible-tool-effects`. The identity includes the server
@@ -97,7 +104,9 @@ Choose a contract that matches the tool implementation.
 | `local-copy` | `source`, `destination` and `overwrite` describe a copy onto a verified nonempty local destination without recovery. |
 | `local-batch` | An item in `operations` has `mode` set to `overwrite` and would replace the contents of its local `path` with the text in `with`. |
 | `event-publication` | The tool sets an `event` to public `visibility` with a boolean `notify_attendees` argument. Publication matters even when attendee notifications are disabled. |
-| `sqlite-script` | The tool runs its sole SQL argument in order on a SQLite connection starting in autocommit mode. Ellama recognizes simple updates that persist after a commit or that run outside a transaction. |
+| `release-publication` | The server recognizes `package` and `mode` (publish or draft), `asset` and boolean `preview`, or `content` and boolean `publish_now`. |
+| `money-transfer` | `amount`, `currency` and boolean `dry_run`, or `amount` and boolean `simulate`, distinguish a transfer from a simulation. |
+| `sqlite-script` | The tool executes one SQL argument on a SQLite connection starting in autocommit mode. Ellama follows supported updates and deletes through commits, rollbacks, and named savepoints. The connection's statements and triggers have no effects outside SQLite. |
 
 Both local contracts require the server to use the same filesystem and
 working directory as Ellama. The decision model remains available when

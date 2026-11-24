@@ -1531,8 +1531,9 @@ Return (t . OUTPUTS) with (MODE . OPERAND) pairs, or nil on unsupported syntax."
         (when redirects
           (cons t (append (ellama-tools--shell-named-outputs last target) (cdr redirects))))))))
 
-(defun ellama-tools--shell-pipeline-stages (command)
-  "Split COMMAND at outer pipeline operators, preserving groups and quotes."
+(defun ellama-tools--shell-pipeline-stages (command &optional lists)
+  "Split COMMAND at outer pipeline operators, preserving groups and quotes.
+When LISTS is non-nil, also split supported sequential and conditional lists."
   (let ((start 0) (position 0) closing stages invalid)
     (while (and (not invalid) (< position (length command)))
       (let ((char (aref command position)))
@@ -1546,12 +1547,22 @@ Return (t . OUTPUTS) with (MODE . OPERAND) pairs, or nil on unsupported syntax."
           (?\( (push ?\) closing))
           (?{ (push ?} closing))
           ((or ?\) ?}) (unless (eq char (pop closing)) (setq invalid t)))
-          (?|
-           (unless (or closing (eq (and (> position 0) (aref command (1- position))) ?>))
-             (if (memq (and (< (1+ position) (length command)) (aref command (1+ position))) '(?| ?&))
-                 (setq invalid t)
-               (push (substring command start position) stages)
-               (setq start (1+ position))))))
+          ((or ?| ?& ?\;)
+           (when (and (not closing)
+                      (or lists (eq char ?|))
+                      (not (memq (and (> position 0) (aref command (1- position)))
+                                 '(?> ?<))))
+             (let ((next (and (< (1+ position) (length command)) (aref command (1+ position)))))
+               (cond
+                ((and lists (memq char '(?| ?&)) (eq next char))
+                 (push (substring command start position) stages)
+                 (cl-incf position)
+                 (setq start (1+ position)))
+                ((or (eq char ?&) (memq next '(?| ?& ?\;)))
+                 (setq invalid t))
+                (t
+                 (push (substring command start position) stages)
+                 (setq start (1+ position))))))))
         (setq position (1+ position))))
     (when (and stages (not invalid) (not closing))
       (nreverse (cons (substring command start) stages)))))
@@ -1647,7 +1658,12 @@ DEPTH bounds the traversal.  Return (t . OUTPUTS), or nil on unsupported syntax.
     (save-match-data
       (let* ((case-fold-search nil)
              (hardlink (ignore-errors (ellama-tools--shell-hardlink-prefix command)))
-             (outputs (cdr (ellama-tools--shell-output-operands (or (nth 2 hardlink) command)))))
+             (literal (unless hardlink (ellama-tools--shell-complete-outputs command)))
+             (outputs (if literal
+                          (mapcar (lambda (target)
+                                    (cons (plist-get target :mode) (plist-get target :path)))
+                                  (cdr literal))
+                        (cdr (ellama-tools--shell-output-operands (or (nth 2 hardlink) command))))))
         (delq nil
               (mapcar (lambda (output)
                         (let* ((word (cdr output))
@@ -1747,7 +1763,7 @@ TARGET matches a path that the detector can resolve locally."
     (tool-name arg-name value &optional tool-metadata)
   "Scan VALUE for TOOL-NAME under ARG-NAME and return a decision plist."
   (let (warn-message warn-strong-message skip-decision truncated sensitive-key
-                     shell-outputs overwrite irreversible overwrite-risk)
+                     shell-outputs overwrite irreversible overwrite-risk git-deletion)
     (catch 'done
       (when
           (ellama-tools--dlp-walk-strings
@@ -1765,7 +1781,14 @@ TARGET matches a path that the detector can resolve locally."
                                 (equal path "cmd")
                                 ellama-tools-dlp-enabled
                                 (ellama-tools-dlp--irreversible-scan-p context)))
+                    (commit (and shell
+                                 (<= (string-bytes text) ellama-tools-dlp-max-scan-size)
+                                 (ellama-tools--posix-shell-p)
+                                 (string-match-p "\\`[ \t]*\\(?:/bin/\\|/usr/bin/\\)rm[ \t]+" text)
+                                 (ellama-tools--rm-git-commit text)))
                     (outputs (and shell (ellama-tools--shell-output-evidence text)))
+                    (no-output (and shell (not outputs)
+                                    (equal (ellama-tools--shell-complete-outputs text) '(t))))
                     (truncation (and shell
                                      (seq-some (lambda (output)
                                                  (and (equal (plist-get output :mode) "truncate")
@@ -1775,12 +1798,21 @@ TARGET matches a path that the detector can resolve locally."
                                    (cond
                                     ((cdr outputs)
                                      (ellama-tools--shell-multiple-output-evidence text outputs))
-                                    (truncation (ellama-tools--shell-overwrite-evidence text))
+                                    (truncation
+                                     (or (ellama-tools--shell-overwrite-evidence text)
+                                         (ellama-tools--shell-no-loss-evidence text outputs)))
                                     (t (ellama-tools--shell-no-loss-evidence text outputs)))))
                     (shell-risk (and shell (not evidence)
                                      (or truncation (ellama-tools--nonempty-shell-truncation-p text))))
                     (context (if evidence
                                  (plist-put context :overwrite-source (plist-get evidence :source))
+                               context))
+                    (context (if commit
+                                 (plist-put (plist-put context :git-deletion-commit commit)
+                                            :overwrite-source 'git-deletion)
+                               context))
+                    (context (if (or evidence no-output)
+                                 (plist-put context :shell-effect-verified t)
                                context))
                     (scan
                      (let ((ellama-tools-dlp-llm-check-enabled
@@ -1800,6 +1832,7 @@ TARGET matches a path that the detector can resolve locally."
                     (irreversible-finding (ellama-tools-dlp--has-irreversible-findings-p
                                            (plist-get scan :findings))))
                (when outputs (setq shell-outputs outputs))
+               (when commit (setq git-deletion commit))
                (when evidence (setq overwrite evidence))
                (when (or shell-risk
                          (seq-some (lambda (output)
@@ -1810,7 +1843,7 @@ TARGET matches a path that the detector can resolve locally."
                (when irreversible-finding (setq irreversible t))
                (when key-finding
                  (setq sensitive-key t))
-               (when (or irreversible-finding
+               (when (or irreversible-finding commit no-output
                          (and shell (eq (plist-get context :shell-literal-shape) 'trusted-printer))
                          (memq (plist-get verdict :configured-action)
                                '(block redact)))
@@ -1843,7 +1876,8 @@ TARGET matches a path that the detector can resolve locally."
         (setq truncated t))
       (append (list :skip-decision skip-decision :truncated truncated :sensitive-key sensitive-key
                     :shell-outputs shell-outputs :overwrite-evidence overwrite
-                    :irreversible irreversible :overwrite-risk overwrite-risk)
+                    :irreversible irreversible :overwrite-risk overwrite-risk
+                    :rm-git-commit git-deletion)
               (cond
                (warn-strong-message
                 (list :action 'warn-strong :message warn-strong-message))
@@ -1886,10 +1920,14 @@ named tool.  Use local-copy and local-batch only for a tool that
 operates on the same local files and working directory as Ellama.
 Use sqlite-script for a tool that runs its query in order on a
 SQLite connection in autocommit mode, without a surrounding transaction.
+Its statements and triggers must have no effects outside SQLite.
+Use release-publication or money-transfer only for tools that honor
+their explicit draft, preview, or simulation modes.
 Set this only for implementations whose argument semantics you know."
   :type '(alist :key-type string
                 :value-type (choice (const local-copy) (const local-batch)
-                                    (const event-publication) (const sqlite-script)))
+                                    (const event-publication) (const release-publication)
+                                    (const money-transfer) (const sqlite-script)))
   :group 'ellama-tools-dlp)
 
 (defun ellama-tools--unrecoverable-destination-p (path)
@@ -1903,8 +1941,32 @@ Set this only for implementations whose argument semantics you know."
               ((> (file-attribute-size attrs) 0)))
     (not (ellama-tools--file-overwrite-evidence file))))
 
+(defun ellama-tools--tool-effect-flag (name args)
+  "Return on or off for an explicit boolean NAME in ARGS."
+  (when-let* ((arg (assoc name args)))
+    (pcase (cdr arg)
+      ('t 'on)
+      ((or 'nil :false :json-false) 'off))))
+
+(defun ellama-tools--release-effect (args)
+  "Classify the supported release publication forms in ARGS."
+  (when (= (length args) 2)
+    (cond
+     ((stringp (cdr (assoc "package" args)))
+      (pcase (cdr (assoc "mode" args))
+        ("publish" "ir-tool-publication")
+        ("draft" 'safe)))
+     ((stringp (cdr (assoc "asset" args)))
+      (pcase (ellama-tools--tool-effect-flag "preview" args)
+        ('on 'safe)
+        ('off "ir-tool-publication")))
+     ((stringp (cdr (assoc "content" args)))
+      (pcase (ellama-tools--tool-effect-flag "publish_now" args)
+        ('on "ir-tool-publication")
+        ('off 'safe))))))
+
 (defun ellama-tools--registered-tool-effect (contract args)
-  "Return an irreversible rule established by CONTRACT and named ARGS."
+  "Return an irreversible rule, safe, or nil for CONTRACT and named ARGS."
   (pcase contract
     ('local-copy
      (when (and (= (length args) 3) (eq (cdr (assoc "overwrite" args)) t))
@@ -1947,11 +2009,23 @@ Set this only for implementations whose argument semantics you know."
                  ((memq (cdr notification) '(t nil :false :json-false)))
                  ((equal (cdr (assoc "visibility" args)) "public")))
        "ir-tool-publication"))
+    ('release-publication (ellama-tools--release-effect args))
+    ('money-transfer
+     (when-let* ((amount (cdr (assoc "amount" args)))
+                 ((and (numberp amount) (> amount 0)))
+                 (simulation
+                  (cond
+                   ((and (= (length args) 3) (stringp (cdr (assoc "currency" args))))
+                    (ellama-tools--tool-effect-flag "dry_run" args))
+                   ((= (length args) 2)
+                    (ellama-tools--tool-effect-flag "simulate" args)))))
+       (if (eq simulation 'on) 'safe "ir-tool-transfer")))
     ('sqlite-script
      (when (and (= (length args) 1)
-                (ellama-tools-dlp--sql-argument-p (caar args))
-                (ellama-tools-dlp--sqlite-persistent-write-p (cdar args)))
-       "ir-sql-persistent-write"))))
+                (ellama-tools-dlp--sql-argument-p (caar args)))
+       (pcase (ellama-tools-dlp--sqlite-write-effect (cdar args))
+         ('persistent "ir-sql-persistent-write")
+         ('safe 'safe))))))
 
 (defun ellama-tools--dlp-input-decision (tool-plist call-args)
   "Scan TOOL-PLIST CALL-ARGS and return decision plist.
@@ -1984,6 +2058,7 @@ Return plist with keys `:action' and optional `:message'."
          backup-options
          shell-outputs
          shell-deletion-evidence
+         git-deletion
          irreversible
          overwrite-risk
          (overwrite (and ellama-tools-dlp-enabled ellama-tools-irreversible-enabled
@@ -2035,6 +2110,8 @@ Return plist with keys `:action' and optional `:message'."
               (setq sensitive-key t))
             (when-let* ((outputs (plist-get arg-decision :shell-outputs)))
               (setq shell-outputs outputs))
+            (when-let* ((commit (plist-get arg-decision :rm-git-commit)))
+              (setq git-deletion commit))
             (when-let* ((recovery (plist-get arg-decision :overwrite-evidence)))
               (setq overwrite recovery))
             (when (plist-get arg-decision :irreversible) (setq irreversible t))
@@ -2094,6 +2171,8 @@ Return plist with keys `:action' and optional `:message'."
             (setq verdict (plist-put verdict :truncated t)))
           (when (plist-get shell-deletion-evidence :commit)
             (setq verdict (plist-put verdict :shell-deletion-recovery shell-deletion-evidence)))
+          (when git-deletion
+            (setq verdict (plist-put verdict :rm-git-commit git-deletion)))
           (if overwrite (plist-put verdict :overwrite-evidence overwrite) verdict))))))
 
 (defun ellama-tools--dlp-call-details (tool-plist call-args &optional decision)
@@ -2376,7 +2455,7 @@ Allow RECURSIVE removal options when preparing a trash hint."
     (let ((case-fold-search nil))
       (when (and (stringp command)
                  (string-match
-                  (concat "\\`[ \t]*rm[ \t]+"
+                  (concat "\\`[ \t]*\\(?:/bin/\\|/usr/bin/\\)?rm[ \t]+"
                           (if recursive
                               "\\(?:\\(?:-[frR]+\\|--force\\|--recursive\\)[ \t]+\\)*"
                             "\\(?:-f[ \t]+\\)?")
@@ -2650,6 +2729,43 @@ file contents, or discovered paths.  An unverified result proves no recovery."
                                     collect (list :path path :mode mode))))
                 (list :writer program :targets targets)))))))))
 
+(defun ellama-tools--shell-complete-outputs (command &optional depth)
+  "Prove the complete output effects of supported literal COMMAND.
+Return (t . TARGETS) in redirection order.  DEPTH bounds group traversal."
+  (when (and (ellama-tools--posix-shell-p)
+             (<= (string-bytes command) ellama-tools-dlp-max-scan-size)
+             (< (or depth 0) 8))
+    (save-match-data
+      (let ((next (1+ (or depth 0)))
+            (case-fold-search nil))
+        (cond
+         ((when-let* ((literal (ellama-tools--literal-file-outputs command)))
+            (cons t (plist-get literal :targets))))
+         ((or (eq (ellama-tools--shell-literal-shape command) 'trusted-printer)
+              (and (string-match "\\`[ \t]*command[ \t]+" command)
+                   (memq (ellama-tools--shell-literal-shape (substring command (match-end 0)))
+                         '(printer trusted-printer)))
+              (string-match-p
+               (concat "\\`[ \t]*\\(?::\\|\\(?:command[ \t]+\\|/bin/\\|/usr/bin/\\)"
+                       "\\(?:true\\|false\\|test[ \t]+\\(?:![ \t]+\\)?"
+                       "-[efs][ \t]+[a-zA-Z0-9_./][a-zA-Z0-9_./-]*\\)\\)[ \t]*\\'") command))
+          (list t))
+         ((when-let* ((stages (ellama-tools--shell-pipeline-stages command t))
+                      ((<= (length stages) 16))
+                      (effects (mapcar (lambda (stage) (ellama-tools--shell-complete-outputs stage next))
+                                       stages))
+                      ((not (memq nil effects))))
+            (cons t (mapcan #'cdr effects))))
+         ((or (string-match "\\`[ \t]*(\\(.*\\))\\([ \t]*\\(?:>.*\\)?\\)\\'" command)
+              (string-match "\\`[ \t]*{[ \t]+\\(.*\\);[ \t]+}\\([ \t]*\\(?:>.*\\)?\\)\\'" command))
+          (let* ((body (match-string 1 command))
+                 (suffix (match-string 2 command))
+                 (outer (unless (string-blank-p suffix)
+                          (ellama-tools--literal-file-outputs (concat ": " suffix)))))
+            (when-let* (((or (string-blank-p suffix) outer))
+                        (inner (ellama-tools--shell-complete-outputs body next)))
+              (cons t (append (plist-get outer :targets) (cdr inner)))))))))))
+
 (defun ellama-tools--literal-file-output (command)
   "Return the path, writer and mode for a single literal output in COMMAND."
   (when-let* ((parsed (ellama-tools--literal-file-outputs command))
@@ -2890,7 +3006,11 @@ When RECOVERABLE is non-nil, also check recovery evidence for truncation."
     (cond
      ((member state '("empty" "missing" "directory"))
       (list :source 'shell-no-loss :path file :state state :mode mode))
-     ;; Appending can damage a file format while preserving the old bytes.
+     ((and (equal state "nonempty") (equal mode "append")
+           (file-regular-p file)
+           (ellama-tools--shell-independent-output-p file))
+      (when-let* ((stamp (ellama-tools--shell-output-stamp file)))
+        (list :source 'shell-append :path file :mode mode :stamp stamp)))
      ((and recoverable (equal state "nonempty") (equal mode "truncate"))
       (ellama-tools--file-overwrite-evidence file t)))))
 
@@ -2898,8 +3018,9 @@ When RECOVERABLE is non-nil, also check recovery evidence for truncation."
   "Return checked evidence for a literal writer in COMMAND and its OUTPUTS."
   (ignore-errors
     (when-let* (((= (length outputs) 1))
-                (output (ellama-tools--literal-file-output command)))
-      (ellama-tools--shell-output-target-evidence output (car outputs)))))
+                (targets (cdr (ellama-tools--shell-complete-outputs command)))
+                ((null (cdr targets))))
+      (ellama-tools--shell-output-target-evidence (car targets) (car outputs) t))))
 
 (defun ellama-tools--overwrite-backup-path (proof)
   "Return the backup path required by the overwrite PROOF, if any."
@@ -2920,7 +3041,7 @@ When RECOVERABLE is non-nil, also check recovery evidence for truncation."
     ;; Each nonempty destination can require several synchronous Git checks.
     (when-let* ((count (length outputs))
                 ((<= 2 count 16))
-                (targets (plist-get (ellama-tools--literal-file-outputs command) :targets))
+                (targets (cdr (ellama-tools--shell-complete-outputs command)))
                 ((= count (length targets)))
                 (evidence
                  (cl-loop for target in targets
@@ -2929,8 +3050,17 @@ When RECOVERABLE is non-nil, also check recovery evidence for truncation."
                           unless proof return nil
                           collect proof))
                 (paths (mapcar (lambda (proof) (plist-get proof :path)) evidence))
-                ((not (cl-loop for (path . remaining) on paths
-                               thereis (ellama-tools--shell-output-alias-p path remaining))))
+                ((not (cl-loop for (proof . remaining) on evidence
+                               thereis
+                               (seq-some
+                                (lambda (other)
+                                  (let ((path (plist-get proof :path))
+                                        (other-path (plist-get other :path)))
+                                    (and (ellama-tools--shell-output-alias-p path (list other-path))
+                                         (not (and (equal path other-path)
+                                                   (equal (plist-get proof :mode) "append")
+                                                   (equal (plist-get other :mode) "append"))))))
+                                remaining))))
                 ((not (seq-some (lambda (proof)
                                   (ellama-tools--shell-output-alias-p
                                    (ellama-tools--overwrite-backup-path proof) paths))
@@ -2954,6 +3084,10 @@ When MULTIPLE is non-nil, require independent destinations and local Git data."
             ('backup (and (eq session (plist-get evidence :session))
                           (equal (plist-get evidence :backup)
                                  (ellama-tools--session-file-backup session path))))
+            ('shell-append (and (file-regular-p path)
+                                (ellama-tools--shell-independent-output-p path)
+                                (equal (plist-get evidence :stamp)
+                                       (ellama-tools--shell-output-stamp path))))
             ('shell-no-loss (equal (plist-get evidence :state)
                                    (ellama-tools--shell-output-state path))))))))
 
@@ -2980,7 +3114,7 @@ When MULTIPLE is non-nil, require independent destinations and local Git data."
 (defun ellama-tools--shell-overwrite-evidence-current-p (command evidence session)
   "Recheck every destination of COMMAND against EVIDENCE for SESSION."
   (ignore-errors
-    (let* ((targets (plist-get (ellama-tools--literal-file-outputs command) :targets))
+    (let* ((targets (cdr (ellama-tools--shell-complete-outputs command)))
            (multiple (eq (plist-get evidence :source) 'shell-outputs))
            (proofs (if multiple (plist-get evidence :targets) (list evidence))))
       (and (= (length targets) (length proofs))
@@ -3041,6 +3175,7 @@ When MULTIPLE is non-nil, require independent destinations and local Git data."
                             tool-plist args))
                  (ellama-tools--overwrite-evidence (plist-get decision :overwrite-evidence))
                  (ellama-tools--shell-deletion-recovery (plist-get decision :shell-deletion-recovery))
+                 (ellama-tools--confirmed-rm-git-evidence (plist-get decision :rm-git-commit))
                  (action (plist-get decision :action))
                  (message (plist-get decision :message))
                  (hint (ellama-tools--dlp-refusal-hint
@@ -3089,7 +3224,8 @@ When MULTIPLE is non-nil, require independent destinations and local Git data."
                    (ellama-tools--dlp-return-message
                     async args
                     (concat (ellama-tools--dlp-blocked-noninteractive-message tool-name message) hint))
-                 (let* ((commit (ellama-tools--rm-git-evidence tool-plist args))
+                 (let* ((commit (or ellama-tools--confirmed-rm-git-evidence
+                                    (ellama-tools--rm-git-evidence tool-plist args)))
                         (warning
                          (if commit
                              (format (concat "%s. Before confirmation, Ellama found "
@@ -5194,7 +5330,7 @@ TIMEOUT is the optional command timeout in seconds."
               (kill-buffer buf)
               (user-error
                (concat "Ellama could not reverify the file against Git "
-                       "after confirmation. Submit the tool call again.")))
+                       "before execution. Submit the tool call again.")))
             (when (and ellama-tools--shell-deletion-recovery
                        (not (equal ellama-tools--shell-deletion-recovery
                                    (ellama-tools--shell-deletion-evidence cmd))))
