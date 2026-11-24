@@ -36,12 +36,15 @@ python3 eval/irreversible/run.py --backend structured-chat \
 ```
 
 Add `--group original` for a short first run. The evaluator warms up the
-model once and then checks cases in order. It uses temperature 0, disables
-thinking, and allows 128 output tokens by default. Add `--thinking` to test
-with reasoning enabled. That raises the default budget to 1024 tokens, and
-`--max-output-tokens` lets you set it explicitly. For a server that requires
-authentication, set `ELLAMA_EVAL_API_KEY` and use that same key as a bearer
-token when listing models.
+model once and then checks cases in order. The JSON schema puts a short
+`reasoning` string before `probability`. The evaluator uses temperature 0,
+disables the server's native thinking, and allows 128 output tokens by
+default. The JSON `reasoning` field works independently of the server's
+thinking mode. Add `--thinking` to enable native thinking and raise the
+default budget to 1024 tokens. Use `--max-output-tokens` to set the budget
+explicitly. For a server that requires authentication, set
+`ELLAMA_EVAL_API_KEY` and use that same key as a bearer token when listing
+models.
 
 The same fixtures, local rules and threshold of 0.5 apply to both backends.
 An invalid, incomplete or abstaining answer triggers the strict policy and
@@ -64,10 +67,11 @@ provider in Emacs. This setting is separate from the command-line evaluation.
 ```
 
 The chat server receives the same tool state and decision criteria. The
-adapter accepts a probability between 0 and 1, or `null` when the model
-cannot decide. Ellama applies the configured irreversible-action policy to
-an abstention or invalid response. Chat scores are estimates from the
-selected model. Use the eval to check how they behave at your threshold.
+adapter checks that `reasoning` is a string and passes a numeric
+`probability` between 0 and 1 to Ellama's policy. The model can abstain by
+returning `null`. Ellama applies the configured irreversible-action policy to
+an abstention or invalid response. Use the eval to see how the model's
+scores behave at your threshold.
 
 ## Select cases
 

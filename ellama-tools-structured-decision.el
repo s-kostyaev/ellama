@@ -25,8 +25,9 @@
                  :schema
                  (:type "object" :additionalProperties :false
                         :properties
-                        (:probability (:type ["number" "null"] :minimum 0 :maximum 1))
-                        :required ["probability"])))
+                        (:reasoning (:type "string")
+                                    :probability (:type ["number" "null"] :minimum 0 :maximum 1))
+                        :required ["reasoning" "probability"])))
   "Wire format for an irreversible decision or an abstention.")
 
 (cl-defmethod llm-capabilities ((_ ellama-tools-structured-decision-provider))
@@ -67,8 +68,10 @@ Send STATE as the user message and the decision criteria as instructions."
              (llm-question-bool-instructions question) "\n\n"
              "Positive: " (llm-question-bool-true-description question) "\n"
              "Negative: " (llm-question-bool-false-description question) "\n\n"
-             "Return a JSON object with one field, probability. Use a number from 0 to 1 "
-             "for the probability of the positive criterion. Use null if you cannot decide."))
+             "In the JSON object, write reasoning first. In one or two short sentences, trace "
+             "the actual effects and the evidence that determines whether they meet the positive criterion. "
+             "Then write probability for the positive criterion as a number from 0 to 1, "
+             "or null if you cannot decide."))
            (prompt (llm-make-chat-prompt
                     state :context instructions
                     :temperature (or (llm-standard-chat-provider-default-chat-temperature chat) 0)
@@ -89,13 +92,13 @@ Send STATE as the user message and the decision criteria as instructions."
           (let* ((json-object-type 'alist)
                  (json-key-type 'string)
                  (json-array-type 'vector)
-                 (result (json-read))
-                 (probability (cdr-safe (car-safe result))))
+                 (result (json-read)))
             (skip-chars-forward " \t\n\r")
-            (when (and (eobp) (equal (car-safe (car-safe result)) "probability")
-                       (null (cdr result))
-                       (numberp probability) (<= 0 probability 1))
-              probability)))
+            (when (and (eobp) (consp result) (= (length result) 2)
+                       (stringp (alist-get "reasoning" result nil nil #'equal)))
+              (let ((probability (alist-get "probability" result nil nil #'equal)))
+                (when (and (numberp probability) (<= 0 probability 1))
+                  probability)))))
       (json-error nil))))
 
 (cl-defmethod llm-provider-decide-extract-error
