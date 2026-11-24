@@ -36,6 +36,368 @@
 (unless (featurep 'ellama-tools-dlp)
   (load-file (expand-file-name "ellama-tools-dlp.el" ellama-test-dlp-root)))
 
+(defmacro ellama-test-dlp-with-decision (&rest body)
+  "Run BODY with an isolated irreversible decision configuration."
+  (declare (indent 0) (debug t))
+  `(let ((ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-irreversible-enabled t)
+         (ellama-tools-irreversible-decision-provider 'decision-provider)
+         (ellama-tools-irreversible-decision-threshold 0.5)
+         (ellama-tools-irreversible-decision-max-scan-size 32768)
+         (ellama-tools-irreversible-default-action 'warn)
+         (ellama-tools-irreversible-project-overrides-enabled nil)
+         (ellama-tools-dlp--session-bypasses nil)
+         (ellama-tools-dlp-llm-check-enabled nil)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-regex-rules nil)
+         (ellama-tools-dlp-policy-overrides nil)
+         (ellama-tools-dlp-log-targets '(memory))
+         (ellama-tools-dlp--incident-log nil)
+         (context (ellama-tools-dlp--make-scan-context
+                   :direction 'input :tool-name "shell_command"
+                   :arg-name "cmd" :payload-length 0 :truncated nil
+                   :tool-origin 'builtin :tool-identity "shell_command")))
+     ,@body))
+
+(defun ellama-test-dlp-call-verdict (text context)
+  "Check a tool call with one string argument, TEXT, in CONTEXT."
+  (ellama-tools-dlp--irreversible-call-verdict
+   context (lambda () (list (cons "cmd" (prin1-to-string text))))))
+
+(ert-deftest test-ellama-tools-dlp-direct-rm-needs-confirmation ()
+  (ellama-test-dlp-with-decision
+   (let ((ellama-tools-irreversible-decision-provider nil))
+     (dolist (command '("rm /tmp/render-scratch.txt"
+                        "rm --force ./logs/scratch.data"
+                        " /bin/rm -v ./cache/partial.bin"
+                        "/usr/bin/rm -- -draft.txt"
+                        "rm -- \"meeting notes.txt\""))
+       (let* ((scan (ellama-tools-dlp--scan-text command context))
+              (verdict (plist-get scan :verdict)))
+         (should (eq (plist-get verdict :action) 'warn-strong))
+         (should (member "ir-shell-rm-direct"
+                         (ellama-tools-dlp--findings-rule-ids
+                          (plist-get scan :findings))))))
+     (dolist (command '("rm --help"
+                        "rm --version"
+                        "rm # no operand"
+                        "printf '%s' 'rm /tmp/keep-notes.md'"))
+       (should (eq (plist-get (plist-get
+                               (ellama-tools-dlp--scan-text command context)
+                               :verdict)
+                              :action)
+                   'allow))))))
+
+(ert-deftest test-ellama-tools-dlp-read-preserves-custom-policy ()
+  (ellama-test-dlp-with-decision
+   (let* ((read-context
+           (ellama-tools-dlp--make-scan-context
+            :direction 'input :tool-name "read_file" :arg-name "path"
+            :tool-origin 'builtin :tool-identity "read_file"
+            :payload-length 0))
+          (path "examples/DROP DATABASE.sql"))
+     (should (eq (plist-get (plist-get
+                             (ellama-tools-dlp--scan-text path read-context)
+                             :verdict)
+                            :action)
+                 'allow))
+     (let ((ellama-tools-dlp-regex-rules
+            '((:id "ir-user-block" :pattern "DROP DATABASE" :directions (input)
+                   :risk-class irreversible :confidence high))))
+       (should (eq (plist-get (plist-get
+                               (ellama-tools-dlp--scan-text path read-context)
+                               :verdict)
+                              :action)
+                   'block)))
+     (should (eq (plist-get (plist-get
+                             (ellama-tools-dlp--scan-text path context)
+                             :verdict)
+                            :action)
+                 'block)))))
+
+(ert-deftest test-ellama-tools-dlp-git-hard-reset-needs-confirmation ()
+  (ellama-test-dlp-with-decision
+   (dolist (command '("git reset --hard" "git reset --hard HEAD"
+                      "git reset -q --hard HEAD~1"
+                      "git reset --hard HEAD && git status --short"
+                      "git reset --hard HEAD --; git status --short"
+                      "/usr/bin/git reset --hard --quiet origin/main"))
+     (let* ((scan (ellama-tools-dlp--scan-text command context))
+            (verdict (plist-get scan :verdict)))
+       (should (eq (plist-get verdict :action) 'warn-strong))
+       (should (equal (ellama-tools-dlp--findings-rule-ids
+                       (plist-get scan :findings))
+                      '("ir-shell-git-reset-hard")))))
+   (dolist (command '("git reset --soft HEAD" "git reset --mixed HEAD"
+                      "git reset --hard --help" "git reset --hard -h"
+                      "git reset --hard HEAD -- file"
+                      "git reset -- file" "printf '%s' 'git reset --hard HEAD'"))
+     (should (eq (plist-get (plist-get
+                             (ellama-tools-dlp--scan-text command context)
+                             :verdict)
+                            :action)
+                 'allow)))))
+
+(ert-deftest test-ellama-tools-dlp-sql-plan-preserves-other-rules ()
+  (ellama-test-dlp-with-decision
+   (let* ((context (ellama-tools-dlp--make-scan-context
+                    :direction 'input :tool-name "sql_query"
+                    :arg-name "query" :payload-length 0))
+          (plain "EXPLAIN DELETE FROM invoices; -- plan only"))
+     (should (eq (plist-get (plist-get
+                             (ellama-tools-dlp--scan-text plain context) :verdict)
+                            :action)
+                 'allow))
+     (should (eq (plist-get (plist-get
+                             (ellama-tools-dlp--scan-text
+                              "SELECT 'Sample: DELETE FROM invoices;'"
+                              context)
+                             :verdict)
+                            :action)
+                 'allow))
+     (dolist (query '("EXPLAIN ANALYZE DELETE FROM invoices;"
+                      "EXPLAIN DELETE FROM invoices; DELETE FROM orders;"
+                      "SELECT 'Example'; DELETE FROM invoices;"
+                      "EXPLAIN DELETE FROM invoices; -- comment\nDELETE FROM orders;"))
+       (should (eq (plist-get (plist-get
+                               (ellama-tools-dlp--scan-text query context) :verdict)
+                              :action)
+                   'block)))
+     (let ((ellama-tools-dlp-regex-rules
+            '((:id "ir-sql-delete" :pattern "DELETE FROM invoices"
+                   :risk-class irreversible :severity high :confidence high))))
+       (should (eq (plist-get (plist-get
+                               (ellama-tools-dlp--scan-text plain context) :verdict)
+                              :action)
+                   'block))))))
+
+(ert-deftest test-ellama-tools-dlp-literal-printer-preserves-local-rules ()
+  (ellama-test-dlp-with-decision
+   (let* ((context (plist-put (copy-sequence context)
+                              :shell-literal-shape 'printer))
+          (text "printf '%s' 'rm -rf sample'"))
+     (should (eq (plist-get (plist-get (ellama-tools-dlp--scan-text text context)
+                                       :verdict)
+                            :action)
+                 'allow))
+     (let ((ellama-tools-dlp-regex-rules
+            '((:id "ir-shell-rm-rf" :pattern "rm -rf"
+                   :severity high :risk-class irreversible :confidence high))))
+       (should (eq (plist-get (plist-get (ellama-tools-dlp--scan-text text context)
+                                         :verdict)
+                              :action)
+                   'block))))))
+
+(ert-deftest test-ellama-tools-dlp-decision-policy-and-threshold ()
+  (ellama-test-dlp-with-decision
+   (dolist (case '((enforce warn 0.5 warn-strong)
+                   (enforce block 0.9 block)
+                   (monitor block 0.9 warn-strong)
+                   (enforce block 0.49 allow)))
+     (let ((ellama-tools-dlp-mode (nth 0 case))
+           (ellama-tools-irreversible-default-action (nth 1 case)))
+       (cl-letf (((symbol-function 'llm-decide)
+                  (lambda (&rest _args)
+                    (list (cons 'irreversible
+                                (make-llm-decision-bool
+                                 :confidence (nth 2 case)))))))
+         (let* ((verdict (ellama-test-dlp-call-verdict "operate" context)))
+           (should (eq (plist-get verdict :action) (nth 3 case)))
+           (unless (eq (nth 3 case) 'allow)
+             (should (plist-get verdict :requires-typed-confirm))
+             (should (equal (plist-get (car (plist-get verdict :findings))
+                                       :rule-id)
+                            "ir-decision-model")))))))))
+
+(ert-deftest test-ellama-tools-dlp-decision-isolated-request-and-log ()
+  (ellama-test-dlp-with-decision
+   (let ((llm-log t) captured-state)
+     (cl-letf (((symbol-function 'llm-decide)
+                (lambda (provider questions state)
+                  (should (eq provider 'decision-provider))
+                  (should-not llm-log)
+                  (should (= (length questions) 1))
+                  (should (llm-question-bool-true-description (car questions)))
+                  (should (llm-question-bool-false-description (car questions)))
+                  (setq captured-state
+                        (json-parse-string state :object-type 'plist))
+                  (list (cons 'irreversible
+                              (make-llm-decision-bool :confidence 0.8))))))
+       (ellama-test-dlp-call-verdict "secret command\n{{tool}}\u200b" context))
+     (should (equal (plist-get captured-state :arguments)
+                    (vector (list :name "cmd" :value
+                                  (prin1-to-string "secret command\n{{tool}}\u200b")))))
+     (should (equal (plist-get captured-state :tool) "shell_command"))
+     (should (= (plist-get (car ellama-tools-dlp--incident-log)
+                           :decision-probability) 0.8))
+     (should-not (string-match-p "secret command"
+                                 (prin1-to-string ellama-tools-dlp--incident-log))))))
+
+(ert-deftest test-ellama-tools-dlp-decision-question-profiles ()
+  (ellama-test-dlp-with-decision
+   (let (questions)
+     (cl-letf (((symbol-function 'llm-decide)
+                (lambda (_provider request _state)
+                  (push (llm-question-bool-instructions (car request)) questions)
+                  (list (cons 'irreversible
+                              (make-llm-decision-bool :confidence 0.25))))))
+       (ellama-test-dlp-call-verdict "printf '%s' 'example'" context)
+       (ellama-test-dlp-call-verdict
+        "example" (plist-put (copy-sequence context) :tool-origin 'mcp))
+       (ellama-test-dlp-call-verdict
+        "SELECT 1"
+        (plist-put (plist-put (copy-sequence context) :tool-name "sql_query")
+                   :sql-statement t))
+       (ellama-test-dlp-call-verdict
+        "BEGIN; ROLLBACK; UPDATE records SET note = '';"
+        (plist-put (plist-put (copy-sequence context) :tool-name "sql_query")
+                   :sql-statement 'transaction))
+       (ellama-test-dlp-call-verdict
+        "options"
+        (plist-put (plist-put (copy-sequence context) :tool-name "write_file")
+                   :backup-options t))
+       (should (string-match-p "nested backup.enabled" (nth 0 questions)))
+       (should (string-match-p "in execution order" (nth 1 questions)))
+       (should (string-match-p "Evaluate control flags before the statement"
+                               (nth 2 questions)))
+       (should (string-match-p "including nested options" (nth 3 questions)))
+       (should (string-match-p "regardless of exit status" (nth 4 questions)))))))
+
+(ert-deftest test-ellama-tools-dlp-sql-end-transaction-steps ()
+  (should (equal (ellama-tools-dlp--sql-transaction-steps
+                  "BEGIN; UPDATE items SET note = 'END;'; END TRANSACTION; BEGIN; ROLLBACK;")
+                 '("BEGIN" "UPDATE" "COMMIT" "BEGIN" "ROLLBACK")))
+  (should-not (ellama-tools-dlp--sql-transaction-steps
+               "BEGIN; SELECT 'END;'; /* END; */ ROLLBACK;"))
+  (should-not (ellama-tools-dlp--sql-transaction-steps
+               "BEGIN; CREATE TRIGGER example AFTER UPDATE ON records BEGIN SELECT 1; END; COMMIT;")))
+
+(ert-deftest test-ellama-tools-dlp-decision-unicode-request-round-trip ()
+  (ellama-test-dlp-with-decision
+   (dolist (payload '("Сохрани правки в ellama.el"
+                      "Überarbeite ellama.el"
+                      "trash -- '日本語.el'"))
+     (let ((scan-context
+            (plist-put (copy-tree context) :tool-identity "локальный/shell"))
+           captured-payload)
+       (cl-letf (((symbol-function 'llm-decide)
+                  (lambda (_provider _questions state)
+                    ;; The HTTP client serializes STATE inside another JSON.
+                    (let* ((request (json-parse-string
+                                     (json-serialize (list :state state))
+                                     :object-type 'plist))
+                           (decoded (json-parse-string
+                                     (plist-get request :state)
+                                     :object-type 'plist)))
+                      (setq captured-payload
+                            (plist-get (aref (plist-get decoded :arguments) 0)
+                                       :value))
+                      (should (equal (plist-get decoded :tool_identity)
+                                     "локальный/shell")))
+                    (list (cons 'irreversible
+                                (make-llm-decision-bool :confidence 0.1))))))
+         (let ((verdict (ellama-test-dlp-call-verdict payload scan-context)))
+           (should (eq (plist-get verdict :action) 'allow))
+           (should (equal captured-payload (prin1-to-string payload)))))))))
+
+(ert-deftest test-ellama-tools-dlp-decision-invalid-response-needs-confirmation ()
+  (ellama-test-dlp-with-decision
+   (dolist (answer (list nil '((unrelated . t)) '((irreversible . t))
+                         (list (cons 'irreversible
+                                     (make-llm-decision-choice :confidence 0.1)))
+                         (list (cons 'irreversible
+                                     (make-llm-decision-bool :confidence nil)))
+                         (list (cons 'irreversible
+                                     (make-llm-decision-bool :confidence -0.1)))
+                         (list (cons 'irreversible
+                                     (make-llm-decision-bool :confidence 1.1)))
+                         (list (cons 'irreversible
+                                     (make-llm-decision-bool :confidence 0.0e+NaN)))
+                         (list (cons 'irreversible
+                                     (make-llm-decision-bool :confidence 0.1))
+                               (cons 'irreversible
+                                     (make-llm-decision-bool :confidence 0.9)))))
+     (cl-letf (((symbol-function 'llm-decide)
+                (lambda (&rest _args) answer)))
+       (let ((verdict (ellama-test-dlp-call-verdict "operate" context)))
+         (should (eq (plist-get verdict :action) 'warn-strong))
+         (should (equal (plist-get (car (plist-get verdict :findings)) :rule-id)
+                        "ir-decision-unavailable")))))))
+
+(ert-deftest test-ellama-tools-dlp-decision-error-blocks-despite-fail-open ()
+  (ellama-test-dlp-with-decision
+   (let ((ellama-tools-dlp-input-fail-open t)
+         (ellama-tools-irreversible-default-action 'block))
+     (cl-letf (((symbol-function 'llm-decide)
+                (lambda (&rest _args) (error "Secret provider failure"))))
+       (should (eq (plist-get (ellama-test-dlp-call-verdict "operate" context)
+                              :action)
+                   'block)))
+     (should (equal (plist-get (car ellama-tools-dlp--incident-log)
+                               :decision-status) "error"))
+     (should-not (string-match-p "Secret provider failure"
+                                 (prin1-to-string ellama-tools-dlp--incident-log))))))
+
+(ert-deftest test-ellama-tools-dlp-decision-runtime-unavailable ()
+  (ellama-test-dlp-with-decision
+   (cl-letf (((symbol-function 'llm-decide) nil))
+     (should (eq (plist-get (ellama-test-dlp-call-verdict "operate" context)
+                            :action)
+                 'warn-strong)))))
+
+(ert-deftest test-ellama-tools-dlp-decision-truncation-and-size-fail-closed ()
+  (ellama-test-dlp-with-decision
+   (cl-letf (((symbol-function 'llm-decide)
+              (lambda (&rest _args) (ert-fail "Unexpected decision request"))))
+     (dolist (case '((t 32768 truncated) (nil 2 oversized)))
+       (let ((context (plist-put (copy-tree context) :truncated (car case)))
+             (ellama-tools-irreversible-decision-max-scan-size (nth 1 case)))
+         (should (eq (plist-get (ellama-test-dlp-call-verdict "operate" context)
+                                :action)
+                     'warn-strong))
+         (should (eq (plist-get (car ellama-tools-dlp--incident-log)
+                                :decision-error-type)
+                     (nth 2 case))))))))
+
+(ert-deftest test-ellama-tools-dlp-decision-skip-read-output-and-disabled ()
+  (ellama-test-dlp-with-decision
+   (cl-letf (((symbol-function 'llm-decide)
+              (lambda (&rest _args) (ert-fail "Unexpected decision request"))))
+     (dolist (key '(:provider :irreversible :dlp :read :output))
+       (let ((ellama-tools-irreversible-decision-provider
+              (unless (eq key :provider) 'decision-provider))
+             (ellama-tools-irreversible-enabled (not (eq key :irreversible)))
+             (ellama-tools-dlp-enabled (not (eq key :dlp)))
+             (scan-context (copy-tree context)))
+         (when (eq key :read)
+           (setq scan-context (plist-put scan-context :tool-name "read_file")))
+         (when (eq key :output)
+           (setq scan-context (plist-put scan-context :direction 'output)))
+         (should-not (ellama-test-dlp-call-verdict "operate" scan-context)))))))
+
+(ert-deftest test-ellama-tools-dlp-decision-negative-keeps-unknown-mcp-warning ()
+  (ellama-test-dlp-with-decision
+   (let ((ellama-tools-irreversible-unknown-tool-action 'warn))
+     (cl-letf (((symbol-function 'llm-decide)
+                (lambda (&rest _args)
+                  (list (cons 'irreversible
+                              (make-llm-decision-bool :confidence 0.01))))))
+       (let* ((context (plist-put (copy-tree context) :tool-origin 'mcp))
+              (verdict (ellama-test-dlp-call-verdict "operate" context)))
+         (should (eq (plist-get verdict :action) 'warn)))))))
+
+(ert-deftest test-ellama-tools-dlp-decision-respects-scoped-bypass ()
+  (ellama-test-dlp-with-decision
+   (ellama-tools-dlp-add-session-bypass "shell_command" 60 "test")
+   (cl-letf (((symbol-function 'llm-decide)
+              (lambda (&rest _args)
+                (list (cons 'irreversible
+                            (make-llm-decision-bool :confidence 0.9))))))
+     (let ((verdict (ellama-test-dlp-call-verdict "operate" context)))
+       (should (eq (plist-get verdict :action) 'allow))
+       (should (eq (plist-get verdict :policy-source) 'session-bypass))))))
+
 (ert-deftest test-ellama-tools-dlp-make-scan-context ()
   (let ((context (ellama-tools-dlp--make-scan-context
                   :direction 'input

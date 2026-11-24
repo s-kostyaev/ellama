@@ -395,14 +395,14 @@ Return list with result and prompt."
         (progn
           (write-region "protected" nil file nil 'silent)
           (ellama-test--with-temp-srt-settings
-              (json-encode (list :filesystem (list :denyRead (vector file))))
-            (let ((ellama-tools-use-srt t)
-                  (ellama-tools-srt-args (list "--settings" settings-file)))
-              (should (string-match-p "srt policy denied read access"
-                                      (ellama-tools-read-file-tool file)))
-              (should (equal (json-read-from-string
-                              (ellama-tools-read-file-tool typed-name))
-                             (format "File %s does not exist." typed-name))))))
+           (json-encode (list :filesystem (list :denyRead (vector file))))
+           (let ((ellama-tools-use-srt t)
+                 (ellama-tools-srt-args (list "--settings" settings-file)))
+             (should (string-match-p "srt policy denied read access"
+                                     (ellama-tools-read-file-tool file)))
+             (should (equal (json-read-from-string
+                             (ellama-tools-read-file-tool typed-name))
+                            (format "File %s does not exist." typed-name))))))
       (delete-directory dir t))))
 
 (ert-deftest test-ellama-read-file-tool-auto-detects-audio ()
@@ -421,6 +421,159 @@ Return list with result and prompt."
            (should (string-match-p "Audio file queued" result))
            (should (ellama--session-extra-get
                     session :pending-tool-media))))))))
+
+(ert-deftest test-ellama-tools-trash-defaults ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((form (car (get 'ellama-tools-trash-command 'standard-value))))
+    (dolist (pair '((darwin . "trash") (windows-nt . "recycle.exe")))
+      (let ((system-type (car pair)))
+        (should (equal (eval form) (cdr pair)))))
+    (let ((system-type 'gnu/linux))
+      (cl-letf (((symbol-function 'executable-find) (lambda (_) "/usr/bin/gio")))
+        (should (equal (eval form) '("gio" "trash"))))
+      (cl-letf (((symbol-function 'executable-find) (lambda (_) nil)))
+        (should (eq (eval form) 'emacs))))))
+
+(ert-deftest test-ellama-tools-trash-built-in-preserves-recovery ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((source (make-temp-file "ellama-trash-source-"))
+        (recovery (make-temp-file "ellama-trash-recovery-" t))
+        (ellama-tools-trash-command 'emacs)
+        (ellama-tools-use-srt nil)
+        (system-type 'gnu/linux)
+        moved)
+    (unwind-protect
+        (progn
+          (with-temp-file source (insert "recoverable contents"))
+          ;; Exercise the real built-in portable backend in a private trash.
+          (cl-letf (((symbol-function 'system-move-file-to-trash) nil))
+            (let ((trash-directory recovery))
+              (should (string-match-p
+                       "Moved 1 path"
+                       (ellama-test--wait-tool-result
+                        #'ellama-tools-trash-files-tool (vector source))))))
+          (setq moved (expand-file-name (file-name-nondirectory source) recovery))
+          (should-not (file-exists-p source))
+          (should (equal (with-temp-buffer
+                           (insert-file-contents moved)
+                           (buffer-string))
+                         "recoverable contents")))
+      (when (file-exists-p source) (delete-file source))
+      (delete-directory recovery t))))
+
+(ert-deftest test-ellama-tools-trash-validates-batch-before-moving ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((source (make-temp-file "ellama-trash-"))
+         (missing (concat source "-missing"))
+         (ellama-tools-trash-command 'emacs)
+         (ellama-tools-use-srt nil)
+         (system-type 'gnu/linux)
+         moved)
+    (unwind-protect
+        (cl-letf (((symbol-function 'move-file-to-trash)
+                   (lambda (_) (setq moved t))))
+          (should (string-match-p
+                   "Path does not exist"
+                   (ellama-test--wait-tool-result
+                    #'ellama-tools-trash-files-tool (list source missing))))
+          (should-not moved)
+          (should (file-exists-p source)))
+      (delete-file source))))
+
+(ert-deftest test-ellama-tools-trash-native-refuses-srt-and-windows ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-trash-command 'emacs)
+        called)
+    (cl-letf (((symbol-function 'move-file-to-trash)
+               (lambda (_) (setq called t))))
+      (let ((ellama-tools-use-srt t) (system-type 'gnu/linux))
+        (should (string-match-p
+                 "cannot run inside SRT"
+                 (ellama-test--wait-tool-result
+                  #'ellama-tools-trash-files-tool '("unused")))))
+      (let ((ellama-tools-use-srt nil) (system-type 'windows-nt))
+        (should (string-match-p
+                 "cannot guarantee recycling"
+                 (ellama-test--wait-tool-result
+                  #'ellama-tools-trash-files-tool '("unused")))))
+      (should-not called))))
+
+(ert-deftest test-ellama-tools-trash-unavailable-does-not-delete ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((source (make-temp-file "ellama-trash-"))
+        (ellama-tools-use-srt nil)
+        called)
+    (unwind-protect
+        (cl-letf (((symbol-function 'executable-find) (lambda (_) nil))
+                  ((symbol-function 'ellama-tools-shell-command-tool)
+                   (lambda (&rest _) (setq called t))))
+          (dolist (command '(nil "nonexistent-trash"))
+            (let ((ellama-tools-trash-command command))
+              (should (string-match-p
+                       "configure\\|Configure\\|not found"
+                       (ellama-test--wait-tool-result
+                        #'ellama-tools-trash-files-tool (list source))))))
+          (should-not called)
+          (should (file-exists-p source)))
+      (delete-file source))))
+
+(ert-deftest test-ellama-tools-trash-external-keeps-literal-arguments ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((directory (make-temp-file "ellama-trash-" t))
+         (source (expand-file-name "--empty ; touch INJECTED" directory))
+         (script (expand-file-name "capture.sh" directory))
+         (default-directory directory)
+         ;; A harmless fake trash utility captures arguments, then fails.
+         (ellama-tools-trash-command (list "/bin/sh" script "trash"))
+         (ellama-tools-use-srt nil))
+    (unwind-protect
+        (progn
+          (with-temp-file source (insert "keep"))
+          (with-temp-file script
+            (insert "printf '%s\\n' \"$@\"\nexit 7\n"))
+          (let ((result (ellama-test--wait-tool-result
+                         #'ellama-tools-trash-files-tool (vector source))))
+            (should (string-match-p "exit code 7" result))
+            (should (string-match-p (regexp-quote source) result))
+            (should (string-match-p "trash" result)))
+          (should (file-exists-p source))
+          (should-not (file-exists-p (expand-file-name "INJECTED" directory))))
+      (delete-directory directory t))))
+
+(ert-deftest test-ellama-tools-trash-denied-path-never-starts-command ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((source (make-temp-file "ellama-trash-"))
+        (ellama-tools-trash-command "trash")
+        called)
+    (unwind-protect
+        (cl-letf (((symbol-function 'ellama-tools--tool-check-file-access)
+                   (lambda (_path operation)
+                     (should (eq operation 'write))
+                     "srt policy denied write access"))
+                  ((symbol-function 'ellama-tools-shell-command-tool)
+                   (lambda (&rest _) (setq called t))))
+          (should (string-match-p
+                   "srt policy denied"
+                   (ellama-test--wait-tool-result
+                    #'ellama-tools-trash-files-tool (list source))))
+          (should-not called)
+          (should (file-exists-p source)))
+      (delete-file source))))
+
+(ert-deftest test-ellama-tools-trash-rejects-invalid-and-remote-paths ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-trash-command 'emacs)
+        (ellama-tools-use-srt nil)
+        (system-type 'gnu/linux)
+        called)
+    (cl-letf (((symbol-function 'move-file-to-trash)
+               (lambda (_) (setq called t))))
+      (dolist (paths '(nil [] ("") (123) ("/ssh:example:/file")))
+        (should (string-match-p
+                 "Cannot move files to trash"
+                 (ellama-test--wait-tool-result
+                  #'ellama-tools-trash-files-tool paths))))
+      (should-not called))))
 
 (ert-deftest test-ellama-shell-command-tool-empty-success-output ()
   (should
@@ -1852,7 +2005,7 @@ Return list with result and prompt."
       (should-not tool-called))))
 
 (ert-deftest
-    test-ellama-tools-wrap-with-confirm-dlp-input-values-only-no-key-scan ()
+    test-ellama-tools-wrap-with-confirm-dlp-input-blocks-object-key ()
   (ellama-test--ensure-local-ellama-tools)
   (let ((ellama-tools-dlp-enabled t)
         (ellama-tools-dlp-mode 'enforce)
@@ -1872,9 +2025,11 @@ Return list with result and prompt."
                                    :args ((:name "payload" :type object))))
            (wrapped (ellama-tools-wrap-with-confirm tool-plist))
            (wrapped-func (plist-get wrapped :function)))
-      (should (equal (funcall wrapped-func '(("SECRET" . 1)))
-                     "ok"))
-      (should tool-called))))
+      (let ((result (funcall wrapped-func '(("SECRET" . 1)))))
+        (should (string-match-p "DLP block input" result))
+        (should (string-match-p (regexp-quote "arg payload[0].key") result))
+        (should-not (string-search "SECRET" result))
+        (should-not tool-called)))))
 
 (ert-deftest
     test-ellama-tools-wrap-with-confirm-dlp-input-block-async-structured-callback ()
@@ -4984,6 +5139,317 @@ END_ELLAMA_AGENT_STATE"))
     (should (equal (plist-get metadata :tool-identity)
                    "mcp-ddg/search"))))
 
+(ert-deftest test-ellama-tools-wrap-with-confirm-irreversible-decision ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((noninteractive nil)
+        (ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-regex-rules nil)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-llm-check-enabled nil)
+        (ellama-tools-irreversible-enabled t)
+        (ellama-tools-irreversible-decision-provider 'decision-provider)
+        (ellama-tools-irreversible-decision-threshold 0.5)
+        (ellama-tools-irreversible-default-action 'warn)
+        (ellama-tools-irreversible-project-overrides-enabled nil)
+        (ellama-tools-dlp--session-bypasses nil)
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (ellama-tools-allow-all t)
+        tool-called)
+    (let* ((tool `(:function ,(lambda (_cmd) (setq tool-called t) "ok")
+                             :name "shell_command"
+                             :args ((:name "cmd" :type string))))
+           (wrapped (plist-get (ellama-tools-wrap-with-confirm tool) :function)))
+      (cl-letf (((symbol-function 'llm-decide)
+                 (lambda (&rest _args)
+                   (list (cons 'irreversible
+                               (make-llm-decision-bool :confidence 0.9)))))
+                ((symbol-function 'read-string)
+                 (lambda (&rest _args) "no")))
+        (should (string-match-p "DLP warning denied tool execution"
+                                (funcall wrapped "destroy the only copy")))
+        (should-not tool-called)
+        (cl-letf (((symbol-function 'read-string)
+                   (lambda (&rest _args)
+                     ellama-tools-irreversible-typed-confirm-phrase)))
+          (should (equal (funcall wrapped "destroy the only copy") "ok")))
+        (should tool-called)
+        (setq tool-called nil)
+        (let ((noninteractive t))
+          (should (string-match-p "Interactive typed confirmation is required"
+                                  (funcall wrapped "destroy the only copy")))
+          (should-not tool-called))
+        (let ((ellama-tools-irreversible-default-action 'block))
+          (should (string-match-p "DLP block input"
+                                  (funcall wrapped "destroy the only copy")))
+          (should-not tool-called))))))
+
+(ert-deftest test-ellama-tools-trash-files-skips-irreversible-model ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((noninteractive t)
+        (ellama-tools-allow-all t)
+        (ellama-tools-use-srt nil)
+        (ellama-tools-trash-command 'emacs)
+        (ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-llm-check-enabled nil)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-regex-rules nil)
+        (ellama-tools-dlp-log-targets '(memory))
+        (ellama-tools-dlp--incident-log nil)
+        (ellama-tools-irreversible-enabled t)
+        (ellama-tools-irreversible-default-action 'warn)
+        (ellama-tools-irreversible-decision-provider 'decision-provider)
+        (ellama-tools-irreversible-project-overrides-enabled nil)
+        (ellama-tools-dlp--session-bypasses nil)
+        (spec (list :name "trash_files" :async t
+                    :function #'ellama-tools-trash-files-tool
+                    :args '((:name "file_names" :type array))))
+        (calls 0)
+        response)
+    (cl-letf (((symbol-function 'llm-decide)
+               (lambda (&rest _)
+                 (cl-incf calls)
+                 (list (cons 'irreversible
+                             (make-llm-decision-bool :confidence 0.9))))))
+      (let ((fn (plist-get (ellama-tools-wrap-with-confirm spec) :function)))
+        (funcall fn (lambda (text) (setq response text)) [])
+        (should (string-match-p "Cannot move files to trash" response))
+        (should (zerop calls))
+        (let ((ellama-tools-trash-command "custom-trash"))
+          (funcall fn (lambda (text) (setq response text)) [])
+          (should (string-match-p "Interactive typed confirmation is required"
+                                  response))
+          (should (= calls 1))))
+      (let* ((other (plist-put (copy-sequence spec) :function #'ignore))
+             (fn (plist-get (ellama-tools-wrap-with-confirm other) :function)))
+        (funcall fn (lambda (text) (setq response text)) [])
+        (should (string-match-p "Interactive typed confirmation is required"
+                                response))
+        (should (= calls 2))))))
+
+(ert-deftest test-ellama-tools-irreversible-decision-complete-call ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((noninteractive t)
+        (ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-llm-check-enabled nil)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-regex-rules nil)
+        (ellama-tools-dlp-log-targets '(memory))
+        (ellama-tools-dlp--incident-log nil)
+        (ellama-tools-irreversible-enabled t)
+        (ellama-tools-irreversible-decision-provider 'decision-provider)
+        (ellama-tools-irreversible-default-action 'warn)
+        (ellama-tools-irreversible-project-overrides-enabled nil)
+        (ellama-tools-dlp--session-bypasses nil)
+        (ellama-tools-allow-all t)
+        (probability 0.9)
+        requests executions)
+    (cl-letf (((symbol-function 'llm-decide)
+               (lambda (_provider _questions state)
+                 (push (json-parse-string state :object-type 'plist) requests)
+                 (list (cons 'irreversible
+                             (make-llm-decision-bool :confidence probability))))))
+      (let* ((tool `(:name "set_retention"
+                           :category "mcp-storage"
+                           :function ,(lambda (&rest args)
+                                        (push args executions)
+                                        "changed")
+                           :args ((:name "days" :type integer)
+                                  (:name "force" :type boolean))))
+             (run (plist-get (ellama-tools-wrap-with-confirm tool) :function)))
+        (should (string-match-p "Interactive typed confirmation is required"
+                                (funcall run 0 t)))
+        (should-not executions)
+        (should (= (length requests) 1))
+        (should (equal (plist-get (car requests) :tool_identity)
+                       "mcp-storage/set_retention"))
+        (should (equal (plist-get (car requests) :arguments)
+                       [(:name "days" :value "0")
+                        (:name "force" :value t)]))
+        (setq probability 0.1
+              requests nil)
+        (cl-letf (((symbol-function 'ellama-tools--dlp-confirm-warn)
+                   (lambda (&rest _args) t)))
+          (should (equal (funcall run 30 nil) "changed")))
+        (should (equal executions '((30 nil))))
+        (should (equal (plist-get (car requests) :arguments)
+                       [(:name "days" :value "30")
+                        (:name "force" :value :false)]))
+        (should (= (length requests) 1))))))
+
+(ert-deftest test-ellama-tools-irreversible-decision-after-local-scan ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-llm-check-enabled nil)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-log-targets '(memory))
+        (ellama-tools-dlp--incident-log nil)
+        (ellama-tools-irreversible-enabled t)
+        (ellama-tools-irreversible-decision-provider 'decision-provider)
+        (ellama-tools-irreversible-default-action 'warn)
+        (ellama-tools-irreversible-project-overrides-enabled nil)
+        (ellama-tools-dlp--session-bypasses nil)
+        (tool '(:name "update"
+                      :args ((:name "name" :type string)
+                             (:name "options" :type object))))
+        (ellama-tools-dlp-policy-overrides nil)
+        (ellama-tools-dlp-input-default-action 'block)
+        (ellama-tools-dlp-regex-rules
+         '((:id "secret" :pattern "private-token" :directions (input))
+           (:id "ir-destroy" :pattern "destroy" :directions (input)
+                :risk-class irreversible :confidence high)))
+        (decision-requests 0))
+    (cl-letf (((symbol-function 'llm-decide)
+               (lambda (&rest _args) (cl-incf decision-requests))))
+      (dolist (payload '("private-token" "destroy"))
+        (let ((verdict (ellama-tools--dlp-input-decision
+                        tool (list "ordinary" (vector payload)))))
+          (should (eq (plist-get verdict :action) 'block))))
+      (let ((ellama-tools-dlp-regex-rules nil)
+            (ellama-tools--dlp-input-max-walk-depth 0))
+        (let ((verdict (ellama-tools--dlp-input-decision
+                        tool '("ordinary" ["nested"]))))
+          (should (eq (plist-get verdict :action) 'warn-strong))
+          (should (eq (plist-get (car ellama-tools-dlp--incident-log)
+                                 :decision-error-type)
+                      'truncated))))
+      (should (zerop decision-requests)))))
+
+(ert-deftest test-ellama-tools-dlp-screens-object-keys-before-provider ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((secret "synthetic-private-key-3471")
+         (ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-llm-check-enabled nil)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-log-targets '(memory))
+         (ellama-tools-dlp--incident-log nil)
+         (ellama-tools-irreversible-enabled t)
+         (ellama-tools-irreversible-decision-provider 'decision-provider)
+         (ellama-tools-irreversible-default-action 'warn)
+         (ellama-tools-irreversible-project-overrides-enabled nil)
+         (ellama-tools-dlp--session-bypasses nil)
+         (ellama-tools-dlp-policy-overrides nil)
+         (ellama-tools-dlp-regex-rules
+          (list (list :id "test-private-key" :pattern secret :directions '(input))))
+         (tool '(:name "update" :args ((:name "options" :type object))))
+         (hash (make-hash-table :test 'equal))
+         (composite-key-hash (make-hash-table :test 'equal))
+         (decorated-key-hash (make-hash-table :test 'equal))
+         requests)
+    (puthash secret "ordinary" hash)
+    (puthash (vector secret) "ordinary" composite-key-hash)
+    (puthash (propertize "key" 'test-hidden-value secret) "ordinary" decorated-key-hash)
+    (cl-letf (((symbol-function 'llm-decide)
+               (lambda (_provider _questions state)
+                 (push state requests)
+                 (list (cons 'irreversible (make-llm-decision-bool :confidence 0.0))))))
+      (dolist (setting '((enforce block block) (enforce warn warn-strong) (monitor block warn-strong)))
+        (pcase-let ((`(,ellama-tools-dlp-mode ,ellama-tools-dlp-input-default-action ,expected) setting))
+          (dolist (object (list hash (list (cons secret "ordinary"))
+                                (list (cons (make-symbol secret) "ordinary"))
+                                (list (intern (concat ":" secret)) "ordinary")))
+            (let* ((ellama-tools-dlp--incident-log nil)
+                   (verdict (ellama-tools--dlp-input-decision tool (list (vector object)))))
+              (should (eq (plist-get verdict :action) expected))
+              (should-not (string-search secret (prin1-to-string verdict)))
+              (should-not (string-search secret (prin1-to-string ellama-tools-dlp--incident-log)))
+              (when (eq expected 'warn-strong)
+                (should (eq (plist-get (car ellama-tools-dlp--incident-log) :decision-error-type)
+                            'sensitive-key)))))))
+      (let ((ellama-tools-irreversible-decision-provider nil)
+            (ellama-tools-dlp-input-default-action 'warn))
+        (should (eq (plist-get (ellama-tools--dlp-input-decision tool (list hash)) :action) 'warn)))
+      (dolist (object (list composite-key-hash decorated-key-hash))
+        (should (eq (plist-get (ellama-tools--dlp-input-decision tool (list object)) :action)
+                    'warn-strong)))
+      (should-not requests)
+      (should (eq (plist-get (ellama-tools--dlp-input-decision
+                              tool '((("normal-key" . "ordinary")))) :action)
+                  'allow))
+      (should (= 1 (length requests)))
+      (should (string-search "normal-key" (car requests))))))
+
+(ert-deftest test-ellama-tools-dlp-truncation-takes-priority-over-backup ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((directory (make-temp-file "ellama-backup-scan-limit-" t))
+         (default-directory (file-name-as-directory (file-truename directory)))
+         (ellama--current-session (make-ellama-session :id "backup-scan-limit"))
+         (ellama-tools-use-srt nil)
+         (ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-llm-check-enabled nil)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-log-targets '(memory))
+         (ellama-tools-dlp--incident-log nil)
+         (ellama-tools-dlp-max-scan-size 32)
+         (ellama-tools-irreversible-enabled t)
+         (ellama-tools-irreversible-project-overrides-enabled nil)
+         (ellama-tools-dlp--session-bypasses nil)
+         (ellama-tools-dlp-policy-overrides nil)
+         (tool '(:name "write_file" :async t :function ellama-tools-write-file-tool
+                       :args ((:name "file_name" :type string) (:name "content" :type string))))
+         (content (make-string 64 ?x))
+         (requests 0))
+    (unwind-protect
+        (cl-letf (((symbol-function 'llm-decide)
+                   (lambda (&rest _)
+                     (cl-incf requests)
+                     (list (cons 'irreversible (make-llm-decision-bool :confidence 0.0))))))
+          (with-temp-file "source.txt" (insert "Original data\n"))
+          (should (string-match-p "Verified backup" (ellama-tools-backup-file-tool "source.txt" "safe.bak")))
+          (dolist (ellama-tools-irreversible-decision-provider '(decision-provider nil))
+            (let ((clean (ellama-tools--dlp-input-decision tool '(ignore "source.txt" "Short revision"))))
+              (should (eq (plist-get clean :action) 'allow))
+              (should (eq (plist-get (plist-get clean :overwrite-evidence) :source) 'backup)))
+            (dolist (policy '(warn block))
+              (let* ((ellama-tools-irreversible-default-action policy)
+                     (verdict (ellama-tools--dlp-input-decision tool (list #'ignore "source.txt" content))))
+                (should (eq (plist-get verdict :action) (if (eq policy 'block) 'block 'warn-strong)))
+                (should (string-match-p "smaller edits" (ellama-tools--dlp-refusal-hint
+                                                         verdict '(:file-editor t) (list "source.txt" content))))
+                (should (eq (plist-get (car ellama-tools-dlp--incident-log) :decision-error-type)
+                            'truncated)))))
+          (should (zerop requests)))
+      (delete-directory directory t))))
+
+(ert-deftest test-ellama-tools-irreversible-decision-once-for-async-call ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-llm-check-enabled nil)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-regex-rules nil)
+        (ellama-tools-dlp-log-targets '(memory))
+        (ellama-tools-dlp--incident-log nil)
+        (ellama-tools-irreversible-enabled t)
+        (ellama-tools-irreversible-decision-provider 'decision-provider)
+        (ellama-tools-irreversible-project-overrides-enabled nil)
+        (ellama-tools-irreversible-unknown-tool-action 'warn)
+        (tool '(:name "manage" :category "mcp-storage" :async t
+                      :args ((:name "operation" :type string)
+                             (:name "targets" :type array))))
+        requests)
+    (cl-letf (((symbol-function 'llm-decide)
+               (lambda (_provider _questions state)
+                 (push (json-parse-string state :object-type 'plist) requests)
+                 (list (cons 'irreversible
+                             (make-llm-decision-bool :confidence 0.1))))))
+      (let ((verdict (ellama-tools--dlp-input-decision
+                      tool '(ignore "list" ["first" "日本語"]))))
+        (should (eq (plist-get verdict :action) 'warn)))
+      (should (equal (mapcar (lambda (request) (plist-get request :arguments))
+                             requests)
+                     (list (vector
+                            (list :name "operation" :value (prin1-to-string "list"))
+                            (list :name "targets" :value
+                                  (prin1-to-string ["first" "日本語"])))))))))
+
+
+
 (ert-deftest
     test-ellama-tools-wrap-with-confirm-dlp-warn-strong-typed-confirm ()
   (ellama-test--ensure-local-ellama-tools)
@@ -5056,6 +5522,712 @@ END_ELLAMA_AGENT_STATE"))
     (should (string-match-p
              (regexp-quote "cmd: \"rm -rf /tmp/obsolete-build\"")
              viewed))))
+
+(ert-deftest test-ellama-tools-rm-git-evidence-needs-literal-target ()
+  (ellama-test--ensure-local-ellama-tools)
+  (should (equal (ellama-tools--literal-rm-path " rm -f -- ./src/file.el ")
+                 "./src/file.el"))
+  (dolist (command '("rm -r folder" "rm path/" "rm path/." "rm -f"
+                     "rm *.el" "rm file other" "rm file && true"
+                     "rm \"file\"" "rm $file" "rm /tmp/file" "rm ../file"
+                     "rm file\ntrue" "rm .GIT/config" "printf 'rm file'"))
+    (should-not (ellama-tools--literal-rm-path command))))
+
+(ert-deftest test-ellama-tools-shell-literal-shape-requires-complete-command ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((shell-file-name "/bin/sh")
+        (shell-command-switch "-c"))
+    (dolist (command '("printf '%s\\n' 'git reset --hard HEAD'"
+                       "echo '$(git reset --hard HEAD)'"))
+      (should (eq (ellama-tools--shell-literal-shape command) 'printer)))
+    (should (eq (ellama-tools--shell-literal-shape "false && git reset --hard main")
+                'skipped))
+    (should (eq (ellama-tools--shell-literal-shape "git clean -ndx") 'dry-run))
+    (should (eq (ellama-tools--shell-literal-shape "rm # no operand") 'no-operands))
+    (dolist (command '("echo 'ready'; git reset --hard main"
+                       "printf '%s' \"$(git reset --hard main)\""
+                       "echo 'ready' > only-copy"
+                       "false && git status; git reset --hard main"
+                       "true || false && git reset --hard main"
+                       "git clean -n; git clean -fdx"
+                       "rm # text\nrm -- only-copy"))
+      (should-not (ellama-tools--shell-literal-shape command)))
+    (let ((shell-command-switch "-lc"))
+      (should-not (ellama-tools--shell-literal-shape "echo 'hello'")))))
+
+(ert-deftest test-ellama-tools-dlp-literal-shell-truncation ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((directory (make-temp-file "ellama-truncate-" t))
+        (ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-regex-rules nil)
+        (ellama-tools-dlp-llm-check-enabled nil)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-log-targets '(memory))
+        (ellama-tools-dlp--incident-log nil)
+        (ellama-tools-irreversible-enabled t)
+        (ellama-tools-irreversible-default-action 'warn)
+        (ellama-tools-irreversible-decision-provider nil)
+        (ellama-tools-irreversible-project-overrides-enabled nil)
+        (ellama-tools-dlp--session-bypasses nil)
+        (ellama-tools-use-srt nil)
+        (shell-file-name "/bin/sh")
+        (shell-command-switch "-c")
+        (tool '(:name "shell_command" :async t
+                      :function ellama-tools-shell-command-tool
+                      :args ((:name "cmd" :type string)))))
+    (unwind-protect
+        (let ((default-directory (file-name-as-directory directory))
+              (process-environment (copy-sequence process-environment)))
+          (with-temp-file "saved notes.txt" (insert "Only copy"))
+          (with-temp-file "saved.txt" (insert "Only copy"))
+          (make-symbolic-link "saved.txt" "linked.txt")
+          (with-temp-file "source.txt" (insert "Other data"))
+          (with-temp-file "-a" (insert "Only copy"))
+          (make-directory "copy-to")
+          (with-temp-file "copy-to/source.txt" (insert "Only copy"))
+          (with-temp-file "empty.txt")
+          (setenv "ELLAMA_SCOPE_TEST" "saved notes.txt")
+          (setenv "ELLAMA_SCOPE_DEFAULT" nil)
+          (dolist (command '(": > 'saved notes.txt'"
+                             ": >| \"saved notes.txt\""
+                             "printf '%s' 'final > marker' > 'saved notes.txt'"
+                             "printf '%s' ok > \"$(echo saved.txt)\""
+                             ": 3>saved.txt"
+                             "(printf '%s' note) > saved.txt"
+                             "{ printf '%s' note; } > saved.txt"
+                             "printf '%s' note | tee saved.txt"
+                             "printf '%s' note | tee ./-a"
+                             "printf '%s' note > saved.txt > new.txt"
+                             "(printf '%s' note) > new.txt 2>saved.txt"
+                             "echo note 4>saved.txt 2>&4"
+                             "echo note | (cat) > saved.txt"
+                             "gzip -c /dev/null > saved.txt"
+                             "echo note | tee new.txt saved.txt > output.txt"
+                             "wc -c /dev/null > saved.txt | cat >/dev/null"
+                             "echo note | (cat > saved.txt) | wc -c"
+                             "{ command printf %s note > saved.txt; } 2>/dev/null"
+                             "test -s saved.txt && wc -c /dev/null > saved.txt"
+                             "case current in current) echo note > saved.txt ;; esac"
+                             "ln saved.txt copy.txt && wc -c /dev/null > copy.txt"
+                             "wc -c /dev/null > \"$(printf '%s' saved.txt)\""
+                             "note=$(printf %s value > saved.txt); printf %s \"$note\""
+                             "command printf %s note </dev/null > saved.txt"
+                             "command printf %s note > linked.txt"
+                             "cp source.txt saved.txt"
+                             "cp -f source.txt copy-to/"
+                             "mkdir copy-from && echo note > copy-from/source.txt; cp copy-from/source.txt copy-to/"
+                             "printf '%s' revision > new.txt; cp new.txt saved.txt"
+                             "/bin/echo ok > 'saved notes.txt'"
+                             "echo ok && : > 'saved notes.txt'"
+                             "echo ok ; : > 'saved notes.txt'"
+                             "true && : > 'saved notes.txt'"
+                             "test -f 'saved notes.txt' && : > './saved notes.txt'"
+                             "test -s 'saved notes.txt' && printf '%s' ok > 'saved notes.txt'"
+                             "echo ok > \"${ELLAMA_SCOPE_DEFAULT:-${ELLAMA_SCOPE_TEST:-empty.txt}}\""
+                             "false || echo ok > 'saved notes.txt'"
+                             ": > \"$ELLAMA_SCOPE_TEST\""
+                             "echo ok && : > \"${ELLAMA_SCOPE_DEFAULT:-saved notes.txt}\""))
+            (let ((decision (ellama-tools--dlp-input-decision
+                             tool (list #'ignore command))))
+              (should (eq (plist-get decision :action) 'warn-strong))
+              (should (member "ir-shell-truncate-file"
+                              (plist-get (car ellama-tools-dlp--incident-log)
+                                         :rule-ids)))))
+          (dolist (command '(": > missing.txt"
+                             ": > empty.txt"
+                             ": >> 'saved notes.txt'"
+                             ": >&1"
+                             ": 3>>saved.txt"
+                             ": 3>&1"
+                             "(printf '%s' note) >> saved.txt"
+                             "{ printf '%s' note; } >> saved.txt"
+                             "false && (printf '%s' note) > saved.txt"
+                             "printf '%s' note | tee -a"
+                             "printf '%s' note | tee -a saved.txt"
+                             "echo note > new.txt 2>>saved.txt"
+                             "(echo note) >> saved.txt 2>&1"
+                             "echo note 4>>saved.txt 2>&4"
+                             "echo note | tee -a new.txt saved.txt > output.txt"
+                             "wc -c /dev/null >> saved.txt | cat >/dev/null"
+                             "case other in current) echo note > saved.txt ;; esac"
+                             "ln saved.txt copy.txt && wc -c /dev/null >> copy.txt"
+                             "wc -c /dev/null >> \"$(printf '%s' saved.txt)\""
+                             "command printf %s note >> linked.txt"
+                             "cp saved.txt ./saved.txt"
+                             "cp missing.txt saved.txt"
+                             "cp -n source.txt saved.txt"
+                             "cp -n source.txt copy-to/"
+                             "printf '%s' revision > new.txt; cp missing.txt saved.txt"
+                             "printf '%s' revision > new.txt; cp -n new.txt saved.txt"
+                             "echo ': > saved.txt'"
+                             "echo ok >> 'saved notes.txt'"
+                             "echo ': > saved.txt' # > 'saved notes.txt'"
+                             "printf '%s' \"$(date)\" > 'saved notes.txt'"
+                             ": > \"$(echo empty.txt)\""
+                             ": > \"$(echo 'saved.txt'; true)\""
+                             ": >> \"$(echo saved.txt)\""
+                             "false && : > 'saved notes.txt'"
+                             "true || : > 'saved notes.txt'"
+                             "test -s empty.txt && echo ok > 'saved notes.txt'"
+                             ": > \"${ELLAMA_SCOPE_DEFAULT:-/dev/null}\""
+                             ": > \"\\$ELLAMA_SCOPE_TEST\""
+                             "echo ok && : > missing.txt"
+                             "echo ok && cat 'saved notes.txt' > /dev/null"
+                             "echo \"result: $x\""
+                             "printf '%s' \"$target\""
+                             ": > \"$ELLAMA_SCOPE_DEFAULT\""))
+            (should (eq (plist-get (ellama-tools--dlp-input-decision
+                                    tool (list #'ignore command))
+                                   :action)
+                        'allow)))
+          (setenv "ELLAMA_SCOPE_TEST" "empty.txt")
+          (cl-letf (((symbol-function 'ellama-tools--tool-check-file-access)
+                     (lambda (path _op)
+                       (when (string-suffix-p "/saved.txt" path) "Denied"))))
+            (should-not (ellama-tools--shell-output-state "linked.txt")))
+          (should-not (ellama-tools--nonempty-shell-truncation-p
+                       ": > \"${ELLAMA_SCOPE_TEST:-saved notes.txt}\""))
+          (let ((custom-tool (plist-put (copy-sequence tool) :function #'ignore)))
+            (should (eq (plist-get (ellama-tools--dlp-input-decision
+                                    custom-tool '(ignore ": > 'saved notes.txt'"))
+                                   :action)
+                        'allow)))
+          (cl-letf (((symbol-function 'ellama-tools--tool-check-file-access)
+                     (lambda (&rest _) "Denied"))
+                    ((symbol-function 'file-regular-p)
+                     (lambda (&rest _) (ert-fail "Denied path was inspected"))))
+            (should-not (ellama-tools--nonempty-shell-truncation-p
+                         ": > 'saved notes.txt'")))
+          (cl-letf (((symbol-function 'ellama-tools--tool-check-file-access)
+                     (lambda (path op)
+                       (when (and (eq op 'read)
+                                  (equal (file-name-nondirectory path) "source.txt"))
+                         "Denied")))
+                    ((symbol-function 'file-equal-p)
+                     (lambda (&rest _) (ert-fail "Denied source was inspected"))))
+            (should-not (ellama-tools--nonempty-shell-truncation-p
+                         "cp source.txt saved.txt"))))
+      (delete-directory directory t))))
+
+(ert-deftest test-ellama-tools-dlp-decision-receives-observed-output-state ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((directory (make-temp-file "ellama-output-state-" t))
+         (default-directory (file-name-as-directory directory))
+         (shell-file-name "/bin/sh")
+         (shell-command-switch "-c")
+         (ellama-tools-use-srt nil)
+         (ellama-tools-dlp-enabled t)
+         (ellama-tools-irreversible-enabled t)
+         (ellama-tools-irreversible-decision-provider 'test-provider)
+         (ellama-tools-dlp-llm-check-enabled nil)
+         (ellama-tools-dlp-log-targets '(memory))
+         (tool '(:name "shell_command" :async t
+                       :function ellama-tools-shell-command-tool
+                       :args ((:name "cmd" :type string))))
+         (command "wc -c /dev/null > output.txt")
+         states)
+    (unwind-protect
+        (cl-letf (((symbol-function 'llm-decide)
+                   (lambda (_provider _questions state)
+                     (let* ((call (json-parse-string state :object-type 'plist))
+                            (output (aref (plist-get call :shell_outputs) 0)))
+                       (should (equal (plist-get output :operand) "output.txt"))
+                       (push (plist-get output :state) states))
+                     (list (cons 'irreversible (make-llm-decision-bool :confidence 0.1))))))
+          (ellama-tools--dlp-input-decision tool (list #'ignore command))
+          (with-temp-file "output.txt")
+          (ellama-tools--dlp-input-decision tool (list #'ignore command))
+          (delete-file "output.txt")
+          (make-directory "output.txt")
+          (ellama-tools--dlp-input-decision tool (list #'ignore command))
+          (should (equal states '("directory" "empty" "missing")))
+          (should-not (ellama-tools--shell-output-evidence "echo 'literal > output.txt'"))
+          (should-not (ellama-tools--shell-output-evidence "false && echo ok > output.txt"))
+          (cl-letf (((symbol-function 'ellama-tools--tool-check-file-access)
+                     (lambda (&rest _) "Denied"))
+                    ((symbol-function 'file-attributes)
+                     (lambda (&rest _) (ert-fail "Denied target was inspected"))))
+            (should-not (ellama-tools--shell-output-evidence command))))
+      (delete-directory directory t))))
+
+(ert-deftest test-ellama-tools-local-shell-output-is-rechecked-before-launch ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((directory (make-temp-file "ellama-local-output-" t))
+         (workspace (expand-file-name "workspace" directory))
+         (alias (expand-file-name "workspace-alias" directory))
+         (default-directory (progn
+                              (make-directory workspace)
+                              (make-symbolic-link workspace alias)
+                              (file-name-as-directory alias)))
+         (shell-file-name "/bin/sh")
+         (shell-command-switch "-c")
+         (ellama-tools-use-srt nil)
+         (ellama-tools-allow-all nil)
+         (ellama-tools-allowed nil)
+         (ellama-tools-confirm-allowed (make-hash-table))
+         (ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-llm-check-enabled nil)
+         (ellama-tools-irreversible-enabled t)
+         (ellama-tools-irreversible-default-action 'warn)
+         (ellama-tools-irreversible-decision-provider 'test-provider)
+         (tool '(:name "shell_command" :async t :function ellama-tools-shell-command-tool
+                       :args ((:name "cmd" :type string))))
+         (command "command printf %s note > 'output file.txt'")
+         (wrapped (plist-get (ellama-tools-wrap-with-confirm tool) :function))
+         result started)
+    (unwind-protect
+        (cl-letf (((symbol-function 'llm-decide)
+                   (lambda (&rest _) (ert-fail "Unexpected model call"))))
+          (let ((evidence (plist-get (ellama-tools--dlp-input-decision tool (list #'ignore command))
+                                     :overwrite-evidence)))
+            (should (eq (plist-get evidence :source) 'shell-no-loss))
+            (should (equal (plist-get evidence :state) "missing")))
+          (let ((noninteractive nil))
+            (cl-letf (((symbol-function 'read-char-choice)
+                       (lambda (&rest _)
+                         (with-temp-file "output file.txt" (insert "Only copy"))
+                         ?y))
+                      ((symbol-function 'start-file-process)
+                       (lambda (&rest _) (setq started t))))
+              (funcall wrapped (lambda (text) (setq result text)) command)))
+          (should-not started)
+          (should (string-match-p "could not reverify" result))
+          (should (eq (plist-get (ellama-tools--dlp-input-decision tool (list #'ignore command)) :action)
+                      'warn-strong))
+          (let ((append-command "command printf %s note >> 'output file.txt'"))
+            (should-not (ellama-tools--shell-no-loss-evidence
+                         append-command (ellama-tools--shell-output-evidence append-command))))
+          (with-temp-file "empty.txt")
+          (should (eq (plist-get (ellama-tools--dlp-input-decision
+                                  tool '(ignore "command printf %s note >> empty.txt")) :action)
+                      'allow))
+          (dolist (unsafe '("command printf %s note > empty.txt; : > 'output file.txt'"
+                            "command printf %s \"$(date)\" > empty.txt"
+                            "command printf %s note > staged.txt > 'output file.txt'"))
+            (should-not (ellama-tools--shell-no-loss-evidence unsafe
+                                                              (ellama-tools--shell-output-evidence unsafe))))
+          (make-symbolic-link "output file.txt" "alias.txt")
+          (let ((append-through-link "command printf %s note >> alias.txt"))
+            (should-not (ellama-tools--shell-no-loss-evidence
+                         append-through-link (ellama-tools--shell-output-evidence append-through-link)))))
+      (delete-directory directory t))))
+
+(ert-deftest test-ellama-tools-multiple-literal-shell-outputs-use-complete-recovery-evidence ()
+  (ellama-test--ensure-local-ellama-tools)
+  (skip-unless (executable-find "git"))
+  (let* ((directory (make-temp-file "ellama-multiple-outputs-" t))
+         (default-directory (file-name-as-directory (file-truename directory)))
+         (shell-file-name "/bin/sh")
+         (shell-command-switch "-c")
+         (ellama--current-session (make-ellama-session :id "multiple-output-owner"))
+         (ellama-tools-use-srt nil)
+         (ellama-tools-allow-all nil)
+         (ellama-tools-allowed nil)
+         (ellama-tools-confirm-allowed (make-hash-table))
+         (ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-llm-check-enabled nil)
+         (ellama-tools-irreversible-enabled t)
+         (ellama-tools-irreversible-default-action 'warn)
+         (ellama-tools-irreversible-project-overrides-enabled nil)
+         (ellama-tools-irreversible-decision-provider 'test-provider)
+         (process-environment (copy-sequence process-environment))
+         (tool '(:name "shell_command" :async t :function ellama-tools-shell-command-tool
+                       :args ((:name "cmd" :type string))))
+         (wrapped (plist-get (ellama-tools-wrap-with-confirm tool) :function))
+         (command "command printf %s next > tracked.txt > 'second file.txt'")
+         (cross-write "command printf %s next > primary.txt > backup.txt")
+         result started)
+    (unwind-protect
+        (cl-letf (((symbol-function 'llm-decide)
+                   (lambda (&rest _) (ert-fail "Unexpected model call"))))
+          (setenv "GIT_CONFIG_GLOBAL" "/dev/null")
+          (setenv "GIT_CONFIG_NOSYSTEM" "1")
+          (with-temp-file "tracked.txt" (insert "Tracked bytes\n"))
+          (with-temp-file "second file.txt" (insert "Other tracked bytes\n"))
+          (with-temp-file "primary.txt" (insert "Initial user bytes\n"))
+          (dolist (file '("tracked.txt" "second file.txt" "primary.txt"))
+            (set-file-modes file #o644))
+          (let ((plan (ellama-tools--backup-plan "primary.txt" "backup.txt")))
+            (copy-file "primary.txt" "backup.txt")
+            (set-file-modes "backup.txt" #o644)
+            (ellama-tools--record-file-backup ellama--current-session plan))
+          (should (= 0 (call-process "git" nil nil nil "init" "-q" "--template=")))
+          (should (= 0 (call-process "git" nil nil nil "add" "tracked.txt" "second file.txt" "backup.txt")))
+          (should (= 0 (call-process "git" nil nil nil "-c" "user.name=Ellama Test"
+                                     "-c" "user.email=test@example.invalid" "-c" "commit.gpgSign=false"
+                                     "-c" "core.hooksPath=/dev/null" "commit" "-qm" "Fixtures")))
+          (let* ((verdict (ellama-tools--dlp-input-decision tool (list #'ignore command)))
+                 (evidence (plist-get verdict :overwrite-evidence))
+                 (proofs (plist-get evidence :targets)))
+            (should (eq (plist-get verdict :action) 'allow))
+            (should (equal (mapcar (lambda (proof) (plist-get proof :source)) proofs)
+                           '(git git)))
+            (should (ellama-tools--shell-overwrite-evidence-current-p
+                     command evidence ellama--current-session))
+            (let ((git-proof (symbol-function 'ellama-tools--git-file-commit)))
+              (cl-letf (((symbol-function 'ellama-tools--git-file-commit)
+                         (lambda (path &optional local-metadata)
+                           (when (equal (file-name-nondirectory path) "second file.txt")
+                             (with-temp-file "tracked.txt" (insert "Change during verification\n")))
+                           (funcall git-proof path local-metadata))))
+                (should-not (ellama-tools--shell-overwrite-evidence-current-p
+                             command evidence ellama--current-session))))
+            (with-temp-file "tracked.txt" (insert "Tracked bytes\n")))
+          (should (eq (plist-get (ellama-tools--file-overwrite-evidence "primary.txt") :source) 'backup))
+          (should (eq (plist-get (ellama-tools--file-overwrite-evidence "backup.txt") :source) 'git))
+          (when (file-name-case-insensitive-p default-directory)
+            (should (ellama-tools--shell-output-alias-p "backup.txt" '("BACKUP.TXT"))))
+          (let* ((separate "command printf %s next > primary.txt > absent.txt")
+                 (verdict (ellama-tools--dlp-input-decision tool (list #'ignore separate)))
+                 (proofs (plist-get (plist-get verdict :overwrite-evidence) :targets)))
+            (should (eq (plist-get verdict :action) 'allow))
+            (should (equal (mapcar (lambda (proof) (plist-get proof :source)) proofs)
+                           '(backup shell-no-loss))))
+          (dolist (policy '(warn block))
+            (let ((ellama-tools-irreversible-default-action policy))
+              (should (eq (plist-get (ellama-tools--dlp-input-decision tool (list #'ignore cross-write)) :action)
+                          (if (eq policy 'block) 'block 'warn-strong)))))
+          (let ((origin (ellama-tools--session-write-origin ellama--current-session "primary.txt")))
+            (with-temp-file "primary.txt" (insert "Current session's notes\n"))
+            (ellama-tools--record-session-write
+             ellama--current-session origin (secure-hash 'sha256 "Current session's notes\n")))
+          (should (eq (plist-get (ellama-tools--file-overwrite-evidence "primary.txt") :source) 'session))
+          (should (eq (plist-get (ellama-tools--dlp-input-decision tool (list #'ignore cross-write)) :action)
+                      'warn-strong))
+          (dolist (unknown '("command printf %s next > new.txt > \"$OUT\""
+                             "command printf %s next > new.txt > ./new.txt"
+                             "command printf %s next > new.txt > other.txt; : > third.txt"))
+            (should-not (ellama-tools--shell-multiple-output-evidence
+                         unknown (ellama-tools--shell-output-evidence unknown))))
+          (let ((noninteractive nil))
+            (cl-letf (((symbol-function 'read-char-choice)
+                       (lambda (&rest _)
+                         (with-temp-file "second file.txt" (insert "Uncommitted change\n"))
+                         ?y))
+                      ((symbol-function 'start-file-process)
+                       (lambda (&rest _) (setq started t))))
+              (funcall wrapped (lambda (text) (setq result text)) command)))
+          (should-not started)
+          (should (string-match-p "could not reverify" result))
+          (should (eq (plist-get (ellama-tools--dlp-input-decision tool (list #'ignore command)) :action)
+                      'warn-strong))
+          (with-temp-file "second file.txt" (insert "Other tracked bytes\n"))
+          (let ((ellama-tools-allow-all t) (result nil))
+            (funcall wrapped (lambda (text) (setq result text)) command)
+            (let ((deadline (+ (float-time) 4)))
+              (while (and (not result) (< (float-time) deadline))
+                (accept-process-output nil 0.05)))
+            (should (equal result "Command completed successfully with no output."))
+            (should (= 0 (file-attribute-size (file-attributes "tracked.txt"))))
+            (with-temp-buffer
+              (insert-file-contents "second file.txt")
+              (should (equal (buffer-string) "next")))))
+      (delete-directory directory t))))
+
+(ert-deftest test-ellama-tools-dlp-sql-commit-checks-unfiltered-update ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let ((ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-regex-rules nil)
+        (ellama-tools-dlp-llm-check-enabled nil)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-log-targets '(memory))
+        (ellama-tools-dlp--incident-log nil)
+        (ellama-tools-irreversible-enabled t)
+        (ellama-tools-irreversible-default-action 'warn)
+        (ellama-tools-irreversible-decision-provider nil)
+        (ellama-tools-irreversible-project-overrides-enabled nil)
+        (ellama-tools-dlp--session-bypasses nil)
+        (tool '(:name "sql_query" :args ((:name "sql" :type string)
+                                         (:name "commit" :type boolean))))
+        (query "UPDATE app.orders SET active = FALSE, amount = 0;"))
+    (should (eq (plist-get (ellama-tools--dlp-input-decision tool (list query t))
+                           :action)
+                'warn-strong))
+    (should (member "ir-sql-committed-unfiltered-update"
+                    (plist-get (car ellama-tools-dlp--incident-log) :rule-ids)))
+    (dolist (args (list (list query nil)
+                        (list query "true")
+                        (list "UPDATE app.orders SET active = FALSE WHERE id = 1" t)
+                        (list "EXPLAIN UPDATE app.orders SET amount = 0" t)))
+      (should (eq (plist-get (ellama-tools--dlp-input-decision tool args)
+                             :action)
+                  'allow)))))
+
+(ert-deftest test-ellama-tools-rm-git-evidence-is-rechecked-after-confirmation ()
+  (ellama-test--ensure-local-ellama-tools)
+  (skip-unless (executable-find "git"))
+  (let ((root (make-temp-file "ellama-rm-git-" t))
+        (ellama-tools-use-srt nil)
+        (ellama-tools-dlp-enabled t)
+        (ellama-tools-dlp-mode 'enforce)
+        (ellama-tools-dlp-llm-check-enabled nil)
+        (ellama-tools-dlp-scan-env-exact-secrets nil)
+        (ellama-tools-dlp-regex-rules nil)
+        (ellama-tools-dlp-log-targets '(memory))
+        (ellama-tools-dlp--incident-log nil)
+        (ellama-tools-irreversible-enabled t)
+        (ellama-tools-irreversible-default-action 'warn)
+        (ellama-tools-irreversible-project-overrides-enabled nil)
+        (ellama-tools-dlp--session-bypasses nil)
+        (ellama-tools-allow-all nil)
+        (ellama-tools-allowed nil)
+        (ellama-tools-confirm-allowed (make-hash-table))
+        (tool '(:name "shell_command" :async t
+                      :function ellama-tools-shell-command-tool
+                      :args ((:name "cmd" :type string))))
+        confirmed-message result executed)
+    (unwind-protect
+        (let* ((default-directory (file-name-as-directory root))
+               (file (expand-file-name "src/note.txt"))
+               (command "rm -- src/note.txt")
+               (args (list #'ignore command))
+               (callback (lambda (text) (setq result text)))
+               (wrapped (plist-get (ellama-tools-wrap-with-confirm tool)
+                                   :function))
+               (process-environment (copy-sequence process-environment)))
+          (setenv "GIT_CONFIG_GLOBAL" "/dev/null")
+          (setenv "GIT_CONFIG_NOSYSTEM" "1")
+          (make-directory (file-name-directory file))
+          (with-temp-file file (insert "tracked\n"))
+          (set-file-modes file #o644)
+          (should (= 0 (call-process "git" nil nil nil "init" "-q")))
+          (should (= 0 (call-process "git" nil nil nil "add" "src/note.txt")))
+          (should (= 0 (call-process "git" nil nil nil
+                                     "-c" "user.name=Ellama Test"
+                                     "-c" "user.email=test@example.invalid"
+                                     "-c" "commit.gpgSign=false"
+                                     "-c" "core.hooksPath=/dev/null"
+                                     "commit" "-qm" "Fixture")))
+          (let ((commit (ellama-tools--rm-git-evidence tool args)))
+            (should (stringp commit))
+            (should-not (ellama-tools--rm-git-evidence
+                         (plist-put (copy-sequence tool) :category "mcp-local")
+                         args))
+            (let ((ellama-tools-use-srt t)
+                  (ellama-tools-srt-program (expand-file-name "missing-srt" root)))
+              (should-not (ellama-tools--rm-git-evidence tool args)))
+            (set-file-modes file #o755)
+            (should-not (ellama-tools--rm-git-evidence tool args))
+            (set-file-modes file #o644)
+            (cl-letf (((symbol-function 'start-file-process)
+                       (lambda (&rest _args) (setq executed t)))
+                      ((symbol-function 'ellama-tools--dlp-confirm-warn-strong)
+                       (lambda (_tool message _details)
+                         (setq confirmed-message message)
+                         t))
+                      ((symbol-function 'read-char-choice)
+                       (lambda (&rest _)
+                         (with-temp-file file (insert "updated while waiting\n"))
+                         ?y)))
+              (let ((noninteractive nil))
+                (should-not (funcall wrapped callback command))))
+            (should (string-match-p (regexp-quote commit) confirmed-message))
+            (should (string-match-p "Ellama could not reverify" result))
+            (should-not executed)
+            (should-not (ellama-tools--rm-git-evidence tool args))
+            (should (= 0 (call-process "git" nil nil nil "add" "src/note.txt")))
+            (with-temp-file file (insert "tracked\n"))
+            (should-not (ellama-tools--rm-git-evidence tool args))))
+      (delete-directory root t))))
+
+(ert-deftest test-ellama-tools-session-overwrite-requires-matching-written-version ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((directory (make-temp-file "ellama-write-origin-" t))
+         (default-directory (file-name-as-directory (file-truename directory)))
+         (session (make-ellama-session :id "file-writer"))
+         (ellama--current-session session)
+         (ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-llm-check-enabled nil)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-dlp-regex-rules nil)
+         (ellama-tools-irreversible-enabled t)
+         (ellama-tools-irreversible-default-action 'warn)
+         (ellama-tools-irreversible-decision-provider nil)
+         (ellama-tools-use-srt nil)
+         (ellama-tools-allow-all nil)
+         (ellama-tools-allowed nil)
+         (ellama-tools-confirm-allowed (make-hash-table))
+         (shell-file-name "/bin/sh")
+         (shell-command-switch "-c")
+         (ellama-tools-read-before-write-enabled nil)
+         (ellama-tools-edit-before-shell-commands nil)
+         (ellama-tools-edit-after-shell-commands nil)
+         (tool '(:name "shell_command" :async t :function ellama-tools-shell-command-tool
+                       :args ((:name "cmd" :type string))))
+         (command "command printf %s next > draft.txt")
+         (args (list #'ignore command))
+         result)
+    (unwind-protect
+        (progn
+          (ellama-tools-write-file-tool (lambda (text) (setq result text)) "draft.txt" "First version\n")
+          (should (string-match-p "Wrote" result))
+          (let* ((decision (ellama-tools--dlp-input-decision tool args))
+                 (evidence (plist-get decision :overwrite-evidence)))
+            (should (eq (plist-get decision :action) 'allow))
+            (should (eq (plist-get evidence :source) 'session))
+            (should (ellama-tools--overwrite-evidence-current-p evidence "draft.txt" session))
+            (let* ((writer '(:name "write_file" :async t :function ellama-tools-write-file-tool
+                                   :args ((:name "file_name" :type string) (:name "content" :type string))))
+                   (write-decision (ellama-tools--dlp-input-decision writer '(ignore "draft.txt" "Next version"))))
+              (should (eq (plist-get write-decision :action) 'allow))
+              (should (eq (plist-get (plist-get write-decision :overwrite-evidence) :source) 'session)))
+            (with-current-buffer (find-buffer-visiting "draft.txt")
+              (insert "unsaved text")
+              (should-not (ellama-tools--file-overwrite-evidence "draft.txt"))
+              (revert-buffer t t t))
+            (let ((ellama--current-session (make-ellama-session :id "other-writer")))
+              (should (eq (plist-get (ellama-tools--dlp-input-decision tool args) :action) 'warn-strong)))
+            (ellama-tools-edit-file-tool #'ignore "draft.txt" "First" "Second")
+            (should-not (ellama-tools--overwrite-evidence-current-p evidence "draft.txt" session))
+            (should (eq (plist-get (ellama-tools--dlp-input-decision tool args) :action) 'allow))
+            (let ((wrapped (plist-get (ellama-tools-wrap-with-confirm tool) :function))
+                  (noninteractive nil) launched)
+              (cl-letf (((symbol-function 'start-file-process)
+                         (lambda (&rest _) (setq launched t)))
+                        ((symbol-function 'read-char-choice)
+                         (lambda (&rest _)
+                           (with-temp-file "draft.txt" (insert "Outside edit\n"))
+                           ?y)))
+                (funcall wrapped (lambda (text) (setq result text)) command))
+              (should (string-match-p "could not reverify" result))
+              (should-not launched))
+            (should (eq (plist-get (ellama-tools--dlp-input-decision tool args) :action) 'warn-strong)))
+          (with-temp-file "preexisting.txt" (insert "User data\n"))
+          (ellama-tools-write-file-tool #'ignore "preexisting.txt" "Session revision\n")
+          (should-not (ellama-tools--file-overwrite-evidence "preexisting.txt"))
+          (setq result nil)
+          (ellama-tools-shell-command-tool (lambda (text) (setq result text))
+                                           "command printf '%s\\n' created > shell.txt")
+          (let ((deadline (+ (float-time) 4)))
+            (while (and (not result) (< (float-time) deadline))
+              (accept-process-output nil 0.05)))
+          (should (equal result "Command completed successfully with no output."))
+          (should (eq (plist-get (ellama-tools--file-overwrite-evidence "shell.txt") :source) 'session)))
+      (dolist (name '("draft.txt" "preexisting.txt"))
+        (when-let* ((buffer (get-file-buffer (expand-file-name name))))
+          (kill-buffer buffer)))
+      (delete-directory directory t))))
+
+(ert-deftest test-ellama-tools-session-backup-is-required-through-repeated-writes ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((directory (make-temp-file "ellama-backed-write-" t))
+         (default-directory (file-name-as-directory (file-truename directory)))
+         (session (make-ellama-session :id "backup-owner"))
+         (ellama--current-session session)
+         (ellama-tools-allow-all t)
+         (ellama-tools-dlp-enabled t)
+         (ellama-tools-dlp-mode 'enforce)
+         (ellama-tools-dlp-regex-rules nil)
+         (ellama-tools-dlp-llm-check-enabled nil)
+         (ellama-tools-dlp-scan-env-exact-secrets nil)
+         (ellama-tools-irreversible-enabled t)
+         (ellama-tools-irreversible-decision-provider nil)
+         (ellama-tools-irreversible-default-action 'warn)
+         (ellama-tools-irreversible-project-overrides-enabled nil)
+         (ellama-tools-use-srt nil)
+         (ellama-tools-read-before-write-enabled nil)
+         (ellama-tools-edit-before-shell-commands nil)
+         (ellama-tools-edit-after-shell-commands nil)
+         (shell-file-name "/bin/sh")
+         (shell-command-switch "-c")
+         (source "source.txt") (backup "source.bak")
+         (shell '(:name "shell_command" :async t :function ellama-tools-shell-command-tool
+                        :args ((:name "cmd" :type string))))
+         (writer '(:name "write_file" :async t :function ellama-tools-write-file-tool
+                         :args ((:name "file_name" :type string) (:name "content" :type string))))
+         (write (plist-get (ellama-tools-wrap-with-confirm writer) :function))
+         (shell-call (plist-get (ellama-tools-wrap-with-confirm shell) :function))
+         (command "command printf %s revision > source.txt")
+         result)
+    (unwind-protect
+        (progn
+          (with-temp-file source (insert "Initial user data\n"))
+          (should (string-match-p "Verified backup" (ellama-tools-backup-file-tool source backup)))
+          (should (= (file-modes backup) #o600))
+          (should (string-match-p "new writable destination" (ellama-tools-backup-file-tool source backup)))
+          (let ((evidence (plist-get (ellama-tools--dlp-input-decision shell (list #'ignore command))
+                                     :overwrite-evidence)))
+            (should (eq (plist-get evidence :source) 'backup))
+            (should (ellama-tools--overwrite-evidence-current-p evidence source session))
+            (let ((ellama--current-session (make-ellama-session :id "other-session")))
+              (should-not (ellama-tools--file-overwrite-evidence source)))
+            ;; Replace the backup while a normal confirmation is pending.
+            (let ((ellama-tools-allow-all nil) (ellama-tools-allowed nil)
+                  (ellama-tools-confirm-allowed (make-hash-table)) (noninteractive nil)
+                  started)
+              (cl-letf (((symbol-function 'read-char-choice)
+                         (lambda (&rest _)
+                           (delete-file backup)
+                           ?y))
+                        ((symbol-function 'start-file-process)
+                         (lambda (&rest _) (setq started t))))
+                (funcall shell-call (lambda (text) (setq result text)) command))
+              (should-not started)
+              (should (string-match-p "could not reverify" result))
+              (should (string-match-p "backup_file" result)))
+            (with-temp-file backup (insert "Initial user data\n"))
+            (should-not (ellama-tools--overwrite-evidence-current-p evidence source session)))
+          (delete-file backup)
+          (should (string-match-p "Verified backup" (ellama-tools-backup-file-tool source backup)))
+          (funcall write (lambda (text) (setq result text)) source "Revision\n")
+          (should (string-match-p "Wrote" result))
+          (let* ((evidence (ellama-tools--file-overwrite-evidence source))
+                 (proof (plist-get (plist-get evidence :entry) :backup))
+                 (stamp (plist-get proof :copy-stamp))
+                 (stat (symbol-function 'ellama-tools--write-stat)))
+            (should (eq (plist-get evidence :source) 'session))
+            (with-temp-file backup (insert "Altered user data\n"))
+            ;; Even unchanged metadata must not authorize different bytes.
+            (cl-letf (((symbol-function 'ellama-tools--write-stat)
+                       (lambda (file)
+                         (if (equal file (plist-get proof :destination))
+                             (cdr stamp)
+                           (funcall stat file)))))
+              (should-not (ellama-tools--file-overwrite-evidence source))))
+          (let ((noninteractive t))
+            (funcall shell-call (lambda (text) (setq result text)) command)
+            (should (string-match-p "backup_file" result))
+            (funcall shell-call (lambda (text) (setq result text)) "rm -- source.txt")
+            (should (string-match-p "trash_files" result)))
+          (should-not (ellama-tools--dlp-refusal-hint '(:action block) '(:shell-command t) (list command)))
+          (should (string-match-p "trash_files" (ellama-tools--dlp-refusal-hint
+                                                 '(:action block :irreversible t)
+                                                 '(:shell-command t) '("rm -rf documents"))))
+          (should-not (ellama-tools--dlp-refusal-hint '(:action block :irreversible t)
+                                                      '(:shell-command t) '("rm -rf /"))))
+      (when-let* ((buffer (get-file-buffer (expand-file-name source))))
+        (kill-buffer buffer))
+      (delete-directory directory t))))
+
+(ert-deftest test-ellama-tools-shell-copy-registers-an-independent-session-backup ()
+  (ellama-test--ensure-local-ellama-tools)
+  (let* ((directory (make-temp-file "ellama-copy-backup-" t))
+         (default-directory (file-name-as-directory (file-truename directory)))
+         (ellama--current-session (make-ellama-session :id "copy-owner"))
+         (ellama-tools-use-srt nil)
+         (shell-file-name "/bin/sh")
+         (shell-command-switch "-c")
+         result)
+    (unwind-protect
+        (progn
+          (with-temp-file "primary.txt" (insert "Exact data\n"))
+          (ellama-tools-shell-command-tool (lambda (text) (setq result text)) "cp primary.txt replica.txt")
+          (let ((deadline (+ (float-time) 4)))
+            (while (and (not result) (< (float-time) deadline))
+              (accept-process-output nil 0.05)))
+          (should (equal result "Command completed successfully with no output."))
+          (should (eq (plist-get (ellama-tools--file-overwrite-evidence "primary.txt") :source) 'backup))
+          (delete-file "replica.txt")
+          (make-symbolic-link "primary.txt" "replica.txt")
+          (should-not (ellama-tools--file-overwrite-evidence "primary.txt")))
+      (delete-directory directory t))))
 
 (ert-deftest
     test-ellama-tools-wrap-with-confirm-dlp-warn-strong-noninteractive-block ()
