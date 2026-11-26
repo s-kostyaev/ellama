@@ -200,7 +200,7 @@ def summarize(rows, suite):
         matches = sum(row["expected"] == row["actual"] for row in cases)
         errors = [row["id"] for row in cases if row.get("error")]
         result = {"cases": len(cases), "correct": matches, "provider_errors": errors}
-        if suite in ("decisions", "contracts"):
+        if suite != "git":
             result.update(
                 dangerous_misses=[r["id"] for r in cases if r["expected"] and not r["actual"]],
                 unnecessary_strict=[r["id"] for r in cases if not r["expected"] and r["actual"]],
@@ -221,9 +221,10 @@ def summarize(rows, suite):
 
 def run(args):
     suite = args.suite
+    live = suite in ("decisions", "focus")
     structured = args.backend == "structured-chat"
-    if structured and (suite != "decisions" or not args.model):
-        raise ValueError("--backend structured-chat requires the decision suite and an explicit --model")
+    if structured and (not live or not args.model):
+        raise ValueError("--backend structured-chat requires decisions or focus and an explicit --model")
     if not structured and (args.thinking or args.max_output_tokens is not None):
         raise ValueError("--thinking and --max-output-tokens require --backend structured-chat")
     if args.max_output_tokens is not None and args.max_output_tokens <= 0:
@@ -231,7 +232,7 @@ def run(args):
     host = (args.host or ("http://127.0.0.1:8000" if structured else "http://127.0.0.1:11434")).rstrip("/")
     model = args.model or "pplx-decider-flash"
     suite_file = EVAL_DIR / {"decisions": "decisions.jsonl", "git": "git-evidence.jsonl",
-                            "contracts": "mcp-contracts.jsonl"}[suite]
+                            "contracts": "mcp-contracts.jsonl", "focus": "focus.jsonl"}[suite]
     rows = [r for r in read_rows(suite_file) if not args.group or r["group"] in args.group]
     if not rows:
         raise ValueError("No fixtures matched the requested groups")
@@ -247,7 +248,7 @@ def run(args):
         "evaluator_sha256": {name: sha256(EVAL_DIR / name) for name in ("run.py", "evaluate.el")},
         "groups": args.group,
     }
-    if suite == "decisions":
+    if live:
         identity = chat_identity if structured else ollama_identity
         resolved_model = identity(host, model)
         metadata.update(resolved_model, backend=args.backend, host=host, threshold=0.5)
@@ -308,7 +309,7 @@ def run(args):
     if suite == "contracts" and any(r["expected_calls"] != case["expected_calls"]
                                     for r, case in zip(observed, rows)):
         raise ValueError("Evaluator output does not match the expected calls in the fixtures")
-    if suite == "decisions" and identity(host, model) != resolved_model:
+    if live and identity(host, model) != resolved_model:
         raise ValueError("The provider or its selected model changed during the run")
     reports = summarize(observed, suite)
     with (output / "summary.json").open("x", encoding="utf-8") as report:
@@ -323,7 +324,7 @@ def run(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite", choices=("decisions", "git", "contracts"), default="decisions")
+    parser.add_argument("--suite", choices=("decisions", "git", "contracts", "focus"), default="decisions")
     parser.add_argument("--backend", choices=("systemone", "structured-chat"), default="systemone")
     parser.add_argument("--group", action="append", help="include this fixture group; repeat as needed")
     parser.add_argument("--source", type=Path, default=REPO, help="Ellama checkout to evaluate")

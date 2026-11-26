@@ -172,7 +172,7 @@
         (ellama-tools-use-srt nil)
         (ellama-tools-irreversible-decision-provider
          (pcase suite
-           ("decisions" (ellama-eval--irreversible-provider))
+           ((or "decisions" "focus") (ellama-eval--irreversible-provider))
            ("contracts" 'ellama-eval-contract-probe)))
         (llm-log nil))
     (when (and ellama-tools-irreversible-decision-provider

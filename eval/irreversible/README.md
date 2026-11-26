@@ -64,6 +64,12 @@ An invalid, incomplete or abstaining answer triggers the strict policy and
 appears in `provider_errors` in the summary. Check that field alongside
 `dangerous_misses` and `unnecessary_strict` when comparing runs.
 
+Use `--suite focus` for 18 additional cases. They pair a persistent SQL
+write with a rolled back write, destination replacement with a preview or
+no-overwrite call, public events with private events, and direct instructions
+in shell arguments with comments, printed text and negated instructions.
+Run `--suite decisions` for comparison with earlier 988-case runs.
+
 To select the same adapter for regular Ellama tool calls, configure its chat
 provider in Emacs. This setting is separate from the command-line evaluation.
 
@@ -79,8 +85,13 @@ provider in Emacs. This setting is separate from the command-line evaluation.
           '((chat_template_kwargs . ((enable_thinking . :false)))))))
 ```
 
-The chat server receives the same tool state and decision criteria. The
-adapter checks that `short_reasoning` is a string and passes a numeric
+The chat server receives the same tool state. For supported argument shapes,
+the adapter asks about the destination's previous contents, the audience of
+an event, or the writes that survive a SQL transaction. For a shell argument
+that is itself a direct instruction, it also asks about the instruction's
+intended effect. The System One questions stay the same.
+
+The adapter checks that `short_reasoning` is a string and passes a numeric
 `probability` between 0 and 1 to Ellama's policy. The model can abstain by
 returning `null`. Ellama applies the configured irreversible-action policy to
 an abstention or invalid response. Use the eval to see how the model's

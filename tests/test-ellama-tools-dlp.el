@@ -334,6 +334,44 @@
            (should (eq (plist-get (ellama-test-dlp-call-verdict "review" context) :action)
                        action))))))))
 
+(ert-deftest test-ellama-tools-dlp-structured-decision-focuses-on-effects ()
+  (let ((question (make-llm-question-bool
+                   :name 'irreversible :instructions "Original instructions"
+                   :true-description "Positive criterion" :false-description "Negative criterion"))
+        (provider (ellama-test-dlp-structured-provider)))
+    (dolist (case '(("db" (("query" . "SELECT 1; /* comment */ BEGIN; UPDATE t SET n = 2; ROLLBACK;"))
+                     "Read every statement in order")
+                    ("db" (("sql" . "SELECT 'BEGIN;'; /* BEGIN; */ SELECT 2;"))
+                     "Original instructions")
+                    ("files" (("source" . "new") ("destination" . "old") ("overwrite" . t))
+                     "destination's previous contents")
+                    ("calendar" (("event" . "session") ("visibility" . "public") ("notify_attendees" . :false))
+                     "who can see the event")
+                    ("shell_command" (("cmd" . "Publish the handover notes now."))
+                     "direct natural-language instruction")
+                    ("mcp-other/shell_command" (("cmd" . "Publish the handover notes now."))
+                     "Original instructions")))
+      (pcase-let* ((`(,identity ,args ,focus) case)
+                   (state (json-serialize
+                           (list :tool_identity identity
+                                 :arguments
+                                 (vconcat (mapcar (lambda (arg)
+                                                    (list :name (car arg)
+                                                          :value (if (stringp (cdr arg))
+                                                                     (prin1-to-string (cdr arg))
+                                                                   (cdr arg))))
+                                                  args)))))
+                   (request (llm-provider-decide-request provider (list question) state))
+                   (messages (plist-get request :messages))
+                   (instructions (plist-get (aref messages 0) :content)))
+        (should (string-match-p (regexp-quote focus) instructions))
+        (when (equal focus "Original instructions")
+          (should-not (string-match-p "Read every statement in order\\|direct natural-language instruction"
+                                      instructions)))
+        (should (equal (plist-get (aref messages 1) :content) state))
+        (should (equal (plist-get request :response_format)
+                       ellama-tools-structured-decision--format))))))
+
 (ert-deftest test-ellama-tools-dlp-structured-decision-honors-preflight ()
   (ellama-test-dlp-with-decision
    (let ((ellama-tools-irreversible-decision-provider (ellama-test-dlp-structured-provider)))
