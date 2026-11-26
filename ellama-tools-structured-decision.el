@@ -15,10 +15,12 @@
 (require 'seq)
 (require 'subr-x)
 
-(cl-defstruct (ellama-tools-structured-decision-provider
-               (:include llm-standard-decide-provider))
-  "Decision adapter for a CHAT-PROVIDER made with `make-llm-openai-compatible'."
-  chat-provider)
+;; Older Emacs versions generate an overlong docstring for the slot's compiler macro.
+(with-suppressed-warnings ((docstrings nil))
+  (cl-defstruct (ellama-tools-structured-decision-provider
+                 (:include llm-standard-decide-provider))
+    "Decision adapter with a CHAT-PROVIDER made by `make-llm-openai-compatible'."
+    chat-provider))
 
 (defconst ellama-tools-structured-decision--reasoning-max-length 512
   "Maximum number of characters in the structured reasoning field.")
