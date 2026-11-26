@@ -19,6 +19,19 @@ It defaults to `pplx-decider-flash` on `http://127.0.0.1:11434`. Use
 `--host` and `--model` to select another endpoint or model. The Git suite
 runs without Ollama.
 
+## Run the MCP contract suite
+
+```sh
+python3 eval/irreversible/run.py --suite contracts
+```
+
+The suite registers synthetic tools by their full MCP identities and
+uses temporary files for the copy and batch cases. It checks the verdict
+and whether a case needed a decision request. The fallback is a local
+stub that returns a negative score, so a matching fallback verdict
+tests routing and policy only. The suite never calls a model or
+executes the tool being evaluated.
+
 ## Run the decision suite with oMLX
 
 With oMLX already running, get the ID of the installed model from its API.
@@ -92,6 +105,9 @@ or standard input. For `cp`, Ellama resolves the file inside an existing
 destination directory and honors `-n`. It applies the irreversible policy
 to replacement of nonempty data without verified recovery. Before running
 a permitted command, Ellama rechecks the effective destination.
+In a supported ordered list, an earlier literal writer can account
+for a source file created before a later `cp -n`. Ellama still checks
+the outputs of both stages.
 Truncating a nonempty file through an output redirection on `tee`, `wc`,
 or `cut` still triggers the irreversible policy.
 

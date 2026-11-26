@@ -88,16 +88,18 @@
           (cl-letf (((symbol-function 'llm-decide)
                      (lambda (provider questions state)
                        (cl-incf calls)
-                       (push (llm-provider-decide-request provider questions state)
-                             requests)
-                       (let ((start (float-time)))
-                         (unwind-protect
-                             (condition-case err
-                                 (funcall decide provider questions state)
-                               (error
-                                (setq failure (error-message-string err))
-                                (signal (car err) (cdr err))))
-                           (push (* 1000 (- (float-time) start)) elapsed)))))
+                       (if (eq provider 'ellama-eval-contract-probe)
+                           (list (cons 'irreversible (make-llm-decision-bool :confidence 0)))
+                         (push (llm-provider-decide-request provider questions state)
+                               requests)
+                         (let ((start (float-time)))
+                           (unwind-protect
+                               (condition-case err
+                                   (funcall decide provider questions state)
+                                 (error
+                                  (setq failure (error-message-string err))
+                                  (signal (car err) (cdr err))))
+                             (push (* 1000 (- (float-time) start)) elapsed))))))
                     ((symbol-function 'llm-provider-decide-extract-result)
                      (lambda (provider response)
                        (push response responses)
@@ -161,10 +163,17 @@
         (ellama-tools-dlp--session-bypasses nil)
         (ellama-tools-dlp-policy-overrides nil)
         (ellama-tools-irreversible-tool-risk-overrides nil)
+        (ellama-tools-irreversible-tool-effects
+         (when (equal suite "contracts")
+           '(("mcp-eval-files/copy_file" . local-copy)
+             ("mcp-eval-files/apply_folder_operations" . local-batch)
+             ("mcp-eval-calendar/update_event_visibility" . event-publication)
+             ("mcp-eval-sqlite/execute_sql_script" . sqlite-script))))
         (ellama-tools-use-srt nil)
         (ellama-tools-irreversible-decision-provider
-         (when (equal suite "decisions")
-           (ellama-eval--irreversible-provider)))
+         (pcase suite
+           ("decisions" (ellama-eval--irreversible-provider))
+           ("contracts" 'ellama-eval-contract-probe)))
         (llm-log nil))
     (when (and ellama-tools-irreversible-decision-provider
                (equal (getenv "ELLAMA_EVAL_BACKEND") "structured-chat"))
@@ -189,6 +198,8 @@
                  (append (list :id (gethash "id" case)
                                :group (gethash "group" case)
                                :expected (gethash "expected" case))
+                         (when (equal suite "contracts")
+                           (list :expected_calls (gethash "expected_calls" case)))
                          result))
                 'utf-8))
         (terpri)))))

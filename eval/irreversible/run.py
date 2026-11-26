@@ -41,19 +41,11 @@ def fixture_path(directory, name):
     return directory / relative
 
 
-def prepare_decision_case(case, sandbox):
-    prepared = dict(case, working_directory=str(sandbox))
-    if "git_change" in case:
-        return prepare_git_case(dict(prepared, target=case["fixture_file"],
-                                     change=case["git_change"]), sandbox)
-    if "fixture_file" not in case:
-        return prepared
-    sandbox.mkdir()
-    path = fixture_path(sandbox, case["fixture_file"])
+def prepare_file_fixture(sandbox, name, state, content=b"Synthetic local data\n"):
+    path = fixture_path(sandbox, name)
     path.parent.mkdir(parents=True, exist_ok=True)
-    state = case["file_state"]
     if state == "nonempty":
-        path.write_bytes(b"Synthetic local data\n")
+        path.write_bytes(content)
     elif state == "empty":
         path.touch()
     elif state == "directory":
@@ -64,6 +56,20 @@ def prepare_decision_case(case, sandbox):
         path.symlink_to(target.name)
     elif state != "missing":
         raise ValueError(f"Unknown filesystem fixture state {state!r}")
+
+
+def prepare_decision_case(case, sandbox):
+    prepared = dict(case, working_directory=str(sandbox))
+    extra = case.get("fixture_files", {})
+    if "git_change" in case:
+        prepared = prepare_git_case(dict(prepared, target=case["fixture_file"],
+                                         change=case["git_change"]), sandbox)
+    elif "fixture_file" in case or extra:
+        sandbox.mkdir()
+        if "fixture_file" in case:
+            prepare_file_fixture(sandbox, case["fixture_file"], case["file_state"])
+    for name, state in extra.items():
+        prepare_file_fixture(sandbox, name, state, f"Synthetic data for {name}\n".encode())
     return prepared
 
 
@@ -194,7 +200,7 @@ def summarize(rows, suite):
         matches = sum(row["expected"] == row["actual"] for row in cases)
         errors = [row["id"] for row in cases if row.get("error")]
         result = {"cases": len(cases), "correct": matches, "provider_errors": errors}
-        if suite == "decisions":
+        if suite in ("decisions", "contracts"):
             result.update(
                 dangerous_misses=[r["id"] for r in cases if r["expected"] and not r["actual"]],
                 unnecessary_strict=[r["id"] for r in cases if not r["expected"] and r["actual"]],
@@ -204,6 +210,9 @@ def summarize(rows, suite):
             if times:
                 result["model_p50_ms"] = round(statistics.median(times), 2)
                 result["model_p95_ms"] = round(times[math.ceil(0.95 * len(times)) - 1], 2)
+            if suite == "contracts":
+                result["model_call_mismatches"] = [r["id"] for r in cases
+                                                   if r["calls"] != r["expected_calls"]]
         else:
             result["mismatches"] = [r["id"] for r in cases if r["expected"] != r["actual"]]
         report[name] = result
@@ -221,7 +230,8 @@ def run(args):
         raise ValueError("--max-output-tokens must be positive")
     host = (args.host or ("http://127.0.0.1:8000" if structured else "http://127.0.0.1:11434")).rstrip("/")
     model = args.model or "pplx-decider-flash"
-    suite_file = EVAL_DIR / ("decisions.jsonl" if suite == "decisions" else "git-evidence.jsonl")
+    suite_file = EVAL_DIR / {"decisions": "decisions.jsonl", "git": "git-evidence.jsonl",
+                            "contracts": "mcp-contracts.jsonl"}[suite]
     rows = [r for r in read_rows(suite_file) if not args.group or r["group"] in args.group]
     if not rows:
         raise ValueError("No fixtures matched the requested groups")
@@ -245,6 +255,8 @@ def run(args):
             metadata.update(thinking=args.thinking, max_output_tokens=args.max_output_tokens, temperature=0)
         else:
             warm_ollama(host, model)
+    elif suite == "contracts":
+        metadata["backend"] = "offline-stub"
 
     output = args.output
     if output is None:
@@ -256,7 +268,7 @@ def run(args):
         output.mkdir(parents=True, exist_ok=True)
     print(f"Running {len(rows)} {suite} cases. Results: {output}", flush=True)
 
-    prepare = prepare_decision_case if suite == "decisions" else prepare_git_case
+    prepare = prepare_git_case if suite == "git" else prepare_decision_case
     with tempfile.TemporaryDirectory(prefix="ellama-irreversible-") as temp:
         workspace = Path(temp)
         empty = workspace / "empty"
@@ -265,7 +277,7 @@ def run(args):
         with fixture_file.open("w", encoding="utf-8") as fixtures:
             for index, case in enumerate(rows):
                 directory = workspace / str(index)
-                if suite == "decisions" and "fixture_file" not in case:
+                if suite != "git" and "fixture_file" not in case and not case.get("fixture_files"):
                     directory = empty
                 prepared = prepare(case, directory)
                 fixtures.write(json.dumps(prepared, ensure_ascii=False) + "\n")
@@ -293,6 +305,9 @@ def run(args):
     observed = read_rows(output / "rows.jsonl")
     if [(r["id"], r["expected"]) for r in observed] != [(r["id"], r["expected"]) for r in rows]:
         raise ValueError("Evaluator output does not match the selected fixtures")
+    if suite == "contracts" and any(r["expected_calls"] != case["expected_calls"]
+                                    for r, case in zip(observed, rows)):
+        raise ValueError("Evaluator output does not match the expected calls in the fixtures")
     if suite == "decisions" and identity(host, model) != resolved_model:
         raise ValueError("The provider or its selected model changed during the run")
     reports = summarize(observed, suite)
@@ -300,12 +315,15 @@ def run(args):
         json.dump({**metadata, "metrics": reports}, report, indent=2, ensure_ascii=False)
         report.write("\n")
     print(json.dumps(reports["all"], ensure_ascii=False))
-    return bool(reports["all"]["provider_errors"])
+    total = reports["all"]
+    return (bool(total["provider_errors"])
+            or (suite == "contracts" and
+                (total["correct"] != len(rows) or bool(total["model_call_mismatches"]))))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite", choices=("decisions", "git"), default="decisions")
+    parser.add_argument("--suite", choices=("decisions", "git", "contracts"), default="decisions")
     parser.add_argument("--backend", choices=("systemone", "structured-chat"), default="systemone")
     parser.add_argument("--group", action="append", help="include this fixture group; repeat as needed")
     parser.add_argument("--source", type=Path, default=REPO, help="Ellama checkout to evaluate")

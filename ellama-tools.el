@@ -1549,8 +1549,9 @@ Return (t . OUTPUTS) with (MODE . OPERAND) pairs, or nil on unsupported syntax."
 
 (defun ellama-tools--shell-pipeline-stages (command &optional lists)
   "Split COMMAND at outer pipeline operators, preserving groups and quotes.
-When LISTS is non-nil, also split supported sequential and conditional lists."
-  (let ((start 0) (position 0) closing stages invalid)
+When LISTS is non-nil, also split supported lists.  With `classify',
+prefix the stages with `ordered' for ; and &&, or `mixed' otherwise."
+  (let ((start 0) (position 0) (order 'ordered) closing stages invalid)
     (while (and (not invalid) (< position (length command)))
       (let ((char (aref command position)))
         (pcase char
@@ -1569,6 +1570,7 @@ When LISTS is non-nil, also split supported sequential and conditional lists."
                       (not (memq (and (> position 0) (aref command (1- position)))
                                  '(?> ?<))))
              (let ((next (and (< (1+ position) (length command)) (aref command (1+ position)))))
+               (when (eq char ?|) (setq order 'mixed))
                (cond
                 ((and lists (memq char '(?| ?&)) (eq next char))
                  (push (substring command start position) stages)
@@ -1581,7 +1583,8 @@ When LISTS is non-nil, also split supported sequential and conditional lists."
                  (setq start (1+ position))))))))
         (setq position (1+ position))))
     (when (and stages (not invalid) (not closing))
-      (nreverse (cons (substring command start) stages)))))
+      (let ((stages (nreverse (cons (substring command start) stages))))
+        (if (eq lists 'classify) (cons order stages) stages)))))
 
 (defun ellama-tools--shell-output-operands (command &optional depth)
   "Collect literal output operands of COMMAND, including nested supported forms.
@@ -2711,8 +2714,9 @@ file contents, or discovered paths.  An unverified result proves no recovery."
   (and (not (file-name-absolute-p path))
        (not (seq-intersection (mapcar #'downcase (split-string path "/" t)) '(".." ".git")))))
 
-(defun ellama-tools--literal-file-outputs (command)
-  "Return a supported COMMAND's literal writer and complete list of outputs."
+(defun ellama-tools--literal-file-outputs (command &optional checked-printer)
+  "Return a supported COMMAND's literal writer and complete list of outputs.
+With CHECKED-PRINTER, accept unqualified system printers for no-loss proofs."
   (when (ellama-tools--posix-shell-p)
     (save-match-data
       (let* ((case-fold-search nil)
@@ -2722,10 +2726,13 @@ file contents, or discovered paths.  An unverified result proves no recovery."
           (let* ((writer (match-string 1 command))
                  (suffix (match-string 2 command))
                  (separated (< (match-end 1) (match-beginning 2)))
+                 (bare (and checked-printer
+                            (string-match "\\`\\(echo\\|printf\\)\\(?:[ \t]\\|\\'\\)" writer)
+                            (ellama-tools--shell-system-utility-p "" (match-string 1 writer))))
                  (program (cond
                            ((string-match "\\`command[ \t]+" writer)
                             (substring writer (match-end 0)))
-                           ((or (equal writer ":") (string-match-p "\\`/\\(?:usr/\\)?bin/" writer))
+                           ((or bare (equal writer ":") (string-match-p "\\`/\\(?:usr/\\)?bin/" writer))
                             writer))))
             (when (and program
                        (or (equal program ":")
@@ -2743,7 +2750,8 @@ file contents, or discovered paths.  An unverified result proves no recovery."
                                                 (not (member ".." parts))
                                                 (not (member ".git" (mapcar #'downcase parts))))
                                     return nil
-                                    collect (list :path path :mode mode))))
+                                    collect (append (list :path path :mode mode)
+                                                    (when bare '(:require-no-loss t))))))
                 (list :writer program :targets targets)))))))))
 
 (defun ellama-tools--shell-system-utility-p (prefix name)
@@ -2767,8 +2775,9 @@ file contents, or discovered paths.  An unverified result proves no recovery."
                 (member (executable-find name)
                         (list (concat "/bin/" name) (concat "/usr/bin/" name)))))))))
 
-(defun ellama-tools--shell-copy-output (arguments)
-  "Return the output target for a supported cp with ARGUMENTS."
+(defun ellama-tools--shell-copy-output (arguments &optional earlier-outputs)
+  "Return the output target for a supported cp with ARGUMENTS.
+EARLIER-OUTPUTS names files that a preceding ordered stage can create."
   (let ((word ellama-tools--shell-output-target-pattern))
     (when (string-match
            (concat "\\`[ \t]+\\(?:\\(-[fn]\\)[ \t]+\\)?\\(?:--[ \t]+\\)?"
@@ -2776,10 +2785,18 @@ file contents, or discovered paths.  An unverified result proves no recovery."
       (let ((flag (match-string 1 arguments))
             (input (match-string 2 arguments))
             (output (match-string 3 arguments)))
-        (when-let* (((not (string-match-p "[$`]" output)))
-                    ((ellama-tools--shell-readable-input-p input))
+        (when-let* (((not (string-match-p "[$`]" input)))
+                    ((not (string-match-p "[$`]" output)))
                     (source (ellama-tools--shell-local-output-file input t))
-                    ((file-regular-p source))
+                    ((or (and (ellama-tools--shell-readable-input-p input)
+                              (file-regular-p source))
+                         ;; A skipped or failed producer leaves the source
+                         ;; missing.  Either way cp -n keeps the old destination.
+                         (and (equal flag "-n")
+                              (member (ellama-tools--local-write-path
+                                       (ellama-tools--shell-output-path input))
+                                      earlier-outputs)
+                              (equal (ellama-tools--shell-output-state input) "missing"))))
                     (path (ellama-tools--shell-local-output-file output t t))
                     ((not (ellama-tools--tool-check-file-access path 'read)))
                     ((or (not (string-suffix-p "/" (ellama-tools--shell-output-path output)))
@@ -2788,7 +2805,7 @@ file contents, or discovered paths.  An unverified result proves no recovery."
                          (not (ellama-tools--tool-check-file-access path 'list))))
                     (destination (ellama-tools--shell-copy-destination source path))
                     ((not (file-directory-p destination)))
-                    ((not (file-equal-p source destination))))
+                    ((not (or (equal source destination) (file-equal-p source destination)))))
           (list t (list :path (if (file-name-absolute-p (ellama-tools--shell-output-path output))
                                   destination
                                 (file-relative-name destination default-directory))
@@ -2834,8 +2851,8 @@ file contents, or discovered paths.  An unverified result proves no recovery."
             (unless (memq nil targets)
               (cons t (delq 'discarded targets)))))))))
 
-(defun ellama-tools--shell-utility-outputs (command)
-  "Collect complete output effects of a supported literal utility COMMAND."
+(defun ellama-tools--shell-utility-outputs (command &optional earlier-outputs)
+  "Collect effects of a supported utility COMMAND after EARLIER-OUTPUTS."
   (when (string-match
          "\\`[ \t]*\\(?:command[ \t]+\\)?\\(/bin/\\|/usr/bin/\\|\\)\\(cp\\|tee\\|wc\\|cut\\)\\_>" command)
     (let ((prefix (match-string 1 command))
@@ -2844,13 +2861,27 @@ file contents, or discovered paths.  An unverified result proves no recovery."
       (condition-case nil
           (when (ellama-tools--shell-system-utility-p prefix name)
             (if (equal name "cp")
-                (ellama-tools--shell-copy-output arguments)
+                (ellama-tools--shell-copy-output arguments earlier-outputs)
               (ellama-tools--shell-stream-outputs name arguments)))
         (file-error nil)))))
 
-(defun ellama-tools--shell-complete-outputs (command &optional depth)
+(defun ellama-tools--shell-ordered-outputs (stages depth earlier-outputs)
+  "Collect STAGES at DEPTH using files that EARLIER-OUTPUTS can create."
+  (let ((available earlier-outputs))
+    (cl-loop for stage in stages
+             for effects = (ellama-tools--shell-complete-outputs stage depth available)
+             unless effects return nil
+             do (dolist (target (cdr effects))
+                  (when-let* ((file (ignore-errors
+                                      (ellama-tools--local-write-path (plist-get target :path)))))
+                    (push file available)))
+             append (cdr effects) into targets
+             finally return (cons t targets))))
+
+(defun ellama-tools--shell-complete-outputs (command &optional depth earlier-outputs)
   "Prove the complete output effects of supported literal COMMAND.
-Return (t . TARGETS) in redirection order.  DEPTH bounds group traversal."
+Return (t . TARGETS) in redirection order.  DEPTH bounds group traversal.
+EARLIER-OUTPUTS names files a preceding stage may create."
   (when (and (ellama-tools--posix-shell-p)
              (<= (string-bytes command) ellama-tools-dlp-max-scan-size)
              (< (or depth 0) 8))
@@ -2858,9 +2889,9 @@ Return (t . TARGETS) in redirection order.  DEPTH bounds group traversal."
       (let ((next (1+ (or depth 0)))
             (case-fold-search nil))
         (cond
-         ((when-let* ((literal (ellama-tools--literal-file-outputs command)))
+         ((when-let* ((literal (ellama-tools--literal-file-outputs command t)))
             (cons t (plist-get literal :targets))))
-         ((ellama-tools--shell-utility-outputs command))
+         ((ellama-tools--shell-utility-outputs command earlier-outputs))
          ((or (eq (ellama-tools--shell-literal-shape command) 'trusted-printer)
               (and (string-match "\\`[ \t]*command[ \t]+" command)
                    (memq (ellama-tools--shell-literal-shape (substring command (match-end 0)))
@@ -2870,12 +2901,16 @@ Return (t . TARGETS) in redirection order.  DEPTH bounds group traversal."
                        "\\(?:true\\|false\\|test[ \t]+\\(?:![ \t]+\\)?"
                        "-[efs][ \t]+[a-zA-Z0-9_./][a-zA-Z0-9_./-]*\\)\\)[ \t]*\\'") command))
           (list t))
-         ((when-let* ((stages (ellama-tools--shell-pipeline-stages command t))
-                      ((<= (length stages) 16))
-                      (effects (mapcar (lambda (stage) (ellama-tools--shell-complete-outputs stage next))
-                                       stages))
-                      ((not (memq nil effects))))
-            (cons t (mapcan #'cdr effects))))
+         ((when-let* ((parsed (ellama-tools--shell-pipeline-stages command 'classify))
+                      (stages (cdr parsed))
+                      ((<= (length stages) 16)))
+            (if (eq (car parsed) 'ordered)
+                (ellama-tools--shell-ordered-outputs stages next earlier-outputs)
+              (let ((effects (mapcar (lambda (stage)
+                                       (ellama-tools--shell-complete-outputs stage next earlier-outputs))
+                                     stages)))
+                (unless (memq nil effects)
+                  (cons t (mapcan #'cdr effects)))))))
          ((or (string-match "\\`[ \t]*(\\(.*\\))\\([ \t]*\\(?:>.*\\)?\\)\\'" command)
               (string-match "\\`[ \t]*{[ \t]+\\(.*\\);[ \t]+}\\([ \t]*\\(?:>.*\\)?\\)\\'" command))
           (let* ((body (match-string 1 command))
@@ -2883,7 +2918,7 @@ Return (t . TARGETS) in redirection order.  DEPTH bounds group traversal."
                  (outer (unless (string-blank-p suffix)
                           (ellama-tools--literal-file-outputs (concat ": " suffix)))))
             (when-let* (((or (string-blank-p suffix) outer))
-                        (inner (ellama-tools--shell-complete-outputs body next)))
+                        (inner (ellama-tools--shell-complete-outputs body next earlier-outputs)))
               (cons t (append (plist-get outer :targets) (cdr inner)))))))))))
 
 (defun ellama-tools--literal-file-output (command)
