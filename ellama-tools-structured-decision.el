@@ -51,7 +51,7 @@
    (ellama-tools-structured-decision-provider-chat-provider provider)))
 
 (defun ellama-tools-structured-decision--sql-transaction-argument-p (argument)
-  "Check whether named ARGUMENT holds a SQL script with a transaction opener."
+  "Recognize a transaction opener in the named SQL ARGUMENT."
   (when (ellama-tools-dlp--sql-argument-p (car argument))
     ;; The decision state prints string arguments with Lisp string quoting.
     (let ((value (cdr argument)))
