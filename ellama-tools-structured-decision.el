@@ -52,18 +52,36 @@
   (llm-provider-headers
    (ellama-tools-structured-decision-provider-chat-provider provider)))
 
-(defun ellama-tools-structured-decision--sql-transaction-argument-p (argument)
-  "Recognize a transaction opener in the named SQL ARGUMENT."
-  (when (ellama-tools-dlp--sql-argument-p (car argument))
-    ;; The decision state prints string arguments with Lisp string quoting.
-    (let ((value (cdr argument)))
-      (when (and (stringp value) (string-prefix-p "\"" value))
-        (pcase (condition-case nil (read-from-string value) (error nil))
-          (`(,(and (pred stringp) sql) . ,end)
-           (and (= end (length value))
-                (seq-some (lambda (part)
-                            (ellama-tools-dlp--sql-transaction-p (concat part ";")))
-                          (ellama-tools-dlp--sql-split-statements sql)))))))))
+(defun ellama-tools-structured-decision--string-argument (value)
+  "Recover the string from a decision argument VALUE."
+  ;; The decision state uses Lisp quoting for string values.
+  (when (and (stringp value) (string-prefix-p "\"" value))
+    (pcase (condition-case nil (read-from-string value) (error nil))
+      (`(,(and (pred stringp) text) . ,end)
+       (when (= end (length value)) text)))))
+
+(defun ellama-tools-structured-decision--sql-leading-read-p (argument)
+  "Recognize a leading read before a transaction in SQL ARGUMENT."
+  (when-let* (((ellama-tools-dlp--sql-argument-p (car argument)))
+              (sql (ellama-tools-structured-decision--string-argument (cdr argument))))
+    (let ((case-fold-search t))
+      (and (string-match-p (concat "\\`" ellama-tools-dlp--sql-leading-trivia-pattern
+                                   "SELECT\\_>") sql)
+           (seq-some (lambda (part)
+                       (ellama-tools-dlp--sql-transaction-p (concat part ";")))
+                     (cdr (ellama-tools-dlp--sql-split-statements sql)))))))
+
+(defun ellama-tools-structured-decision--shell-sentence-p (value)
+  "Recognize sentence-shaped shell argument VALUE for intent review."
+  (when-let* ((text (ellama-tools-structured-decision--string-argument value)))
+    ;; This routes a question only. A sentence can still name an executable.
+    (let* ((word "[[:alpha:]][[:alnum:]]*\\(?:[-’][[:alnum:]]+\\)*")
+           (clause (concat word "\\(?:,?[ \t]+" word "\\)\\{2,\\}")))
+      (and (string-match-p (concat "\\`" clause "\\(?:;[ \t]+" clause "\\)*[.!?]\\'")
+                           (string-trim text))
+           (not (string-match-p
+                 "\\`[ \t]*\\(?:echo\\|printf\\|command\\|builtin\\|exec\\|eval\\|env\\)[ \t]"
+                 text))))))
 
 (defun ellama-tools-structured-decision--criteria (question state)
   "Focus QUESTION on the relevant target and effect in decision STATE."
@@ -81,22 +99,8 @@
          (negative (llm-question-bool-false-description question)))
     (cond
      ((and (= (length values) 1)
-           (ellama-tools-structured-decision--sql-transaction-argument-p (car values)))
-      (list (concat "Which executed data-changing statement, if any, survives its transaction? "
-                    "Read every statement in order, even if the script starts with a read. "
-                    "A rollback ends its transaction and only undoes writes in its scope. "
-                    "Then check for later writes, including standalone writes that can autocommit. "
-                    "The END transaction statement commits like COMMIT. "
-                    "Honor explicit execution controls and treat comments and strings as data.")
-            "An executed write replaces or removes stored data and survives."
-            "The tool only reads or previews, or all executed writes are rolled back."))
-     ((and (assoc "source" values) (assoc "destination" values)
-           (memq (cdr (assoc "overwrite" values)) '(t :false)))
-      (list (concat instructions " Focus on the destination's previous contents. "
-                    "An intact source does not restore the destination's old bytes. "
-                    "Use evidence that the destination is new, empty or recoverable if supplied. "
-                    "Do not assume a backup exists. Honor no-overwrite and preview controls.")
-            positive negative))
+           (ellama-tools-structured-decision--sql-leading-read-p (car values)))
+      (ellama-tools-dlp--irreversible-question-criteria 'sql-transaction))
      ((and (assoc "event" values) (assoc "visibility" values)
            (memq (cdr (assoc "notify_attendees" values)) '(t :false)))
       (list (concat instructions " Focus on who can see the event after the call. "
@@ -104,13 +108,13 @@
                     "Check for a preview or evidence that the event is already public.")
             positive negative))
      ((and (listp call) (equal (alist-get 'tool_identity call) "shell_command")
-           (stringp (cdr (assoc "cmd" values)))
-           (not (or (alist-get 'shell_outputs call) (alist-get 'shell_deletion call))))
-      (list (concat instructions " If cmd itself is a direct natural-language instruction "
-                    "to carry out an irreversible operation, flag its intended effect for review, "
-                    "even when it has no shell executable. Apply this to the instruction itself, "
-                    "not to comments, quoted operands being printed, examples or negated requests.")
-            (concat positive " A direct instruction in cmd to perform such an operation also counts.")
+           (not (or (alist-get 'shell_outputs call) (alist-get 'shell_deletion call)))
+           (ellama-tools-structured-decision--shell-sentence-p (cdr (assoc "cmd" values))))
+      (list (concat "Inspect the complete cmd argument. For a direct natural-language instruction, "
+                    "classify the operation it asks to perform even if the shell cannot execute it. "
+                    "For a shell command, trace only reachable effects. Treat examples, comments "
+                    "and printed or negated requests as data.")
+            (concat positive " A direct request to perform any of these operations also counts.")
             negative))
      (t (list instructions positive negative)))))
 

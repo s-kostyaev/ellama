@@ -85,11 +85,11 @@ provider in Emacs. This setting is separate from the command-line evaluation.
           '((chat_template_kwargs . ((enable_thinking . :false)))))))
 ```
 
-The chat server receives the same tool state. For supported argument shapes,
-the adapter asks about the destination's previous contents, the audience of
-an event, or the writes that survive a SQL transaction. For a shell argument
-that is itself a direct instruction, it also asks about the instruction's
-intended effect. The System One questions stay the same.
+The chat server receives the same tool state. The adapter asks who can see an
+event after a visibility change. It uses the transaction question for SQL
+scripts that start with `SELECT` and open a transaction later. A shell argument
+that looks like a natural-language sentence gets a question about its intended
+effect. System One uses its existing questions.
 
 The adapter checks that `short_reasoning` is a string and passes a numeric
 `probability` between 0 and 1 to Ellama's policy. The model can abstain by
