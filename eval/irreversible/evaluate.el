@@ -15,6 +15,7 @@
 
 (require 'cl-lib)
 (require 'json)
+(require 'subr-x)
 (require 'ellama-tools)
 
 (defun ellama-eval--irreversible-lisp-value (value)
@@ -87,16 +88,18 @@
           (cl-letf (((symbol-function 'llm-decide)
                      (lambda (provider questions state)
                        (cl-incf calls)
-                       (push (llm-provider-decide-request provider questions state)
-                             requests)
-                       (let ((start (float-time)))
-                         (unwind-protect
-                             (condition-case err
-                                 (funcall decide provider questions state)
-                               (error
-                                (setq failure (error-message-string err))
-                                (signal (car err) (cdr err))))
-                           (push (* 1000 (- (float-time) start)) elapsed)))))
+                       (if (eq provider 'ellama-eval-contract-probe)
+                           (list (cons 'irreversible (make-llm-decision-bool :confidence 0)))
+                         (push (llm-provider-decide-request provider questions state)
+                               requests)
+                         (let ((start (float-time)))
+                           (unwind-protect
+                               (condition-case err
+                                   (funcall decide provider questions state)
+                                 (error
+                                  (setq failure (error-message-string err))
+                                  (signal (car err) (cdr err))))
+                             (push (* 1000 (- (float-time) start)) elapsed))))))
                     ((symbol-function 'llm-provider-decide-extract-result)
                      (lambda (provider response)
                        (push response responses)
@@ -123,6 +126,28 @@
                                 incidents)
                        :null)))))
 
+(defun ellama-eval--irreversible-provider ()
+  "Build the decision provider selected by the Python runner."
+  (let ((model (getenv "ELLAMA_EVAL_MODEL"))
+        (endpoint (getenv "ELLAMA_EVAL_ENDPOINT"))
+        (max-output-tokens (getenv "ELLAMA_EVAL_MAX_OUTPUT_TOKENS")))
+    (if (equal (getenv "ELLAMA_EVAL_BACKEND") "structured-chat")
+        (progn
+          (require 'ellama-tools-structured-decision)
+          (make-ellama-tools-structured-decision-provider
+           :chat-provider
+           (make-llm-openai-compatible
+            :url endpoint :chat-model model :key (getenv "ELLAMA_EVAL_API_KEY")
+            :default-chat-max-tokens
+            (unless (string-empty-p (or max-output-tokens ""))
+              (string-to-number max-output-tokens))
+            :default-chat-non-standard-params
+            `((chat_template_kwargs .
+               ((enable_thinking . ,(if (equal (getenv "ELLAMA_EVAL_THINKING") "true")
+                                        t :false))))))))
+      (require 'llm-typesafe)
+      (make-llm-typesafe-compatible :model model :url endpoint))))
+
 (defun ellama-eval--irreversible-run (cases suite)
   "Evaluate the synthetic CASES in SUITE and print one JSON record per case."
   (let ((ellama-tools-dlp-enabled t)
@@ -138,14 +163,28 @@
         (ellama-tools-dlp--session-bypasses nil)
         (ellama-tools-dlp-policy-overrides nil)
         (ellama-tools-irreversible-tool-risk-overrides nil)
+        (ellama-tools-irreversible-tool-effects
+         (when (equal suite "contracts")
+           '(("mcp-eval-files/copy_file" . local-copy)
+             ("mcp-eval-files/apply_folder_operations" . local-batch)
+             ("mcp-eval-calendar/update_event_visibility" . event-publication)
+             ("mcp-eval-sqlite/execute_sql_script" . sqlite-script))))
         (ellama-tools-use-srt nil)
         (ellama-tools-irreversible-decision-provider
-         (when (equal suite "decisions")
-           (require 'llm-typesafe)
-           (make-llm-typesafe-compatible
-            :model (getenv "ELLAMA_EVAL_MODEL")
-            :url (getenv "ELLAMA_EVAL_ENDPOINT"))))
+         (pcase suite
+           ((or "decisions" "focus") (ellama-eval--irreversible-provider))
+           ("contracts" 'ellama-eval-contract-probe)))
         (llm-log nil))
+    (when (and ellama-tools-irreversible-decision-provider
+               (equal (getenv "ELLAMA_EVAL_BACKEND") "structured-chat"))
+      (unless (eq (plist-get
+                   (ellama-tools-dlp--request-irreversible-decision
+                    (concat "{\"tool\":\"shell_command\",\"tool_identity\":\"shell_command\","
+                            "\"arguments\":[{\"name\":\"cmd\",\"value\":\"printf example\"}]}")
+                    'literal-printer)
+                   :status)
+                  'ok)
+        (error "Structured chat warmup did not return a valid decision")))
     (dolist (case cases)
       (let* ((default-directory
               (file-name-as-directory (gethash "working_directory" case)))
@@ -159,6 +198,8 @@
                  (append (list :id (gethash "id" case)
                                :group (gethash "group" case)
                                :expected (gethash "expected" case))
+                         (when (equal suite "contracts")
+                           (list :expected_calls (gethash "expected_calls" case)))
                          result))
                 'utf-8))
         (terpri)))))

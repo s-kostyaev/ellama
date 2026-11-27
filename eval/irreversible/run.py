@@ -41,19 +41,11 @@ def fixture_path(directory, name):
     return directory / relative
 
 
-def prepare_decision_case(case, sandbox):
-    prepared = dict(case, working_directory=str(sandbox))
-    if "git_change" in case:
-        return prepare_git_case(dict(prepared, target=case["fixture_file"],
-                                     change=case["git_change"]), sandbox)
-    if "fixture_file" not in case:
-        return prepared
-    sandbox.mkdir()
-    path = fixture_path(sandbox, case["fixture_file"])
+def prepare_file_fixture(sandbox, name, state, content=b"Synthetic local data\n"):
+    path = fixture_path(sandbox, name)
     path.parent.mkdir(parents=True, exist_ok=True)
-    state = case["file_state"]
     if state == "nonempty":
-        path.write_bytes(b"Synthetic local data\n")
+        path.write_bytes(content)
     elif state == "empty":
         path.touch()
     elif state == "directory":
@@ -64,6 +56,20 @@ def prepare_decision_case(case, sandbox):
         path.symlink_to(target.name)
     elif state != "missing":
         raise ValueError(f"Unknown filesystem fixture state {state!r}")
+
+
+def prepare_decision_case(case, sandbox):
+    prepared = dict(case, working_directory=str(sandbox))
+    extra = case.get("fixture_files", {})
+    if "git_change" in case:
+        prepared = prepare_git_case(dict(prepared, target=case["fixture_file"],
+                                         change=case["git_change"]), sandbox)
+    elif "fixture_file" in case or extra:
+        sandbox.mkdir()
+        if "fixture_file" in case:
+            prepare_file_fixture(sandbox, case["fixture_file"], case["file_state"])
+    for name, state in extra.items():
+        prepare_file_fixture(sandbox, name, state, f"Synthetic data for {name}\n".encode())
     return prepared
 
 
@@ -138,23 +144,34 @@ def prepare_git_case(case, sandbox):
     return dict(case, working_directory=str(working_directory))
 
 
-def ollama_request(host, route, payload=None):
+def provider_request(host, route, payload=None, api_key=None):
     request = urllib.request.Request(
         host + route,
         data=None if payload is None else json.dumps(payload).encode(),
         headers={"Content-Type": "application/json"},
     )
+    if api_key:
+        request.add_unredirected_header("Authorization", f"Bearer {api_key}")
     with urllib.request.urlopen(request, timeout=120) as response:
         return json.load(response)
 
 
 def ollama_identity(host, model):
-    tags = ollama_request(host, "/api/tags")["models"]
+    tags = provider_request(host, "/api/tags")["models"]
     tag = model if ":" in model.rsplit("/", 1)[-1] else f"{model}:latest"
     installed = next((item for item in tags if item["name"] == tag), None)
     if installed is None:
         raise ValueError(f"Ollama has no local tag named {tag}")
-    return {"runtime": ollama_request(host, "/api/version"), "model": installed}
+    return {"runtime": provider_request(host, "/api/version"), "model": installed}
+
+
+def chat_identity(host, model):
+    response = provider_request(host, "/v1/models", api_key=os.environ.get("ELLAMA_EVAL_API_KEY"))
+    installed = next((item for item in response["data"] if item["id"] == model), None)
+    if installed is None:
+        raise ValueError(f"The chat endpoint does not list model {model!r}; use an ID from /v1/models")
+    # oMLX fills the OpenAI `created` timestamp on every listing.
+    return {"model": {key: value for key, value in installed.items() if key != "created"}}
 
 
 def warm_ollama(host, model):
@@ -169,7 +186,7 @@ def warm_ollama(host, model):
             },
         },
     }
-    response = ollama_request(host, "/v1/systemone", payload)
+    response = provider_request(host, "/v1/systemone", payload)
     if response["answers"]["check"]["type"] != "noul":
         raise ValueError("Ollama returned an unexpected answer to the warmup")
 
@@ -183,7 +200,7 @@ def summarize(rows, suite):
         matches = sum(row["expected"] == row["actual"] for row in cases)
         errors = [row["id"] for row in cases if row.get("error")]
         result = {"cases": len(cases), "correct": matches, "provider_errors": errors}
-        if suite == "decisions":
+        if suite != "git":
             result.update(
                 dangerous_misses=[r["id"] for r in cases if r["expected"] and not r["actual"]],
                 unnecessary_strict=[r["id"] for r in cases if not r["expected"] and r["actual"]],
@@ -193,6 +210,9 @@ def summarize(rows, suite):
             if times:
                 result["model_p50_ms"] = round(statistics.median(times), 2)
                 result["model_p95_ms"] = round(times[math.ceil(0.95 * len(times)) - 1], 2)
+            if suite == "contracts":
+                result["model_call_mismatches"] = [r["id"] for r in cases
+                                                   if r["calls"] != r["expected_calls"]]
         else:
             result["mismatches"] = [r["id"] for r in cases if r["expected"] != r["actual"]]
         report[name] = result
@@ -201,12 +221,25 @@ def summarize(rows, suite):
 
 def run(args):
     suite = args.suite
-    suite_file = EVAL_DIR / ("decisions.jsonl" if suite == "decisions" else "git-evidence.jsonl")
+    live = suite in ("decisions", "focus")
+    structured = args.backend == "structured-chat"
+    if structured and (not live or not args.model):
+        raise ValueError("--backend structured-chat requires decisions or focus and an explicit --model")
+    if not structured and (args.thinking or args.max_output_tokens is not None):
+        raise ValueError("--thinking and --max-output-tokens require --backend structured-chat")
+    if args.max_output_tokens is not None and args.max_output_tokens <= 0:
+        raise ValueError("--max-output-tokens must be positive")
+    host = (args.host or ("http://127.0.0.1:8000" if structured else "http://127.0.0.1:11434")).rstrip("/")
+    model = args.model or "pplx-decider-flash"
+    suite_file = EVAL_DIR / {"decisions": "decisions.jsonl", "git": "git-evidence.jsonl",
+                            "contracts": "mcp-contracts.jsonl", "focus": "focus.jsonl"}[suite]
     rows = [r for r in read_rows(suite_file) if not args.group or r["group"] in args.group]
     if not rows:
         raise ValueError("No fixtures matched the requested groups")
     source = args.source.resolve()
-    source_files = ("ellama-tools.el", "ellama-tools-dlp.el")
+    source_files = ["ellama-tools.el", "ellama-tools-dlp.el"]
+    if structured:
+        source_files.append("ellama-tools-structured-decision.el")
     metadata = {
         "suite": suite,
         "source_commit": git(source, "rev-parse", "HEAD").decode().strip(),
@@ -215,10 +248,16 @@ def run(args):
         "evaluator_sha256": {name: sha256(EVAL_DIR / name) for name in ("run.py", "evaluate.el")},
         "groups": args.group,
     }
-    host = args.host.rstrip("/")
-    if suite == "decisions":
-        metadata.update(ollama_identity(host, args.model), threshold=0.5)
-        warm_ollama(host, args.model)
+    if live:
+        identity = chat_identity if structured else ollama_identity
+        resolved_model = identity(host, model)
+        metadata.update(resolved_model, backend=args.backend, host=host, threshold=0.5)
+        if structured:
+            metadata.update(thinking=args.thinking, max_output_tokens=args.max_output_tokens, temperature=0)
+        else:
+            warm_ollama(host, model)
+    elif suite == "contracts":
+        metadata["backend"] = "offline-stub"
 
     output = args.output
     if output is None:
@@ -230,7 +269,7 @@ def run(args):
         output.mkdir(parents=True, exist_ok=True)
     print(f"Running {len(rows)} {suite} cases. Results: {output}", flush=True)
 
-    prepare = prepare_decision_case if suite == "decisions" else prepare_git_case
+    prepare = prepare_git_case if suite == "git" else prepare_decision_case
     with tempfile.TemporaryDirectory(prefix="ellama-irreversible-") as temp:
         workspace = Path(temp)
         empty = workspace / "empty"
@@ -239,7 +278,7 @@ def run(args):
         with fixture_file.open("w", encoding="utf-8") as fixtures:
             for index, case in enumerate(rows):
                 directory = workspace / str(index)
-                if suite == "decisions" and "fixture_file" not in case:
+                if suite != "git" and "fixture_file" not in case and not case.get("fixture_files"):
                     directory = empty
                 prepared = prepare(case, directory)
                 fixtures.write(json.dumps(prepared, ensure_ascii=False) + "\n")
@@ -247,8 +286,11 @@ def run(args):
             **os.environ,
             "ELLAMA_EVAL_FIXTURES": str(fixture_file),
             "ELLAMA_EVAL_SUITE": suite,
-            "ELLAMA_EVAL_ENDPOINT": f"{host}/v1/systemone",
-            "ELLAMA_EVAL_MODEL": args.model,
+            "ELLAMA_EVAL_BACKEND": args.backend,
+            "ELLAMA_EVAL_ENDPOINT": f"{host}/v1/" if structured else f"{host}/v1/systemone",
+            "ELLAMA_EVAL_MODEL": model,
+            "ELLAMA_EVAL_THINKING": "true" if args.thinking else "false",
+            "ELLAMA_EVAL_MAX_OUTPUT_TOKENS": str(args.max_output_tokens or ""),
         }
         emacs = [
             args.emacs, "-Q", "-batch", "--eval", "(package-initialize)",
@@ -264,27 +306,34 @@ def run(args):
     observed = read_rows(output / "rows.jsonl")
     if [(r["id"], r["expected"]) for r in observed] != [(r["id"], r["expected"]) for r in rows]:
         raise ValueError("Evaluator output does not match the selected fixtures")
-    if suite == "decisions" and ollama_identity(host, args.model) != {
-        key: metadata[key] for key in ("runtime", "model")
-    }:
-        raise ValueError("Ollama or its selected model changed during the run")
+    if suite == "contracts" and any(r["expected_calls"] != case["expected_calls"]
+                                    for r, case in zip(observed, rows)):
+        raise ValueError("Evaluator output does not match the expected calls in the fixtures")
+    if live and identity(host, model) != resolved_model:
+        raise ValueError("The provider or its selected model changed during the run")
     reports = summarize(observed, suite)
     with (output / "summary.json").open("x", encoding="utf-8") as report:
         json.dump({**metadata, "metrics": reports}, report, indent=2, ensure_ascii=False)
         report.write("\n")
     print(json.dumps(reports["all"], ensure_ascii=False))
-    return bool(reports["all"]["provider_errors"])
+    total = reports["all"]
+    return (bool(total["provider_errors"])
+            or (suite == "contracts" and
+                (total["correct"] != len(rows) or bool(total["model_call_mismatches"]))))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite", choices=("decisions", "git"), default="decisions")
+    parser.add_argument("--suite", choices=("decisions", "git", "contracts", "focus"), default="decisions")
+    parser.add_argument("--backend", choices=("systemone", "structured-chat"), default="systemone")
     parser.add_argument("--group", action="append", help="include this fixture group; repeat as needed")
     parser.add_argument("--source", type=Path, default=REPO, help="Ellama checkout to evaluate")
     parser.add_argument("--output", type=Path, help="directory for JSONL results and summary")
     parser.add_argument("--emacs", default="emacs", help="Emacs executable")
-    parser.add_argument("--host", default="http://127.0.0.1:11434", help="Ollama base URL")
-    parser.add_argument("--model", default="pplx-decider-flash", help="installed Ollama model tag")
+    parser.add_argument("--host", help="server base URL without /v1")
+    parser.add_argument("--model", help="installed model tag or chat model ID")
+    parser.add_argument("--thinking", action="store_true", help="enable thinking for structured chat")
+    parser.add_argument("--max-output-tokens", type=int, help="structured chat output token budget")
     try:
         return run(parser.parse_args())
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
